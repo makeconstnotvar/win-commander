@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 import Cocoa
 
-let NCPanelTabBarDraggingUTI = NSPasteboard.PasteboardType("com.magnumbytes.nimblecommander.NCPanelTabBarDraggingUTI")
+let NCPanelTabBarDraggingUTI = NSPasteboard.PasteboardType("com.wincommander.NCPanelTabBarDraggingUTI")
 
 @objc
 public protocol NCPanelTabBarViewDelegate: NSTabViewDelegate {

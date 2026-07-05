@@ -145,7 +145,7 @@ std::span<const std::pair<std::string, std::string>> Task::BuildEnv()
         }
 
         env.emplace_back("TERM", "xterm-256color");
-        env.emplace_back("TERM_PROGRAM", "Nimble_Commander");
+        env.emplace_back("TERM_PROGRAM", "Win_Commander");
         return env;
     }();
     return env;

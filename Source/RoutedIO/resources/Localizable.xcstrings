@@ -7,13 +7,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Please authenticate as an Administrator to provide Nimble Commander additional rights"
+            "value" : "Please authenticate as an Administrator to provide Win Commander additional rights"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Пожалуйста пройдите аутентификацию как администратор чтобы предоставить Nimble Commander дополнительные права"
+            "value" : "Пожалуйста пройдите аутентификацию как администратор чтобы предоставить Win Commander дополнительные права"
           }
         }
       }
@@ -24,13 +24,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Please authenticate as an Administrator to allow Nimble Commander install additional components."
+            "value" : "Please authenticate as an Administrator to allow Win Commander install additional components."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Пожалуйста пройдите аутентификацию как администратор чтобы позволить Nimble Commander установить дополнительные компоненты."
+            "value" : "Пожалуйста пройдите аутентификацию как администратор чтобы позволить Win Commander установить дополнительные компоненты."
           }
         }
       }

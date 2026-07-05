@@ -27,16 +27,16 @@ LOG_FILE=${BUILD_DIR}/xcodebuild.log
 
 # all builds paths will be relative to ROOT_DIR
 ROOT_DIR=$(cd "$SCRIPTS_DIR/.." && pwd)
-XCODEPROJ="../Source/NimbleCommander/NimbleCommander.xcodeproj"
+XCODEPROJ="../Source/WinCommander/WinCommander.xcodeproj"
 PBUDDY=/usr/libexec/PlistBuddy
 
 # Build Help.pdf and copy it into the NC sources
 ${SCRIPTS_DIR}/build_help.sh
-cp -f "${SCRIPTS_DIR}/build_help.tmp/Help.pdf" "${ROOT_DIR}/Source/NimbleCommander/NimbleCommander/Resources/Help.pdf"
+cp -f "${SCRIPTS_DIR}/build_help.tmp/Help.pdf" "${ROOT_DIR}/Source/WinCommander/WinCommander/Resources/Help.pdf"
 
 XC="xcodebuild \
  -project ${XCODEPROJ} \
- -scheme NimbleCommander-NonMAS \
+ -scheme WinCommander-NonMAS \
  -configuration Release \
  CODE_SIGNING_ALLOWED=NO \
  CODE_SIGN_IDENTITY= \
@@ -59,7 +59,7 @@ VERSION=$( $PBUDDY -c "Print CFBundleShortVersionString" "$APP_PATH/Contents/Inf
 BUILD=$( $PBUDDY -c "Print CFBundleVersion" "$APP_PATH/Contents/Info.plist" )
 
 create-dmg \
- --volname "Nimble Commander Unsigned" \
+ --volname "Win Commander Unsigned" \
  --window-pos 200 200 \
  --window-size 610 386 \
  --background "dmg/background.png" \
@@ -67,5 +67,5 @@ create-dmg \
  --icon-size 128 \
  --icon "${APP_NAME}" 176 192 \
  --app-drop-link 432 192 \
- "nimble-commander-unsigned-${VERSION}(${BUILD}).dmg" \
+ "win-commander-unsigned-${VERSION}(${BUILD}).dmg" \
  "${APP_NAME}"

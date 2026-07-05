@@ -21,7 +21,7 @@ static PosixIOInterface &IOWrappedCreateProxy();
 PosixIOInterface &RoutedIO::Direct = IODirectCreateProxy();
 PosixIOInterface &RoutedIO::Default = IOWrappedCreateProxy();
 
-static const char *g_HelperLabel = "info.filesmanager.Files.PrivilegedIOHelperV2";
+static const char *g_HelperLabel = "com.wincommander.App.PrivilegedIOHelperV2";
 static CFStringRef g_HelperLabelCF = base::CFStringCreateWithUTF8StringNoCopy(g_HelperLabel);
 
 static const char *AuthRCToString(OSStatus _rc) noexcept;

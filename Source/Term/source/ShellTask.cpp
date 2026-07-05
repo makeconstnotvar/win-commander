@@ -359,7 +359,7 @@ bool ShellTask::Launch(const std::filesystem::path &_work_dir)
         const auto gen = std::to_string(g_TCSHPipeGeneration++);
 
         // open the cwd channel first
-        I->tcsh_cwd_path = dir + "nimble_commander.tcsh.cwd_pipe." + mypid + "." + gen;
+        I->tcsh_cwd_path = dir + "win_commander.tcsh.cwd_pipe." + mypid + "." + gen;
         Log::Debug("tcsh_cwd_path: {}", I->tcsh_cwd_path);
 
         const int cwd_fifo_rc = mkfifo(I->tcsh_cwd_path.c_str(), 0600);
@@ -376,7 +376,7 @@ bool ShellTask::Launch(const std::filesystem::path &_work_dir)
         I->cwd_pipe[0] = cwd_open_rc;
 
         // and then open the semaphore channel
-        I->tcsh_semaphore_path = dir + "nimble_commander.tcsh.semaphore_pipe." + mypid + "." + gen;
+        I->tcsh_semaphore_path = dir + "win_commander.tcsh.semaphore_pipe." + mypid + "." + gen;
         Log::Debug("tcsh_semaphore_path: {}", I->tcsh_semaphore_path);
 
         const int semaphore_fifo_rc = mkfifo(I->tcsh_semaphore_path.c_str(), 0600);

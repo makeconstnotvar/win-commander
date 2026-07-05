@@ -23,7 +23,7 @@ public:
 
     /**
      * Returns connections path is the following format: protocol://[user@]domain[/resource]
-     * e.g. sftp://migun@192.168.2.1, sftp://migun@magnumbytes.com.
+     * e.g. sftp://user@192.168.2.1, sftp://user@example.com.
      */
     static std::string MakeConnectionPath(const Connection &_conn);
 

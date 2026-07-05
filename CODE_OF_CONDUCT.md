@@ -60,7 +60,7 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by contacting the Nimble Commander maintainer.
+reported by contacting the Win Commander maintainer.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

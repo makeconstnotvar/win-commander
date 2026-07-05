@@ -514,7 +514,7 @@ TEST_CASE(PREFIX "Spotlight detects items with new tags invented by NC", "[!mayf
     auto cleanup = at_scope_end([basepath] { std::filesystem::remove_all(basepath); });
 
     const std::string label =
-        fmt::format("Hello! This is a new tag created via Nimble Commander! My PID is {}", getpid());
+        fmt::format("Hello! This is a new tag created via Win Commander! My PID is {}", getpid());
     const Tags::Color color = Tags::Color::Orange;
 
     {

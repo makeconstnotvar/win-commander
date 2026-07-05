@@ -14,7 +14,7 @@
 #include <algorithm>
 
 static NSString *_Nonnull const g_BatchRenamingDialogTableViewDataType =
-    @"com.magnumbytes.nc.ops.BatchRenameSheetControllerPrivateTableViewDataType";
+    @"com.wincommander.nc.ops.BatchRenameSheetControllerPrivateTableViewDataType";
 
 [[clang::no_destroy]] static const ankerl::unordered_dense::map<long, NSString *> g_BatchRenamingDialogInsertSnippets =
     {

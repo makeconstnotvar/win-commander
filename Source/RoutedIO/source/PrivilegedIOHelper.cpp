@@ -14,10 +14,10 @@
 
 // requires that identifier is right and binary is signed by me
 static const char *g_SignatureRequirement =
-    "identifier info.filesmanager.Files and "
+    "identifier com.wincommander.App and "
     "certificate leaf[subject.CN] = \"Developer ID Application: Mikhail Kazakov (AC5SJT236H)\"";
 
-static const char *g_ServiceName = "info.filesmanager.Files.PrivilegedIOHelperV2";
+static const char *g_ServiceName = "com.wincommander.App.PrivilegedIOHelperV2";
 
 #define syslog_error(...) syslog(LOG_ERR, __VA_ARGS__)
 #define syslog_warning(...) syslog(LOG_WARNING, __VA_ARGS__)
@@ -559,7 +559,7 @@ static bool AllowConnectionFrom(const char *_bin_path)
     if( !last_sl )
         return false;
 
-    return strcmp(last_sl, "/Nimble Commander") == 0;
+    return strcmp(last_sl, "/Win Commander") == 0;
 }
 
 static bool CheckSignature(const char *_bin_path)

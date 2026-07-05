@@ -1,4 +1,4 @@
-# What's New in Nimble Commander
+# What's New in Win Commander
 
 ## Version 1.8.0 (19 Dec 2025)
 - Updated for macOS Tahoe.
@@ -44,7 +44,7 @@
 - Improved the security checks in the privileged helper.
 
 ## Version 1.6.0 (14 May 2024)
-- Nimble Commander is now completely free and open source.
+- Win Commander is now completely free and open source.
 - Added support for file tags.
 - Fixed an issue that could stop directory updates on SMB volumes.
 - Fixed an issue where the mouse cursor could navigate to the wrong directory.
@@ -285,7 +285,7 @@
 - Fixed some visual and stability bugs.
 
 ## Version 1.1.2 (7 June 2016)
-- Changed the application’s title to Nimble Commander.
+- Changed the application’s title to Win Commander.
 - Added basic support for editing remote files.
 - Added support for lightweight search with Spotlight.
 - Added the new ⌥⌘V shortcut to move item here.

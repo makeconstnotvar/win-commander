@@ -1,25 +1,7 @@
-[![Build and Test](https://github.com/mikekazakov/nimble-commander/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/mikekazakov/nimble-commander/actions/workflows/build.yml)
-[![Nightly Build](https://github.com/mikekazakov/nimble-commander/actions/workflows/nightly.yml/badge.svg?branch=main)](https://github.com/mikekazakov/nimble-commander/actions/workflows/nightly.yml)
-
-# Nimble Commander
+# Win Commander
 ![](Docs/nc.png)
-Nimble Commander is a free dual-pane file manager for macOS, designed with a focus on speed, keyboard-based navigation, and flexibility.  
+Win Commander is a free dual-pane file manager for macOS, designed with a focus on speed, keyboard-based navigation, and flexibility.  
 The project's aim is to blend the user experience of classic file managers from the '80s-'90s with the modern look and feel of Mac computers.  
-Visit the project's website at: https://magnumbytes.com.  
-
-# Getting Nimble Commander
-
-## Nightly Builds
-You can download the latest nightly build of the app from [GitHub Actions](https://github.com/mikekazakov/nimble-commander/actions/workflows/nightly.yml).  
-Go to the most recent integration and select the `nimble-commander-nightly` in the `Artifacts` section (a GitHub account is required).
-
-## Current Release
-Direct download link: https://magnumbytes.com/downloads/releases/nimble-commander.dmg.  
-Available on Mac App Store: https://itunes.apple.com/app/files-lite/id905202937?ls=1&mt=12.  
-Install via Homebrew: `brew install nimble-commander`.  
-
-## Past Releases
-Access all previous releases at https://github.com/mikekazakov/nimble-commander-releases. 
 
 # Documentation
 The user guide can be found here: [Help.md](Docs/Help.md).

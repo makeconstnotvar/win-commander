@@ -246,7 +246,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				INFOPLIST_FILE = resources/CUIResources.plist;
-				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.CUIResources;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.CUIResources;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				WRAPPER_EXTENSION = bundle;
@@ -258,7 +258,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				INFOPLIST_FILE = resources/CUIResources.plist;
-				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.CUIResources;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.CUIResources;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				WRAPPER_EXTENSION = bundle;

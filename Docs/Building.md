@@ -1,22 +1,20 @@
-# Building Nimble Commander
-This guide outlines the steps to build Nimble Commander from its source code. Follow these instructions to set up your development environment and start contributing to or experimenting with NC.
+# Building Win Commander
+This guide outlines the steps to build Win Commander from its source code. Follow these instructions to set up your development environment and start contributing to or experimenting with NC.
 
 ## Getting the code
-The source code for NC is available for cloning. Use the following command to clone the repository:  
-`git clone https://github.com/mikekazakov/nimble-commander`  
-To minimize internet bandwidth, you can opt to fetch only the latest version with:  
-`git clone https://github.com/mikekazakov/nimble-commander --depth=1`
+Clone this repository with `git clone`.  
+To minimize internet bandwidth, you can opt to fetch only the latest version with `git clone --depth=1`.
 
 ## Compiling the Project
-After obtaining the source code, you'll need Xcode 26.5 to open and compile the project. Navigate to the `NimbleCommander.xcodeproj` folder within the source code and open it using either the Xcode GUI or the command line with:  
-`open nimble-commander/Source/NimbleCommander/NimbleCommander.xcodeproj`  
+After obtaining the source code, you'll need Xcode 26.5 to open and compile the project. Navigate to the `WinCommander.xcodeproj` folder within the source code and open it using either the Xcode GUI or the command line with:  
+`open win-commander/Source/WinCommander/WinCommander.xcodeproj`  
 
 ![](schema.png)
 
-Make sure to select the `NimbleCommander-Unsigned` schema in Xcode. Now, you are ready to build the project. Use `Cmd+B` to build and `Cmd+R` to run the project under Xcode's debugger.
+Make sure to select the `WinCommander-Unsigned` schema in Xcode. Now, you are ready to build the project. Use `Cmd+B` to build and `Cmd+R` to run the project under Xcode's debugger.
 
 ## Exploring the Source Code
-Nimble Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The project includes the main application and 10 sub-projects:
+Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The project includes the main application and 10 sub-projects:
   * Base: Foundational, general-purpose tools.
   * Config: Configuration management.
   * CUI: Shared UI components.
@@ -30,14 +28,14 @@ Nimble Commander has a medium-sized codebase (~150KSloC) written in C++, Objecti
   * Viewer: Integrated file viewer component.
 
 ## Testing
-Nimble Commander employs two testing strategies: unit tests (`_UT` suffix) for individual components, and integration tests (`_IT` suffix) for checking how those components interact. Each type of test is easily identifiable by its unique filename suffix and corresponding build target. For example, `Term` represents the library, `TermUT` the unit tests for this library, and `TermIT` the integration tests.  
+Win Commander employs two testing strategies: unit tests (`_UT` suffix) for individual components, and integration tests (`_IT` suffix) for checking how those components interact. Each type of test is easily identifiable by its unique filename suffix and corresponding build target. For example, `Term` represents the library, `TermUT` the unit tests for this library, and `TermIT` the integration tests.  
 Unit tests are quick and standalone, not requiring any external setups. In contrast, integration tests might need specific conditions, like running Docker VMs (detailed in `Source/VFS/tests/data/docker/[start|stop].sh`), to properly execute.  
 
 ## Limitations
-While this source code mirrors that of the official Nimble Commander builds, the public repository does not include sensitive information such as specific accounts, addresses, and keys. Consequently, some features might be restricted or unavailable:
+While this source code mirrors that of the official Win Commander builds, the public repository does not include sensitive information such as specific accounts, addresses, and keys. Consequently, some features might be restricted or unavailable:
   * Privileged Helper: Requires proper signing to be installed and function correctly.
   
 ## Implementation Notes
   * [Syntax Highlighting](SyntaxHighlighting.md)
   * [Creating Image Templates from SF Symbols](ImageTemplatesFromSFSymbols.md)
-  * [Unity Builds](https://kazakov.life/2025/12/12/nimble-commander-and-build-times/)
+  * [Unity Builds](https://kazakov.life/2025/12/12/win-commander-and-build-times/)

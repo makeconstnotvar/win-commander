@@ -29,7 +29,7 @@ void Job::Run()
 
 void Job::Execute()
 {
-    const auto thread_title = "com.magnumbytes.nimblecommander." + boost::core::demangle(typeid(*this).name());
+    const auto thread_title = "com.wincommander." + boost::core::demangle(typeid(*this).name());
     pthread_setname_np(thread_title.c_str());
 
     const auto sleep_preventer = base::IdleSleepPreventer::GetPromise();

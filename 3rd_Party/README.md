@@ -2,13 +2,13 @@
 
 ## Approach
 
-Nimble Commander is built with the goal of being as hermetic as reasonably possible.  
+Win Commander is built with the goal of being as hermetic as reasonably possible.  
 This means:
   * All dependencies are linked statically into a single executable binary.
-  * Symbol visibility is hidden in both 3rd-party libraries and Nimble Commander itself.
-  * Both 3rd-party libraries and Nimble Commander are built with link-time optimization.
+  * Symbol visibility is hidden in both 3rd-party libraries and Win Commander itself.
+  * Both 3rd-party libraries and Win Commander are built with link-time optimization.
 
-Dependencies are manually bootstrapped, and the precompiled versions are stored directly within the Nimble Commander repository.
+Dependencies are manually bootstrapped, and the precompiled versions are stored directly within the Win Commander repository.
 
 The following flags or their equivalents (e.g., when the 3rd-party library uses CMake or Xcode projects) should be uniformly applied:
 

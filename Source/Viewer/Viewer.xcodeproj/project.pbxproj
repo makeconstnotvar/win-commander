@@ -671,7 +671,7 @@
 				INFOPLIST_FILE = resources/Highlighter.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Highlighter;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024 Michael G. Kazakov. All rights reserved.";
-				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.Highlighter;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.Highlighter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
@@ -688,7 +688,7 @@
 				INFOPLIST_FILE = resources/Highlighter.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Highlighter;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2024 Michael G. Kazakov. All rights reserved.";
-				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.Highlighter;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.Highlighter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
@@ -704,7 +704,7 @@
 				INFOPLIST_FILE = resources/ViewerResources.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.ViewerResources;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.ViewerResources;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				WRAPPER_EXTENSION = bundle;
@@ -720,7 +720,7 @@
 				INFOPLIST_FILE = resources/ViewerResources.plist;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.ViewerResources;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.ViewerResources;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				WRAPPER_EXTENSION = bundle;

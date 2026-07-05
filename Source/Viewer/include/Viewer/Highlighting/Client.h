@@ -24,7 +24,7 @@ public:
                                dispatch_queue_t _queue = nullptr);
 
 private:
-    static constexpr const char *m_ServiceName = "com.magnumbytes.NimbleCommander.Highlighter";
+    static constexpr const char *m_ServiceName = "com.wincommander.Highlighter";
 };
 
 } // namespace nc::viewer::hl

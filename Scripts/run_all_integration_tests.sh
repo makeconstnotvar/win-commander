@@ -49,7 +49,7 @@ cd ${SCRIPTS_DIR}
 
 # Build the xcodebuild execution command
 XC="xcodebuild \
-    -project ../Source/NimbleCommander/NimbleCommander.xcodeproj \
+    -project ../Source/WinCommander/WinCommander.xcodeproj \
     -scheme IntegrationTests \
     -configuration Debug \
     -destination "platform=macOS,arch=${HOST_ARCH}" \

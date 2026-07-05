@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/nimble-commander.iml" filepath="$PROJECT_DIR$/.idea/nimble-commander.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/win-commander.iml" filepath="$PROJECT_DIR$/.idea/win-commander.iml" />
     </modules>
   </component>
 </project>

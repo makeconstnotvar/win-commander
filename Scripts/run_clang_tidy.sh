@@ -46,7 +46,7 @@ mkdir -p "${BUILD_DIR}"
 xattr -w com.apple.xcode.CreatedByBuildSystem true "${BUILD_DIR}"
 
 # A project to build
-XCODEPROJ="${ROOT_DIR}/Source/NimbleCommander/NimbleCommander.xcodeproj"
+XCODEPROJ="${ROOT_DIR}/Source/WinCommander/WinCommander.xcodeproj"
 
 echo Building the target "All"
 

@@ -160,7 +160,7 @@ Gw
             <point key="canvasLocation" x="19" y="268"/>
         </button>
         <viewController title="Advanced options" nibName="MassCopySheetDisclosureViewController" id="jQo-c7-41i" customClass="DisclosureViewController"/>
-        <viewController title="Advanced options" nibName="CopyingDialogDisclosedView" nibBundleIdentifier="com.magnumbytes.NimbleCommander.OperationsResources" id="E1e-vG-fVc" customClass="DisclosureViewController">
+        <viewController title="Advanced options" nibName="CopyingDialogDisclosedView" nibBundleIdentifier="com.wincommander.OperationsResources" id="E1e-vG-fVc" customClass="DisclosureViewController">
             <connections>
                 <outlet property="disclosedView" destination="4Xp-mm-USZ" id="h1o-T6-hK4"/>
             </connections>

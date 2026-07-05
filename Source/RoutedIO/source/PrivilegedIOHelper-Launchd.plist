@@ -3,14 +3,14 @@
 <plist version="1.0">
 <dict>
 	<key>AssociatedBundleIdentifiers</key>
-	<string>info.filesmanager.Files</string>
+	<string>com.wincommander.App</string>
 	<key>Label</key>
-	<string>info.filesmanager.Files.PrivilegedIOHelperV2</string>
+	<string>com.wincommander.App.PrivilegedIOHelperV2</string>
 	<key>RunAtLoad</key>
 	<true/>
 	<key>MachServices</key>
 	<dict>
-		<key>info.filesmanager.Files.PrivilegedIOHelperV2</key>
+		<key>com.wincommander.App.PrivilegedIOHelperV2</key>
 		<true/>
 	</dict>
 </dict>

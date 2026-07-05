@@ -4,7 +4,7 @@
 <dict>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>info.filesmanager.Files</key>
+		<key>com.wincommander.App</key>
 		<string>NC NonMAS Developer ID</string>
 	</dict>
 	<key>method</key>

@@ -1,4 +1,4 @@
-# Releasing a new version of Nimble Commander
+# Releasing a new version of Win Commander
 *This is a checklist of various steps to take to release a new version, after the actual work is done.*
 
 ## Step 1: Update dependencies
@@ -40,9 +40,9 @@ Use the 'Release Build' workflow in GitHub Actions on the `main` branch.
 - Write `whats-new-X.Y.Z.html` from the information in `WHATS_NEW.md`.
 - Place the release build and run `compose.sh`.
 
-## Step 10: Update nimble-commander-website
-- Place the release build into `/downloads/releases/` as `nimble-commander-X.Y.Z(ABCD).dmg` and as `nimble-commander.dmg`.
-- Place the new Sparkle manifest into `/downloads/releases/` as `sparkle-nimble-commander.xml`.
+## Step 10: Update win-commander-website
+- Place the release build into `/downloads/releases/` as `win-commander-X.Y.Z(ABCD).dmg` and as `win-commander.dmg`.
+- Place the new Sparkle manifest into `/downloads/releases/` as `sparkle-win-commander.xml`.
 - Update the front page.
 - Update the `whats-new` page.
 - Update other pages if needed.
