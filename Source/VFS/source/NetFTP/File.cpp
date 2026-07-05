@@ -371,15 +371,19 @@ void File::FinishReading()
     assert(m_Mode == Mode::Read);
 
     // tell curl to cancel any going reading if any
-    m_CURL->prog_func = ^(curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
-      return 1;
-    };
+    m_CURL->prog_func = [](curl_off_t, curl_off_t, curl_off_t, curl_off_t) { return 1; };
 
-    int running_handles = 0;
+    int still_running = 0;
     do {
-        while( CURLM_CALL_MULTI_PERFORM == curl_multi_perform(m_CURL->curlm, &running_handles) )
-            ;
-    } while( running_handles );
+        CURLMcode mc = curl_multi_perform(m_CURL->curlm, &still_running);
+        if( mc == CURLM_OK ) {
+            mc = curl_multi_wait(m_CURL->curlm, nullptr, 0, m_SelectTimeout.tv_usec, nullptr);
+        }
+        if( mc != CURLM_OK ) {
+            Log::Error("curl_multi failed, code {}.", std::to_underlying(mc));
+            break;
+        }
+    } while( still_running );
 }
 
 } // namespace nc::vfs::ftp
