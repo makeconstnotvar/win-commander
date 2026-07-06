@@ -213,5 +213,10 @@ xcuserdata/
 #tm_build_errors
 
 ####
+# JETBRAINS IDEs (CLion, etc.):
+#
+.idea/
+
+####
 # UNKNOWN: recommended by others, but I can't discover what these files are
 #
