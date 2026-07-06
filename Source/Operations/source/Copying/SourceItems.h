@@ -1,0 +1,53 @@
+// Copyright (C) 2017-2020 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include <VFS/VFS.h>
+
+namespace nc::ops::copying {
+
+class SourceItems
+{
+public:
+    int InsertItem(uint16_t _host_index,
+                   unsigned _base_dir_index,
+                   int _parent_index,
+                   std::string _item_name,
+                   const VFSStat &_stat);
+
+    [[nodiscard]] uint64_t TotalRegBytes() const noexcept;
+    [[nodiscard]] int ItemsAmount() const noexcept;
+
+    [[nodiscard]] std::string ComposeFullPath(int _item_no) const;
+    [[nodiscard]] std::string ComposeRelativePath(int _item_no) const;
+    [[nodiscard]] const std::string &ItemName(int _item_no) const;
+    [[nodiscard]] mode_t ItemMode(int _item_no) const;
+    [[nodiscard]] uint64_t ItemSize(int _item_no) const;
+    [[nodiscard]] VFSHost &ItemHost(int _item_no) const;
+
+    [[nodiscard]] VFSHost &Host(uint16_t _host_ind) const;
+    uint16_t InsertOrFindHost(const VFSHostPtr &_host);
+
+    [[nodiscard]] const std::string &BaseDir(unsigned _base_dir_ind) const;
+    unsigned InsertOrFindBaseDir(const std::string &_dir);
+
+private:
+    struct SourceItem {
+        // full path = m_SourceItemsBaseDirectories[base_dir_index] + ... +
+        //             m_Items[m_Items[parent_index].parent_index].item_name +
+        //             m_Items[parent_index].item_name +
+        //             item_name;
+        std::string item_name;
+        uint64_t item_size;
+        int parent_index;
+        unsigned base_dir_index;
+        uint16_t host_index;
+        uint16_t mode;
+    };
+
+    std::vector<SourceItem> m_Items;
+    std::vector<VFSHostPtr> m_SourceItemsHosts;
+    std::vector<std::string> m_SourceItemsBaseDirectories;
+    uint64_t m_TotalRegBytes = 0;
+};
+
+} // namespace nc::ops::copying

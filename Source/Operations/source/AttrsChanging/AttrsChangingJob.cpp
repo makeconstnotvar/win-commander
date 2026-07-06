@@ -1,0 +1,367 @@
+// Copyright (C) 2017-2026 Michael Kazakov. Subject to GNU General Public License version 3.
+#include "AttrsChangingJob.h"
+#include <Utility/PathManip.h>
+#include <sys/stat.h>
+#include <fmt/format.h>
+
+namespace nc::ops {
+
+struct AttrsChangingJob::Meta {
+    VFSStat stat;
+    int origin_item;
+};
+
+AttrsChangingJob::AttrsChangingJob(AttrsChangingCommand _command) : m_Command(std::move(_command))
+{
+    if( m_Command.permissions )
+        m_ChmodCommand = PermissionsValueAndMask(*m_Command.permissions);
+    if( m_Command.flags )
+        m_ChflagCommand = FlagsValueAndMask(*m_Command.flags);
+
+    Statistics().SetPreferredSource(Statistics::SourceType::Items);
+}
+
+AttrsChangingJob::~AttrsChangingJob() = default;
+
+void AttrsChangingJob::Perform()
+{
+    if( !m_Command.permissions && !m_Command.ownage && !m_Command.flags && !m_Command.times )
+        return;
+
+    DoScan();
+
+    if( BlockIfPaused(); IsStopped() )
+        return;
+
+    DoChange();
+}
+
+void AttrsChangingJob::DoScan()
+{
+    for( int i = 0, e = static_cast<int>(m_Command.items.size()); i != e; ++i ) {
+        if( BlockIfPaused(); IsStopped() )
+            return;
+        ScanItem(i);
+    }
+}
+
+void AttrsChangingJob::ScanItem(unsigned _origin_item)
+{
+    const auto &item = m_Command.items[_origin_item];
+    const auto path = item.Path();
+    auto &vfs = *item.Host();
+    VFSStat st;
+    while( true ) {
+        const std::expected<VFSStat, Error> exp_stat = vfs.Stat(path, 0);
+        if( exp_stat ) {
+            st = *exp_stat;
+            break;
+        }
+        switch( m_OnSourceAccessError(exp_stat.error(), path, vfs) ) {
+            case SourceAccessErrorResolution::Stop:
+                Stop();
+                return;
+            case SourceAccessErrorResolution::Skip:
+                return;
+            case SourceAccessErrorResolution::Retry:
+                continue;
+        }
+    }
+
+    Meta m;
+    m.stat = st;
+    m.origin_item = _origin_item;
+    m_Metas.emplace_back(m);
+    m_Filenames.push_back(item.IsDir() ? EnsureTrailingSlash(item.Filename()) : item.Filename(), nullptr);
+    Statistics().CommitEstimated(Statistics::SourceType::Items, 1);
+
+    if( m_Command.apply_to_subdirs && item.IsDir() ) {
+        std::vector<std::string> dir_entries;
+        while( true ) {
+            const auto callback = [&](const VFSDirEnt &_entry) {
+                dir_entries.emplace_back(_entry.name);
+                return true;
+            };
+            const std::expected<void, Error> list_rc = vfs.IterateDirectoryListing(path, callback);
+            if( list_rc )
+                break;
+            switch( m_OnSourceAccessError(list_rc.error(), path, vfs) ) {
+                case SourceAccessErrorResolution::Stop:
+                    Stop();
+                    return;
+                case SourceAccessErrorResolution::Skip:
+                    return;
+                case SourceAccessErrorResolution::Retry:
+                    continue;
+            }
+        }
+
+        const auto prefix = &m_Filenames.back();
+        for( auto &dirent : dir_entries )
+            ScanItem(fmt::format("{}/{}", path, dirent), dirent, _origin_item, prefix);
+    }
+}
+
+void AttrsChangingJob::ScanItem(const std::string &_full_path,
+                                const std::string &_filename,
+                                unsigned _origin_item,
+                                const base::chained_strings::node *_prefix)
+{
+    const auto &item = m_Command.items[_origin_item];
+    auto &vfs = *item.Host();
+
+    VFSStat st;
+    while( true ) {
+        const std::expected<VFSStat, Error> exp_stat = vfs.Stat(_full_path, 0);
+        if( exp_stat ) {
+            st = *exp_stat;
+            break;
+        }
+        switch( m_OnSourceAccessError(exp_stat.error(), _full_path, vfs) ) {
+            case SourceAccessErrorResolution::Stop:
+                Stop();
+                return;
+            case SourceAccessErrorResolution::Skip:
+                return;
+            case SourceAccessErrorResolution::Retry:
+                continue;
+        }
+    }
+
+    Meta m;
+    m.stat = st;
+    m.origin_item = _origin_item;
+    m_Metas.emplace_back(m);
+    m_Filenames.push_back(S_ISDIR(st.mode) ? EnsureTrailingSlash(_filename) : _filename, _prefix);
+    Statistics().CommitEstimated(Statistics::SourceType::Items, 1);
+
+    if( m_Command.apply_to_subdirs && S_ISDIR(st.mode) ) {
+        std::vector<std::string> dir_entries;
+        while( true ) {
+            const auto callback = [&](const VFSDirEnt &_entry) {
+                dir_entries.emplace_back(_entry.name);
+                return true;
+            };
+            const std::expected<void, Error> list_rc = vfs.IterateDirectoryListing(_full_path, callback);
+            if( list_rc )
+                break;
+            switch( m_OnSourceAccessError(list_rc.error(), _full_path, vfs) ) {
+                case SourceAccessErrorResolution::Stop:
+                    Stop();
+                    return;
+                case SourceAccessErrorResolution::Skip:
+                    return;
+                case SourceAccessErrorResolution::Retry:
+                    continue;
+            }
+        }
+        const auto prefix = &m_Filenames.back();
+        for( auto &dirent : dir_entries )
+            ScanItem(fmt::format("{}/{}", _full_path, dirent), dirent, _origin_item, prefix);
+    }
+}
+
+void AttrsChangingJob::DoChange()
+{
+    int n = 0;
+    for( auto i = std::begin(m_Filenames), e = std::end(m_Filenames); i != e; ++i, ++n ) {
+        const auto &meta = m_Metas[n];
+        const auto &origin_item = m_Command.items[meta.origin_item];
+        const auto path = EnsureNoTrailingSlash(origin_item.Directory() + (*i).to_str_with_pref());
+
+        const auto success = AlterSingleItem(path, *origin_item.Host(), meta.stat);
+
+        if( success ) {
+            Statistics().CommitProcessed(Statistics::SourceType::Items, 1);
+
+            // for now reports only about successful processing
+            const ItemStateReport report{.host = *origin_item.Host(), .path = path, .status = ItemStatus::Processed};
+            TellItemReport(report);
+        }
+
+        if( BlockIfPaused(); IsStopped() )
+            return;
+    }
+}
+
+bool AttrsChangingJob::AlterSingleItem(const std::string &_path, VFSHost &_vfs, const VFSStat &_stat)
+{
+    if( m_ChmodCommand )
+        if( !ChmodSingleItem(_path, _vfs, _stat) )
+            return false;
+
+    if( m_Command.ownage )
+        if( !ChownSingleItem(_path, _vfs, _stat) )
+            return false;
+
+    if( m_ChflagCommand )
+        if( !ChflagSingleItem(_path, _vfs, _stat) )
+            return false;
+
+    if( m_Command.times )
+        if( !ChtimesSingleItem(_path, _vfs, _stat) )
+            return false;
+
+    return true;
+}
+
+bool AttrsChangingJob::ChmodSingleItem(const std::string &_path, VFSHost &_vfs, const VFSStat &_stat)
+{
+    const auto [new_mode, mask] = *m_ChmodCommand;
+    const uint16_t mode = (_stat.mode & ~mask) | (new_mode & mask);
+    if( mode == _stat.mode )
+        return true;
+
+    while( true ) {
+        const std::expected<void, Error> chmod_rc = _vfs.SetPermissions(_path, mode);
+        if( chmod_rc )
+            break;
+        switch( m_OnChmodError(chmod_rc.error(), _path, _vfs) ) {
+            case ChmodErrorResolution::Stop:
+                Stop();
+                return false;
+            case ChmodErrorResolution::Skip:
+                Statistics().CommitSkipped(Statistics::SourceType::Items, 1);
+                return false;
+            case ChmodErrorResolution::Retry:
+                continue;
+        }
+    }
+
+    return true;
+}
+
+bool AttrsChangingJob::ChownSingleItem(const std::string &_path, VFSHost &_vfs, const VFSStat &_stat)
+{
+    const auto new_uid = m_Command.ownage->uid ? *m_Command.ownage->uid : _stat.uid;
+    const auto new_gid = m_Command.ownage->gid ? *m_Command.ownage->gid : _stat.gid;
+    if( new_uid == _stat.uid && new_gid == _stat.gid )
+        return true;
+
+    while( true ) {
+        const std::expected<void, Error> chown_rc = _vfs.SetOwnership(_path, new_uid, new_gid);
+        if( chown_rc )
+            break;
+        switch( m_OnChownError(chown_rc.error(), _path, _vfs) ) {
+            case ChownErrorResolution::Stop:
+                Stop();
+                return false;
+            case ChownErrorResolution::Skip:
+                Statistics().CommitSkipped(Statistics::SourceType::Items, 1);
+                return false;
+            case ChownErrorResolution::Retry:
+                continue;
+        }
+    }
+
+    return true;
+}
+
+bool AttrsChangingJob::ChflagSingleItem(const std::string &_path, VFSHost &_vfs, const VFSStat &_stat)
+{
+    const auto [new_flags, mask] = *m_ChflagCommand;
+    const uint32_t flags = (_stat.flags & ~mask) | (new_flags & mask);
+    if( flags == _stat.flags )
+        return true;
+
+    while( true ) {
+        const std::expected<void, Error> chflags_rc = _vfs.SetFlags(_path, flags, vfs::Flags::None);
+        if( chflags_rc )
+            break;
+        switch( m_OnFlagsError(chflags_rc.error(), _path, _vfs) ) {
+            case FlagsErrorResolution::Stop:
+                Stop();
+                return false;
+            case FlagsErrorResolution::Skip:
+                Statistics().CommitSkipped(Statistics::SourceType::Items, 1);
+                return false;
+            case FlagsErrorResolution::Retry:
+                continue;
+        }
+    }
+
+    return true;
+}
+
+bool AttrsChangingJob::ChtimesSingleItem(const std::string &_path, VFSHost &_vfs, [[maybe_unused]] const VFSStat &_stat)
+{
+    while( true ) {
+        const std::expected<void, Error> set_times_rc = _vfs.SetTimes(
+            _path, m_Command.times->btime, m_Command.times->mtime, m_Command.times->ctime, m_Command.times->atime);
+        if( set_times_rc )
+            break;
+        switch( m_OnTimesError(set_times_rc.error(), _path, _vfs) ) {
+            case TimesErrorResolution::Stop:
+                Stop();
+                return false;
+            case TimesErrorResolution::Skip:
+                Statistics().CommitSkipped(Statistics::SourceType::Items, 1);
+                return false;
+            case TimesErrorResolution::Retry:
+                continue;
+        }
+    }
+
+    return true;
+}
+
+std::pair<uint16_t, uint16_t> AttrsChangingJob::PermissionsValueAndMask(const AttrsChangingCommand::Permissions &_p)
+{
+    uint16_t value = 0;
+    uint16_t mask = 0;
+    const auto m = [&](const std::optional<bool> &_v, uint16_t _b) {
+        if( _v ) {
+            mask |= _b;
+            if( *_v )
+                value |= _b;
+        }
+    };
+
+    m(_p.usr_r, S_IRUSR);
+    m(_p.usr_w, S_IWUSR);
+    m(_p.usr_x, S_IXUSR);
+    m(_p.grp_r, S_IRGRP);
+    m(_p.grp_w, S_IWGRP);
+    m(_p.grp_x, S_IXGRP);
+    m(_p.oth_r, S_IROTH);
+    m(_p.oth_w, S_IWOTH);
+    m(_p.oth_x, S_IXOTH);
+    m(_p.suid, S_ISUID);
+    m(_p.sgid, S_ISGID);
+    m(_p.sticky, S_ISVTX);
+
+    return {value, mask};
+}
+
+std::pair<uint32_t, uint32_t> AttrsChangingJob::FlagsValueAndMask(const AttrsChangingCommand::Flags &_f)
+{
+    uint32_t value = 0;
+    uint32_t mask = 0;
+    const auto m = [&](const std::optional<bool> &_v, uint32_t _b) {
+        if( _v ) {
+            mask |= _b;
+            if( *_v )
+                value |= _b;
+        }
+    };
+
+    m(_f.u_nodump, UF_NODUMP);
+    m(_f.u_immutable, UF_IMMUTABLE);
+    m(_f.u_append, UF_APPEND);
+    m(_f.u_opaque, UF_OPAQUE);
+    m(_f.u_tracked, UF_TRACKED);
+    m(_f.u_hidden, UF_HIDDEN);
+    m(_f.u_compressed, UF_COMPRESSED);
+    m(_f.u_datavault, UF_DATAVAULT);
+    m(_f.s_archived, SF_ARCHIVED);
+    m(_f.s_immutable, SF_IMMUTABLE);
+    m(_f.s_append, SF_APPEND);
+    m(_f.s_restricted, SF_RESTRICTED);
+    m(_f.s_nounlink, SF_NOUNLINK);
+    m(_f.s_firmlink, SF_FIRMLINK);
+    m(_f.s_dataless, SF_DATALESS);
+
+    return {value, mask};
+}
+
+} // namespace nc::ops

@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24412" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24412"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="PreferencesWindowExternalEditorsTab">
+            <connections>
+                <outlet property="ExtEditorsController" destination="tw8-Qz-5OO" id="Twu-nn-P63"/>
+                <outlet property="TableView" destination="p39-Vd-dj2" id="8vp-Yf-7yS"/>
+                <outlet property="addRemove" destination="nAw-F0-gxx" id="Ain-6e-Usa"/>
+                <outlet property="view" destination="Hz6-mo-xeY" id="0bl-1N-x8E"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="Hz6-mo-xeY">
+            <rect key="frame" x="0.0" y="0.0" width="730" height="350"/>
+            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+            <subviews>
+                <scrollView horizontalHuggingPriority="1" autohidesScrollers="YES" horizontalLineScroll="19" horizontalPageScroll="10" verticalLineScroll="19" verticalPageScroll="10" usesPredominantAxisScrolling="NO" horizontalScrollElasticity="none" verticalScrollElasticity="none" translatesAutoresizingMaskIntoConstraints="NO" id="8G6-nH-UUs">
+                    <rect key="frame" x="20" y="45" width="690" height="285"/>
+                    <clipView key="contentView" id="pjZ-Ta-3LC">
+                        <rect key="frame" x="1" y="1" width="688" height="283"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" alternatingRowBackgroundColors="YES" columnReordering="NO" multipleSelection="NO" autosaveColumns="NO" typeSelect="NO" headerView="9HZ-fC-91A" id="p39-Vd-dj2">
+                                <rect key="frame" x="0.0" y="0.0" width="728" height="260"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <size key="intercellSpacing" width="3" height="2"/>
+                                <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                <tableViewGridLines key="gridStyleMask" vertical="YES"/>
+                                <color key="gridColor" name="gridColor" catalog="System" colorSpace="catalog"/>
+                                <tableColumns>
+                                    <tableColumn width="240" minWidth="40" maxWidth="1000" id="pPs-JA-wnQ">
+                                        <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="External editor">
+                                            <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="backgroundColor" white="0.33333298560000002" alpha="1" colorSpace="calibratedWhite"/>
+                                        </tableHeaderCell>
+                                        <textFieldCell key="dataCell" lineBreakMode="truncatingTail" selectable="YES" editable="YES" alignment="left" id="klK-4x-ZLX">
+                                            <font key="font" metaFont="system"/>
+                                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                        </textFieldCell>
+                                        <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                        <connections>
+                                            <binding destination="tw8-Qz-5OO" name="value" keyPath="arrangedObjects.name" id="xeq-tf-sb4">
+                                                <dictionary key="options">
+                                                    <bool key="NSCreatesSortDescriptor" value="NO"/>
+                                                </dictionary>
+                                            </binding>
+                                        </connections>
+                                    </tableColumn>
+                                    <tableColumn width="473" minWidth="40" maxWidth="1000" id="gJg-B1-OAZ">
+                                        <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border" alignment="left" title="File mask">
+                                            <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="backgroundColor" white="0.33333298560000002" alpha="1" colorSpace="calibratedWhite"/>
+                                        </tableHeaderCell>
+                                        <textFieldCell key="dataCell" lineBreakMode="truncatingTail" selectable="YES" editable="YES" alignment="left" id="fxa-Cq-8Oe">
+                                            <font key="font" metaFont="system"/>
+                                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                                            <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
+                                        </textFieldCell>
+                                        <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
+                                        <connections>
+                                            <binding destination="tw8-Qz-5OO" name="value" keyPath="arrangedObjects.mask" id="C2A-R7-jOM">
+                                                <dictionary key="options">
+                                                    <bool key="NSCreatesSortDescriptor" value="NO"/>
+                                                </dictionary>
+                                            </binding>
+                                        </connections>
+                                    </tableColumn>
+                                </tableColumns>
+                            </tableView>
+                        </subviews>
+                    </clipView>
+                    <constraints>
+                        <constraint firstAttribute="height" relation="greaterThanOrEqual" constant="191" id="VjI-Dx-65q"/>
+                    </constraints>
+                    <scroller key="horizontalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="E5U-F4-mIG">
+                        <rect key="frame" x="1" y="267" width="688" height="17"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </scroller>
+                    <scroller key="verticalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="FDT-5O-jYy">
+                        <autoresizingMask key="autoresizingMask"/>
+                    </scroller>
+                    <tableHeaderView key="headerView" wantsLayer="YES" id="9HZ-fC-91A">
+                        <rect key="frame" x="0.0" y="0.0" width="728" height="23"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </tableHeaderView>
+                </scrollView>
+                <segmentedControl horizontalHuggingPriority="1" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="nAw-F0-gxx">
+                    <rect key="frame" x="20" y="20" width="47" height="24"/>
+                    <segmentedCell key="cell" borderStyle="border" alignment="left" style="smallSquare" trackingMode="momentary" id="9Hv-je-1mq">
+                        <font key="font" metaFont="system"/>
+                        <segments>
+                            <segment image="NSAddTemplate" imageScaling="none" width="23"/>
+                            <segment image="NSRemoveTemplate" imageScaling="none" width="23" tag="1"/>
+                        </segments>
+                    </segmentedCell>
+                    <connections>
+                        <action selector="onPlusMinus:" target="-2" id="3Gw-XH-LOi"/>
+                    </connections>
+                </segmentedControl>
+                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="NK8-Ud-1ge">
+                    <rect key="frame" x="176" y="24" width="536" height="16"/>
+                    <textFieldCell key="cell" lineBreakMode="clipping" title="When choosing an editor to start, editors are checked in order of appearance in this list." id="lyi-ta-ZdJ">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+            </subviews>
+            <constraints>
+                <constraint firstItem="NK8-Ud-1ge" firstAttribute="centerY" secondItem="nAw-F0-gxx" secondAttribute="centerY" id="7e3-C4-eqf"/>
+                <constraint firstItem="NK8-Ud-1ge" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="nAw-F0-gxx" secondAttribute="trailing" constant="8" symbolic="YES" id="IMI-Hm-M7R"/>
+                <constraint firstItem="8G6-nH-UUs" firstAttribute="top" secondItem="Hz6-mo-xeY" secondAttribute="top" constant="20" symbolic="YES" id="aEg-DS-O7Q"/>
+                <constraint firstAttribute="bottom" secondItem="nAw-F0-gxx" secondAttribute="bottom" constant="20" symbolic="YES" id="hMy-UY-v0k"/>
+                <constraint firstItem="nAw-F0-gxx" firstAttribute="top" secondItem="8G6-nH-UUs" secondAttribute="bottom" constant="1" id="l0Z-4X-NxV"/>
+                <constraint firstAttribute="trailing" secondItem="8G6-nH-UUs" secondAttribute="trailing" constant="20" symbolic="YES" id="qlf-cw-JqG"/>
+                <constraint firstAttribute="trailing" secondItem="NK8-Ud-1ge" secondAttribute="trailing" constant="20" symbolic="YES" id="qwH-N1-7kA"/>
+                <constraint firstItem="nAw-F0-gxx" firstAttribute="leading" secondItem="8G6-nH-UUs" secondAttribute="leading" id="rWP-vK-LfE"/>
+                <constraint firstItem="8G6-nH-UUs" firstAttribute="leading" secondItem="Hz6-mo-xeY" secondAttribute="leading" constant="20" symbolic="YES" id="vYX-wn-ylK"/>
+            </constraints>
+            <point key="canvasLocation" x="139" y="135"/>
+        </customView>
+        <arrayController objectClassName="ExternalEditorInfo" id="tw8-Qz-5OO">
+            <declaredKeys>
+                <string>name</string>
+            </declaredKeys>
+            <classReference key="objectClass" className="ExternalEditorInfo"/>
+            <connections>
+                <binding destination="-2" name="contentArray" keyPath="self.ExtEditors" id="oHY-xZ-s7b"/>
+            </connections>
+        </arrayController>
+    </objects>
+    <resources>
+        <image name="NSAddTemplate" width="18" height="17"/>
+        <image name="NSRemoveTemplate" width="18" height="5"/>
+    </resources>
+</document>

@@ -1,0 +1,25 @@
+// Copyright (C) 2017-2018 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include <Cocoa/Cocoa.h>
+
+@class PanelController;
+@class MainWindowFilePanelState;
+
+namespace nc::panel::actions {
+
+struct PanelAction {
+    virtual ~PanelAction();
+    [[nodiscard]] virtual bool Predicate(PanelController *_target) const;
+    [[nodiscard]] virtual bool ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const;
+    virtual void Perform(PanelController *_target, id _sender) const;
+};
+
+struct StateAction {
+    virtual ~StateAction();
+    [[nodiscard]] virtual bool Predicate(MainWindowFilePanelState *_target) const;
+    [[nodiscard]] virtual bool ValidateMenuItem(MainWindowFilePanelState *_target, NSMenuItem *_item) const;
+    virtual void Perform(MainWindowFilePanelState *_target, id _sender) const;
+};
+
+}; // namespace nc::panel::actions

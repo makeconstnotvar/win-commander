@@ -1,0 +1,232 @@
+// Copyright (C) 2018-2026 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include <utility>
+#include <type_traits>
+#include <atomic>
+
+// this is an almost straight copy of boost::intrusive_ptr, mainly because I don't want
+// to have all that legacy support and preprocessor spaghetti.
+
+namespace nc::base {
+
+template <typename T>
+class intrusive_ptr
+{
+public:
+    using element_type = T;
+    using pointer = T *;
+
+    static_assert(std::is_same_v<decltype(intrusive_ptr_add_refcount(static_cast<const T *>(nullptr))), void>);
+    static_assert(std::is_same_v<decltype(intrusive_ptr_dec_refcount(static_cast<const T *>(nullptr))), void>);
+
+    constexpr intrusive_ptr() noexcept : p(nullptr) {}
+
+    constexpr intrusive_ptr(std::nullptr_t) noexcept : p(nullptr) {}
+
+    explicit intrusive_ptr(T *_p) noexcept : p(_p)
+    {
+        if( p )
+            intrusive_ptr_add_refcount(p);
+    }
+
+    intrusive_ptr(const intrusive_ptr &_rhs) noexcept : p(_rhs.p)
+    {
+        if( p )
+            intrusive_ptr_add_refcount(p);
+    }
+
+    template <typename U>
+    intrusive_ptr(const intrusive_ptr<U> &_rhs,
+                  std::enable_if_t<std::is_convertible_v<U *, T *>> * /*unused*/ = nullptr) noexcept
+        : p(_rhs.get())
+    {
+        if( p )
+            intrusive_ptr_add_refcount(p);
+    }
+
+    intrusive_ptr(intrusive_ptr &&_rhs) noexcept : p(_rhs.p) { _rhs.p = nullptr; }
+
+    template <typename U>
+    intrusive_ptr(intrusive_ptr<U> &&_rhs,
+                  std::enable_if_t<std::is_convertible_v<U *, T *>> * /*unused*/ = nullptr) noexcept
+        : p(_rhs.get())
+    {
+        _rhs.release();
+    }
+
+    ~intrusive_ptr() noexcept
+    {
+        if( p != nullptr )
+            intrusive_ptr_dec_refcount(p);
+    }
+
+    intrusive_ptr &operator=(const intrusive_ptr &_rhs) noexcept
+    {
+        intrusive_ptr(_rhs).swap(*this);
+        return *this;
+    }
+
+    intrusive_ptr &operator=(intrusive_ptr &&_rhs) noexcept
+    {
+        intrusive_ptr(std::move(_rhs)).swap(*this);
+        return *this;
+    }
+
+    intrusive_ptr &operator=(std::nullptr_t) noexcept
+    {
+        reset();
+        return *this;
+    }
+
+    void reset() noexcept { intrusive_ptr().swap(*this); }
+
+    template <typename U>
+    void reset(U *_p) noexcept
+        requires(std::is_convertible_v<U *, T *>)
+    {
+        intrusive_ptr(_p).swap(*this);
+    }
+
+    [[nodiscard]] T *get() const noexcept { return p; }
+
+    T *release() noexcept
+    {
+        auto tmp = p;
+        p = nullptr;
+        return tmp;
+    }
+
+    T &operator*() const noexcept { return *p; }
+
+    T *operator->() const noexcept { return p; }
+
+    explicit operator bool() const noexcept { return p != nullptr; }
+
+    void swap(intrusive_ptr &_rhs) noexcept { std::swap(p, _rhs.p); }
+
+private:
+    T *p;
+};
+
+template <class T, class U>
+bool operator==(const intrusive_ptr<T> &_lhs, const intrusive_ptr<U> &_rhs) noexcept
+{
+    return _lhs.get() == _rhs.get();
+}
+
+template <class T, class U>
+bool operator!=(const intrusive_ptr<T> &_lhs, const intrusive_ptr<U> &_rhs) noexcept
+{
+    return _lhs.get() != _rhs.get();
+}
+
+template <class T, class U>
+bool operator<(const intrusive_ptr<T> &_lhs, const intrusive_ptr<U> &_rhs) noexcept
+{
+    return _lhs.get() < _rhs.get();
+}
+
+template <class T, class U>
+bool operator<=(const intrusive_ptr<T> &_lhs, const intrusive_ptr<U> &_rhs) noexcept
+{
+    return _lhs.get() <= _rhs.get();
+}
+
+template <class T, class U>
+bool operator>(const intrusive_ptr<T> &_lhs, const intrusive_ptr<U> &_rhs) noexcept
+{
+    return _lhs.get() > _rhs.get();
+}
+
+template <class T, class U>
+bool operator>=(const intrusive_ptr<T> &_lhs, const intrusive_ptr<U> &_rhs) noexcept
+{
+    return _lhs.get() >= _rhs.get();
+}
+
+template <class T>
+bool operator==(const intrusive_ptr<T> &_p, std::nullptr_t) noexcept
+{
+    return !static_cast<bool>(_p);
+}
+
+template <class T>
+bool operator==(std::nullptr_t, const intrusive_ptr<T> &_p) noexcept
+{
+    return !static_cast<bool>(_p);
+}
+
+template <class T>
+bool operator!=(const intrusive_ptr<T> &_p, std::nullptr_t) noexcept
+{
+    return static_cast<bool>(_p);
+}
+
+template <class T>
+bool operator!=(std::nullptr_t, const intrusive_ptr<T> &_p) noexcept
+{
+    return static_cast<bool>(_p);
+}
+
+template <typename T>
+class intrusive_ref_counter;
+
+template <typename T>
+void intrusive_ptr_add_refcount(const intrusive_ref_counter<T> *p) noexcept;
+template <typename T>
+void intrusive_ptr_dec_refcount(const intrusive_ref_counter<T> *p) noexcept;
+
+template <typename T>
+class intrusive_ref_counter
+{
+    intrusive_ref_counter() noexcept : c{0} {}
+    intrusive_ref_counter(const intrusive_ref_counter & /*unused*/) noexcept : c{0} {}
+
+public:
+    intrusive_ref_counter &operator=(const intrusive_ref_counter & /*unused*/) noexcept { return *this; }
+
+    int use_count() const noexcept { return c.load(std::memory_order_relaxed); }
+
+protected:
+    ~intrusive_ref_counter() = default;
+
+private:
+    mutable std::atomic<int> c;
+    friend void intrusive_ptr_add_refcount<T>(const intrusive_ref_counter<T> *p) noexcept;
+    friend void intrusive_ptr_dec_refcount<T>(const intrusive_ref_counter<T> *p) noexcept;
+    friend T;
+};
+
+template <typename T>
+void intrusive_ptr_add_refcount(const intrusive_ref_counter<T> *p) noexcept
+{
+    p->c.fetch_add(1, std::memory_order_relaxed);
+}
+
+template <typename T>
+void intrusive_ptr_dec_refcount(const intrusive_ref_counter<T> *p) noexcept
+{
+    if( p->c.fetch_sub(1, std::memory_order_release) == 1 ) {
+        std::atomic_thread_fence(std::memory_order_acquire);
+        delete static_cast<const T *>(p);
+    }
+}
+} // namespace nc::base
+
+namespace std {
+
+template <typename T>
+void swap(nc::base::intrusive_ptr<T> &lhs, nc::base::intrusive_ptr<T> &rhs) noexcept
+{
+    lhs.swap(rhs);
+}
+
+template <typename T>
+struct hash<nc::base::intrusive_ptr<T>> {
+    using argument_type = nc::base::intrusive_ptr<T>;
+    using result_type = size_t;
+    result_type operator()(const argument_type &_p) const { return hash<typename argument_type::pointer>()(_p.get()); }
+};
+
+} // namespace std

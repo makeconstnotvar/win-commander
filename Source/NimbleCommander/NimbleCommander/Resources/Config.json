@@ -1,0 +1,950 @@
+{
+    /**
+     * General stuff
+     */
+    "general": {
+        /**
+        * Selected theme name. Defaults includes three: "Modern", "Classic", "Dark".
+        */
+        "theme": "Modern",
+        
+        /**
+         * Show/hide toolbar
+         */
+        "showToolbar": true,
+
+        /**
+         * Show/hide tabs bar
+         */
+        "showTabs": false,
+        
+        /**
+         * Force NC to treat incoming FnXX keys as functional ones, not multimedia controls
+         */
+        "alwaysUseFnKeysAsFunctional": false,
+        
+        "notifications": {            
+            /**
+             * Allow to show notifications when NC is a frontmost application.
+             */
+            "showWhenActive": true,
+            
+            /**
+             * A minimum time threshold in seconds, after which a completion of a file operation
+             * will trigger a notification.
+             */
+            "minElapsedOperationTime": 30
+        }
+    },
+
+    /**
+     * Settings related to file panels, i.e. main application state
+     */
+    "filePanel": {
+
+        "general": {
+            /**
+             * When creating a first window, should app restore the last state
+             */
+            "restoreLastWindowState": true,
+            
+            /**
+             * Initial path for left panel
+             */
+            "initialLeftPanelPath": "~/",
+
+            /**
+             * Initial path for right panel
+             */
+            "initialRightPanelPath": "~/",
+            
+            /**
+             * Should selection by mask (cmd+=, alt+cmd+= etc) ignore when enumerating entries
+             */
+            "ignoreDirectoriesOnSelectionWithMask": true,
+
+            /**
+             * Show localized and/or modified (like ~/Trash instead of ~/.Trash) filenames in file panels
+             */
+            "showLocalizedFilenames": true,
+            
+            /**
+             * When loading directory listings for file panels, should "entry" be present
+             */
+            "showDotDotEntry": true,
+  
+            /**
+             * Show current paths in other file panels in GoTo pop-up menu
+             */
+            "appendOtherWindowsPathsToGoToMenu": true,
+
+            /**
+             * Should show network connections in GoTo pop-up menu
+             */
+            "showNetworkConnectionsInGoToMenu": true,
+            
+            /**
+             * Maximum amount of recent network connections shown in GoTo pop-up menu
+             */
+            "maximumNetworkConnectionsInGoToMenu": 5,
+
+            /**
+             * When dragging items, allow or not dragging into some directory in file panel or only into current file panel's directory
+             */
+            "allowDraggingIntoFolders": true,
+  
+            /**
+             * When panel path was changed by GoTo pop-up menu click, should that panel be activated automatically
+             */
+            "goToButtonForcesPanelActivation": true,
+
+            /**
+             * Which extensions should be treated as potential archives when deciding what to do upon Enter key pressed
+             */
+            "archivesExtensionsWhitelist": "zip, tar, pax, cpio, cpgz, xar, lha, ar, cab, mtree, iso, bz2, gz, bzip2, gzip, 7z, jar, xz, rar, lz, lz4, lzo, lzma, z, zst",
+            
+            /**
+             * Which extensions should be treated as potential executables when deciding what to do upon Enter key pressed
+             */
+            "executableExtensionsWhitelist": "sh, pl, rb, py",
+
+            /**
+             * Size format for current file, integer enumeration:
+             * 1 - 2536 K
+             * 2 - 2,5 MB
+             */
+            "fileSizeFormat": 1,
+            
+            /**
+             * Size format for total selection, integer enumeration:
+             * 0 - 2 597 065 bytes
+             * 1 - 2536 K
+             * 2 - 2,5 MB
+             * 3 - 2,48 MB
+             */
+            "selectionSizeFormat": 0,
+  
+            "routeKeyboardInputIntoTerminal": false,
+            
+            /**
+             * Default algorithm to calculate file's checksum, possible values:
+             * Adler32, CRC32, MD2, MD4, MD5, SHA1-160, SHA2-224, SHA2-256, SHA2-384, SHA2-512.
+             */
+            "checksumCalculationAlgorithm": "MD5",
+            
+            /**
+             * Limit maximum rate of views redrawing, zero is no limit
+             */
+            "maxFPS": 60,
+  
+            "bottomGapForOverlappedTerminal": 0,
+            
+            /**
+             * Separator between filenames/filepaths for copying in pasteboard.
+             */
+            "separatorForCopyingMultipleFilenames": "\n",
+
+            /**
+             * Automatically deselect items after they were processed by a file operation.
+             */
+            "deselectItemsAfterFileOperations": true,
+            
+            /**
+             * When opening a file from a VFS, NC will have to copy it into a temporary location first.
+             * This setting controls the maximum size of a file that can be opened without confirmation.
+             * Default value: 64MB.
+             */
+            "maximumAllowedVFSFileSizeForOpeningWithoutConfirmation": 67108864
+        },
+        
+        /**
+         * Section about common visual appearance of panels
+         */
+        "presentation": {
+            /**
+             * How to trim a filename in case it doesn't fit the column width, integer enumeration:
+             * 0 - Heading
+             * 1 - Middle
+             * 2 - Trailing
+             */
+            "filenamesTrimmingMode": 1,
+            
+            /**
+             * Switches between two modes of Preview:
+             * false - as a panel overlay
+             * true - as a floating window
+             */
+            "showQuickLookAsFloatingPanel": false,
+            
+            /**
+             * A whitelist of UTIs used to determine whether an QuickLook icon is required for a
+             * file. Requires restart to take effect.
+             */
+            "quickLookIconsWhitelist": "public.image, public.movie, public.audio",
+            
+            /**
+             * Due to a bug in the Apple's QuickLook framework viewing some file formats can cause
+             * the application to crash. That happens only under specific circumstances and when
+             * QuickLook is displayed as a panel overlay.
+             * As a workaround this comma-separated list controls whether QuickLook view will be
+             * reset before displaying the next item.
+             * This causes a visual flicker so is not enabled by default.
+             * Specifying "*" will enable this safe behaviour for all items.
+             */
+            "quickLookHazardousExtensionsList": "pdf",
+            
+            /**
+             * Controls whether the panels should be scrolled instantly (default) or with a smooth animation.
+             */
+            "smoothScrolling": false
+        },
+        
+        /**
+         * Section about QuickSearch - instant search for filenames in current panel by typing
+         */
+        "quickSearch": {
+            /**
+             * Enable quick search typing prompt
+             */
+            "typingView": true,
+
+            /**
+             * Should filtering show only matching filenames(false) or should it only focus matching filenames in whole panel(true)
+             */
+            "softFiltering": false,
+            
+            /**
+             * Where to find a piece of text in filename, integer enumeration:
+             * 0 - Anywhere
+             * 1 - Beginning
+             * 2 - Ending
+             * 3 - BeginningOrEnding
+             * 4 - Fuzzy
+             */
+            "whereToFind": 0,
+  
+            /**
+             * Key option to activate quick search by typing, integer enumeration:
+             * 0 - ⌥, type filename part with Alt key
+             * 1 - ⌃⌥, type filename part with Ctrl+Alt keys
+             * 2 - ⇧⌥, type filename part with Shift+Alt keys
+             * 3 - no modifiers required
+             * 4 - quick search is disabled
+             */
+            "keyOption": 3,
+            
+            /**
+             * A set of characters to ignore when processing input, regradless of their position
+             */
+            "ignoreCharacters": " "
+        },
+        
+        /**
+         * Settings related to the usage of Finder Tags 
+         */
+        "FinderTags": {
+            /**
+             * Enable loading and UI components of tags
+             */
+            "enable": true,
+            
+            /**
+             * Storage for the known tags
+             */
+            "tags": {}
+         },
+  
+        /**
+         * Settings related to Spotlight usage
+         */
+        "spotlight": {
+            /**
+             * Search request formatting. #{query} will be replaced with entered search criteria.
+             * There's an option to split input parameter string into substrings with spaces(" ") and use them separately.
+             * To do so #{query1}, #{query2}, ..., #{query9} should be used, like the one below:
+             * "kMDItemFSName == '*#{query1}*'cd && kMDItemFSName == '*#{query2}*'cd && kMDItemFSName == '*#{query3}*'cd && kMDItemFSName == '*#{query4}*'cd && kMDItemFSName == '*#{query5}*'cd && kMDItemFSName == '*#{query6}*'cd && kMDItemFSName == '*#{query7}*'cd && kMDItemFSName == '*#{query8}*'cd && kMDItemFSName == '*#{query9}*'cd".
+             */
+            "format": "kMDItemFSName == '*#{query}*'cd",
+            
+            /**
+             * Maximum results count to fetch.
+             */
+            "maxCount": 1024
+        },
+        
+        /**
+         * Settings related to file operations
+         */
+        "operations": {
+            /**
+             * When to check result files after copy/move operation, integer enumeration:
+             * 0 - Never check
+             * 1 - Verify after moving files
+             * 2 - Verify always
+             */
+            "defaultChecksumVerification": 1,
+            
+            /**
+             * Time in milliseconds, that NC will wait before checking for changes in shadow copy of
+             * VFS file after getting a notification from filesystem.
+             */
+            "vfsShadowUploadChangesCheckDelay": 5000,
+
+            /**
+             * Time in milliseconds, after which NC will give up on watching for changes in shadow 
+             * copy of VFS file. Measured from making of shadow copy or from the it's last change.
+             */
+            "vfsShadowUploadObservationDropDelay": 3600000,
+            
+            /**
+             * Maximum amount of concurrent file operation running simultaneously in a single window.
+             * Any operation added after this value is reached will wait in a queue.
+             */
+             "concurrencyPerWindow": 5,
+             
+             /**
+              * A list of operations that are not enqueued in case the concurrency limit is reached,
+              * effectively bypassing this mechanism. Comma-separated string list, possible entries
+              * are: "attrs_change", "batch_rename", "compress", "copy", "delete", "mkdir", "link".
+              */
+              "concurrencyPerWindowDoesntApplyTo": "",
+
+              /**
+               * When performing I/O, bypass system caches for the affected files.
+               * Effectively controls whether F_NOCACHE will be applied.
+               */
+              "disableSystemCaches": false
+        },
+        
+        /**
+         * Panel layout settings. By default layout N2 is used.
+         */
+        "layout": {
+            "layouts_v1": [
+                            {
+                                "title": "Short",
+                                "brief": {
+                                    "mode": 1,
+                                    "fixed_amount_value": 3
+                                }
+                            },
+                            {
+                                "title": "Medium",
+                                "brief": {
+                                    "mode": 2
+                                }
+                            },
+                            {
+                                "title": "Full",
+                                "list": {
+                                    "columns": [
+                                                {
+                                                    "kind": 1
+                                                },
+                                                {
+                                                    "kind": 2
+                                                },
+                                                {
+                                                    "kind": 3
+                                                },
+                                                {
+                                                    "kind": 5
+                                                },
+                                                {
+                                                    "kind": 4
+                                                }
+                                    ]
+                                }
+                           },
+                           {
+                                "title": "Wide",
+                                "list": {
+                                    "columns": [
+                                                {
+                                                    "kind": 1
+                                                },
+                                                {
+                                                    "kind": 2
+                                                }
+                                       ]
+                                }
+                           },
+                           {
+                                "title": "Gallery",
+                                "gallery": {
+                                    "icon_scale": 1,
+                                    "text_lines": 2
+                                }
+                           },
+                           {
+                                "title": "Custom Layout VI",
+                                "disabled": null
+                           },
+                           {
+                                "title": "Custom Layout VII",
+                                "disabled": null
+                           },
+                           {
+                                "title": "Custom Layout VIII",
+                                "disabled": null
+                           },
+                           {
+                                "title": "Custom Layout IX",
+                                "disabled": null
+                           },
+                           {
+                                "title": "Custom Layout X",
+                                "disabled": null
+                           }
+            ]
+        }
+    },
+    
+    /**
+     * Settings related to built-in viewer
+     */
+    "viewer": {
+
+        /**
+         * Should viewer be presented in modal mode or as a separate window.
+         */
+        "modalMode": true,
+        
+        /**
+         * Size of a window thru which viewer should show contents of a file, integer enumeration:
+         * 0 - 32Kb
+         * 1 - 64Kb
+         * 2 - 128Kb
+         * 3 - 256Kb
+         * 4 - 512Kb
+         * 5 - 1024Kb
+         */
+        "fileWindowSize": 3,
+
+        "defaultEncoding": "ENCODING_MACOS_ROMAN_WESTERN",
+        
+        "autoDetectEncoding": true,
+        
+        "respectComAppleTextEncoding": true,
+        
+        /**
+         * Search options
+         */
+        "searchCaseSensitive": false,
+        "searchForWholePhrase": false,
+        
+        /**
+         * What per-file states viewer should save
+         */
+        "saveFileEncoding":     true,
+        "saveFileMode":         true,
+        "saveFilePosition":     true,
+        "saveFileWrapping":     true,
+        "saveFileSelection":    true,
+        "saveFileLanguage":     true,
+        "maximumHistoryEntries": 256,
+
+        /**
+         * Automatically refresh Viewer whenever its file is changed.
+         */
+        "automaticRefresh": true,
+        
+        /**
+         * Should keep the scroll at the bottom when a file is reloaded.
+         */
+        "stickToBottomOnRefresh": true,
+        
+        /**
+         * Whether the viewer should try do syntax highlighting.
+         */
+         "enableHighlighting": true
+    },
+    
+    /**
+     * Settings related to terminal emulator
+     */
+    "terminal": {
+        /**
+         * True if NC should ignore customShellPath and use a value from environment: $SHELL.
+         */
+        "useDefaultLoginShell": true,
+        
+        /**
+         * Which shell NC should use, if not the default one.
+         */
+        "customShellPath": "/bin/bash",
+        
+        /**
+         * Limit maximum rate of view redrawing, zero is no limit.
+         */
+        "maxFPS": 60,
+
+        /**
+         * Option to mandatory hide the scrollbar.
+         */
+        "hideVerticalScrollbar": false,
+        
+        /**
+         * Cursor drawing mode, integer enumeration:
+         * 0 - Block,
+         * 1 - Underline,
+         * 2 - Vertical bar
+         */
+        "cursorMode": 0
+    },
+    
+    "externalTools": {
+        "tools_v1": [
+            {
+                "title": "Open System Terminal Here",
+                "path": "/System/Applications/Utilities/Terminal.app",
+                "parameters": "%r",
+                "shortcut": ""
+            },
+            {
+                "title": "XCode Merge",
+                "path": "/usr/bin/opendiff",
+                "parameters": "%p %-p",
+                "shortcut": ""
+            }
+        ]
+    },
+    
+    "externalEditors": {
+        "editors_v1": [
+                       {
+                       "name": "vi",
+                       "path": "/usr/bin/vi",
+                       "args": "%%",
+                       "mask": "*",
+                       "openInTerminal": true
+                       },
+                       {
+                       "name": "TextEdit",
+                       "path": "/System/Applications/TextEdit.app",
+                       "args": "",
+                       "mask": "*",
+                       "openInTerminal": false
+                       }
+                       ]
+    },
+    
+    "themes": {
+        "automaticSwitching": {
+            "enabled": true,
+            "light": "Light",
+            "dark": "Dark"
+        },
+        "themes_v1": [
+                      {
+                      "themeName": "Light",
+                      "themeAppearance": "light",
+                      "filePanelsColoringRules_v1": [
+                                                     {
+                                                     "name": "selected",
+                                                     "regular": "#FF0000",
+                                                     "focused": "#FF0000",
+                                                     "filter": {
+                                                     "selected": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "hidden",
+                                                     "regular": "#666666",
+                                                     "focused": "#999999",
+                                                     "filter": {
+                                                     "hidden": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "other",
+                                                     "regular": "#000000",
+                                                     "focused": "#FFFFFF"
+                                                     }
+                                                     ],
+                      "filePanelsGeneralDropBorderColor": "@blueColor",
+                      "filePanelsGeneralOverlayColor": "@whiteColor",
+                      "filePanelsGeneralSplitterColor": "#BABABA",
+                      "filePanelsGeneralTopSeparatorColor": "#6060606B",
+                      
+                      /* File Panels -> tabs settings */
+                      "filePanelsTabsFont": "@systemFont, 11",
+                      "filePanelsTabsTextColor": "@controlTextColor",
+                      "filePanelsTabsSelectedKeyWndActiveBackgroundColor": "#FFFFFF",
+                      "filePanelsTabsSelectedKeyWndInactiveBackgroundColor": "@clearColor",
+                      "filePanelsTabsSelectedNotKeyWndBackgroundColor": "@clearColor",
+                      "filePanelsTabsRegularKeyWndHoverBackgroundColor": "#A5A5A5",
+                      "filePanelsTabsRegularKeyWndRegularBackgroundColor": "#B9B9B9",
+                      "filePanelsTabsRegularNotKeyWndBackgroundColor": "@clearColor",
+                      "filePanelsTabsSeparatorColor": "#8080806B",
+                      "filePanelsTabsPictogramColor": "#303030",
+                      
+                      /* File Panels -> header settings */
+                      "filePanelsHeaderFont": "@labelFont, 13",
+                      "filePanelsHeaderTextColor": "@labelColor",
+                      "filePanelsHeaderActiveTextColor": "@labelColor",
+                      "filePanelsHeaderActiveBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsHeaderInactiveBackgroundColor": "@clearColor",
+                      "filePanelsHeaderSeparatorColor": "#8080806B",
+                      
+                      /* File Panels -> footer settings */
+                      "filePanelsFooterFont": "@labelFont, 13",
+                      "filePanelsFooterTextColor" : "@labelColor",
+                      "filePanelsFooterActiveTextColor" : "@labelColor",
+                      "filePanelsFooterSeparatorsColor": "#8080806B",
+                      "filePanelsFooterActiveBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsFooterInactiveBackgroundColor": "#E8E8E8",
+                      
+                      /* File Panels -> List settings */
+                      "filePanelsListFont": "@systemFont, 13",
+                      "filePanelsListSecondaryColumnsOpacity": "100",
+                      "filePanelsListRowVerticalPadding": "0",
+                      "filePanelsListGridColor": "@clearColor",
+                      "filePanelsListHeaderFont": "@systemFont, 11",
+                      "filePanelsListHeaderBackgroundColor": "@controlBackgroundColor",
+                      "filePanelsListHeaderTextColor": "@headerTextColor",
+                      "filePanelsListHeaderSeparatorColor": "#8080806B",
+                      "filePanelsListFocusedActiveRowBackgroundColor": "@blueColor",
+                      "filePanelsListFocusedInactiveRowBackgroundColor": "@lightGrayColor",
+                      "filePanelsListSelectedItemBackgroundColor": "#80C3FF58",                      
+                      "filePanelsListRegularEvenRowBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsListRegularOddRowBackgroundColor" : "@controlAlternatingRowBackgroundColors1",
+                      
+                      /* File Panels -> Brief settings */
+                      "filePanelsBriefFont": "@systemFont, 13",
+                      "filePanelsBriefRowVerticalPadding": "0",
+                      "filePanelsBriefGridColor": "#E6E6E6",
+                      "filePanelsBriefRegularEvenRowBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsBriefRegularOddRowBackgroundColor": "@controlAlternatingRowBackgroundColors1",
+                      "filePanelsBriefFocusedActiveItemBackgroundColor": "@blueColor",
+                      "filePanelsBriefFocusedInactiveItemBackgroundColor": "@lightGrayColor",
+                      "filePanelsBriefSelectedItemBackgroundColor": "#80C3FF58",
+
+                      /* File Panels -> Gallery settings */
+                      "filePanelsGalleryFont": "@systemFont, 10",
+                      "filePanelsGalleryBackgroundColor": "@textBackgroundColor",
+                      "filePanelsGalleryFocusedActiveItemBackgroundColor": "@blueColor",
+                      "filePanelsGalleryFocusedInactiveItemBackgroundColor": "@lightGrayColor",
+                      "filePanelsGallerySelectedItemBackgroundColor": "#D3EAFF",
+                      
+                      /* Terminal Emulator */
+                      "terminalFont": "Menlo-Regular, 13",
+                      "terminalOverlayColor": "@whiteColor",
+                      "terminalForegroundColor": "#FFFFFF",
+                      "terminalBoldForegroundColor": "#FFFFFF",
+                      "terminalBackgroundColor": "#000000",
+                      "terminalSelectionColor": "#E5E5E5",
+                      "terminalCursorColor": "#666666",
+                      "terminalAnsiColor0": "#000000", // black
+                      "terminalAnsiColor1": "#990000", // red
+                      "terminalAnsiColor2": "#00A600", // green
+                      "terminalAnsiColor3": "#999900", // yellow
+                      "terminalAnsiColor4": "#0000B2", // blue
+                      "terminalAnsiColor5": "#B200B2", // magenta
+                      "terminalAnsiColor6": "#00A6B2", // cyan
+                      "terminalAnsiColor7": "#BFC2BF", // white
+                      "terminalAnsiColor8": "#666666", // bright black
+                      "terminalAnsiColor9": "#E50000", // bright red
+                      "terminalAnsiColorA": "#00D900", // bright green
+                      "terminalAnsiColorB": "#E5E500", // bright yellow
+                      "terminalAnsiColorC": "#0000FF", // bright blue
+                      "terminalAnsiColorD": "#E500E5", // bright magenta
+                      "terminalAnsiColorE": "#00E5E5", // bright cyan
+                      "terminalAnsiColorF": "#E5E6E5", // bright white
+                      
+                      /* Viewer */
+                      "viewerFont": "Menlo-Regular, 13",
+                      "viewerOverlayColor": "@whiteColor",
+                      "viewerTextColor": "#000000",
+                      "viewerTextSyntaxCommentColor": "#267507",
+                      "viewerTextSyntaxPreprocessorColor": "#643820",
+                      "viewerTextSyntaxKeywordColor": "#9B2393",
+                      "viewerTextSyntaxOperatorColor": "#121249",
+                      "viewerTextSyntaxIdentifierColor": "#000000",
+                      "viewerTextSyntaxNumberColor": "#1C00CF",
+                      "viewerTextSyntaxStringColor": "#C41A16",
+                      "viewerSelectionColor": "#B4D6FC",
+                      "viewerBackgroundColor": "#FFFFFF"
+                      },
+                      {
+                      "themeName": "Dark",
+                      "themeAppearance": "dark",
+                      
+                      "filePanelsColoringRules_v1": [
+                                                     {
+                                                     "name": "selected",
+                                                     "regular": "#FF0000",
+                                                     "focused": "#FF0000",
+                                                     "filter": {
+                                                     "selected": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "hidden",
+                                                     "regular": "#666666",
+                                                     "focused": "#999999",
+                                                     "filter": {
+                                                     "hidden": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "other",
+                                                     "regular": "#929292",
+                                                     "focused": "#FFFFFF"
+                                                     }
+                                                     ],
+                      "filePanelsGeneralDropBorderColor": "@grayColor",
+                      "filePanelsGeneralOverlayColor": "@blackColor",
+                      "filePanelsGeneralSplitterColor": "#282828",
+                      "filePanelsGeneralTopSeparatorColor": "#6060606B",
+                      
+                      /* File Panels -> tabs settings */
+                      "filePanelsTabsFont": "@systemFont, 11",
+                      "filePanelsTabsTextColor": "@controlTextColor",
+                      "filePanelsTabsSelectedKeyWndActiveBackgroundColor": "#323232",
+                      "filePanelsTabsSelectedKeyWndInactiveBackgroundColor": "#181818",
+                      "filePanelsTabsSelectedNotKeyWndBackgroundColor": "#101010",
+                      "filePanelsTabsRegularKeyWndHoverBackgroundColor": "#3A3A3A",
+                      "filePanelsTabsRegularKeyWndRegularBackgroundColor": "#000000",
+                      "filePanelsTabsRegularNotKeyWndBackgroundColor": "#000000",
+                      "filePanelsTabsSeparatorColor": "#8080806B",
+                      "filePanelsTabsPictogramColor": "@controlTextColor",
+                      
+                      /* File Panels -> header settings */
+                      "filePanelsHeaderFont": "@labelFont, 13",
+                      "filePanelsHeaderTextColor": "#777777",
+                      "filePanelsHeaderActiveTextColor": "@labelColor",
+                      "filePanelsHeaderActiveBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsHeaderInactiveBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsHeaderSeparatorColor": "#8080806B",
+                      
+                      /* File Panels -> footer settings */
+                      "filePanelsFooterFont": "@labelFont, 13",
+                      "filePanelsFooterTextColor" : "#777777",
+                      "filePanelsFooterActiveTextColor" : "@labelColor",
+                      "filePanelsFooterSeparatorsColor": "#282828",
+                      "filePanelsFooterActiveBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      "filePanelsFooterInactiveBackgroundColor": "@controlAlternatingRowBackgroundColors0",
+                      
+                      /* File Panels -> List settings */
+                      "filePanelsListFont": "@systemFont, 13",
+                      "filePanelsListSecondaryColumnsOpacity": "100",
+                      "filePanelsListRowVerticalPadding": "0",
+                      "filePanelsListGridColor": "@clearColor",
+                      "filePanelsListHeaderFont": "@systemFont, 11",
+                      "filePanelsListHeaderBackgroundColor": "@controlBackgroundColor",
+                      "filePanelsListHeaderTextColor": "#777777",
+                      "filePanelsListHeaderSeparatorColor": "#8080806B",
+                      "filePanelsListFocusedActiveRowBackgroundColor": "@blueColor",
+                      "filePanelsListFocusedInactiveRowBackgroundColor": "#4B4B4B",
+                      "filePanelsListSelectedItemBackgroundColor": "#55555558",
+                      "filePanelsListRegularEvenRowBackgroundColor": "#000000",
+                      "filePanelsListRegularOddRowBackgroundColor" : "#0A0A0A",
+  
+                      
+                      /* File Panels -> Brief settings */
+                      "filePanelsBriefFont": "@systemFont, 13",
+                      "filePanelsBriefRowVerticalPadding": "0",
+                      "filePanelsBriefGridColor": "#141414",
+                      "filePanelsBriefRegularEvenRowBackgroundColor": "#000000",
+                      "filePanelsBriefRegularOddRowBackgroundColor": "#0A0A0A",
+                      "filePanelsBriefFocusedActiveItemBackgroundColor": "@blueColor",
+                      "filePanelsBriefFocusedInactiveItemBackgroundColor": "#4B4B4B",
+                      "filePanelsBriefSelectedItemBackgroundColor": "#55555558",
+                      
+                      /* File Panels -> Gallery settings */
+                      "filePanelsGalleryFont": "@systemFont, 10",
+                      "filePanelsGalleryBackgroundColor": "@textBackgroundColor",
+                      "filePanelsGalleryFocusedActiveItemBackgroundColor": "@blueColor",
+                      "filePanelsGalleryFocusedInactiveItemBackgroundColor": "#4B4B4B",
+                      "filePanelsGallerySelectedItemBackgroundColor": "#242424",
+                      
+                      /* Terminal Emulator */
+                      "terminalFont": "Menlo-Regular, 13",
+                      "terminalOverlayColor": "@blackColor",
+                      "terminalForegroundColor": "#FFFFFF",
+                      "terminalBoldForegroundColor": "#FFFFFF",
+                      "terminalBackgroundColor": "#000000",
+                      "terminalSelectionColor": "#E5E5E5",
+                      "terminalCursorColor": "#666666",
+                      "terminalAnsiColor0": "#000000", // black
+                      "terminalAnsiColor1": "#990000", // red
+                      "terminalAnsiColor2": "#00A600", // green
+                      "terminalAnsiColor3": "#999900", // yellow
+                      "terminalAnsiColor4": "#0000B2", // blue
+                      "terminalAnsiColor5": "#B200B2", // magenta
+                      "terminalAnsiColor6": "#00A6B2", // cyan
+                      "terminalAnsiColor7": "#BFC2BF", // white
+                      "terminalAnsiColor8": "#666666", // bright black
+                      "terminalAnsiColor9": "#E50000", // bright red
+                      "terminalAnsiColorA": "#00D900", // bright green
+                      "terminalAnsiColorB": "#E5E500", // bright yellow
+                      "terminalAnsiColorC": "#0000FF", // bright blue
+                      "terminalAnsiColorD": "#E500E5", // bright magenta
+                      "terminalAnsiColorE": "#00E5E5", // bright cyan
+                      "terminalAnsiColorF": "#E5E6E5", // bright white
+                      
+                      /* Viewer */
+                      "viewerFont": "Menlo-Regular, 13",
+                      "viewerOverlayColor": "@blackColor",
+                      "viewerTextColor": "#DCDCDC",
+                      "viewerTextSyntaxKeywordColor": "#FC5FA3",
+                      "viewerTextSyntaxOperatorColor": "#DCE7FF",
+                      "viewerTextSyntaxIdentifierColor": "#DCDCDC",
+                      "viewerTextSyntaxNumberColor": "#D0BF69",
+                      "viewerTextSyntaxStringColor": "#FC695D",
+                      "viewerTextSyntaxCommentColor": "#73A74E",
+                      "viewerTextSyntaxPreprocessorColor": "#FD8F3F",
+                      "viewerSelectionColor": "#245DFA",
+                      "viewerBackgroundColor": "#141414"
+                      },
+                      {
+                      "themeName": "Classic",
+                      "themeAppearance": "light",
+                      
+                      "filePanelsColoringRules_v1": [
+                                                     {
+                                                     "name": "selected",
+                                                     "regular": "#FFFF00",
+                                                     "focused": "#FFFF00",
+                                                     "filter": {
+                                                     "selected": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "hidden",
+                                                     "regular": "#008080",
+                                                     "focused": "#808080",
+                                                     "filter": {
+                                                     "hidden": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "regular files",
+                                                     "regular": "#00FFFF",
+                                                     "focused": "#000000",
+                                                     "filter": {
+                                                     "reg": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "directories",
+                                                     "regular": "#FFFFFF",
+                                                     "focused": "#FFFFFF",
+                                                     "filter": {
+                                                     "directory": true
+                                                     }
+                                                     },
+                                                     {
+                                                     "name": "other",
+                                                     "regular": "#FF0000",
+                                                     "focused": "#FF0000"
+                                                     }
+                                                     ],
+                      "filePanelsGeneralDropBorderColor": "@yellowColor",
+                      "filePanelsGeneralOverlayColor": "@whiteColor",
+                      "filePanelsGeneralSplitterColor": "#00FFFF",
+                      "filePanelsGeneralTopSeparatorColor": "#6060606B",
+                      
+                      /* File Panels -> tabs settings */
+                      "filePanelsTabsFont": "Menlo-Regular, 11",
+                      "filePanelsTabsTextColor": "#E5E5E5",
+                      "filePanelsTabsSelectedKeyWndActiveBackgroundColor": "#008080",
+                      "filePanelsTabsSelectedKeyWndInactiveBackgroundColor": "#000080",
+                      "filePanelsTabsSelectedNotKeyWndBackgroundColor": "#000080",
+                      "filePanelsTabsRegularKeyWndHoverBackgroundColor": "#000080",
+                      "filePanelsTabsRegularKeyWndRegularBackgroundColor": "#000080",
+                      "filePanelsTabsRegularNotKeyWndBackgroundColor": "#000080",
+                      "filePanelsTabsSeparatorColor": "#00FFFF",
+                      "filePanelsTabsPictogramColor": "#E5E5E5",
+                      
+                      /* File Panels -> header settings */
+                      "filePanelsHeaderFont": "Menlo-Regular, 13",
+                      "filePanelsHeaderTextColor": "#00FFFF",
+                      "filePanelsHeaderActiveTextColor": "@whiteColor",
+                      "filePanelsHeaderActiveBackgroundColor": "#000080",
+                      "filePanelsHeaderInactiveBackgroundColor": "#000080",
+                      "filePanelsHeaderSeparatorColor": "#00FFFF",
+                      
+                      /* File Panels -> footer settings */
+                      "filePanelsFooterFont": "Menlo-Regular, 13",
+                      "filePanelsFooterTextColor" : "#00FFFF",
+                      "filePanelsFooterActiveTextColor" : "@whiteColor",
+                      "filePanelsFooterSeparatorsColor": "#00FFFF",
+                      "filePanelsFooterActiveBackgroundColor": "#000080",
+                      "filePanelsFooterInactiveBackgroundColor": "#000080",
+                      
+                      /* File Panels -> List settings */
+                      "filePanelsListFont": "Menlo-Regular, 13",
+                      "filePanelsListSecondaryColumnsOpacity": "100",
+                      "filePanelsListRowVerticalPadding": "0",
+                      "filePanelsListGridColor": "#00FFFF",
+                      "filePanelsListHeaderFont": "Menlo-Regular, 13",
+                      "filePanelsListHeaderBackgroundColor": "#000080",
+                      "filePanelsListHeaderTextColor": "@yellowColor",
+                      "filePanelsListHeaderSeparatorColor": "#00FFFF",
+                      "filePanelsListFocusedActiveRowBackgroundColor": "#008080",
+                      "filePanelsListFocusedInactiveRowBackgroundColor": "#000080",
+                      "filePanelsListSelectedItemBackgroundColor": "#00000000",
+                      "filePanelsListRegularEvenRowBackgroundColor": "#000080",
+                      "filePanelsListRegularOddRowBackgroundColor" : "#000080",
+                      
+                      /* File Panels -> Brief settings */
+                      "filePanelsBriefFont": "Menlo-Regular, 13",
+                      "filePanelsBriefRowVerticalPadding": "0",
+                      "filePanelsBriefGridColor": "#00FFFF",
+                      "filePanelsBriefRegularEvenRowBackgroundColor": "#000080",
+                      "filePanelsBriefRegularOddRowBackgroundColor": "#000080",
+                      "filePanelsBriefFocusedActiveItemBackgroundColor": "#008080",
+                      "filePanelsBriefFocusedInactiveItemBackgroundColor": "#000080",
+                      "filePanelsBriefSelectedItemBackgroundColor": "#00000000",
+                      
+                      /* File Panels -> Gallery settings */
+                      "filePanelsGalleryFont": "Menlo-Regular, 10",
+                      "filePanelsGalleryBackgroundColor": "#000080",
+                      "filePanelsGalleryFocusedActiveItemBackgroundColor": "#008080",
+                      "filePanelsGalleryFocusedInactiveItemBackgroundColor": "#000080",
+                      "filePanelsGallerySelectedItemBackgroundColor": "#000080",
+                      
+                      /* Terminal Emulator */
+                      "terminalFont": "Menlo-Regular, 13",
+                      "terminalOverlayColor": "@whiteColor",
+                      "terminalForegroundColor": "#FFFFFF",
+                      "terminalBoldForegroundColor": "#FFFFFF",
+                      "terminalBackgroundColor": "#000000",
+                      "terminalSelectionColor": "#E5E5E5",
+                      "terminalCursorColor": "#666666",
+                      "terminalAnsiColor0": "#000000", // black
+                      "terminalAnsiColor1": "#990000", // red
+                      "terminalAnsiColor2": "#00A600", // green
+                      "terminalAnsiColor3": "#999900", // yellow
+                      "terminalAnsiColor4": "#0000B2", // blue
+                      "terminalAnsiColor5": "#B200B2", // magenta
+                      "terminalAnsiColor6": "#00A6B2", // cyan
+                      "terminalAnsiColor7": "#BFC2BF", // white
+                      "terminalAnsiColor8": "#666666", // bright black
+                      "terminalAnsiColor9": "#E50000", // bright red
+                      "terminalAnsiColorA": "#00D900", // bright green
+                      "terminalAnsiColorB": "#E5E500", // bright yellow
+                      "terminalAnsiColorC": "#0000FF", // bright blue
+                      "terminalAnsiColorD": "#E500E5", // bright magenta
+                      "terminalAnsiColorE": "#00E5E5", // bright cyan
+                      "terminalAnsiColorF": "#E5E6E5", // bright white
+                      
+                      /* Viewer */
+                      "viewerFont": "Menlo-Regular, 13",
+                      "viewerOverlayColor": "@whiteColor",
+                      "viewerTextColor": "#00FFFF",
+                      "viewerTextSyntaxIdentifierColor": "#FFFFFF",
+                      "viewerTextSyntaxStringColor": "#E5E500",
+                      "viewerTextSyntaxPreprocessorColor": "#E50000",
+                      "viewerTextSyntaxNumberColor": "#00D900",
+                      "viewerTextSyntaxCommentColor": "#666666",
+                      "viewerTextSyntaxKeywordColor": "#E500E5",
+                      "viewerTextSyntaxOperatorColor": "#00FFFF",
+                      "viewerSelectionColor": "#008080",
+                      "viewerBackgroundColor": "#000080"
+                      }
+        ]
+    }
+}

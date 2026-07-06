@@ -1,0 +1,835 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 70;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CF1F6FC525E70982003A2497 /* Connection.h in Headers */ = {isa = PBXBuildFile; fileRef = CF1F6FC125E70982003A2497 /* Connection.h */; };
+		CF1F6FC625E70982003A2497 /* CURLConnection.h in Headers */ = {isa = PBXBuildFile; fileRef = CF1F6FC225E70982003A2497 /* CURLConnection.h */; };
+		CF22F08B258B7F280033E850 /* VFSSFTP_Tests.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF18470D1E41C8A5008B7C9F /* VFSSFTP_Tests.mm */; };
+		CF22F094258CC0230033E850 /* VFSFTP_IT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF18470B1E41C8A5008B7C9F /* VFSFTP_IT.mm */; };
+		CF24E1FF2290200800C166FA /* SearchForFiles_IT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF24E1FD2290200400C166FA /* SearchForFiles_IT.cpp */; };
+		CF26DE2121D2864D003F0E93 /* Tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF26DE2021D2864D003F0E93 /* Tests.cpp */; };
+		CF3989B32B416F84006103C1 /* libBase.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF3989B22B416F84006103C1 /* libBase.a */; };
+		CF3989B42B416F89006103C1 /* libBase.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF3989B22B416F84006103C1 /* libBase.a */; };
+		CF3D24152D14B72B005C36F6 /* DisplayNamesCache_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF3D24142D14B72B005C36F6 /* DisplayNamesCache_UT.mm */; };
+		CF824F66279F564800C4F29C /* Host.h in Headers */ = {isa = PBXBuildFile; fileRef = CF824F64279F564800C4F29C /* Host.h */; };
+		CFA99A9A266FC16800F72E93 /* Log.h in Headers */ = {isa = PBXBuildFile; fileRef = CFA99A99266FC16800F72E93 /* Log.h */; };
+		CFAB6D1D258A1AF000397DB5 /* TestEnv.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFE08AEB23CFAFD8007E99B8 /* TestEnv.mm */; };
+		CFAB6D1F258A1AF000397DB5 /* Tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF26DE2021D2864D003F0E93 /* Tests.cpp */; };
+		CFAB6D38258A1B6600397DB5 /* VFSPS_IT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF18470C1E41C8A5008B7C9F /* VFSPS_IT.cpp */; };
+		CFAB6D6F258A58D300397DB5 /* WebDAV_IT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFFA95571F4E65A60035E606 /* WebDAV_IT.mm */; };
+		CFAB6D87258B6B1F00397DB5 /* VFSArchive_IT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF18470A1E41C8A5008B7C9F /* VFSArchive_IT.mm */; };
+		CFB63CD525939A630038502E /* VFSNative_IT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFB63CD425939A630038502E /* VFSNative_IT.mm */; };
+		CFE08AED23CFAFD8007E99B8 /* TestEnv.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFE08AEB23CFAFD8007E99B8 /* TestEnv.mm */; };
+		CFEADD61259D2C03009ECA14 /* libVFS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF460065256057250095FC73 /* libVFS.a */; };
+		CFEADD62259D2C07009ECA14 /* libVFS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF460065256057250095FC73 /* libVFS.a */; };
+		CFEADD69259D2C20009ECA14 /* libRoutedIO.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CFEADD68259D2C20009ECA14 /* libRoutedIO.a */; };
+		CFEADD6B259D2C24009ECA14 /* libUtility.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CFEADD6A259D2C24009ECA14 /* libUtility.a */; };
+		CFEADD6D259D2C2F009ECA14 /* libRoutedIO.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CFEADD68259D2C20009ECA14 /* libRoutedIO.a */; };
+		CFEADD6E259D2C3C009ECA14 /* libUtility.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CFEADD6A259D2C24009ECA14 /* libUtility.a */; };
+		CFF762A02EDCA7CC002DD1EE /* _VFS.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CFF7629F2EDCA7CC002DD1EE /* _VFS.cpp */; };
+		CFF762A52EDCB6EE002DD1EE /* OpenDirectory.h in Headers */ = {isa = PBXBuildFile; fileRef = CFF762A22EDCB6EE002DD1EE /* OpenDirectory.h */; };
+		CFF762A72EDCEDB0002DD1EE /* _VFS.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFF762A62EDCEDB0002DD1EE /* _VFS.mm */; };
+		CFF762C12EDE0D52002DD1EE /* _VFSUT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CFF762C02EDE0D52002DD1EE /* _VFSUT.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CF26DE1621D285A6003F0E93 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		CFAB6D23258A1AF000397DB5 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		CF18470A1E41C8A5008B7C9F /* VFSArchive_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSArchive_IT.mm; path = tests/VFSArchive_IT.mm; sourceTree = SOURCE_ROOT; };
+		CF18470B1E41C8A5008B7C9F /* VFSFTP_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSFTP_IT.mm; path = tests/VFSFTP_IT.mm; sourceTree = SOURCE_ROOT; };
+		CF18470C1E41C8A5008B7C9F /* VFSPS_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSPS_IT.cpp; path = tests/VFSPS_IT.cpp; sourceTree = SOURCE_ROOT; };
+		CF18470D1E41C8A5008B7C9F /* VFSSFTP_Tests.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSSFTP_Tests.mm; path = tests/VFSSFTP_Tests.mm; sourceTree = SOURCE_ROOT; };
+		CF1847171E41C9F9008B7C9F /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		CF1847191E41CA0B008B7C9F /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		CF18471B1E41CA19008B7C9F /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
+		CF1847261E41CC49008B7C9F /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = ../3rd_Party/OpenSSL/built/libssl.a; sourceTree = "<group>"; };
+		CF1847281E41CC4C008B7C9F /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = ../3rd_Party/OpenSSL/built/libcrypto.a; sourceTree = "<group>"; };
+		CF18472F1E41CFB7008B7C9F /* libarchive.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libarchive.a; path = ../3rd_Party/libarchive/built/libarchive.a; sourceTree = "<group>"; };
+		CF1F6FC125E70982003A2497 /* Connection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Connection.h; path = source/NetWebDAV/Connection.h; sourceTree = "<group>"; };
+		CF1F6FC225E70982003A2497 /* CURLConnection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CURLConnection.h; path = source/NetWebDAV/CURLConnection.h; sourceTree = "<group>"; };
+		CF1F6FC325E70982003A2497 /* Connection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Connection.cpp; path = source/NetWebDAV/Connection.cpp; sourceTree = "<group>"; };
+		CF1F6FC425E70982003A2497 /* CURLConnection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CURLConnection.cpp; path = source/NetWebDAV/CURLConnection.cpp; sourceTree = "<group>"; };
+		CF1FBF381E909AC400D3569C /* Fetching.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Fetching.cpp; path = source/Native/Fetching.cpp; sourceTree = "<group>"; };
+		CF1FBF391E909AC400D3569C /* Fetching.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Fetching.h; path = source/Native/Fetching.h; sourceTree = "<group>"; };
+		CF1FDD011F5BBA6F00AF1EBD /* WriteBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = WriteBuffer.h; path = source/NetWebDAV/WriteBuffer.h; sourceTree = "<group>"; };
+		CF1FDD021F5BBA6F00AF1EBD /* WriteBuffer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = WriteBuffer.cpp; path = source/NetWebDAV/WriteBuffer.cpp; sourceTree = "<group>"; };
+		CF1FDD051F5D4AEC00AF1EBD /* PathRoutines.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PathRoutines.h; path = source/NetWebDAV/PathRoutines.h; sourceTree = "<group>"; };
+		CF1FDD061F5D4AEC00AF1EBD /* PathRoutines.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = PathRoutines.mm; path = source/NetWebDAV/PathRoutines.mm; sourceTree = "<group>"; };
+		CF2343EE22CD321300F516CB /* KeyValidator_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = KeyValidator_UT.cpp; path = tests/NetSFTP/KeyValidator_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CF24E1F922901C6800C166FA /* SearchForFiles.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SearchForFiles.cpp; path = source/SearchForFiles.cpp; sourceTree = "<group>"; };
+		CF24E1FB22901C7800C166FA /* SearchForFiles.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SearchForFiles.h; path = include/VFS/SearchForFiles.h; sourceTree = "<group>"; };
+		CF24E1FD2290200400C166FA /* SearchForFiles_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SearchForFiles_IT.cpp; path = tests/SearchForFiles_IT.cpp; sourceTree = SOURCE_ROOT; };
+		CF26DE0621CFA2AD003F0E93 /* NetWebDAV.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NetWebDAV.h; path = include/VFS/NetWebDAV.h; sourceTree = "<group>"; };
+		CF26DE0721CFA2AE003F0E93 /* VFS_fwd.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFS_fwd.h; path = include/VFS/VFS_fwd.h; sourceTree = "<group>"; };
+		CF26DE0821CFA2AE003F0E93 /* FileWindow.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FileWindow.h; path = include/VFS/FileWindow.h; sourceTree = "<group>"; };
+		CF26DE0C21CFA2BF003F0E93 /* FileWindow.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = FileWindow.cpp; path = source/FileWindow.cpp; sourceTree = "<group>"; };
+		CF26DE0E21CFA2CC003F0E93 /* FileWindow_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = FileWindow_UT.cpp; path = tests/FileWindow_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CF26DE1021D266E0003F0E93 /* SearchInFile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SearchInFile.h; path = include/VFS/SearchInFile.h; sourceTree = "<group>"; };
+		CF26DE1121D266EA003F0E93 /* SearchInFile.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SearchInFile.cpp; path = source/SearchInFile.cpp; sourceTree = "<group>"; };
+		CF26DE1821D285A6003F0E93 /* VFSUT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = VFSUT; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF26DE1F21D2864D003F0E93 /* Tests.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Tests.h; path = tests/Tests.h; sourceTree = SOURCE_ROOT; };
+		CF26DE2021D2864D003F0E93 /* Tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Tests.cpp; path = tests/Tests.cpp; sourceTree = SOURCE_ROOT; };
+		CF26DE2221D28699003F0E93 /* tests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = tests.xcconfig; path = config/tests.xcconfig; sourceTree = "<group>"; wrapsLines = 1; };
+		CF26DE2321D28754003F0E93 /* SearchInFile_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SearchInFile_UT.cpp; path = tests/SearchInFile_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CF26DE3521E297AE003F0E93 /* EasyOps_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = EasyOps_UT.cpp; path = tests/EasyOps_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CF3989B22B416F84006103C1 /* libBase.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libBase.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF3BFC6A2D143F3300105999 /* Host_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Host_UT.cpp; path = tests/Host_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CF3D24142D14B72B005C36F6 /* DisplayNamesCache_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = DisplayNamesCache_UT.mm; path = tests/Native/DisplayNamesCache_UT.mm; sourceTree = SOURCE_ROOT; };
+		CF3E2F841F60DF08001BFFCE /* Requests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Requests.cpp; path = source/NetWebDAV/Requests.cpp; sourceTree = "<group>"; };
+		CF3E2F851F60DF08001BFFCE /* Requests.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Requests.h; path = source/NetWebDAV/Requests.h; sourceTree = "<group>"; };
+		CF460065256057250095FC73 /* libVFS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libVFS.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF5099931F95C881000AFDE7 /* EncodingDetection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EncodingDetection.h; path = source/ArcLA/EncodingDetection.h; sourceTree = "<group>"; };
+		CF5099941F95C881000AFDE7 /* EncodingDetection.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = EncodingDetection.mm; path = source/ArcLA/EncodingDetection.mm; sourceTree = "<group>"; };
+		CF5FD92C1FA1BD0700752E59 /* default.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = default.xcconfig; path = config/default.xcconfig; sourceTree = "<group>"; wrapsLines = 1; };
+		CF69CFE01DA227E400992B84 /* ArcLA.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ArcLA.h; path = include/VFS/ArcLA.h; sourceTree = "<group>"; };
+		CF69CFE21DA227E400992B84 /* Native.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Native.h; path = include/VFS/Native.h; sourceTree = "<group>"; };
+		CF69CFE31DA227E400992B84 /* NetFTP.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NetFTP.h; path = include/VFS/NetFTP.h; sourceTree = "<group>"; };
+		CF69CFE41DA227E400992B84 /* NetSFTP.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NetSFTP.h; path = include/VFS/NetSFTP.h; sourceTree = "<group>"; };
+		CF69CFE51DA227E400992B84 /* PS.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PS.h; path = include/VFS/PS.h; sourceTree = "<group>"; };
+		CF69CFE61DA227E400992B84 /* XAttr.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = XAttr.h; path = include/VFS/XAttr.h; sourceTree = "<group>"; };
+		CF69CFE71DA227E400992B84 /* VFS.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFS.h; path = include/VFS/VFS.h; sourceTree = "<group>"; };
+		CF69CFE81DA227E400992B84 /* VFSArchiveProxy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSArchiveProxy.h; path = include/VFS/VFSArchiveProxy.h; sourceTree = "<group>"; };
+		CF69CFE91DA227E400992B84 /* VFSConfiguration.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSConfiguration.h; path = include/VFS/VFSConfiguration.h; sourceTree = "<group>"; };
+		CF69CFEA1DA227E400992B84 /* VFSDeclarations.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSDeclarations.h; path = include/VFS/VFSDeclarations.h; sourceTree = "<group>"; };
+		CF69CFEB1DA227E400992B84 /* VFSEasyOps.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSEasyOps.h; path = include/VFS/VFSEasyOps.h; sourceTree = "<group>"; };
+		CF69CFED1DA227E400992B84 /* VFSFactory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSFactory.h; path = include/VFS/VFSFactory.h; sourceTree = "<group>"; };
+		CF69CFEE1DA227E400992B84 /* VFSFile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSFile.h; path = include/VFS/VFSFile.h; sourceTree = "<group>"; };
+		CF69CFEF1DA227E400992B84 /* VFSGenericMemReadOnlyFile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSGenericMemReadOnlyFile.h; path = include/VFS/VFSGenericMemReadOnlyFile.h; sourceTree = "<group>"; };
+		CF69CFF01DA227E400992B84 /* Host.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Host.h; path = include/VFS/Host.h; sourceTree = "<group>"; };
+		CF69CFF21DA227E400992B84 /* VFSPath.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSPath.h; path = include/VFS/VFSPath.h; sourceTree = "<group>"; };
+		CF69CFF31DA227E400992B84 /* VFSSeqToRandomWrapper.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSSeqToRandomWrapper.h; path = include/VFS/VFSSeqToRandomWrapper.h; sourceTree = "<group>"; };
+		CF69D0081DA2281E00992B84 /* Host.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Host.cpp; path = source/Host.cpp; sourceTree = "<group>"; };
+		CF69D00C1DA22BE800992B84 /* VFSArchiveProxy.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSArchiveProxy.cpp; path = source/VFSArchiveProxy.cpp; sourceTree = "<group>"; };
+		CF69D00D1DA22BE800992B84 /* VFSConfiguration.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSConfiguration.cpp; path = source/VFSConfiguration.cpp; sourceTree = "<group>"; };
+		CF69D00E1DA22BE800992B84 /* VFSEasyOps.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSEasyOps.mm; path = source/VFSEasyOps.mm; sourceTree = "<group>"; };
+		CF69D0101DA22BE800992B84 /* VFSFactory.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSFactory.cpp; path = source/VFSFactory.cpp; sourceTree = "<group>"; };
+		CF69D0111DA22BE800992B84 /* VFSFile.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSFile.cpp; path = source/VFSFile.cpp; sourceTree = "<group>"; };
+		CF69D0121DA22BE800992B84 /* VFSGenericMemReadOnlyFile.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSGenericMemReadOnlyFile.cpp; path = source/VFSGenericMemReadOnlyFile.cpp; sourceTree = "<group>"; };
+		CF69D0131DA22BE800992B84 /* Listing.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Listing.cpp; path = source/Listing.cpp; sourceTree = "<group>"; };
+		CF69D0141DA22BE800992B84 /* ListingInput.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ListingInput.h; path = source/ListingInput.h; sourceTree = "<group>"; };
+		CF69D0151DA22BE800992B84 /* VFSPath.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSPath.cpp; path = source/VFSPath.cpp; sourceTree = "<group>"; };
+		CF69D0161DA22BE800992B84 /* VFSSeqToRandomWrapper.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSSeqToRandomWrapper.cpp; path = source/VFSSeqToRandomWrapper.cpp; sourceTree = "<group>"; };
+		CF69D0231DA2305A00992B84 /* DisplayNamesCache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DisplayNamesCache.h; path = source/Native/DisplayNamesCache.h; sourceTree = "<group>"; };
+		CF69D0241DA2305A00992B84 /* DisplayNamesCache.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = DisplayNamesCache.mm; path = source/Native/DisplayNamesCache.mm; sourceTree = "<group>"; };
+		CF69D0251DA2305A00992B84 /* File.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = File.cpp; path = source/Native/File.cpp; sourceTree = "<group>"; };
+		CF69D0261DA2305A00992B84 /* File.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = File.h; path = source/Native/File.h; sourceTree = "<group>"; };
+		CF69D0271DA2305A00992B84 /* Host.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Host.h; path = source/Native/Host.h; sourceTree = "<group>"; };
+		CF69D0281DA2305A00992B84 /* Host.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Host.cpp; path = source/Native/Host.cpp; sourceTree = "<group>"; };
+		CF69D0301DA231EA00992B84 /* xattr.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = xattr.cpp; path = source/XAttr/xattr.cpp; sourceTree = "<group>"; };
+		CF69D0311DA231EA00992B84 /* xattr.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = xattr.h; path = source/XAttr/xattr.h; sourceTree = "<group>"; };
+		CF69D0351DA2324100992B84 /* Cache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Cache.h; path = source/NetFTP/Cache.h; sourceTree = "<group>"; };
+		CF69D0361DA2324100992B84 /* Cache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Cache.cpp; path = source/NetFTP/Cache.cpp; sourceTree = "<group>"; };
+		CF69D0371DA2324100992B84 /* File.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = File.h; path = source/NetFTP/File.h; sourceTree = "<group>"; };
+		CF69D0381DA2324100992B84 /* File.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = File.cpp; path = source/NetFTP/File.cpp; sourceTree = "<group>"; };
+		CF69D0391DA2324100992B84 /* Host.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Host.h; path = source/NetFTP/Host.h; sourceTree = "<group>"; };
+		CF69D03A1DA2324100992B84 /* Host.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Host.cpp; path = source/NetFTP/Host.cpp; sourceTree = "<group>"; };
+		CF69D03B1DA2324100992B84 /* Internals.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Internals.h; path = source/NetFTP/Internals.h; sourceTree = "<group>"; };
+		CF69D03C1DA2324100992B84 /* Internals.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Internals.cpp; path = source/NetFTP/Internals.cpp; sourceTree = "<group>"; };
+		CF69D03D1DA2324100992B84 /* InternalsForward.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = InternalsForward.h; path = source/NetFTP/InternalsForward.h; sourceTree = "<group>"; };
+		CF69D0481DA232EF00992B84 /* File.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = File.cpp; path = source/NetSFTP/File.cpp; sourceTree = "<group>"; };
+		CF69D0491DA232EF00992B84 /* File.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = File.h; path = source/NetSFTP/File.h; sourceTree = "<group>"; };
+		CF69D04A1DA232EF00992B84 /* SFTPHost.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SFTPHost.cpp; path = source/NetSFTP/SFTPHost.cpp; sourceTree = "<group>"; };
+		CF69D04B1DA232EF00992B84 /* SFTPHost.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SFTPHost.h; path = source/NetSFTP/SFTPHost.h; sourceTree = "<group>"; };
+		CF69D0511DA2336500992B84 /* File.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = File.cpp; path = source/ArcLA/File.cpp; sourceTree = "<group>"; };
+		CF69D0521DA2336500992B84 /* File.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = File.h; path = source/ArcLA/File.h; sourceTree = "<group>"; };
+		CF69D0531DA2336500992B84 /* Host.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Host.h; path = source/ArcLA/Host.h; sourceTree = "<group>"; };
+		CF69D0541DA2336500992B84 /* Host.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Host.cpp; path = source/ArcLA/Host.cpp; sourceTree = "<group>"; };
+		CF69D0551DA2336500992B84 /* Internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Internal.h; path = source/ArcLA/Internal.h; sourceTree = "<group>"; };
+		CF69D0561DA2336500992B84 /* Internal.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Internal.cpp; path = source/ArcLA/Internal.cpp; sourceTree = "<group>"; };
+		CF69D05D1DA233EC00992B84 /* AppleDoubleEA.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppleDoubleEA.h; path = include/VFS/AppleDoubleEA.h; sourceTree = "<group>"; };
+		CF69D05F1DA233F700992B84 /* AppleDoubleEA.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = AppleDoubleEA.cpp; path = source/AppleDoubleEA.cpp; sourceTree = "<group>"; };
+		CF69D06F1DA2353000992B84 /* File.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = File.cpp; path = source/PS/File.cpp; sourceTree = "<group>"; };
+		CF69D0701DA2353000992B84 /* File.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = File.h; path = source/PS/File.h; sourceTree = "<group>"; };
+		CF69D0711DA2353000992B84 /* Host.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Host.h; path = source/PS/Host.h; sourceTree = "<group>"; };
+		CF69D0721DA2353000992B84 /* Host.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Host.cpp; path = source/PS/Host.cpp; sourceTree = "<group>"; };
+		CF69D0731DA2353000992B84 /* Internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Internal.h; path = source/PS/Internal.h; sourceTree = "<group>"; };
+		CF69D0791DA238D400992B84 /* VFSListingInput.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = VFSListingInput.h; path = include/VFS/VFSListingInput.h; sourceTree = "<group>"; };
+		CF7A09BB1EC4382700533B07 /* KeyValidator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = KeyValidator.cpp; path = source/NetSFTP/KeyValidator.cpp; sourceTree = "<group>"; };
+		CF7A09BC1EC4382700533B07 /* KeyValidator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = KeyValidator.h; path = source/NetSFTP/KeyValidator.h; sourceTree = "<group>"; };
+		CF7C7D8E1E659D33002DB0E2 /* libssh2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssh2.a; path = ../3rd_Party/libssh2/built/libssh2.a; sourceTree = "<group>"; };
+		CF824F64279F564800C4F29C /* Host.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Host.h; path = source/ArcLARaw/Host.h; sourceTree = "<group>"; };
+		CF824F65279F564800C4F29C /* Host.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Host.cpp; path = source/ArcLARaw/Host.cpp; sourceTree = "<group>"; };
+		CF824F68279F622900C4F29C /* VFSArchiveRaw_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSArchiveRaw_UT.cpp; path = tests/VFSArchiveRaw_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CFA99A99266FC16800F72E93 /* Log.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Log.h; path = source/Log.h; sourceTree = "<group>"; };
+		CFA99A9E266FC17000F72E93 /* Log.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Log.cpp; path = source/Log.cpp; sourceTree = "<group>"; };
+		CFAB6D27258A1AF000397DB5 /* VFSIT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = VFSIT; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFAE50772D7322CF007ADA14 /* VFSFile.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSFile.mm; path = source/VFSFile.mm; sourceTree = "<group>"; };
+		CFB44F2D1F383D4B00E7555E /* OpenDirectory.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenDirectory.framework; path = System/Library/Frameworks/OpenDirectory.framework; sourceTree = SDKROOT; };
+		CFB63CD425939A630038502E /* VFSNative_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSNative_IT.mm; path = tests/VFSNative_IT.mm; sourceTree = SOURCE_ROOT; };
+		CFC4F92F1F0B5E250000B3EE /* ListingObjC.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = ListingObjC.mm; path = source/ListingObjC.mm; sourceTree = "<group>"; };
+		CFC4F9F31F1719860000B3EE /* OSDetector.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = OSDetector.cpp; path = source/NetSFTP/OSDetector.cpp; sourceTree = "<group>"; };
+		CFC4F9F41F1719860000B3EE /* OSDetector.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = OSDetector.h; path = source/NetSFTP/OSDetector.h; sourceTree = "<group>"; };
+		CFC4F9F71F171A470000B3EE /* OSType.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = OSType.h; path = source/NetSFTP/OSType.h; sourceTree = "<group>"; };
+		CFC4F9F91F171E990000B3EE /* AccountsFetcher.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = AccountsFetcher.cpp; path = source/NetSFTP/AccountsFetcher.cpp; sourceTree = "<group>"; };
+		CFC4F9FA1F171E990000B3EE /* AccountsFetcher.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AccountsFetcher.h; path = source/NetSFTP/AccountsFetcher.h; sourceTree = "<group>"; };
+		CFCB68B82886075900086E40 /* VFSArchive_PT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSArchive_PT.mm; path = tests/VFSArchive_PT.mm; sourceTree = SOURCE_ROOT; };
+		CFCB68D2289089BF00086E40 /* VFSArchive_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSArchive_UT.cpp; path = tests/VFSArchive_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CFCE73141F972623009E2FD7 /* Listing.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Listing.h; path = source/Listing.h; sourceTree = "<group>"; };
+		CFCE73161F972B7A009E2FD7 /* Stat.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Stat.cpp; path = source/Stat.cpp; sourceTree = "<group>"; };
+		CFD725FF1E42DD6000603077 /* LDAP.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LDAP.framework; path = System/Library/Frameworks/LDAP.framework; sourceTree = SDKROOT; };
+		CFD7273B1E42EC7B00603077 /* DiskArbitration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DiskArbitration.framework; path = System/Library/Frameworks/DiskArbitration.framework; sourceTree = SDKROOT; };
+		CFD7273D1E42EC8E00603077 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		CFD7273F1E42EC9A00603077 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		CFD727411E42EC9D00603077 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		CFDA17E82D496A2E00EE375B /* Errors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = Errors.h; path = source/NetSFTP/Errors.h; sourceTree = "<group>"; };
+		CFDA17E92D496A2E00EE375B /* Errors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Errors.cpp; path = source/NetSFTP/Errors.cpp; sourceTree = "<group>"; };
+		CFDA17EC2D4E3E8400EE375B /* Errors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = Errors.h; path = source/NetFTP/Errors.h; sourceTree = "<group>"; };
+		CFDA17ED2D4E3E8400EE375B /* Errors.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = Errors.cpp; path = source/NetFTP/Errors.cpp; sourceTree = "<group>"; };
+		CFDE716C21526799005449C8 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
+		CFE08AE023CA5447007E99B8 /* NativeSpecialDirectories.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NativeSpecialDirectories.h; path = include/VFS/NativeSpecialDirectories.h; sourceTree = "<group>"; };
+		CFE08AE223CA546A007E99B8 /* SpecialDirectories.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SpecialDirectories.cpp; path = source/Native/SpecialDirectories.cpp; sourceTree = "<group>"; };
+		CFE08AE323CA546B007E99B8 /* SpecialDirectories.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SpecialDirectories.h; path = source/Native/SpecialDirectories.h; sourceTree = "<group>"; };
+		CFE08AE623CA5787007E99B8 /* VFSNative_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSNative_UT.cpp; path = tests/VFSNative_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CFE08AE823CB2D83007E99B8 /* ListingInput_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ListingInput_UT.cpp; path = tests/ListingInput_UT.cpp; sourceTree = SOURCE_ROOT; };
+		CFE08AEA23CFAFD8007E99B8 /* TestEnv.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TestEnv.h; path = tests/TestEnv.h; sourceTree = SOURCE_ROOT; };
+		CFE08AEB23CFAFD8007E99B8 /* TestEnv.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = TestEnv.mm; path = tests/TestEnv.mm; sourceTree = SOURCE_ROOT; };
+		CFEADD66259D2C19009ECA14 /* libHabanero.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libHabanero.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFEADD68259D2C20009ECA14 /* libRoutedIO.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libRoutedIO.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFEADD6A259D2C24009ECA14 /* libUtility.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libUtility.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFF3403F2556DD3A00B3C92C /* VFSListing.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VFSListing.h; path = include/VFS/VFSListing.h; sourceTree = "<group>"; };
+		CFF7629F2EDCA7CC002DD1EE /* _VFS.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = _VFS.cpp; path = source/_VFS.cpp; sourceTree = "<group>"; };
+		CFF762A22EDCB6EE002DD1EE /* OpenDirectory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OpenDirectory.h; path = source/Native/OpenDirectory.h; sourceTree = "<group>"; };
+		CFF762A32EDCB6EE002DD1EE /* OpenDirectory.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OpenDirectory.mm; path = source/Native/OpenDirectory.mm; sourceTree = "<group>"; };
+		CFF762A62EDCEDB0002DD1EE /* _VFS.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = _VFS.mm; path = source/_VFS.mm; sourceTree = "<group>"; };
+		CFF762C02EDE0D52002DD1EE /* _VFSUT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = _VFSUT.cpp; path = tests/_VFSUT.cpp; sourceTree = SOURCE_ROOT; };
+		CFFA94E31F4544F60035E606 /* libRoutedIO.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libRoutedIO.dylib; path = "../../../../Library/Developer/Xcode/DerivedData/NimbleCommander-gmplwpfcimcucreprhpqaoectnmi/Build/Products/Debug/libRoutedIO.dylib"; sourceTree = "<group>"; };
+		CFFA94E51F4544F90035E606 /* libUtility.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libUtility.dylib; path = "../../../../Library/Developer/Xcode/DerivedData/NimbleCommander-gmplwpfcimcucreprhpqaoectnmi/Build/Products/Debug/libUtility.dylib"; sourceTree = "<group>"; };
+		CFFA94E71F4544FB0035E606 /* libHabanero.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libHabanero.dylib; path = "../../../../Library/Developer/Xcode/DerivedData/NimbleCommander-gmplwpfcimcucreprhpqaoectnmi/Build/Products/Debug/libHabanero.dylib"; sourceTree = "<group>"; };
+		CFFA94EB1F4546480035E606 /* DirectoryService.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DirectoryService.framework; path = System/Library/Frameworks/DirectoryService.framework; sourceTree = SDKROOT; };
+		CFFA95531F4E60850035E606 /* WebDAVHost.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = WebDAVHost.h; path = source/NetWebDAV/WebDAVHost.h; sourceTree = "<group>"; };
+		CFFA95541F4E60850035E606 /* WebDAVHost.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = WebDAVHost.cpp; path = source/NetWebDAV/WebDAVHost.cpp; sourceTree = "<group>"; };
+		CFFA95571F4E65A60035E606 /* WebDAV_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = WebDAV_IT.mm; path = tests/WebDAV_IT.mm; sourceTree = SOURCE_ROOT; };
+		CFFA95591F4EA7200035E606 /* Internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Internal.h; path = source/NetWebDAV/Internal.h; sourceTree = "<group>"; };
+		CFFA955A1F4EA7200035E606 /* Internal.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Internal.cpp; path = source/NetWebDAV/Internal.cpp; sourceTree = "<group>"; };
+		CFFA955D1F528A7B0035E606 /* DateTimeParser.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DateTimeParser.h; path = source/NetWebDAV/DateTimeParser.h; sourceTree = "<group>"; };
+		CFFA955E1F528A7B0035E606 /* DateTimeParser.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = DateTimeParser.cpp; path = source/NetWebDAV/DateTimeParser.cpp; sourceTree = "<group>"; };
+		CFFA95611F5506FC0035E606 /* ConnectionsPool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ConnectionsPool.h; path = source/NetWebDAV/ConnectionsPool.h; sourceTree = "<group>"; };
+		CFFA95621F5506FC0035E606 /* ConnectionsPool.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ConnectionsPool.cpp; path = source/NetWebDAV/ConnectionsPool.cpp; sourceTree = "<group>"; };
+		CFFA95651F57B2710035E606 /* Cache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Cache.h; path = source/NetWebDAV/Cache.h; sourceTree = "<group>"; };
+		CFFA95661F57B2710035E606 /* Cache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Cache.cpp; path = source/NetWebDAV/Cache.cpp; sourceTree = "<group>"; };
+		CFFA95691F5A43DD0035E606 /* File.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = File.h; path = source/NetWebDAV/File.h; sourceTree = "<group>"; };
+		CFFA956A1F5A43DD0035E606 /* File.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = File.cpp; path = source/NetWebDAV/File.cpp; sourceTree = "<group>"; };
+		CFFA956D1F5A4EDC0035E606 /* ReadBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ReadBuffer.h; path = source/NetWebDAV/ReadBuffer.h; sourceTree = "<group>"; };
+		CFFA956E1F5A4EDC0035E606 /* ReadBuffer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ReadBuffer.cpp; path = source/NetWebDAV/ReadBuffer.cpp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		CF35C5E52FBCF5A800370B89 /* data */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = data; path = tests/data; sourceTree = SOURCE_ROOT; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CF26DE1521D285A6003F0E93 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFEADD6B259D2C24009ECA14 /* libUtility.a in Frameworks */,
+				CFEADD69259D2C20009ECA14 /* libRoutedIO.a in Frameworks */,
+				CF3989B32B416F84006103C1 /* libBase.a in Frameworks */,
+				CFEADD62259D2C07009ECA14 /* libVFS.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF460063256057250095FC73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CFAB6D20258A1AF000397DB5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFEADD6E259D2C3C009ECA14 /* libUtility.a in Frameworks */,
+				CFEADD6D259D2C2F009ECA14 /* libRoutedIO.a in Frameworks */,
+				CF3989B42B416F89006103C1 /* libBase.a in Frameworks */,
+				CFEADD61259D2C03009ECA14 /* libVFS.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CF1846FF1E41C86D008B7C9F /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				CF35C5E52FBCF5A800370B89 /* data */,
+				CFF762C02EDE0D52002DD1EE /* _VFSUT.cpp */,
+				CF3D24142D14B72B005C36F6 /* DisplayNamesCache_UT.mm */,
+				CF26DE3521E297AE003F0E93 /* EasyOps_UT.cpp */,
+				CF26DE0E21CFA2CC003F0E93 /* FileWindow_UT.cpp */,
+				CF3BFC6A2D143F3300105999 /* Host_UT.cpp */,
+				CFE08AE823CB2D83007E99B8 /* ListingInput_UT.cpp */,
+				CF2343ED22CD31F300F516CB /* NetSFTP */,
+				CF24E1FD2290200400C166FA /* SearchForFiles_IT.cpp */,
+				CF26DE2321D28754003F0E93 /* SearchInFile_UT.cpp */,
+				CFE08AEA23CFAFD8007E99B8 /* TestEnv.h */,
+				CFE08AEB23CFAFD8007E99B8 /* TestEnv.mm */,
+				CF26DE1F21D2864D003F0E93 /* Tests.h */,
+				CF26DE2021D2864D003F0E93 /* Tests.cpp */,
+				CF18470A1E41C8A5008B7C9F /* VFSArchive_IT.mm */,
+				CFCB68B82886075900086E40 /* VFSArchive_PT.mm */,
+				CFCB68D2289089BF00086E40 /* VFSArchive_UT.cpp */,
+				CF824F68279F622900C4F29C /* VFSArchiveRaw_UT.cpp */,
+				CF18470B1E41C8A5008B7C9F /* VFSFTP_IT.mm */,
+				CFB63CD425939A630038502E /* VFSNative_IT.mm */,
+				CFE08AE623CA5787007E99B8 /* VFSNative_UT.cpp */,
+				CF18470C1E41C8A5008B7C9F /* VFSPS_IT.cpp */,
+				CF18470D1E41C8A5008B7C9F /* VFSSFTP_Tests.mm */,
+				CFFA95571F4E65A60035E606 /* WebDAV_IT.mm */,
+			);
+			name = Tests;
+			sourceTree = "<group>";
+		};
+		CF1847121E41C9C0008B7C9F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CF3989B22B416F84006103C1 /* libBase.a */,
+				CFEADD6A259D2C24009ECA14 /* libUtility.a */,
+				CFEADD68259D2C20009ECA14 /* libRoutedIO.a */,
+				CFEADD66259D2C19009ECA14 /* libHabanero.a */,
+				CFDE716C21526799005449C8 /* libiconv.tbd */,
+				CFFA94EB1F4546480035E606 /* DirectoryService.framework */,
+				CFFA94E71F4544FB0035E606 /* libHabanero.dylib */,
+				CFFA94E51F4544F90035E606 /* libUtility.dylib */,
+				CFFA94E31F4544F60035E606 /* libRoutedIO.dylib */,
+				CFB44F2D1F383D4B00E7555E /* OpenDirectory.framework */,
+				CF7C7D8E1E659D33002DB0E2 /* libssh2.a */,
+				CFD727411E42EC9D00603077 /* AppKit.framework */,
+				CFD7273F1E42EC9A00603077 /* Foundation.framework */,
+				CFD7273D1E42EC8E00603077 /* Carbon.framework */,
+				CFD7273B1E42EC7B00603077 /* DiskArbitration.framework */,
+				CFD725FF1E42DD6000603077 /* LDAP.framework */,
+				CF18472F1E41CFB7008B7C9F /* libarchive.a */,
+				CF1847281E41CC4C008B7C9F /* libcrypto.a */,
+				CF1847261E41CC49008B7C9F /* libssl.a */,
+				CF18471B1E41CA19008B7C9F /* ServiceManagement.framework */,
+				CF1847191E41CA0B008B7C9F /* SystemConfiguration.framework */,
+				CF1847171E41C9F9008B7C9F /* Security.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		CF2343ED22CD31F300F516CB /* NetSFTP */ = {
+			isa = PBXGroup;
+			children = (
+				CF2343EE22CD321300F516CB /* KeyValidator_UT.cpp */,
+			);
+			name = NetSFTP;
+			sourceTree = "<group>";
+		};
+		CF5FD92B1FA1BCE900752E59 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CF5FD92C1FA1BD0700752E59 /* default.xcconfig */,
+				CF26DE2221D28699003F0E93 /* tests.xcconfig */,
+			);
+			name = Config;
+			sourceTree = "<group>";
+		};
+		CF69CFC61DA224E200992B84 = {
+			isa = PBXGroup;
+			children = (
+				CF5FD92B1FA1BCE900752E59 /* Config */,
+				CF69CFDD1DA227B100992B84 /* Headers */,
+				CF69CFDF1DA227C100992B84 /* Source */,
+				CF1846FF1E41C86D008B7C9F /* Tests */,
+				CF69CFD01DA224E200992B84 /* Products */,
+				CF1847121E41C9C0008B7C9F /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		CF69CFD01DA224E200992B84 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CF26DE1821D285A6003F0E93 /* VFSUT */,
+				CF460065256057250095FC73 /* libVFS.a */,
+				CFAB6D27258A1AF000397DB5 /* VFSIT */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CF69CFDD1DA227B100992B84 /* Headers */ = {
+			isa = PBXGroup;
+			children = (
+				CFA99A99266FC16800F72E93 /* Log.h */,
+				CF69D05D1DA233EC00992B84 /* AppleDoubleEA.h */,
+				CF69CFE01DA227E400992B84 /* ArcLA.h */,
+				CF26DE0821CFA2AE003F0E93 /* FileWindow.h */,
+				CF69CFF01DA227E400992B84 /* Host.h */,
+				CF69CFE21DA227E400992B84 /* Native.h */,
+				CFE08AE023CA5447007E99B8 /* NativeSpecialDirectories.h */,
+				CF69CFE31DA227E400992B84 /* NetFTP.h */,
+				CF69CFE41DA227E400992B84 /* NetSFTP.h */,
+				CF26DE0621CFA2AD003F0E93 /* NetWebDAV.h */,
+				CF69CFE51DA227E400992B84 /* PS.h */,
+				CF24E1FB22901C7800C166FA /* SearchForFiles.h */,
+				CF26DE1021D266E0003F0E93 /* SearchInFile.h */,
+				CF26DE0721CFA2AE003F0E93 /* VFS_fwd.h */,
+				CF69CFE71DA227E400992B84 /* VFS.h */,
+				CF69CFE81DA227E400992B84 /* VFSArchiveProxy.h */,
+				CF69CFE91DA227E400992B84 /* VFSConfiguration.h */,
+				CF69CFEA1DA227E400992B84 /* VFSDeclarations.h */,
+				CF69CFEB1DA227E400992B84 /* VFSEasyOps.h */,
+				CF69CFED1DA227E400992B84 /* VFSFactory.h */,
+				CF69CFEE1DA227E400992B84 /* VFSFile.h */,
+				CF69CFEF1DA227E400992B84 /* VFSGenericMemReadOnlyFile.h */,
+				CFF3403F2556DD3A00B3C92C /* VFSListing.h */,
+				CF69D0791DA238D400992B84 /* VFSListingInput.h */,
+				CF69CFF21DA227E400992B84 /* VFSPath.h */,
+				CF69CFF31DA227E400992B84 /* VFSSeqToRandomWrapper.h */,
+				CF69CFE61DA227E400992B84 /* XAttr.h */,
+			);
+			name = Headers;
+			sourceTree = "<group>";
+		};
+		CF69CFDF1DA227C100992B84 /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				CFF7629F2EDCA7CC002DD1EE /* _VFS.cpp */,
+				CFF762A62EDCEDB0002DD1EE /* _VFS.mm */,
+				CF69D0501DA2335700992B84 /* ArcLA */,
+				CF824F63279F563300C4F29C /* ArcLARaw */,
+				CF26DE0C21CFA2BF003F0E93 /* FileWindow.cpp */,
+				CF69D0081DA2281E00992B84 /* Host.cpp */,
+				CFCE73141F972623009E2FD7 /* Listing.h */,
+				CF69D0131DA22BE800992B84 /* Listing.cpp */,
+				CF69D0141DA22BE800992B84 /* ListingInput.h */,
+				CFC4F92F1F0B5E250000B3EE /* ListingObjC.mm */,
+				CFA99A9E266FC17000F72E93 /* Log.cpp */,
+				CF69D0221DA2304B00992B84 /* Native */,
+				CF69D0341DA2323400992B84 /* NetFTP */,
+				CF69D0471DA232E300992B84 /* NetSFTP */,
+				CFFA95521F4E604D0035E606 /* NetWebDAV */,
+				CF69D06E1DA2352000992B84 /* PS */,
+				CF24E1F922901C6800C166FA /* SearchForFiles.cpp */,
+				CF26DE1121D266EA003F0E93 /* SearchInFile.cpp */,
+				CFCE73161F972B7A009E2FD7 /* Stat.cpp */,
+				CF69D00C1DA22BE800992B84 /* VFSArchiveProxy.cpp */,
+				CF69D00D1DA22BE800992B84 /* VFSConfiguration.cpp */,
+				CF69D00E1DA22BE800992B84 /* VFSEasyOps.mm */,
+				CF69D0101DA22BE800992B84 /* VFSFactory.cpp */,
+				CF69D0111DA22BE800992B84 /* VFSFile.cpp */,
+				CFAE50772D7322CF007ADA14 /* VFSFile.mm */,
+				CF69D0121DA22BE800992B84 /* VFSGenericMemReadOnlyFile.cpp */,
+				CF69D0151DA22BE800992B84 /* VFSPath.cpp */,
+				CF69D0161DA22BE800992B84 /* VFSSeqToRandomWrapper.cpp */,
+				CF69D02F1DA231DA00992B84 /* XAttr */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
+		CF69D0221DA2304B00992B84 /* Native */ = {
+			isa = PBXGroup;
+			children = (
+				CFF762A22EDCB6EE002DD1EE /* OpenDirectory.h */,
+				CFF762A32EDCB6EE002DD1EE /* OpenDirectory.mm */,
+				CF69D0231DA2305A00992B84 /* DisplayNamesCache.h */,
+				CF69D0241DA2305A00992B84 /* DisplayNamesCache.mm */,
+				CF1FBF381E909AC400D3569C /* Fetching.cpp */,
+				CF1FBF391E909AC400D3569C /* Fetching.h */,
+				CF69D0251DA2305A00992B84 /* File.cpp */,
+				CF69D0261DA2305A00992B84 /* File.h */,
+				CF69D0271DA2305A00992B84 /* Host.h */,
+				CF69D0281DA2305A00992B84 /* Host.cpp */,
+				CFE08AE223CA546A007E99B8 /* SpecialDirectories.cpp */,
+				CFE08AE323CA546B007E99B8 /* SpecialDirectories.h */,
+			);
+			name = Native;
+			sourceTree = "<group>";
+		};
+		CF69D02F1DA231DA00992B84 /* XAttr */ = {
+			isa = PBXGroup;
+			children = (
+				CF69D05F1DA233F700992B84 /* AppleDoubleEA.cpp */,
+				CF69D0301DA231EA00992B84 /* xattr.cpp */,
+				CF69D0311DA231EA00992B84 /* xattr.h */,
+			);
+			name = XAttr;
+			sourceTree = "<group>";
+		};
+		CF69D0341DA2323400992B84 /* NetFTP */ = {
+			isa = PBXGroup;
+			children = (
+				CF69D0351DA2324100992B84 /* Cache.h */,
+				CF69D0361DA2324100992B84 /* Cache.cpp */,
+				CFDA17EC2D4E3E8400EE375B /* Errors.h */,
+				CFDA17ED2D4E3E8400EE375B /* Errors.cpp */,
+				CF69D0371DA2324100992B84 /* File.h */,
+				CF69D0381DA2324100992B84 /* File.cpp */,
+				CF69D0391DA2324100992B84 /* Host.h */,
+				CF69D03A1DA2324100992B84 /* Host.cpp */,
+				CF69D03B1DA2324100992B84 /* Internals.h */,
+				CF69D03C1DA2324100992B84 /* Internals.cpp */,
+				CF69D03D1DA2324100992B84 /* InternalsForward.h */,
+			);
+			name = NetFTP;
+			sourceTree = "<group>";
+		};
+		CF69D0471DA232E300992B84 /* NetSFTP */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9FA1F171E990000B3EE /* AccountsFetcher.h */,
+				CFC4F9F91F171E990000B3EE /* AccountsFetcher.cpp */,
+				CFDA17E82D496A2E00EE375B /* Errors.h */,
+				CFDA17E92D496A2E00EE375B /* Errors.cpp */,
+				CF69D0491DA232EF00992B84 /* File.h */,
+				CF69D0481DA232EF00992B84 /* File.cpp */,
+				CF7A09BC1EC4382700533B07 /* KeyValidator.h */,
+				CF7A09BB1EC4382700533B07 /* KeyValidator.cpp */,
+				CFC4F9F41F1719860000B3EE /* OSDetector.h */,
+				CFC4F9F31F1719860000B3EE /* OSDetector.cpp */,
+				CFC4F9F71F171A470000B3EE /* OSType.h */,
+				CF69D04B1DA232EF00992B84 /* SFTPHost.h */,
+				CF69D04A1DA232EF00992B84 /* SFTPHost.cpp */,
+			);
+			name = NetSFTP;
+			sourceTree = "<group>";
+		};
+		CF69D0501DA2335700992B84 /* ArcLA */ = {
+			isa = PBXGroup;
+			children = (
+				CF5099931F95C881000AFDE7 /* EncodingDetection.h */,
+				CF5099941F95C881000AFDE7 /* EncodingDetection.mm */,
+				CF69D0511DA2336500992B84 /* File.cpp */,
+				CF69D0521DA2336500992B84 /* File.h */,
+				CF69D0541DA2336500992B84 /* Host.cpp */,
+				CF69D0531DA2336500992B84 /* Host.h */,
+				CF69D0561DA2336500992B84 /* Internal.cpp */,
+				CF69D0551DA2336500992B84 /* Internal.h */,
+			);
+			name = ArcLA;
+			sourceTree = "<group>";
+		};
+		CF69D06E1DA2352000992B84 /* PS */ = {
+			isa = PBXGroup;
+			children = (
+				CF69D06F1DA2353000992B84 /* File.cpp */,
+				CF69D0701DA2353000992B84 /* File.h */,
+				CF69D0711DA2353000992B84 /* Host.h */,
+				CF69D0721DA2353000992B84 /* Host.cpp */,
+				CF69D0731DA2353000992B84 /* Internal.h */,
+			);
+			name = PS;
+			sourceTree = "<group>";
+		};
+		CF824F63279F563300C4F29C /* ArcLARaw */ = {
+			isa = PBXGroup;
+			children = (
+				CF824F65279F564800C4F29C /* Host.cpp */,
+				CF824F64279F564800C4F29C /* Host.h */,
+			);
+			name = ArcLARaw;
+			sourceTree = "<group>";
+		};
+		CFFA95521F4E604D0035E606 /* NetWebDAV */ = {
+			isa = PBXGroup;
+			children = (
+				CFFA95661F57B2710035E606 /* Cache.cpp */,
+				CFFA95651F57B2710035E606 /* Cache.h */,
+				CF1F6FC325E70982003A2497 /* Connection.cpp */,
+				CF1F6FC125E70982003A2497 /* Connection.h */,
+				CFFA95621F5506FC0035E606 /* ConnectionsPool.cpp */,
+				CFFA95611F5506FC0035E606 /* ConnectionsPool.h */,
+				CF1F6FC425E70982003A2497 /* CURLConnection.cpp */,
+				CF1F6FC225E70982003A2497 /* CURLConnection.h */,
+				CFFA955E1F528A7B0035E606 /* DateTimeParser.cpp */,
+				CFFA955D1F528A7B0035E606 /* DateTimeParser.h */,
+				CFFA956A1F5A43DD0035E606 /* File.cpp */,
+				CFFA95691F5A43DD0035E606 /* File.h */,
+				CFFA955A1F4EA7200035E606 /* Internal.cpp */,
+				CFFA95591F4EA7200035E606 /* Internal.h */,
+				CF1FDD051F5D4AEC00AF1EBD /* PathRoutines.h */,
+				CF1FDD061F5D4AEC00AF1EBD /* PathRoutines.mm */,
+				CFFA956E1F5A4EDC0035E606 /* ReadBuffer.cpp */,
+				CFFA956D1F5A4EDC0035E606 /* ReadBuffer.h */,
+				CF3E2F841F60DF08001BFFCE /* Requests.cpp */,
+				CF3E2F851F60DF08001BFFCE /* Requests.h */,
+				CFFA95541F4E60850035E606 /* WebDAVHost.cpp */,
+				CFFA95531F4E60850035E606 /* WebDAVHost.h */,
+				CF1FDD021F5BBA6F00AF1EBD /* WriteBuffer.cpp */,
+				CF1FDD011F5BBA6F00AF1EBD /* WriteBuffer.h */,
+			);
+			name = NetWebDAV;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		CF460061256057250095FC73 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFF762A52EDCB6EE002DD1EE /* OpenDirectory.h in Headers */,
+				CFA99A9A266FC16800F72E93 /* Log.h in Headers */,
+				CF1F6FC625E70982003A2497 /* CURLConnection.h in Headers */,
+				CF1F6FC525E70982003A2497 /* Connection.h in Headers */,
+				CF824F66279F564800C4F29C /* Host.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		CF26DE1721D285A6003F0E93 /* VFSUT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF26DE1C21D285A6003F0E93 /* Build configuration list for PBXNativeTarget "VFSUT" */;
+			buildPhases = (
+				CF26DE1421D285A6003F0E93 /* Sources */,
+				CF26DE1521D285A6003F0E93 /* Frameworks */,
+				CF26DE1621D285A6003F0E93 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VFSUT;
+			productName = VFSUT;
+			productReference = CF26DE1821D285A6003F0E93 /* VFSUT */;
+			productType = "com.apple.product-type.tool";
+		};
+		CF460064256057250095FC73 /* VFS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF460066256057250095FC73 /* Build configuration list for PBXNativeTarget "VFS" */;
+			buildPhases = (
+				CF460061256057250095FC73 /* Headers */,
+				CF460062256057250095FC73 /* Sources */,
+				CF460063256057250095FC73 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VFS;
+			productName = VFS;
+			productReference = CF460065256057250095FC73 /* libVFS.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		CFAB6D16258A1AF000397DB5 /* VFSIT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CFAB6D24258A1AF000397DB5 /* Build configuration list for PBXNativeTarget "VFSIT" */;
+			buildPhases = (
+				CFAB6D17258A1AF000397DB5 /* Sources */,
+				CFAB6D20258A1AF000397DB5 /* Frameworks */,
+				CFAB6D23258A1AF000397DB5 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VFSIT;
+			productName = VFSUT;
+			productReference = CFAB6D27258A1AF000397DB5 /* VFSIT */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CF69CFC71DA224E200992B84 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1220;
+				ORGANIZATIONNAME = "Michael G. Kazakov";
+				TargetAttributes = {
+					CF26DE1721D285A6003F0E93 = {
+						CreatedOnToolsVersion = 10.1;
+						ProvisioningStyle = Automatic;
+					};
+					CF460064256057250095FC73 = {
+						CreatedOnToolsVersion = 12.0;
+					};
+				};
+			};
+			buildConfigurationList = CF69CFCA1DA224E200992B84 /* Build configuration list for PBXProject "VFS" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CF69CFC61DA224E200992B84;
+			productRefGroup = CF69CFD01DA224E200992B84 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CF460064256057250095FC73 /* VFS */,
+				CF26DE1721D285A6003F0E93 /* VFSUT */,
+				CFAB6D16258A1AF000397DB5 /* VFSIT */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CF26DE1421D285A6003F0E93 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFF762C12EDE0D52002DD1EE /* _VFSUT.cpp in Sources */,
+				CF3D24152D14B72B005C36F6 /* DisplayNamesCache_UT.mm in Sources */,
+				CFE08AED23CFAFD8007E99B8 /* TestEnv.mm in Sources */,
+				CF24E1FF2290200800C166FA /* SearchForFiles_IT.cpp in Sources */,
+				CF26DE2121D2864D003F0E93 /* Tests.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF460062256057250095FC73 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFF762A72EDCEDB0002DD1EE /* _VFS.mm in Sources */,
+				CFF762A02EDCA7CC002DD1EE /* _VFS.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CFAB6D17258A1AF000397DB5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFAB6D87258B6B1F00397DB5 /* VFSArchive_IT.mm in Sources */,
+				CFAB6D38258A1B6600397DB5 /* VFSPS_IT.cpp in Sources */,
+				CF22F094258CC0230033E850 /* VFSFTP_IT.mm in Sources */,
+				CFAB6D1D258A1AF000397DB5 /* TestEnv.mm in Sources */,
+				CF22F08B258B7F280033E850 /* VFSSFTP_Tests.mm in Sources */,
+				CFAB6D6F258A58D300397DB5 /* WebDAV_IT.mm in Sources */,
+				CFB63CD525939A630038502E /* VFSNative_IT.mm in Sources */,
+				CFAB6D1F258A1AF000397DB5 /* Tests.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		CF26DE1D21D285A6003F0E93 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF26DE2221D28699003F0E93 /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		CF26DE1E21D285A6003F0E93 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF26DE2221D28699003F0E93 /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		CF460067256057250095FC73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		CF460068256057250095FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		CF69CFD11DA224E200992B84 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF5FD92C1FA1BD0700752E59 /* default.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		CF69CFD21DA224E200992B84 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF5FD92C1FA1BD0700752E59 /* default.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		CFAB6D25258A1AF000397DB5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF26DE2221D28699003F0E93 /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		CFAB6D26258A1AF000397DB5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF26DE2221D28699003F0E93 /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CF26DE1C21D285A6003F0E93 /* Build configuration list for PBXNativeTarget "VFSUT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF26DE1D21D285A6003F0E93 /* Debug */,
+				CF26DE1E21D285A6003F0E93 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF460066256057250095FC73 /* Build configuration list for PBXNativeTarget "VFS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF460067256057250095FC73 /* Debug */,
+				CF460068256057250095FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF69CFCA1DA224E200992B84 /* Build configuration list for PBXProject "VFS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF69CFD11DA224E200992B84 /* Debug */,
+				CF69CFD21DA224E200992B84 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CFAB6D24258A1AF000397DB5 /* Build configuration list for PBXNativeTarget "VFSIT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFAB6D25258A1AF000397DB5 /* Debug */,
+				CFAB6D26258A1AF000397DB5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CF69CFC71DA224E200992B84 /* Project object */;
+}

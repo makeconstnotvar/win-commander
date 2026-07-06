@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="22154" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22154"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="PreferencesWindowGeneralTab">
+            <connections>
+                <outlet property="FSAccessLabel" destination="mE6-dr-OKl" id="bOi-pr-rtr"/>
+                <outlet property="FSAccessResetButton" destination="8tk-ZS-HXz" id="vPs-ST-nCy"/>
+                <outlet property="view" destination="1" id="2"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="1">
+            <rect key="frame" x="0.0" y="0.0" width="730" height="140"/>
+            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+            <subviews>
+                <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="30">
+                    <rect key="frame" x="321" y="93" width="144" height="32"/>
+                    <buttonCell key="cell" type="push" title="Reset to defaults" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="31">
+                        <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <constraints>
+                        <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="130" id="Uvv-7h-B38"/>
+                    </constraints>
+                    <connections>
+                        <action selector="ResetToDefaults:" target="-2" id="35"/>
+                    </connections>
+                </button>
+                <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="55">
+                    <rect key="frame" x="18" y="103" width="304" height="16"/>
+                    <constraints>
+                        <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="160" id="WRW-Mf-BIz"/>
+                    </constraints>
+                    <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Settings:" id="56">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mE6-dr-OKl">
+                    <rect key="frame" x="18" y="77" width="304" height="16"/>
+                    <constraints>
+                        <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="160" id="Wx1-FM-SzG"/>
+                    </constraints>
+                    <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" alignment="right" title="Granted filesystem access:" id="q8n-Mc-Nho">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="8tk-ZS-HXz">
+                    <rect key="frame" x="321" y="67" width="94" height="32"/>
+                    <buttonCell key="cell" type="push" title="Reset" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="Geu-Lq-Yub">
+                        <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <constraints>
+                        <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="80" id="8tX-8H-w09"/>
+                    </constraints>
+                    <connections>
+                        <action selector="OnFSAccessReset:" target="-2" id="qcr-xq-bMK"/>
+                    </connections>
+                </button>
+            </subviews>
+            <constraints>
+                <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="30" secondAttribute="trailing" constant="20" symbolic="YES" id="7El-SZ-fOn"/>
+                <constraint firstItem="mE6-dr-OKl" firstAttribute="leading" secondItem="1" secondAttribute="leading" constant="20" symbolic="YES" id="7nT-fX-tJv"/>
+                <constraint firstItem="mE6-dr-OKl" firstAttribute="baseline" secondItem="8tk-ZS-HXz" secondAttribute="baseline" id="DWR-Gx-qRV"/>
+                <constraint firstItem="8tk-ZS-HXz" firstAttribute="leading" secondItem="mE6-dr-OKl" secondAttribute="trailing" constant="8" symbolic="YES" id="Jsg-pf-8Iw"/>
+                <constraint firstItem="30" firstAttribute="leading" secondItem="1" secondAttribute="centerX" multiplier="0.9" id="QpF-mh-46a"/>
+                <constraint firstItem="mE6-dr-OKl" firstAttribute="top" secondItem="55" secondAttribute="bottom" constant="10" id="XVu-Ye-Bul"/>
+                <constraint firstItem="30" firstAttribute="leading" secondItem="8tk-ZS-HXz" secondAttribute="leading" id="bTj-I0-FCe"/>
+                <constraint firstItem="55" firstAttribute="leading" secondItem="1" secondAttribute="leading" constant="20" symbolic="YES" id="gzh-KN-5Td"/>
+                <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="8tk-ZS-HXz" secondAttribute="trailing" constant="20" symbolic="YES" id="rRE-74-ng4"/>
+                <constraint firstItem="30" firstAttribute="top" secondItem="1" secondAttribute="top" constant="20" symbolic="YES" id="sCH-9h-gF7"/>
+                <constraint firstItem="30" firstAttribute="leading" secondItem="55" secondAttribute="trailing" constant="8" symbolic="YES" id="tQd-hJ-HV9"/>
+                <constraint firstItem="30" firstAttribute="baseline" secondItem="55" secondAttribute="baseline" id="wgf-ND-KF3"/>
+            </constraints>
+            <point key="canvasLocation" x="79" y="118"/>
+        </customView>
+        <userDefaultsController representsSharedInstance="YES" id="21"/>
+    </objects>
+</document>

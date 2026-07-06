@@ -1,0 +1,31 @@
+// Copyright (C) 2017-2025 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include <VFS/VFS.h>
+#include "../Operation.h"
+
+namespace nc::ops {
+
+class BatchRenamingJob;
+struct BatchRenamingJobCallbacks;
+
+class BatchRenaming final : public Operation
+{
+public:
+    BatchRenaming(std::vector<std::string> _src_paths,
+                  std::vector<std::string> _dst_paths,
+                  std::shared_ptr<VFSHost> _vfs);
+    ~BatchRenaming() override;
+
+private:
+    using Callbacks = BatchRenamingJobCallbacks;
+
+    Job *GetJob() noexcept override;
+    int OnRenameError(Error _err, const std::string &_path, VFSHost &_vfs);
+    static std::string Caption(const std::vector<std::string> &_paths);
+
+    std::unique_ptr<BatchRenamingJob> m_Job;
+    bool m_SkipAll = false;
+};
+
+} // namespace nc::ops

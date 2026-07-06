@@ -1,0 +1,544 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CF24E20C2291777E00C166FA /* UnitTests_main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF24E20B2291777D00C166FA /* UnitTests_main.cpp */; };
+		CF3989702B4162A5006103C1 /* IdleSleepPreventer.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39894B2B4162A4006103C1 /* IdleSleepPreventer.h */; };
+		CF3989712B4162A5006103C1 /* Observable.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39894C2B4162A4006103C1 /* Observable.h */; };
+		CF3989722B4162A5006103C1 /* tribool.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39894D2B4162A4006103C1 /* tribool.h */; };
+		CF3989732B4162A5006103C1 /* intrusive_ptr.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39894E2B4162A4006103C1 /* intrusive_ptr.h */; };
+		CF3989742B4162A5006103C1 /* CommonPaths.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39894F2B4162A5006103C1 /* CommonPaths.h */; };
+		CF3989752B4162A5006103C1 /* PosixFilesystem.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989502B4162A5006103C1 /* PosixFilesystem.h */; };
+		CF3989762B4162A5006103C1 /* LRUCache.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989512B4162A5006103C1 /* LRUCache.h */; };
+		CF3989772B4162A5006103C1 /* chained_strings.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989522B4162A5006103C1 /* chained_strings.h */; };
+		CF3989782B4162A5006103C1 /* PosixFilesystemMock.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989532B4162A5006103C1 /* PosixFilesystemMock.h */; };
+		CF3989792B4162A5006103C1 /* CFDefaultsCPP.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989542B4162A5006103C1 /* CFDefaultsCPP.h */; };
+		CF39897A2B4162A5006103C1 /* SpdlogFacade.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989552B4162A5006103C1 /* SpdlogFacade.h */; };
+		CF39897B2B4162A5006103C1 /* SysLocale.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989562B4162A5006103C1 /* SysLocale.h */; };
+		CF39897C2B4162A5006103C1 /* UnorderedUtil.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989572B4162A5006103C1 /* UnorderedUtil.h */; };
+		CF39897D2B4162A5006103C1 /* DispatchGroup.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989582B4162A5006103C1 /* DispatchGroup.h */; };
+		CF39897E2B4162A5006103C1 /* WhereIs.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989592B4162A5006103C1 /* WhereIs.h */; };
+		CF39897F2B4162A5006103C1 /* ExecutionDeadline.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39895A2B4162A5006103C1 /* ExecutionDeadline.h */; };
+		CF3989802B4162A5006103C1 /* mach_time.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39895B2B4162A5006103C1 /* mach_time.h */; };
+		CF3989812B4162A5006103C1 /* ToLower.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39895C2B4162A5006103C1 /* ToLower.h */; };
+		CF3989822B4162A5006103C1 /* CFStackAllocator.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39895D2B4162A5006103C1 /* CFStackAllocator.h */; };
+		CF3989832B4162A5006103C1 /* SpdlogFormatters.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39895E2B4162A5006103C1 /* SpdlogFormatters.h */; };
+		CF3989842B4162A5006103C1 /* CFRange.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39895F2B4162A5006103C1 /* CFRange.h */; };
+		CF3989852B4162A5006103C1 /* CFPtr.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989602B4162A5006103C1 /* CFPtr.h */; };
+		CF3989862B4162A5006103C1 /* debug.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989612B4162A5006103C1 /* debug.h */; };
+		CF3989872B4162A5006103C1 /* Hash.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989622B4162A5006103C1 /* Hash.h */; };
+		CF3989882B4162A5006103C1 /* ScopedObservable.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989632B4162A5006103C1 /* ScopedObservable.h */; };
+		CF39898A2B4162A5006103C1 /* spinlock.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989652B4162A5006103C1 /* spinlock.h */; };
+		CF39898B2B4162A5006103C1 /* algo.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989662B4162A5006103C1 /* algo.h */; };
+		CF39898C2B4162A5006103C1 /* UUID.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989672B4162A5006103C1 /* UUID.h */; };
+		CF39898D2B4162A5006103C1 /* WriteAtomically.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989682B4162A5006103C1 /* WriteAtomically.h */; };
+		CF39898E2B4162A5006103C1 /* PosixFilesystemImpl.h in Headers */ = {isa = PBXBuildFile; fileRef = CF3989692B4162A5006103C1 /* PosixFilesystemImpl.h */; };
+		CF39898F2B4162A5006103C1 /* CFString.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39896A2B4162A5006103C1 /* CFString.h */; };
+		CF3989902B4162A5006103C1 /* CloseFrom.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39896B2B4162A5006103C1 /* CloseFrom.h */; };
+		CF3989912B4162A5006103C1 /* StringsBulk.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39896C2B4162A5006103C1 /* StringsBulk.h */; };
+		CF3989922B4162A5006103C1 /* SerialQueue.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39896D2B4162A5006103C1 /* SerialQueue.h */; };
+		CF3989932B4162A5006103C1 /* variable_container.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39896E2B4162A5006103C1 /* variable_container.h */; };
+		CF3989942B4162A5006103C1 /* dispatch_cpp.h in Headers */ = {isa = PBXBuildFile; fileRef = CF39896F2B4162A5006103C1 /* dispatch_cpp.h */; };
+		CF4C98092EDA011C001E6496 /* _Base.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF4C98072EDA011C001E6496 /* _Base.cpp */; };
+		CF4C980A2EDA011C001E6496 /* _Base.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF4C98082EDA011C001E6496 /* _Base.mm */; };
+		CF4C98102EDA03B0001E6496 /* _BaseUT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF4C980F2EDA03B0001E6496 /* _BaseUT.cpp */; };
+		CFDA17E22D4650E300EE375B /* Error.h in Headers */ = {isa = PBXBuildFile; fileRef = CFDA17E12D4650E300EE375B /* Error.h */; };
+		CFDA17E62D4651F800EE375B /* Error_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFDA17E52D4651F800EE375B /* Error_UT.mm */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CF24E2022291772900C166FA /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		CF0A49F125252C40008EC7B0 /* CloseFrom.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CloseFrom.cpp; path = source/CloseFrom.cpp; sourceTree = "<group>"; };
+		CF0A49F3252530D2008EC7B0 /* CloseFrom_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CloseFrom_UT.cpp; sourceTree = "<group>"; };
+		CF19B3ED2544B94800838B45 /* ScopedObservable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ScopedObservable.cpp; path = source/ScopedObservable.cpp; sourceTree = "<group>"; };
+		CF19B4392544BD2400838B45 /* SerialQueue.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SerialQueue.cpp; path = source/SerialQueue.cpp; sourceTree = "<group>"; };
+		CF2084001FEFACFC0014D6AD /* StringsBulk.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = StringsBulk.cpp; path = source/StringsBulk.cpp; sourceTree = "<group>"; };
+		CF2084021FEFB2F70014D6AD /* StringsBulk_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = StringsBulk_UT.cpp; sourceTree = "<group>"; };
+		CF24E2042291772900C166FA /* BaseUT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = BaseUT; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF24E20B2291777D00C166FA /* UnitTests_main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = UnitTests_main.cpp; sourceTree = "<group>"; };
+		CF24E20D229191B700C166FA /* default.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = default.xcconfig; path = config/default.xcconfig; sourceTree = "<group>"; };
+		CF24E210229191B800C166FA /* tests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = tests.xcconfig; path = config/tests.xcconfig; sourceTree = "<group>"; };
+		CF24E214229196E100C166FA /* CFPtr_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CFPtr_UT.cpp; sourceTree = "<group>"; };
+		CF308F48213B755F00915730 /* PosixFilesystem.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = PosixFilesystem.cpp; path = source/PosixFilesystem.cpp; sourceTree = "<group>"; };
+		CF308F4C213B773400915730 /* PosixFilesystemImpl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = PosixFilesystemImpl.cpp; path = source/PosixFilesystemImpl.cpp; sourceTree = "<group>"; };
+		CF39894B2B4162A4006103C1 /* IdleSleepPreventer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = IdleSleepPreventer.h; path = include/Base/IdleSleepPreventer.h; sourceTree = "<group>"; };
+		CF39894C2B4162A4006103C1 /* Observable.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Observable.h; path = include/Base/Observable.h; sourceTree = "<group>"; };
+		CF39894D2B4162A4006103C1 /* tribool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = tribool.h; path = include/Base/tribool.h; sourceTree = "<group>"; };
+		CF39894E2B4162A4006103C1 /* intrusive_ptr.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = intrusive_ptr.h; path = include/Base/intrusive_ptr.h; sourceTree = "<group>"; };
+		CF39894F2B4162A5006103C1 /* CommonPaths.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CommonPaths.h; path = include/Base/CommonPaths.h; sourceTree = "<group>"; };
+		CF3989502B4162A5006103C1 /* PosixFilesystem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PosixFilesystem.h; path = include/Base/PosixFilesystem.h; sourceTree = "<group>"; };
+		CF3989512B4162A5006103C1 /* LRUCache.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = LRUCache.h; path = include/Base/LRUCache.h; sourceTree = "<group>"; };
+		CF3989522B4162A5006103C1 /* chained_strings.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = chained_strings.h; path = include/Base/chained_strings.h; sourceTree = "<group>"; };
+		CF3989532B4162A5006103C1 /* PosixFilesystemMock.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PosixFilesystemMock.h; path = include/Base/PosixFilesystemMock.h; sourceTree = "<group>"; };
+		CF3989542B4162A5006103C1 /* CFDefaultsCPP.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CFDefaultsCPP.h; path = include/Base/CFDefaultsCPP.h; sourceTree = "<group>"; };
+		CF3989552B4162A5006103C1 /* SpdlogFacade.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SpdlogFacade.h; path = include/Base/SpdlogFacade.h; sourceTree = "<group>"; };
+		CF3989562B4162A5006103C1 /* SysLocale.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SysLocale.h; path = include/Base/SysLocale.h; sourceTree = "<group>"; };
+		CF3989572B4162A5006103C1 /* UnorderedUtil.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = UnorderedUtil.h; path = include/Base/UnorderedUtil.h; sourceTree = "<group>"; };
+		CF3989582B4162A5006103C1 /* DispatchGroup.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DispatchGroup.h; path = include/Base/DispatchGroup.h; sourceTree = "<group>"; };
+		CF3989592B4162A5006103C1 /* WhereIs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = WhereIs.h; path = include/Base/WhereIs.h; sourceTree = "<group>"; };
+		CF39895A2B4162A5006103C1 /* ExecutionDeadline.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ExecutionDeadline.h; path = include/Base/ExecutionDeadline.h; sourceTree = "<group>"; };
+		CF39895B2B4162A5006103C1 /* mach_time.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = mach_time.h; path = include/Base/mach_time.h; sourceTree = "<group>"; };
+		CF39895C2B4162A5006103C1 /* ToLower.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ToLower.h; path = include/Base/ToLower.h; sourceTree = "<group>"; };
+		CF39895D2B4162A5006103C1 /* CFStackAllocator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CFStackAllocator.h; path = include/Base/CFStackAllocator.h; sourceTree = "<group>"; };
+		CF39895E2B4162A5006103C1 /* SpdlogFormatters.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SpdlogFormatters.h; path = include/Base/SpdlogFormatters.h; sourceTree = "<group>"; };
+		CF39895F2B4162A5006103C1 /* CFRange.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CFRange.h; path = include/Base/CFRange.h; sourceTree = "<group>"; };
+		CF3989602B4162A5006103C1 /* CFPtr.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CFPtr.h; path = include/Base/CFPtr.h; sourceTree = "<group>"; };
+		CF3989612B4162A5006103C1 /* debug.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = debug.h; path = include/Base/debug.h; sourceTree = "<group>"; };
+		CF3989622B4162A5006103C1 /* Hash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Hash.h; path = include/Base/Hash.h; sourceTree = "<group>"; };
+		CF3989632B4162A5006103C1 /* ScopedObservable.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ScopedObservable.h; path = include/Base/ScopedObservable.h; sourceTree = "<group>"; };
+		CF3989652B4162A5006103C1 /* spinlock.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = spinlock.h; path = include/Base/spinlock.h; sourceTree = "<group>"; };
+		CF3989662B4162A5006103C1 /* algo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = algo.h; path = include/Base/algo.h; sourceTree = "<group>"; };
+		CF3989672B4162A5006103C1 /* UUID.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = UUID.h; path = include/Base/UUID.h; sourceTree = "<group>"; };
+		CF3989682B4162A5006103C1 /* WriteAtomically.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = WriteAtomically.h; path = include/Base/WriteAtomically.h; sourceTree = "<group>"; };
+		CF3989692B4162A5006103C1 /* PosixFilesystemImpl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PosixFilesystemImpl.h; path = include/Base/PosixFilesystemImpl.h; sourceTree = "<group>"; };
+		CF39896A2B4162A5006103C1 /* CFString.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CFString.h; path = include/Base/CFString.h; sourceTree = "<group>"; };
+		CF39896B2B4162A5006103C1 /* CloseFrom.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CloseFrom.h; path = include/Base/CloseFrom.h; sourceTree = "<group>"; };
+		CF39896C2B4162A5006103C1 /* StringsBulk.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = StringsBulk.h; path = include/Base/StringsBulk.h; sourceTree = "<group>"; };
+		CF39896D2B4162A5006103C1 /* SerialQueue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SerialQueue.h; path = include/Base/SerialQueue.h; sourceTree = "<group>"; };
+		CF39896E2B4162A5006103C1 /* variable_container.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = variable_container.h; path = include/Base/variable_container.h; sourceTree = "<group>"; };
+		CF39896F2B4162A5006103C1 /* dispatch_cpp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = dispatch_cpp.h; path = include/Base/dispatch_cpp.h; sourceTree = "<group>"; };
+		CF4601E725630DCB0095FC73 /* libBase.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libBase.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF47DF721E063CCF00AAAF3C /* DispatchGroup.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = DispatchGroup.cpp; path = source/DispatchGroup.cpp; sourceTree = "<group>"; };
+		CF4C98072EDA011C001E6496 /* _Base.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = _Base.cpp; path = source/_Base.cpp; sourceTree = "<group>"; };
+		CF4C98082EDA011C001E6496 /* _Base.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = _Base.mm; path = source/_Base.mm; sourceTree = "<group>"; };
+		CF4C980F2EDA03B0001E6496 /* _BaseUT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _BaseUT.cpp; sourceTree = "<group>"; };
+		CF5338682532512100022EE8 /* ExecutionDeadline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ExecutionDeadline.cpp; path = source/ExecutionDeadline.cpp; sourceTree = "<group>"; };
+		CF614ACD1F9D8EDC0005F2DB /* Hash_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Hash_UT.cpp; sourceTree = "<group>"; };
+		CF614ACE1F9D8EDD0005F2DB /* VariableContainer_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VariableContainer_UT.cpp; sourceTree = "<group>"; };
+		CF614AD11F9D8EF00005F2DB /* chained_strings_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = chained_strings_UT.cpp; sourceTree = "<group>"; };
+		CF6D1DC02C94C85B0010FBFF /* StackAllocator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = StackAllocator.h; path = include/Base/StackAllocator.h; sourceTree = "<group>"; };
+		CF8D0D161D98EA4300ADFF14 /* CFStackAllocator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CFStackAllocator.cpp; path = source/CFStackAllocator.cpp; sourceTree = "<group>"; };
+		CF90C0C11EC1B35E0056E3B8 /* spinlock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = spinlock.cpp; path = source/spinlock.cpp; sourceTree = "<group>"; };
+		CF9A9F161CACDD490094D6F7 /* CFDefaultsCPP.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CFDefaultsCPP.cpp; path = source/CFDefaultsCPP.cpp; sourceTree = "<group>"; };
+		CFA99A012650661300F72E93 /* SpdlogFacade.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SpdlogFacade.cpp; path = source/SpdlogFacade.cpp; sourceTree = "<group>"; };
+		CFA99A0F26512D4400F72E93 /* WriteAtomically.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = WriteAtomically.cpp; path = source/WriteAtomically.cpp; sourceTree = "<group>"; };
+		CFD22CD52012DDF800608DFE /* LRUCache_Tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = LRUCache_Tests.cpp; sourceTree = "<group>"; };
+		CFD230F52AE5CF190000C7CF /* SysLocale.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SysLocale.cpp; path = source/SysLocale.cpp; sourceTree = "<group>"; };
+		CFD2312E2AEDC3B80000C7CF /* algo.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = algo.cpp; path = source/algo.cpp; sourceTree = "<group>"; };
+		CFD231302AEDC6260000C7CF /* algo_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = algo_UT.cpp; sourceTree = "<group>"; };
+		CFD231342AEEA2610000C7CF /* UUID.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = UUID.cpp; path = source/UUID.cpp; sourceTree = "<group>"; };
+		CFD231362AEEA26E0000C7CF /* UUID_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = UUID_UT.cpp; sourceTree = "<group>"; };
+		CFD62BA01C99C2AE0021EE7F /* CFString.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CFString.cpp; path = source/CFString.cpp; sourceTree = "<group>"; };
+		CFD62BA11C99C2AE0021EE7F /* CommonPaths.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CommonPaths.cpp; path = source/CommonPaths.cpp; sourceTree = "<group>"; };
+		CFD62BA21C99C2AE0021EE7F /* CommonPaths.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CommonPaths.mm; path = source/CommonPaths.mm; sourceTree = "<group>"; };
+		CFD62BA31C99C2AE0021EE7F /* debug.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = debug.cpp; path = source/debug.cpp; sourceTree = "<group>"; };
+		CFD62BA41C99C2AE0021EE7F /* dispatch_cpp.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = dispatch_cpp.cpp; path = source/dispatch_cpp.cpp; sourceTree = "<group>"; };
+		CFD62BA71C99C2AE0021EE7F /* Hash.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Hash.cpp; path = source/Hash.cpp; sourceTree = "<group>"; };
+		CFD62BA81C99C2AE0021EE7F /* IdleSleepPreventer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = IdleSleepPreventer.cpp; path = source/IdleSleepPreventer.cpp; sourceTree = "<group>"; };
+		CFD62BAA1C99C2AE0021EE7F /* mach_time.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = mach_time.cpp; path = source/mach_time.cpp; sourceTree = "<group>"; };
+		CFD62BBD1C99C7480021EE7F /* chained_strings.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = chained_strings.cpp; path = source/chained_strings.cpp; sourceTree = "<group>"; };
+		CFD6DD211D6C44C1006B94C2 /* Observable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Observable.cpp; path = source/Observable.cpp; sourceTree = "<group>"; };
+		CFDA17E12D4650E300EE375B /* Error.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = Error.h; path = include/Base/Error.h; sourceTree = "<group>"; };
+		CFDA17E32D4651CF00EE375B /* Error.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = Error.mm; path = source/Error.mm; sourceTree = "<group>"; };
+		CFDA17E52D4651F800EE375B /* Error_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = Error_UT.mm; sourceTree = "<group>"; };
+		CFDA17E72D46520700EE375B /* UnitTests_main.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UnitTests_main.h; sourceTree = "<group>"; };
+		CFDE36E326BA5F2400EB1B0D /* WhereIs.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = WhereIs.cpp; path = source/WhereIs.cpp; sourceTree = "<group>"; };
+		CFDE36E926BA665700EB1B0D /* WhereIs_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = WhereIs_UT.cpp; sourceTree = "<group>"; };
+		CFE08ADE23C20664007E99B8 /* intrusive_ptr_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = intrusive_ptr_UT.cpp; sourceTree = "<group>"; };
+		CFE8F90321A27F3000300019 /* spinlock_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = spinlock_UT.cpp; sourceTree = "<group>"; };
+		CFF835362DC783BA00CED300 /* WriteAtomically_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = WriteAtomically_UT.cpp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CF24E2012291772900C166FA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF4601E525630DCB0095FC73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CF24E212229191DF00C166FA /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CF24E20D229191B700C166FA /* default.xcconfig */,
+				CF24E210229191B800C166FA /* tests.xcconfig */,
+			);
+			name = Config;
+			sourceTree = "<group>";
+		};
+		CF24E21722919F8100C166FA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		CF614ABF1F9D8E6E0005F2DB /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				CF4C980F2EDA03B0001E6496 /* _BaseUT.cpp */,
+				CFD231302AEDC6260000C7CF /* algo_UT.cpp */,
+				CF24E214229196E100C166FA /* CFPtr_UT.cpp */,
+				CF614AD11F9D8EF00005F2DB /* chained_strings_UT.cpp */,
+				CF0A49F3252530D2008EC7B0 /* CloseFrom_UT.cpp */,
+				CFDA17E52D4651F800EE375B /* Error_UT.mm */,
+				CF614ACD1F9D8EDC0005F2DB /* Hash_UT.cpp */,
+				CFE08ADE23C20664007E99B8 /* intrusive_ptr_UT.cpp */,
+				CFD22CD52012DDF800608DFE /* LRUCache_Tests.cpp */,
+				CFE8F90321A27F3000300019 /* spinlock_UT.cpp */,
+				CF2084021FEFB2F70014D6AD /* StringsBulk_UT.cpp */,
+				CFDA17E72D46520700EE375B /* UnitTests_main.h */,
+				CF24E20B2291777D00C166FA /* UnitTests_main.cpp */,
+				CFD231362AEEA26E0000C7CF /* UUID_UT.cpp */,
+				CF614ACE1F9D8EDD0005F2DB /* VariableContainer_UT.cpp */,
+				CFDE36E926BA665700EB1B0D /* WhereIs_UT.cpp */,
+				CFF835362DC783BA00CED300 /* WriteAtomically_UT.cpp */,
+			);
+			name = Tests;
+			path = tests;
+			sourceTree = SOURCE_ROOT;
+		};
+		CFD62B691C99C19A0021EE7F = {
+			isa = PBXGroup;
+			children = (
+				CF24E212229191DF00C166FA /* Config */,
+				CFD62B841C99C2510021EE7F /* Headers */,
+				CFD62B851C99C2590021EE7F /* Source */,
+				CF614ABF1F9D8E6E0005F2DB /* Tests */,
+				CFD62B731C99C19A0021EE7F /* Products */,
+				CF24E21722919F8100C166FA /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		CFD62B731C99C19A0021EE7F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CF24E2042291772900C166FA /* BaseUT */,
+				CF4601E725630DCB0095FC73 /* libBase.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CFD62B841C99C2510021EE7F /* Headers */ = {
+			isa = PBXGroup;
+			children = (
+				CF3989662B4162A5006103C1 /* algo.h */,
+				CF3989542B4162A5006103C1 /* CFDefaultsCPP.h */,
+				CF3989602B4162A5006103C1 /* CFPtr.h */,
+				CF39895F2B4162A5006103C1 /* CFRange.h */,
+				CF39895D2B4162A5006103C1 /* CFStackAllocator.h */,
+				CF39896A2B4162A5006103C1 /* CFString.h */,
+				CF3989522B4162A5006103C1 /* chained_strings.h */,
+				CF39896B2B4162A5006103C1 /* CloseFrom.h */,
+				CF39894F2B4162A5006103C1 /* CommonPaths.h */,
+				CF3989612B4162A5006103C1 /* debug.h */,
+				CF39896F2B4162A5006103C1 /* dispatch_cpp.h */,
+				CF3989582B4162A5006103C1 /* DispatchGroup.h */,
+				CFDA17E12D4650E300EE375B /* Error.h */,
+				CF39895A2B4162A5006103C1 /* ExecutionDeadline.h */,
+				CF3989622B4162A5006103C1 /* Hash.h */,
+				CF39894B2B4162A4006103C1 /* IdleSleepPreventer.h */,
+				CF39894E2B4162A4006103C1 /* intrusive_ptr.h */,
+				CF3989512B4162A5006103C1 /* LRUCache.h */,
+				CF39895B2B4162A5006103C1 /* mach_time.h */,
+				CF39894C2B4162A4006103C1 /* Observable.h */,
+				CF3989502B4162A5006103C1 /* PosixFilesystem.h */,
+				CF3989692B4162A5006103C1 /* PosixFilesystemImpl.h */,
+				CF3989532B4162A5006103C1 /* PosixFilesystemMock.h */,
+				CF3989632B4162A5006103C1 /* ScopedObservable.h */,
+				CF39896D2B4162A5006103C1 /* SerialQueue.h */,
+				CF3989552B4162A5006103C1 /* SpdlogFacade.h */,
+				CF39895E2B4162A5006103C1 /* SpdlogFormatters.h */,
+				CF3989652B4162A5006103C1 /* spinlock.h */,
+				CF6D1DC02C94C85B0010FBFF /* StackAllocator.h */,
+				CF39896C2B4162A5006103C1 /* StringsBulk.h */,
+				CF3989562B4162A5006103C1 /* SysLocale.h */,
+				CF39895C2B4162A5006103C1 /* ToLower.h */,
+				CF39894D2B4162A4006103C1 /* tribool.h */,
+				CF3989572B4162A5006103C1 /* UnorderedUtil.h */,
+				CF3989672B4162A5006103C1 /* UUID.h */,
+				CF39896E2B4162A5006103C1 /* variable_container.h */,
+				CF3989592B4162A5006103C1 /* WhereIs.h */,
+				CF3989682B4162A5006103C1 /* WriteAtomically.h */,
+			);
+			name = Headers;
+			sourceTree = "<group>";
+		};
+		CFD62B851C99C2590021EE7F /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				CF4C98072EDA011C001E6496 /* _Base.cpp */,
+				CF4C98082EDA011C001E6496 /* _Base.mm */,
+				CFD2312E2AEDC3B80000C7CF /* algo.cpp */,
+				CF9A9F161CACDD490094D6F7 /* CFDefaultsCPP.cpp */,
+				CF8D0D161D98EA4300ADFF14 /* CFStackAllocator.cpp */,
+				CFD62BA01C99C2AE0021EE7F /* CFString.cpp */,
+				CFD62BBD1C99C7480021EE7F /* chained_strings.cpp */,
+				CF0A49F125252C40008EC7B0 /* CloseFrom.cpp */,
+				CFD62BA11C99C2AE0021EE7F /* CommonPaths.cpp */,
+				CFD62BA21C99C2AE0021EE7F /* CommonPaths.mm */,
+				CFD62BA31C99C2AE0021EE7F /* debug.cpp */,
+				CFD62BA41C99C2AE0021EE7F /* dispatch_cpp.cpp */,
+				CF47DF721E063CCF00AAAF3C /* DispatchGroup.cpp */,
+				CFDA17E32D4651CF00EE375B /* Error.mm */,
+				CF5338682532512100022EE8 /* ExecutionDeadline.cpp */,
+				CFD62BA71C99C2AE0021EE7F /* Hash.cpp */,
+				CFD62BA81C99C2AE0021EE7F /* IdleSleepPreventer.cpp */,
+				CFD62BAA1C99C2AE0021EE7F /* mach_time.cpp */,
+				CFD6DD211D6C44C1006B94C2 /* Observable.cpp */,
+				CF308F48213B755F00915730 /* PosixFilesystem.cpp */,
+				CF308F4C213B773400915730 /* PosixFilesystemImpl.cpp */,
+				CF19B3ED2544B94800838B45 /* ScopedObservable.cpp */,
+				CF19B4392544BD2400838B45 /* SerialQueue.cpp */,
+				CFA99A012650661300F72E93 /* SpdlogFacade.cpp */,
+				CF90C0C11EC1B35E0056E3B8 /* spinlock.cpp */,
+				CF2084001FEFACFC0014D6AD /* StringsBulk.cpp */,
+				CFD230F52AE5CF190000C7CF /* SysLocale.cpp */,
+				CFD231342AEEA2610000C7CF /* UUID.cpp */,
+				CFDE36E326BA5F2400EB1B0D /* WhereIs.cpp */,
+				CFA99A0F26512D4400F72E93 /* WriteAtomically.cpp */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		CF4601E325630DCB0095FC73 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF39898F2B4162A5006103C1 /* CFString.h in Headers */,
+				CF3989872B4162A5006103C1 /* Hash.h in Headers */,
+				CF3989932B4162A5006103C1 /* variable_container.h in Headers */,
+				CF3989802B4162A5006103C1 /* mach_time.h in Headers */,
+				CF39897E2B4162A5006103C1 /* WhereIs.h in Headers */,
+				CF3989902B4162A5006103C1 /* CloseFrom.h in Headers */,
+				CF3989922B4162A5006103C1 /* SerialQueue.h in Headers */,
+				CF39897D2B4162A5006103C1 /* DispatchGroup.h in Headers */,
+				CF39898A2B4162A5006103C1 /* spinlock.h in Headers */,
+				CF39898E2B4162A5006103C1 /* PosixFilesystemImpl.h in Headers */,
+				CF39897B2B4162A5006103C1 /* SysLocale.h in Headers */,
+				CF3989942B4162A5006103C1 /* dispatch_cpp.h in Headers */,
+				CF3989912B4162A5006103C1 /* StringsBulk.h in Headers */,
+				CF3989832B4162A5006103C1 /* SpdlogFormatters.h in Headers */,
+				CF39898B2B4162A5006103C1 /* algo.h in Headers */,
+				CF3989882B4162A5006103C1 /* ScopedObservable.h in Headers */,
+				CF39897F2B4162A5006103C1 /* ExecutionDeadline.h in Headers */,
+				CFDA17E22D4650E300EE375B /* Error.h in Headers */,
+				CF3989702B4162A5006103C1 /* IdleSleepPreventer.h in Headers */,
+				CF39898D2B4162A5006103C1 /* WriteAtomically.h in Headers */,
+				CF3989752B4162A5006103C1 /* PosixFilesystem.h in Headers */,
+				CF3989712B4162A5006103C1 /* Observable.h in Headers */,
+				CF3989722B4162A5006103C1 /* tribool.h in Headers */,
+				CF3989772B4162A5006103C1 /* chained_strings.h in Headers */,
+				CF3989792B4162A5006103C1 /* CFDefaultsCPP.h in Headers */,
+				CF3989862B4162A5006103C1 /* debug.h in Headers */,
+				CF3989762B4162A5006103C1 /* LRUCache.h in Headers */,
+				CF39897C2B4162A5006103C1 /* UnorderedUtil.h in Headers */,
+				CF3989782B4162A5006103C1 /* PosixFilesystemMock.h in Headers */,
+				CF39898C2B4162A5006103C1 /* UUID.h in Headers */,
+				CF3989822B4162A5006103C1 /* CFStackAllocator.h in Headers */,
+				CF3989742B4162A5006103C1 /* CommonPaths.h in Headers */,
+				CF3989842B4162A5006103C1 /* CFRange.h in Headers */,
+				CF3989812B4162A5006103C1 /* ToLower.h in Headers */,
+				CF39897A2B4162A5006103C1 /* SpdlogFacade.h in Headers */,
+				CF3989852B4162A5006103C1 /* CFPtr.h in Headers */,
+				CF3989732B4162A5006103C1 /* intrusive_ptr.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		CF24E2032291772900C166FA /* BaseUT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF24E2082291772900C166FA /* Build configuration list for PBXNativeTarget "BaseUT" */;
+			buildPhases = (
+				CF24E2002291772900C166FA /* Sources */,
+				CF24E2012291772900C166FA /* Frameworks */,
+				CF24E2022291772900C166FA /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BaseUT;
+			productName = HabaneroUT;
+			productReference = CF24E2042291772900C166FA /* BaseUT */;
+			productType = "com.apple.product-type.tool";
+		};
+		CF4601E625630DCB0095FC73 /* Base */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF4601E825630DCB0095FC73 /* Build configuration list for PBXNativeTarget "Base" */;
+			buildPhases = (
+				CF4601E325630DCB0095FC73 /* Headers */,
+				CF4601E425630DCB0095FC73 /* Sources */,
+				CF4601E525630DCB0095FC73 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Base;
+			productName = Habanero;
+			productReference = CF4601E725630DCB0095FC73 /* libBase.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CFD62B6A1C99C19A0021EE7F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1220;
+				ORGANIZATIONNAME = "Michael G. Kazakov";
+				TargetAttributes = {
+					CF24E2032291772900C166FA = {
+						CreatedOnToolsVersion = 10.2.1;
+					};
+					CF4601E625630DCB0095FC73 = {
+						CreatedOnToolsVersion = 12.0;
+					};
+				};
+			};
+			buildConfigurationList = CFD62B6D1C99C19A0021EE7F /* Build configuration list for PBXProject "Base" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CFD62B691C99C19A0021EE7F;
+			productRefGroup = CFD62B731C99C19A0021EE7F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CF4601E625630DCB0095FC73 /* Base */,
+				CF24E2032291772900C166FA /* BaseUT */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CF24E2002291772900C166FA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF24E20C2291777E00C166FA /* UnitTests_main.cpp in Sources */,
+				CFDA17E62D4651F800EE375B /* Error_UT.mm in Sources */,
+				CF4C98102EDA03B0001E6496 /* _BaseUT.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF4601E425630DCB0095FC73 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF4C98092EDA011C001E6496 /* _Base.cpp in Sources */,
+				CF4C980A2EDA011C001E6496 /* _Base.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		CF24E2092291772900C166FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF24E210229191B800C166FA /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = BaseUT;
+			};
+			name = Debug;
+		};
+		CF24E20A2291772900C166FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF24E210229191B800C166FA /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = BaseUT;
+			};
+			name = Release;
+		};
+		CF4601E925630DCB0095FC73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		CF4601EA25630DCB0095FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		CFD62B791C99C19A0021EE7F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF24E20D229191B700C166FA /* default.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		CFD62B7A1C99C19A0021EE7F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF24E20D229191B700C166FA /* default.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CF24E2082291772900C166FA /* Build configuration list for PBXNativeTarget "BaseUT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF24E2092291772900C166FA /* Debug */,
+				CF24E20A2291772900C166FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF4601E825630DCB0095FC73 /* Build configuration list for PBXNativeTarget "Base" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF4601E925630DCB0095FC73 /* Debug */,
+				CF4601EA25630DCB0095FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CFD62B6D1C99C19A0021EE7F /* Build configuration list for PBXProject "Base" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFD62B791C99C19A0021EE7F /* Debug */,
+				CFD62B7A1C99C19A0021EE7F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CFD62B6A1C99C19A0021EE7F /* Project object */;
+}

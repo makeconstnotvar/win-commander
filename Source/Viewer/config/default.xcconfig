@@ -1,0 +1,9 @@
+#include "../XCConfig/common.xcconfig"
+
+HEADER_SEARCH_PATHS = $(inherited) $(PROJECT_DIR)/include $(PROJECT_DIR)/include/Viewer $(LIBS)/Utility/include $(LIBS)/VFS/include $(LIBS)/Base/include $(LIBS)/Config/include $(LIBS)/CUI/include
+
+INSTALL_PATH = @rpath/
+
+EXECUTABLE_PREFIX =
+
+PRODUCT_NAME = $(TARGET_NAME)

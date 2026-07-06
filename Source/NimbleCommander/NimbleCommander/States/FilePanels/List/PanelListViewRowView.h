@@ -1,0 +1,32 @@
+// Copyright (C) 2016-2024 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include <Cocoa/Cocoa.h>
+#include <VFS/VFS.h>
+#include <Panel/PanelDataItemVolatileData.h>
+
+@class NCPanelListView;
+@class PanelListViewNameView;
+@class PanelListViewSizeView;
+
+@interface PanelListViewRowView : NSTableRowView
+
+- (id)initWithItem:(VFSListingItem)_item;
+
+@property(nonatomic) VFSListingItem item; // may be empty!
+@property(nonatomic) nc::panel::data::ItemVolatileData vd;
+@property(nonatomic, weak) NCPanelListView *listView;
+@property(nonatomic, readonly) NSColor *rowBackgroundColor;
+@property(nonatomic, readonly) NSColor *rowTextColor;
+@property(nonatomic, readonly) NSColor *rowSecondaryTextColor;
+@property(nonatomic, readonly) NSColor *tagAccentColor; // may return nil when no accent should be drawn
+@property(nonatomic) bool panelActive;
+@property(nonatomic) int itemIndex;
+@property(nonatomic, readonly) PanelListViewNameView *nameView;
+@property(nonatomic, readonly) PanelListViewSizeView *sizeView;
+
+// Called by the owner to notify theme change.
+// Row itself does not listed to these events.
+- (void)notifyThemeChanged;
+
+@end

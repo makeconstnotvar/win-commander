@@ -1,0 +1,18 @@
+// Copyright (C) 2017 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include "DefaultAction.h"
+
+namespace nc::panel::actions {
+
+struct RevealInOppositePanel final : StateAction {
+    [[nodiscard]] bool Predicate(MainWindowFilePanelState *_target) const override;
+    void Perform(MainWindowFilePanelState *_target, id _sender) const override;
+};
+
+struct RevealInOppositePanelTab final : StateAction {
+    [[nodiscard]] bool Predicate(MainWindowFilePanelState *_target) const override;
+    void Perform(MainWindowFilePanelState *_target, id _sender) const override;
+};
+
+} // namespace nc::panel::actions

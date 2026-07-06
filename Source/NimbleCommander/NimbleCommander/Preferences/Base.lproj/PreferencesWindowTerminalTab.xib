@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="PreferencesWindowTerminalTab">
+            <connections>
+                <outlet property="view" destination="Hz6-mo-xeY" id="0bl-1N-x8E"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <customView id="Hz6-mo-xeY">
+            <rect key="frame" x="0.0" y="0.0" width="730" height="271"/>
+            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+            <subviews>
+                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="y11-Bl-tZz">
+                    <rect key="frame" x="273" y="235" width="49" height="16"/>
+                    <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Cursor:" id="nU3-et-JNg">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <matrix verticalHuggingPriority="750" allowsEmptySelection="NO" translatesAutoresizingMaskIntoConstraints="NO" id="stk-zw-sC0">
+                    <rect key="frame" x="328" y="193" width="255" height="58"/>
+                    <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    <size key="cellSize" width="255" height="18"/>
+                    <size key="intercellSpacing" width="4" height="2"/>
+                    <buttonCell key="prototype" type="radio" imagePosition="left" alignment="left" inset="2" id="Rlj-B4-Zwm">
+                        <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <cells>
+                        <column>
+                            <buttonCell type="radio" title="█ Block" imagePosition="left" alignment="left" state="on" tag="1" inset="2" id="lmd-o1-1kc">
+                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                <font key="font" metaFont="system"/>
+                            </buttonCell>
+                            <buttonCell type="radio" title="▁ Underline" imagePosition="left" alignment="left" inset="2" id="Hi6-HH-WxJ">
+                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                <font key="font" metaFont="system"/>
+                            </buttonCell>
+                            <buttonCell type="radio" title=" ▏Vertical Bar" imagePosition="left" alignment="left" inset="2" id="OJo-EQ-cnc">
+                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                <font key="font" metaFont="system"/>
+                            </buttonCell>
+                        </column>
+                    </cells>
+                    <connections>
+                        <binding destination="-3" name="selectedIndex" keyPath="self.delegate.config.terminal.cursorMode" id="k7e-oW-gf4"/>
+                    </connections>
+                </matrix>
+                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="aka-YG-TVI">
+                    <rect key="frame" x="217" y="161" width="105" height="16"/>
+                    <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Open shell with: " id="nWF-WN-ul0">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <matrix verticalHuggingPriority="750" allowsEmptySelection="NO" translatesAutoresizingMaskIntoConstraints="NO" id="BYU-QH-WHm">
+                    <rect key="frame" x="328" y="139" width="294" height="38"/>
+                    <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    <size key="cellSize" width="294" height="18"/>
+                    <size key="intercellSpacing" width="4" height="2"/>
+                    <buttonCell key="prototype" type="radio" imagePosition="left" alignment="left" inset="2" id="faN-90-lWJ">
+                        <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <cells>
+                        <column>
+                            <buttonCell type="radio" title="Default login shell" imagePosition="left" alignment="left" state="on" tag="1" inset="2" id="dru-f9-fCV">
+                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                <font key="font" metaFont="system"/>
+                            </buttonCell>
+                            <buttonCell type="radio" title="Command (complete path):" imagePosition="left" alignment="left" inset="2" id="ZFM-pn-oBo">
+                                <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                                <font key="font" metaFont="system"/>
+                            </buttonCell>
+                        </column>
+                    </cells>
+                    <connections>
+                        <binding destination="-3" name="selectedTag" keyPath="self.delegate.config.terminal.useDefaultLoginShell" id="rLo-ra-b6q">
+                            <dictionary key="options">
+                                <string key="NSValueTransformerName">PreferencesBoolToNumberValueTransformer</string>
+                            </dictionary>
+                        </binding>
+                    </connections>
+                </matrix>
+                <textField verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="oJr-Cv-UJI">
+                    <rect key="frame" x="352" y="114" width="300" height="21"/>
+                    <constraints>
+                        <constraint firstAttribute="width" constant="300" id="18A-yW-Vlw"/>
+                    </constraints>
+                    <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" state="on" borderStyle="bezel" drawsBackground="YES" id="eip-rj-eLj">
+                        <font key="font" metaFont="system"/>
+                        <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                    <connections>
+                        <binding destination="-3" name="value" keyPath="self.delegate.config.terminal.customShellPath" id="QXV-Zk-ldu"/>
+                        <binding destination="-2" name="enabled" keyPath="self.usesDefaultLoginShell" id="Uxc-VT-0zD">
+                            <dictionary key="options">
+                                <string key="NSValueTransformerName">NSNegateBoolean</string>
+                            </dictionary>
+                        </binding>
+                    </connections>
+                </textField>
+                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" setsMaxLayoutWidthAtFirstLayout="YES" translatesAutoresizingMaskIntoConstraints="NO" id="4Ie-L3-z7Z">
+                    <rect key="frame" x="350" y="96" width="207" height="14"/>
+                    <textFieldCell key="cell" controlSize="small" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Supported shells: bash, zsh and [t]csh" id="9D7-aw-d5c">
+                        <font key="font" metaFont="smallSystem"/>
+                        <color key="textColor" name="disabledControlTextColor" catalog="System" colorSpace="catalog"/>
+                        <color key="backgroundColor" name="controlColor" catalog="System" colorSpace="catalog"/>
+                    </textFieldCell>
+                </textField>
+                <button translatesAutoresizingMaskIntoConstraints="NO" id="uAW-va-aIo">
+                    <rect key="frame" x="326" y="63" width="111" height="18"/>
+                    <buttonCell key="cell" type="check" title="Hide scrollbar" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="zcL-oM-aS5">
+                        <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                        <font key="font" metaFont="system"/>
+                    </buttonCell>
+                    <connections>
+                        <binding destination="-3" name="value" keyPath="self.delegate.config.terminal.hideVerticalScrollbar" id="VVw-wM-YY2"/>
+                    </connections>
+                </button>
+            </subviews>
+            <constraints>
+                <constraint firstItem="oJr-Cv-UJI" firstAttribute="top" secondItem="BYU-QH-WHm" secondAttribute="bottom" constant="4" id="84C-UI-dIX"/>
+                <constraint firstItem="BYU-QH-WHm" firstAttribute="leading" secondItem="aka-YG-TVI" secondAttribute="trailing" constant="8" symbolic="YES" id="8La-hI-gez"/>
+                <constraint firstItem="BYU-QH-WHm" firstAttribute="top" secondItem="stk-zw-sC0" secondAttribute="bottom" constant="16" id="CiG-gr-nbl"/>
+                <constraint firstItem="4Ie-L3-z7Z" firstAttribute="leading" secondItem="oJr-Cv-UJI" secondAttribute="leading" id="GXy-c4-drO"/>
+                <constraint firstItem="4Ie-L3-z7Z" firstAttribute="top" secondItem="oJr-Cv-UJI" secondAttribute="bottom" constant="4" id="HWW-10-iuX"/>
+                <constraint firstItem="stk-zw-sC0" firstAttribute="leading" secondItem="y11-Bl-tZz" secondAttribute="trailing" constant="8" symbolic="YES" id="IQb-uK-d3q"/>
+                <constraint firstItem="oJr-Cv-UJI" firstAttribute="leading" secondItem="BYU-QH-WHm" secondAttribute="leading" constant="24" id="PPe-Dv-s7c"/>
+                <constraint firstItem="uAW-va-aIo" firstAttribute="top" secondItem="4Ie-L3-z7Z" secondAttribute="bottom" constant="16" id="e1n-cD-m1c"/>
+                <constraint firstItem="stk-zw-sC0" firstAttribute="leading" secondItem="BYU-QH-WHm" secondAttribute="leading" id="kgd-DC-cZ1"/>
+                <constraint firstItem="stk-zw-sC0" firstAttribute="leading" secondItem="Hz6-mo-xeY" secondAttribute="centerX" multiplier="0.9" id="oF3-yB-Pca"/>
+                <constraint firstItem="uAW-va-aIo" firstAttribute="leading" secondItem="BYU-QH-WHm" secondAttribute="leading" id="q6e-Kc-TTg"/>
+                <constraint firstItem="BYU-QH-WHm" firstAttribute="top" secondItem="aka-YG-TVI" secondAttribute="top" id="wQn-aq-uC0"/>
+                <constraint firstItem="y11-Bl-tZz" firstAttribute="top" secondItem="Hz6-mo-xeY" secondAttribute="top" constant="20" symbolic="YES" id="xQL-i5-xCC"/>
+                <constraint firstItem="stk-zw-sC0" firstAttribute="top" secondItem="y11-Bl-tZz" secondAttribute="top" id="y8q-qc-w7j"/>
+            </constraints>
+            <point key="canvasLocation" x="117" y="238.5"/>
+        </customView>
+        <userDefaultsController representsSharedInstance="YES" id="P8G-GI-rPW"/>
+    </objects>
+</document>

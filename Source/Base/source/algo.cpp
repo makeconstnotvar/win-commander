@@ -1,0 +1,141 @@
+// Copyright (C) 2023-2024 Michael Kazakov. Subject to GNU General Public License version 3.
+#include "algo.h"
+
+namespace nc::base {
+
+// TODO: unit tests
+std::string_view Trim(std::string_view _str) noexcept
+{
+    while( !_str.empty() && _str.front() == ' ' )
+        _str.remove_prefix(1);
+    while( !_str.empty() && _str.back() == ' ' )
+        _str.remove_suffix(1);
+    return _str;
+}
+
+// TODO: unit tests
+std::string_view Trim(std::string_view _str, char _c) noexcept
+{
+    while( !_str.empty() && _str.front() == _c )
+        _str.remove_prefix(1);
+    while( !_str.empty() && _str.back() == _c )
+        _str.remove_suffix(1);
+    return _str;
+}
+
+// TODO: unit tests
+std::string_view TrimLeft(std::string_view _str) noexcept
+{
+    while( !_str.empty() && _str.front() == ' ' )
+        _str.remove_prefix(1);
+    return _str;
+}
+
+// TODO: unit tests
+std::string_view TrimLeft(std::string_view _str, char _c) noexcept
+{
+    while( !_str.empty() && _str.front() == _c )
+        _str.remove_prefix(1);
+    return _str;
+}
+
+// TODO: unit tests
+std::string_view TrimRight(std::string_view _str) noexcept
+{
+    while( !_str.empty() && _str.back() == ' ' )
+        _str.remove_suffix(1);
+    return _str;
+}
+
+// TODO: unit tests
+std::string_view TrimRight(std::string_view _str, char _c) noexcept
+{
+    while( !_str.empty() && _str.back() == _c )
+        _str.remove_suffix(1);
+    return _str;
+}
+
+// TODO: unit tests
+std::string ReplaceAll(std::string_view _source, char _what, std::string_view _with) noexcept
+{
+    std::string result;
+    for( auto c : _source ) {
+        if( c == _what ) {
+            result += _with;
+        }
+        else {
+            result += c;
+        }
+    }
+    return result;
+}
+
+std::string ReplaceAll(std::string_view _source, std::string_view _what, std::string_view _with) noexcept
+{
+    if( _what.empty() )
+        return std::string{_source};
+    if( _what.length() == 1 )
+        return ReplaceAll(_source, _what.front(), _with);
+
+    std::string result;
+    for( size_t pos = 0; pos != _source.length(); ) {
+        if( const size_t next = _source.find(_what, pos); next == std::string_view::npos ) {
+            result.append(_source.substr(pos));
+            pos = _source.length();
+        }
+        else {
+            result.append(_source.substr(pos, next - pos));
+            result.append(_with);
+            pos = next + _what.size();
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> SplitByDelimiters(std::string_view _str, std::string_view _delims, bool _compress) noexcept
+{
+    std::vector<std::string> res;
+    std::string next;
+    for( auto c : _str ) {
+        if( _delims.contains(c) ) {
+            if( !next.empty() || !_compress ) {
+                res.emplace_back(std::move(next));
+                next = {};
+            }
+        }
+        else {
+            next += c;
+        }
+    }
+
+    if( !next.empty() || (!_compress && !_str.empty()) ) {
+        res.emplace_back(std::move(next));
+    }
+
+    return res;
+}
+
+std::vector<std::string> SplitByDelimiter(std::string_view _str, char _delim, bool _compress) noexcept
+{
+    std::vector<std::string> res;
+    std::string next;
+    for( auto c : _str ) {
+        if( c == _delim ) {
+            if( !next.empty() || !_compress ) {
+                res.emplace_back(std::move(next));
+                next = {};
+            }
+        }
+        else {
+            next += c;
+        }
+    }
+
+    if( !next.empty() || (!_compress && !_str.empty()) ) {
+        res.emplace_back(std::move(next));
+    }
+
+    return res;
+}
+
+} // namespace nc::base

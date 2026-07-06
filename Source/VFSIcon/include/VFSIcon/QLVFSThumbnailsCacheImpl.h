@@ -1,0 +1,41 @@
+// Copyright (C) 2018-2026 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include "QLVFSThumbnailsCache.h"
+#include <Utility/BriefOnDiskStorage.h>
+#include <Base/LRUCache.h>
+#include <Base/spinlock.h>
+
+namespace nc::vfsicon {
+
+class QLVFSThumbnailsCacheImpl : public QLVFSThumbnailsCache
+{
+public:
+    QLVFSThumbnailsCacheImpl(const std::shared_ptr<utility::BriefOnDiskStorage> &_temp_storage);
+    ~QLVFSThumbnailsCacheImpl() override;
+
+    NSImage *ThumbnailIfHas(const std::string &_file_path, VFSHost &_host, int _px_size) override;
+
+    NSImage *ProduceThumbnail(const std::string &_file_path, VFSHost &_host, int _px_size) override;
+
+private:
+    // this is a lazy and far from ideal implementation
+    // it cheats in several ways:
+    // - it uses VFSHost's verbose path to make a unique path identifier
+    // - it pretends that file do not change on VFSes
+    // also, it's pretty inefficient in dealing with strings
+
+    static constexpr size_t m_CacheSize = 1024;
+    using Container = base::LRUCache<std::string, NSImage *, m_CacheSize>;
+
+    NSImage *ProduceThumbnail(const std::string &_path, const std::string &_ext, VFSHost &_host, CGSize _sz);
+    static std::string MakeKey(const std::string &_file_path, VFSHost &_host, int _px_size);
+    static NSImage *ProduceThumbnailForTempFile(const std::string &_path, CGSize _px_size);
+    static std::expected<std::vector<uint8_t>, Error> ReadEntireFile(const std::string &_path, VFSHost &_host);
+
+    Container m_Thumbnails;
+    mutable spinlock m_Lock;
+    std::shared_ptr<utility::BriefOnDiskStorage> m_TempStorage;
+};
+
+} // namespace nc::vfsicon

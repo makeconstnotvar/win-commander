@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="32700.99.1234" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22690"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NCViewerSheet">
+            <connections>
+                <outlet property="settingsPopover" destination="T94-gH-ROL" id="22O-0M-lil"/>
+                <outlet property="viewPlaceholder" destination="agn-et-TU9" id="oTF-Bb-dlA"/>
+                <outlet property="window" destination="F0z-JX-Cv5" id="gIp-Ho-8D9"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <window title="Window" allowsToolTipsWhenApplicationIsInactive="NO" releasedWhenClosed="NO" visibleAtLaunch="NO" frameAutosaveName="BigFileViewSheet" animationBehavior="default" id="F0z-JX-Cv5" customClass="NSPanel">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+            <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
+            <rect key="contentRect" x="196" y="240" width="739" height="491"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1055"/>
+            <value key="minSize" type="size" width="300" height="491"/>
+            <view key="contentView" id="se5-gp-TjO">
+                <rect key="frame" x="0.0" y="0.0" width="739" height="491"/>
+                <autoresizingMask key="autoresizingMask"/>
+                <subviews>
+                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="1BM-GG-fwQ">
+                        <rect key="frame" x="631" y="13" width="94" height="32"/>
+                        <buttonCell key="cell" type="push" title="Close" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="5rO-0k-5gI">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="system"/>
+                            <string key="keyEquivalent" base64-UTF8="YES">
+Gw
+</string>
+                        </buttonCell>
+                        <constraints>
+                            <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="80" id="6xO-8W-BhE"/>
+                        </constraints>
+                        <connections>
+                            <action selector="OnClose:" target="-2" id="5HP-M4-3SK"/>
+                        </connections>
+                    </button>
+                    <customView translatesAutoresizingMaskIntoConstraints="NO" id="agn-et-TU9">
+                        <rect key="frame" x="21" y="61" width="697" height="409"/>
+                    </customView>
+                    <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="DUy-Xi-YNp">
+                        <rect key="frame" x="21" y="58" width="697" height="5"/>
+                    </box>
+                    <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="b9G-tJ-W8x">
+                        <rect key="frame" x="21" y="468" width="697" height="5"/>
+                    </box>
+                    <box horizontalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="LGo-bH-RLu">
+                        <rect key="frame" x="716" y="60" width="5" height="411"/>
+                    </box>
+                    <box horizontalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="V2m-F5-frJ">
+                        <rect key="frame" x="18" y="60" width="5" height="411"/>
+                    </box>
+                </subviews>
+                <constraints>
+                    <constraint firstAttribute="trailing" secondItem="LGo-bH-RLu" secondAttribute="trailing" constant="20" symbolic="YES" id="8Xw-1o-lZO"/>
+                    <constraint firstItem="LGo-bH-RLu" firstAttribute="bottom" secondItem="agn-et-TU9" secondAttribute="bottom" constant="1" id="90n-mw-ZBb"/>
+                    <constraint firstItem="DUy-Xi-YNp" firstAttribute="trailing" secondItem="agn-et-TU9" secondAttribute="trailing" id="9NG-cU-yqw"/>
+                    <constraint firstItem="V2m-F5-frJ" firstAttribute="bottom" secondItem="agn-et-TU9" secondAttribute="bottom" constant="1" id="9hS-HW-hdj"/>
+                    <constraint firstAttribute="bottom" secondItem="1BM-GG-fwQ" secondAttribute="bottom" constant="20" symbolic="YES" id="Erx-r9-yxF"/>
+                    <constraint firstItem="b9G-tJ-W8x" firstAttribute="leading" secondItem="agn-et-TU9" secondAttribute="leading" id="EzA-w2-nZa"/>
+                    <constraint firstItem="LGo-bH-RLu" firstAttribute="leading" secondItem="agn-et-TU9" secondAttribute="trailing" id="JbT-P4-qVg"/>
+                    <constraint firstItem="b9G-tJ-W8x" firstAttribute="trailing" secondItem="agn-et-TU9" secondAttribute="trailing" id="LcG-1x-g4x"/>
+                    <constraint firstItem="1BM-GG-fwQ" firstAttribute="top" secondItem="DUy-Xi-YNp" secondAttribute="bottom" constant="20" symbolic="YES" id="MhG-Vb-gMF"/>
+                    <constraint firstItem="agn-et-TU9" firstAttribute="top" secondItem="b9G-tJ-W8x" secondAttribute="bottom" id="P69-PC-jlo"/>
+                    <constraint firstItem="agn-et-TU9" firstAttribute="leading" secondItem="V2m-F5-frJ" secondAttribute="trailing" id="hOB-cp-9PB"/>
+                    <constraint firstItem="agn-et-TU9" firstAttribute="trailing" secondItem="1BM-GG-fwQ" secondAttribute="trailing" id="jgM-bI-zoI"/>
+                    <constraint firstItem="DUy-Xi-YNp" firstAttribute="leading" secondItem="agn-et-TU9" secondAttribute="leading" id="lyk-Wh-aL3"/>
+                    <constraint firstItem="V2m-F5-frJ" firstAttribute="leading" secondItem="se5-gp-TjO" secondAttribute="leading" constant="20" symbolic="YES" id="mOt-rc-x1l"/>
+                    <constraint firstItem="DUy-Xi-YNp" firstAttribute="top" secondItem="agn-et-TU9" secondAttribute="bottom" id="mSh-cb-3hg"/>
+                    <constraint firstItem="V2m-F5-frJ" firstAttribute="top" secondItem="agn-et-TU9" secondAttribute="top" constant="-1" id="n7g-uU-IBy"/>
+                    <constraint firstItem="1BM-GG-fwQ" firstAttribute="leading" relation="greaterThanOrEqual" secondItem="se5-gp-TjO" secondAttribute="leading" constant="20" symbolic="YES" id="w1b-Nb-O5w"/>
+                    <constraint firstItem="b9G-tJ-W8x" firstAttribute="top" secondItem="se5-gp-TjO" secondAttribute="top" constant="20" symbolic="YES" id="wbg-Am-xb2"/>
+                    <constraint firstItem="LGo-bH-RLu" firstAttribute="top" secondItem="agn-et-TU9" secondAttribute="top" constant="-1" id="yqb-hm-YhE"/>
+                </constraints>
+            </view>
+            <connections>
+                <outlet property="delegate" destination="-2" id="0bl-1N-AYu"/>
+                <outlet property="initialFirstResponder" destination="agn-et-TU9" id="RdK-xo-weA"/>
+            </connections>
+            <point key="canvasLocation" x="72.5" y="284.5"/>
+        </window>
+        <popover animates="NO" behavior="t" id="T94-gH-ROL">
+            <connections>
+                <outlet property="contentViewController" destination="Yn4-Pm-dY0" id="cOD-l3-nT2"/>
+            </connections>
+        </popover>
+        <viewController id="Yn4-Pm-dY0" userLabel="Popover View Controller"/>
+    </objects>
+</document>

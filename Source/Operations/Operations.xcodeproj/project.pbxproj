@@ -1,0 +1,1120 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CF22F0C2258F43610033E850 /* Tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF2C101822A0731500A5359D /* Tests.cpp */; };
+		CF22F0CA258F43610033E850 /* TestEnv.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFE08AFC23D3719B007E99B8 /* TestEnv.mm */; };
+		CF287FF426F6876200FC24B5 /* PoolEnqueueFilter.h in Headers */ = {isa = PBXBuildFile; fileRef = CF287FF226F6876200FC24B5 /* PoolEnqueueFilter.h */; };
+		CF2C101A22A0731500A5359D /* Tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF2C101822A0731500A5359D /* Tests.cpp */; };
+		CF2C102622A4116F00A5359D /* DirectoryPathAutoCompetion_IT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF2C102422A4116B00A5359D /* DirectoryPathAutoCompetion_IT.mm */; };
+		CF46FF45255FCC350095FC73 /* Media.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F8DF1EFCD9A50000B3EE /* Media.xcassets */; };
+		CF46FF4F255FCC4C0095FC73 /* PoolViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F8CB1EFA05DA0000B3EE /* PoolViewController.xib */; };
+		CF46FF54255FCC500095FC73 /* HaltReasonDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F8E81F00E5D30000B3EE /* HaltReasonDialog.xib */; };
+		CF46FF59255FCC540095FC73 /* GenericErrorDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F8F21F0243D30000B3EE /* GenericErrorDialog.xib */; };
+		CF46FF5E255FCC590095FC73 /* BriefOperationViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F8D91EFB5FAB0000B3EE /* BriefOperationViewController.xib */; };
+		CF46FF63255FCC6B0095FC73 /* AttrsChangingDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFFA95401F4C0C390035E606 /* AttrsChangingDialog.xib */; };
+		CF46FF68255FCC770095FC73 /* BatchRenamingDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F9751F0DEC280000B3EE /* BatchRenamingDialog.xib */; };
+		CF46FF6D255FCC7C0095FC73 /* BatchRenamingRangeSelectionPopover.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F9771F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.xib */; };
+		CF46FF72255FCC820095FC73 /* CompressDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CF5C8BDD22D0D69100619F45 /* CompressDialog.xib */; };
+		CF46FF77255FCC890095FC73 /* CopyingDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CF4BCF4C1F2F07DB005F8414 /* CopyingDialog.xib */; };
+		CF46FF7C255FCC8C0095FC73 /* CopyingDialogDisclosedView.xib in Resources */ = {isa = PBXBuildFile; fileRef = CF197C271FB4381E009F6C59 /* CopyingDialogDisclosedView.xib */; };
+		CF46FF81255FCC900095FC73 /* FileAlreadyExistDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CF4BCF081F1EF579005F8414 /* FileAlreadyExistDialog.xib */; };
+		CF46FF86255FCC980095FC73 /* DeletionDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F9581F0CB07A0000B3EE /* DeletionDialog.xib */; };
+		CF46FF8B255FCCA20095FC73 /* DirectoryCreationDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F94A1F0CA84D0000B3EE /* DirectoryCreationDialog.xib */; };
+		CF46FF90255FCCA90095FC73 /* AlterSymlinkDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F9A81F10890B0000B3EE /* AlterSymlinkDialog.xib */; };
+		CF46FF95255FCCAD0095FC73 /* CreateHardlinkDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F9AA1F10890B0000B3EE /* CreateHardlinkDialog.xib */; };
+		CF46FF9A255FCCAF0095FC73 /* CreateSymlinkDialog.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFC4F9AC1F10890B0000B3EE /* CreateSymlinkDialog.xib */; };
+		CF47861A2EE7127500736117 /* _Operations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF4786192EE7127500736117 /* _Operations.cpp */; };
+		CF47861C2EE7144500736117 /* _Operations.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF47861B2EE7144500736117 /* _Operations.mm */; };
+		CF4786212EE7171400736117 /* Localizable.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF4786202EE7171400736117 /* Localizable.mm */; };
+		CF91790E2EEAC60100A5A578 /* _OperationsUT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF91790D2EEAC60100A5A578 /* _OperationsUT.mm */; };
+		CF9179102EEAC76900A5A578 /* _OperationsUT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF91790F2EEAC76900A5A578 /* _OperationsUT.cpp */; };
+		CF9179122EEAC9BB00A5A578 /* _OperationsIT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF9179112EEAC9BB00A5A578 /* _OperationsIT.cpp */; };
+		CFB7BD43260F696C00E2EA4D /* DeletionJobCallbacks.h in Headers */ = {isa = PBXBuildFile; fileRef = CFB7BD41260F696C00E2EA4D /* DeletionJobCallbacks.h */; };
+		CFCFAC712D3D2F8D008C6E26 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CFCFAC702D3D2F8D008C6E26 /* Localizable.xcstrings */; };
+		CFCFAC722D3D2F8D008C6E26 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CFCFAC702D3D2F8D008C6E26 /* Localizable.xcstrings */; };
+		CFE08AFE23D3719B007E99B8 /* TestEnv.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFE08AFC23D3719B007E99B8 /* TestEnv.mm */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CF2F110525680BF400622405 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CFF53B261EDD197300F567C4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CF46FF31255FCA770095FC73;
+			remoteInfo = OperationsResources;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CF22F0D1258F43610033E850 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		CF2C100F22A072BE00A5359D /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		CF197C261FB4381E009F6C59 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/CopyingDialogDisclosedView.xib; sourceTree = "<group>"; };
+		CF22F0D5258F43610033E850 /* OperationsUT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = OperationsUT; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF22F0F4258F43A80033E850 /* Deletion_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Deletion_UT.cpp; sourceTree = "<group>"; };
+		CF238E0E21A1948800569809 /* Helpers.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Helpers.cpp; path = source/Copying/Helpers.cpp; sourceTree = "<group>"; };
+		CF238E0F21A1948800569809 /* Helpers.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Helpers.h; path = source/Copying/Helpers.h; sourceTree = "<group>"; };
+		CF287FDB26EE0A5600FC24B5 /* Pool_UT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = Pool_UT.mm; sourceTree = "<group>"; };
+		CF287FF126F6876200FC24B5 /* PoolEnqueueFilter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = PoolEnqueueFilter.cpp; path = source/PoolEnqueueFilter.cpp; sourceTree = "<group>"; };
+		CF287FF226F6876200FC24B5 /* PoolEnqueueFilter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PoolEnqueueFilter.h; path = source/PoolEnqueueFilter.h; sourceTree = "<group>"; };
+		CF2C1005229F16E400A5359D /* CompressDialog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CompressDialog.h; path = source/Compression/CompressDialog.h; sourceTree = "<group>"; };
+		CF2C1006229F16E400A5359D /* CompressDialog.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CompressDialog.mm; path = source/Compression/CompressDialog.mm; sourceTree = "<group>"; };
+		CF2C100B229F1B9B00A5359D /* CompressDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CompressDialog.h; path = include/Operations/CompressDialog.h; sourceTree = "<group>"; };
+		CF2C101122A072BE00A5359D /* OperationsIT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = OperationsIT; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF2C101822A0731500A5359D /* Tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Tests.cpp; sourceTree = "<group>"; };
+		CF2C101922A0731500A5359D /* Tests.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Tests.h; sourceTree = "<group>"; };
+		CF2C101B22A073AF00A5359D /* tests.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = tests.xcconfig; path = config/tests.xcconfig; sourceTree = "<group>"; };
+		CF2C101E22A2F00F00A5359D /* FilenameTextControl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FilenameTextControl.h; path = source/FilenameTextControl.h; sourceTree = "<group>"; };
+		CF2C101F22A2F00F00A5359D /* FilenameTextControl.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = FilenameTextControl.mm; path = source/FilenameTextControl.mm; sourceTree = "<group>"; };
+		CF2C102222A2F02E00A5359D /* FilenameTextControl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FilenameTextControl.h; path = include/Operations/FilenameTextControl.h; sourceTree = "<group>"; };
+		CF2C102422A4116B00A5359D /* DirectoryPathAutoCompetion_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = DirectoryPathAutoCompetion_IT.mm; sourceTree = "<group>"; };
+		CF2F1152256C528400622405 /* BatchRenaming_UT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = BatchRenaming_UT.mm; sourceTree = "<group>"; };
+		CF3ABD8023BA1B1A00D1878B /* Copying_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Copying_IT.cpp; sourceTree = "<group>"; };
+		CF3ABD8223BA1B2800D1878B /* Environment.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Environment.h; sourceTree = "<group>"; };
+		CF402371256D9C440028E0B3 /* BasicOperationsSemantics_UT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = BasicOperationsSemantics_UT.mm; sourceTree = "<group>"; };
+		CF40237B256D9F1A0028E0B3 /* Linkage_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Linkage_IT.cpp; sourceTree = "<group>"; };
+		CF402389256DA6850028E0B3 /* Archive_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Archive_IT.cpp; sourceTree = "<group>"; };
+		CF46FF32255FCA770095FC73 /* OperationsResources.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OperationsResources.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF46FFAD255FCF690095FC73 /* libOperations.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libOperations.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF4786192EE7127500736117 /* _Operations.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = _Operations.cpp; path = source/_Operations.cpp; sourceTree = "<group>"; };
+		CF47861B2EE7144500736117 /* _Operations.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = _Operations.mm; path = source/_Operations.mm; sourceTree = "<group>"; };
+		CF47861D2EE716AE00736117 /* AggregateProgressTracker.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = AggregateProgressTracker.h; path = include/Operations/AggregateProgressTracker.h; sourceTree = "<group>"; };
+		CF47861E2EE716AE00736117 /* Localizable.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = Localizable.h; path = include/Operations/Localizable.h; sourceTree = "<group>"; };
+		CF47861F2EE716AE00736117 /* PoolEnqueueFilter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PoolEnqueueFilter.h; path = include/Operations/PoolEnqueueFilter.h; sourceTree = "<group>"; };
+		CF4786202EE7171400736117 /* Localizable.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = Localizable.mm; path = source/Localizable.mm; sourceTree = "<group>"; };
+		CF4BCEE41F1D9CAA005F8414 /* CopyingJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CopyingJob.cpp; path = source/Copying/CopyingJob.cpp; sourceTree = "<group>"; };
+		CF4BCEE51F1D9CAA005F8414 /* CopyingJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CopyingJob.h; path = source/Copying/CopyingJob.h; sourceTree = "<group>"; };
+		CF4BCEE61F1D9CAA005F8414 /* SourceItems.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = SourceItems.cpp; path = source/Copying/SourceItems.cpp; sourceTree = "<group>"; };
+		CF4BCEE71F1D9CAA005F8414 /* Options.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Options.h; path = source/Copying/Options.h; sourceTree = "<group>"; };
+		CF4BCEED1F1DA207005F8414 /* Copying.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Copying.h; path = source/Copying/Copying.h; sourceTree = "<group>"; };
+		CF4BCEEE1F1DA207005F8414 /* Copying.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Copying.mm; path = source/Copying/Copying.mm; sourceTree = "<group>"; };
+		CF4BCEF11F1DA5AF005F8414 /* AttrsChanging.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AttrsChanging.h; path = include/Operations/AttrsChanging.h; sourceTree = "<group>"; };
+		CF4BCEF21F1DA5AF005F8414 /* AttrsChangingDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AttrsChangingDialog.h; path = include/Operations/AttrsChangingDialog.h; sourceTree = "<group>"; };
+		CF4BCEF31F1DA5AF005F8414 /* Copying.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Copying.h; path = include/Operations/Copying.h; sourceTree = "<group>"; };
+		CF4BCEF41F1DA5AF005F8414 /* CopyingOptions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CopyingOptions.h; path = include/Operations/CopyingOptions.h; sourceTree = "<group>"; };
+		CF4BCF001F1EEFCE005F8414 /* NativeFSHelpers.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = NativeFSHelpers.cpp; path = source/Copying/NativeFSHelpers.cpp; sourceTree = "<group>"; };
+		CF4BCF011F1EEFCE005F8414 /* NativeFSHelpers.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NativeFSHelpers.h; path = source/Copying/NativeFSHelpers.h; sourceTree = "<group>"; };
+		CF4BCF041F1EF0F2005F8414 /* SourceItems.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SourceItems.h; path = source/Copying/SourceItems.h; sourceTree = "<group>"; };
+		CF4BCF061F1EF0FE005F8414 /* Statistics.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Statistics.h; path = include/Operations/Statistics.h; sourceTree = "<group>"; };
+		CF4BCF091F1EF579005F8414 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/Copying/Base.lproj/FileAlreadyExistDialog.xib; sourceTree = "<group>"; };
+		CF4BCF0A1F1EF579005F8414 /* FileAlreadyExistDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = FileAlreadyExistDialog.h; path = source/Copying/FileAlreadyExistDialog.h; sourceTree = "<group>"; };
+		CF4BCF0B1F1EF579005F8414 /* FileAlreadyExistDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = FileAlreadyExistDialog.mm; path = source/Copying/FileAlreadyExistDialog.mm; sourceTree = "<group>"; };
+		CF4BCF3D1F29A326005F8414 /* ChecksumExpectation.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ChecksumExpectation.cpp; path = source/Copying/ChecksumExpectation.cpp; sourceTree = "<group>"; };
+		CF4BCF3E1F29A326005F8414 /* ChecksumExpectation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ChecksumExpectation.h; path = source/Copying/ChecksumExpectation.h; sourceTree = "<group>"; };
+		CF4BCF4D1F2F07DB005F8414 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/Copying/Base.lproj/CopyingDialog.xib; sourceTree = "<group>"; };
+		CF4BCF4E1F2F07DB005F8414 /* CopyingDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CopyingDialog.h; path = source/Copying/CopyingDialog.h; sourceTree = "<group>"; };
+		CF4BCF4F1F2F07DB005F8414 /* CopyingDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CopyingDialog.mm; path = source/Copying/CopyingDialog.mm; sourceTree = "<group>"; };
+		CF4BCF561F2F1508005F8414 /* DisclosureViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DisclosureViewController.h; path = source/Copying/DisclosureViewController.h; sourceTree = "<group>"; };
+		CF4BCF571F2F1508005F8414 /* DisclosureViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = DisclosureViewController.m; path = source/Copying/DisclosureViewController.m; sourceTree = "<group>"; };
+		CF4BCF5A1F301303005F8414 /* AggregateProgressTracker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AggregateProgressTracker.h; path = source/AggregateProgressTracker.h; sourceTree = "<group>"; };
+		CF4BCF5B1F301303005F8414 /* AggregateProgressTracker.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AggregateProgressTracker.mm; path = source/AggregateProgressTracker.mm; sourceTree = "<group>"; };
+		CF4BCF5E1F30130B005F8414 /* CopyingDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CopyingDialog.h; path = include/Operations/CopyingDialog.h; sourceTree = "<group>"; };
+		CF5C8BDC22D0D69100619F45 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/CompressDialog.xib; sourceTree = "<group>"; };
+		CF5FD93E1FA2D3B400752E59 /* default.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = default.xcconfig; path = config/default.xcconfig; sourceTree = "<group>"; wrapsLines = 1; };
+		CF7084D61EF7CC770072F0F6 /* Pool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Pool.h; path = source/Pool.h; sourceTree = "<group>"; };
+		CF7084D71EF7CC770072F0F6 /* Pool.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Pool.mm; path = source/Pool.mm; sourceTree = "<group>"; };
+		CF7084DA1EF7CCB00072F0F6 /* Pool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Pool.h; path = include/Operations/Pool.h; sourceTree = "<group>"; };
+		CF7084DC1EF7CF7E0072F0F6 /* Compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Compression.h; path = include/Operations/Compression.h; sourceTree = "<group>"; };
+		CF86D5E1255E8AF00049F7F8 /* AttrsChanging_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AttrsChanging_IT.cpp; sourceTree = "<group>"; };
+		CF91790D2EEAC60100A5A578 /* _OperationsUT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = _OperationsUT.mm; sourceTree = "<group>"; };
+		CF91790F2EEAC76900A5A578 /* _OperationsUT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _OperationsUT.cpp; sourceTree = "<group>"; };
+		CF9179112EEAC9BB00A5A578 /* _OperationsIT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _OperationsIT.cpp; sourceTree = "<group>"; };
+		CFAAF0721FA9D8B8009230B3 /* CopyingTitleBuilder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CopyingTitleBuilder.h; path = source/Copying/CopyingTitleBuilder.h; sourceTree = "<group>"; };
+		CFAAF0731FA9D8B8009230B3 /* CopyingTitleBuilder.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CopyingTitleBuilder.mm; path = source/Copying/CopyingTitleBuilder.mm; sourceTree = "<group>"; };
+		CFAB6D7D258A742D00397DB5 /* CopyingFindNonExistingItemPath_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CopyingFindNonExistingItemPath_UT.cpp; sourceTree = "<group>"; };
+		CFB7BD40260F696C00E2EA4D /* DeletionJobCallbacks.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = DeletionJobCallbacks.cpp; path = source/Deletion/DeletionJobCallbacks.cpp; sourceTree = "<group>"; };
+		CFB7BD41260F696C00E2EA4D /* DeletionJobCallbacks.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DeletionJobCallbacks.h; path = source/Deletion/DeletionJobCallbacks.h; sourceTree = "<group>"; };
+		CFC4F8C31EFA05B00000B3EE /* PoolView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PoolView.h; path = source/PoolView.h; sourceTree = "<group>"; };
+		CFC4F8C41EFA05B00000B3EE /* PoolView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = PoolView.mm; path = source/PoolView.mm; sourceTree = "<group>"; };
+		CFC4F8C51EFA05B00000B3EE /* PoolViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PoolViewController.h; path = source/PoolViewController.h; sourceTree = "<group>"; };
+		CFC4F8C61EFA05B00000B3EE /* PoolViewController.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = PoolViewController.mm; path = source/PoolViewController.mm; sourceTree = "<group>"; };
+		CFC4F8CB1EFA05DA0000B3EE /* PoolViewController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; name = PoolViewController.xib; path = source/PoolViewController.xib; sourceTree = "<group>"; };
+		CFC4F8CD1EFA07F00000B3EE /* PoolView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PoolView.h; path = include/Operations/PoolView.h; sourceTree = "<group>"; };
+		CFC4F8CE1EFA07F00000B3EE /* PoolViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PoolViewController.h; path = include/Operations/PoolViewController.h; sourceTree = "<group>"; };
+		CFC4F8D11EFA17070000B3EE /* Internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Internal.h; path = source/Internal.h; sourceTree = "<group>"; };
+		CFC4F8D21EFA17070000B3EE /* Internal.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Internal.mm; path = source/Internal.mm; sourceTree = "<group>"; };
+		CFC4F8D51EFB5F780000B3EE /* BriefOperationViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BriefOperationViewController.h; path = source/BriefOperationViewController.h; sourceTree = "<group>"; };
+		CFC4F8D61EFB5F780000B3EE /* BriefOperationViewController.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BriefOperationViewController.mm; path = source/BriefOperationViewController.mm; sourceTree = "<group>"; };
+		CFC4F8D91EFB5FAB0000B3EE /* BriefOperationViewController.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; name = BriefOperationViewController.xib; path = source/BriefOperationViewController.xib; sourceTree = "<group>"; };
+		CFC4F8DB1EFCC0040000B3EE /* StatisticsFormatter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = StatisticsFormatter.h; path = source/StatisticsFormatter.h; sourceTree = "<group>"; };
+		CFC4F8DC1EFCC0040000B3EE /* StatisticsFormatter.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = StatisticsFormatter.mm; path = source/StatisticsFormatter.mm; sourceTree = "<group>"; };
+		CFC4F8DF1EFCD9A50000B3EE /* Media.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Media.xcassets; path = resources/Media.xcassets; sourceTree = "<group>"; };
+		CFC4F8E21EFCE0380000B3EE /* BriefOperationView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BriefOperationView.h; path = source/BriefOperationView.h; sourceTree = "<group>"; };
+		CFC4F8E31EFCE0380000B3EE /* BriefOperationView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BriefOperationView.mm; path = source/BriefOperationView.mm; sourceTree = "<group>"; };
+		CFC4F8E61F00E5D30000B3EE /* HaltReasonDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = HaltReasonDialog.h; path = source/HaltReasonDialog.h; sourceTree = "<group>"; };
+		CFC4F8E71F00E5D30000B3EE /* HaltReasonDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = HaltReasonDialog.mm; path = source/HaltReasonDialog.mm; sourceTree = "<group>"; };
+		CFC4F8E81F00E5D30000B3EE /* HaltReasonDialog.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; name = HaltReasonDialog.xib; path = source/HaltReasonDialog.xib; sourceTree = "<group>"; };
+		CFC4F8EC1F0224710000B3EE /* AsyncDialogResponse.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AsyncDialogResponse.h; path = source/AsyncDialogResponse.h; sourceTree = "<group>"; };
+		CFC4F8ED1F0224710000B3EE /* AsyncDialogResponse.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = AsyncDialogResponse.cpp; path = source/AsyncDialogResponse.cpp; sourceTree = "<group>"; };
+		CFC4F8F01F0243D30000B3EE /* GenericErrorDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = GenericErrorDialog.h; path = source/GenericErrorDialog.h; sourceTree = "<group>"; };
+		CFC4F8F11F0243D30000B3EE /* GenericErrorDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = GenericErrorDialog.mm; path = source/GenericErrorDialog.mm; sourceTree = "<group>"; };
+		CFC4F8F21F0243D30000B3EE /* GenericErrorDialog.xib */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.xib; name = GenericErrorDialog.xib; path = source/GenericErrorDialog.xib; sourceTree = "<group>"; };
+		CFC4F9011F0617E20000B3EE /* ModalDialogResponses.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ModalDialogResponses.h; path = source/ModalDialogResponses.h; sourceTree = "<group>"; };
+		CFC4F9041F06253D0000B3EE /* DirectoryCreation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DirectoryCreation.h; path = source/DirectoryCreation/DirectoryCreation.h; sourceTree = "<group>"; };
+		CFC4F9051F06253D0000B3EE /* DirectoryCreation.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = DirectoryCreation.mm; path = source/DirectoryCreation/DirectoryCreation.mm; sourceTree = "<group>"; };
+		CFC4F9061F06253D0000B3EE /* DirectoryCreationJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DirectoryCreationJob.h; path = source/DirectoryCreation/DirectoryCreationJob.h; sourceTree = "<group>"; };
+		CFC4F9071F06253D0000B3EE /* DirectoryCreationJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = DirectoryCreationJob.cpp; path = source/DirectoryCreation/DirectoryCreationJob.cpp; sourceTree = "<group>"; };
+		CFC4F90C1F0628CC0000B3EE /* DirectoryCreations_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = DirectoryCreations_IT.cpp; path = tests/DirectoryCreations_IT.cpp; sourceTree = SOURCE_ROOT; };
+		CFC4F9171F09D9740000B3EE /* Deletion.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Deletion.h; path = source/Deletion/Deletion.h; sourceTree = "<group>"; };
+		CFC4F9181F09D9740000B3EE /* Deletion.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Deletion.mm; path = source/Deletion/Deletion.mm; sourceTree = "<group>"; };
+		CFC4F9191F09D9740000B3EE /* DeletionJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = DeletionJob.cpp; path = source/Deletion/DeletionJob.cpp; sourceTree = "<group>"; };
+		CFC4F91A1F09D9740000B3EE /* DeletionJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DeletionJob.h; path = source/Deletion/DeletionJob.h; sourceTree = "<group>"; };
+		CFC4F91F1F09DCC80000B3EE /* Options.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Options.h; path = source/Deletion/Options.h; sourceTree = "<group>"; };
+		CFC4F9211F09DFD80000B3EE /* Deletion_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Deletion_IT.cpp; path = tests/Deletion_IT.cpp; sourceTree = SOURCE_ROOT; };
+		CFC4F92B1F0B49C00000B3EE /* Deletion.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Deletion.h; path = include/Operations/Deletion.h; sourceTree = "<group>"; };
+		CFC4F92C1F0B49C00000B3EE /* DirectoryCreation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DirectoryCreation.h; path = include/Operations/DirectoryCreation.h; sourceTree = "<group>"; };
+		CFC4F94B1F0CA84D0000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/DirectoryCreation/Base.lproj/DirectoryCreationDialog.xib; sourceTree = "<group>"; };
+		CFC4F94C1F0CA84D0000B3EE /* DirectoryCreationDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DirectoryCreationDialog.h; path = source/DirectoryCreation/DirectoryCreationDialog.h; sourceTree = "<group>"; };
+		CFC4F94D1F0CA84D0000B3EE /* DirectoryCreationDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = DirectoryCreationDialog.mm; path = source/DirectoryCreation/DirectoryCreationDialog.mm; sourceTree = "<group>"; };
+		CFC4F9561F0CB0260000B3EE /* DirectoryCreationDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DirectoryCreationDialog.h; path = include/Operations/DirectoryCreationDialog.h; sourceTree = "<group>"; };
+		CFC4F9591F0CB07A0000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/Deletion/Base.lproj/DeletionDialog.xib; sourceTree = "<group>"; };
+		CFC4F95A1F0CB07A0000B3EE /* DeletionDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DeletionDialog.h; path = source/Deletion/DeletionDialog.h; sourceTree = "<group>"; };
+		CFC4F95B1F0CB07A0000B3EE /* DeletionDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = DeletionDialog.mm; path = source/Deletion/DeletionDialog.mm; sourceTree = "<group>"; };
+		CFC4F9621F0CC66E0000B3EE /* BatchRenamingScheme.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenamingScheme.h; path = source/BatchRenaming/BatchRenamingScheme.h; sourceTree = "<group>"; };
+		CFC4F9631F0CC66E0000B3EE /* BatchRenamingScheme.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BatchRenamingScheme.mm; path = source/BatchRenaming/BatchRenamingScheme.mm; sourceTree = "<group>"; };
+		CFC4F9691F0CEFB60000B3EE /* BatchRenaming.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenaming.h; path = source/BatchRenaming/BatchRenaming.h; sourceTree = "<group>"; };
+		CFC4F96A1F0CEFB60000B3EE /* BatchRenaming.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BatchRenaming.mm; path = source/BatchRenaming/BatchRenaming.mm; sourceTree = "<group>"; };
+		CFC4F96B1F0CEFB60000B3EE /* BatchRenamingJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = BatchRenamingJob.cpp; path = source/BatchRenaming/BatchRenamingJob.cpp; sourceTree = "<group>"; };
+		CFC4F96C1F0CEFB60000B3EE /* BatchRenamingJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenamingJob.h; path = source/BatchRenaming/BatchRenamingJob.h; sourceTree = "<group>"; };
+		CFC4F9761F0DEC280000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/BatchRenaming/Base.lproj/BatchRenamingDialog.xib; sourceTree = "<group>"; };
+		CFC4F9781F0DEC280000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/BatchRenaming/Base.lproj/BatchRenamingRangeSelectionPopover.xib; sourceTree = "<group>"; };
+		CFC4F9791F0DEC280000B3EE /* BatchRenamingDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenamingDialog.h; path = source/BatchRenaming/BatchRenamingDialog.h; sourceTree = "<group>"; };
+		CFC4F97A1F0DEC280000B3EE /* BatchRenamingDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BatchRenamingDialog.mm; path = source/BatchRenaming/BatchRenamingDialog.mm; sourceTree = "<group>"; };
+		CFC4F97B1F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenamingRangeSelectionPopover.h; path = source/BatchRenaming/BatchRenamingRangeSelectionPopover.h; sourceTree = "<group>"; };
+		CFC4F97C1F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = BatchRenamingRangeSelectionPopover.mm; path = source/BatchRenaming/BatchRenamingRangeSelectionPopover.mm; sourceTree = "<group>"; };
+		CFC4F9861F0F22850000B3EE /* Linkage.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Linkage.h; path = source/Linkage/Linkage.h; sourceTree = "<group>"; };
+		CFC4F9871F0F22850000B3EE /* Linkage.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Linkage.mm; path = source/Linkage/Linkage.mm; sourceTree = "<group>"; };
+		CFC4F9881F0F22850000B3EE /* LinkageJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = LinkageJob.cpp; path = source/Linkage/LinkageJob.cpp; sourceTree = "<group>"; };
+		CFC4F9891F0F22850000B3EE /* LinkageJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = LinkageJob.h; path = source/Linkage/LinkageJob.h; sourceTree = "<group>"; };
+		CFC4F98A1F0F22850000B3EE /* Options.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Options.h; path = source/Linkage/Options.h; sourceTree = "<group>"; };
+		CFC4F9901F0F22900000B3EE /* BatchRenaming.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenaming.h; path = include/Operations/BatchRenaming.h; sourceTree = "<group>"; };
+		CFC4F9911F0F22900000B3EE /* BatchRenamingDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenamingDialog.h; path = include/Operations/BatchRenamingDialog.h; sourceTree = "<group>"; };
+		CFC4F9921F0F22900000B3EE /* BatchRenamingScheme.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = BatchRenamingScheme.h; path = include/Operations/BatchRenamingScheme.h; sourceTree = "<group>"; };
+		CFC4F9931F0F22900000B3EE /* DeletionDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DeletionDialog.h; path = include/Operations/DeletionDialog.h; sourceTree = "<group>"; };
+		CFC4F99B1F0F33C20000B3EE /* Linkage.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Linkage.h; path = include/Operations/Linkage.h; sourceTree = "<group>"; };
+		CFC4F9A91F10890B0000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/Linkage/Base.lproj/AlterSymlinkDialog.xib; sourceTree = "<group>"; };
+		CFC4F9AB1F10890B0000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/Linkage/Base.lproj/CreateHardlinkDialog.xib; sourceTree = "<group>"; };
+		CFC4F9AD1F10890B0000B3EE /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = source/Linkage/Base.lproj/CreateSymlinkDialog.xib; sourceTree = "<group>"; };
+		CFC4F9AE1F10890B0000B3EE /* AlterSymlinkDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AlterSymlinkDialog.h; path = source/Linkage/AlterSymlinkDialog.h; sourceTree = "<group>"; };
+		CFC4F9AF1F10890B0000B3EE /* AlterSymlinkDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AlterSymlinkDialog.mm; path = source/Linkage/AlterSymlinkDialog.mm; sourceTree = "<group>"; };
+		CFC4F9B01F10890B0000B3EE /* CreateHardlinkDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CreateHardlinkDialog.h; path = source/Linkage/CreateHardlinkDialog.h; sourceTree = "<group>"; };
+		CFC4F9B11F10890B0000B3EE /* CreateHardlinkDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CreateHardlinkDialog.mm; path = source/Linkage/CreateHardlinkDialog.mm; sourceTree = "<group>"; };
+		CFC4F9B21F10890B0000B3EE /* CreateSymlinkDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CreateSymlinkDialog.h; path = source/Linkage/CreateSymlinkDialog.h; sourceTree = "<group>"; };
+		CFC4F9B31F10890B0000B3EE /* CreateSymlinkDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CreateSymlinkDialog.mm; path = source/Linkage/CreateSymlinkDialog.mm; sourceTree = "<group>"; };
+		CFC4F9C41F11D5A10000B3EE /* AlterSymlinkDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AlterSymlinkDialog.h; path = include/Operations/AlterSymlinkDialog.h; sourceTree = "<group>"; };
+		CFC4F9C51F11D5A10000B3EE /* CreateHardlinkDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CreateHardlinkDialog.h; path = include/Operations/CreateHardlinkDialog.h; sourceTree = "<group>"; };
+		CFC4F9C61F11D5A10000B3EE /* CreateSymlinkDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CreateSymlinkDialog.h; path = include/Operations/CreateSymlinkDialog.h; sourceTree = "<group>"; };
+		CFC4F9CB1F14BECA0000B3EE /* Options.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Options.h; path = source/AttrsChanging/Options.h; sourceTree = "<group>"; };
+		CFC4F9CD1F14BFFE0000B3EE /* AttrsChanging.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AttrsChanging.h; path = source/AttrsChanging/AttrsChanging.h; sourceTree = "<group>"; };
+		CFC4F9CE1F14BFFE0000B3EE /* AttrsChanging.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AttrsChanging.mm; path = source/AttrsChanging/AttrsChanging.mm; sourceTree = "<group>"; };
+		CFC4F9D11F14C4030000B3EE /* AttrsChangingJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = AttrsChangingJob.cpp; path = source/AttrsChanging/AttrsChangingJob.cpp; sourceTree = "<group>"; };
+		CFC4F9D21F14C4030000B3EE /* AttrsChangingJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AttrsChangingJob.h; path = source/AttrsChanging/AttrsChangingJob.h; sourceTree = "<group>"; };
+		CFC4F9E61F15BA800000B3EE /* AttrsChangingDialog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AttrsChangingDialog.h; path = source/AttrsChanging/AttrsChangingDialog.h; sourceTree = "<group>"; };
+		CFC4F9E71F15BA800000B3EE /* AttrsChangingDialog.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AttrsChangingDialog.mm; path = source/AttrsChanging/AttrsChangingDialog.mm; sourceTree = "<group>"; };
+		CFCFAC6A2D3D2F8B008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/DirectoryCreation/mul.lproj/DirectoryCreationDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC6B2D3D2F8B008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/Copying/mul.lproj/CopyingDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC6C2D3D2F8C008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/Copying/mul.lproj/FileAlreadyExistDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC6D2D3D2F8C008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/Linkage/mul.lproj/AlterSymlinkDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC6E2D3D2F8C008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = mul.lproj/CopyingDialogDisclosedView.xcstrings; sourceTree = "<group>"; };
+		CFCFAC6F2D3D2F8D008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/Linkage/mul.lproj/CreateHardlinkDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC702D3D2F8D008C6E26 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = Localizable.xcstrings; path = resources/Localizable.xcstrings; sourceTree = "<group>"; };
+		CFCFAC732D3D2F8D008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/BatchRenaming/mul.lproj/BatchRenamingRangeSelectionPopover.xcstrings; sourceTree = "<group>"; };
+		CFCFAC742D3D2F8E008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = mul.lproj/CompressDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC752D3D2F8E008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/BatchRenaming/mul.lproj/BatchRenamingDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC762D3D2F8E008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = mul.lproj/AttrsChangingDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC772D3D2F8F008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/Deletion/mul.lproj/DeletionDialog.xcstrings; sourceTree = "<group>"; };
+		CFCFAC782D3D2F8F008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = source/Linkage/mul.lproj/CreateSymlinkDialog.xcstrings; sourceTree = "<group>"; };
+		CFDE716E215267BB005449C8 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
+		CFE08AFB23D3719B007E99B8 /* TestEnv.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TestEnv.h; sourceTree = "<group>"; };
+		CFE08AFC23D3719B007E99B8 /* TestEnv.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = TestEnv.mm; sourceTree = "<group>"; };
+		CFE0D33525A08DC200EFF0EB /* OperationsResources.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = OperationsResources.plist; path = resources/OperationsResources.plist; sourceTree = "<group>"; };
+		CFF340462557E21E00B3C92C /* ItemStateReport.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ItemStateReport.h; path = source/ItemStateReport.h; sourceTree = "<group>"; };
+		CFF53B331EDD197300F567C4 /* Info-Framework.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info-Framework.plist"; path = "resources/Info-Framework.plist"; sourceTree = "<group>"; };
+		CFF53B3F1EDD197300F567C4 /* Info-Tests.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info-Tests.plist"; path = "resources/Info-Tests.plist"; sourceTree = "<group>"; };
+		CFF53B721EDD401900F567C4 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		CFF53B741EDE53E800F567C4 /* Operation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Operation.h; path = source/Operation.h; sourceTree = SOURCE_ROOT; };
+		CFF53B751EDE53E800F567C4 /* Operation.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Operation.mm; path = source/Operation.mm; sourceTree = SOURCE_ROOT; };
+		CFF53B781EDEA83900F567C4 /* Job.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Job.h; path = source/Job.h; sourceTree = SOURCE_ROOT; };
+		CFF53B791EDEA83900F567C4 /* Job.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Job.cpp; path = source/Job.cpp; sourceTree = SOURCE_ROOT; };
+		CFF53B8C1EE24F9E00F567C4 /* Job.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Job.h; path = include/Operations/Job.h; sourceTree = "<group>"; };
+		CFF53B8D1EE24F9E00F567C4 /* Operation.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Operation.h; path = include/Operations/Operation.h; sourceTree = "<group>"; };
+		CFF53B8F1EE24FEC00F567C4 /* Compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Compression.h; path = source/Compression/Compression.h; sourceTree = "<group>"; };
+		CFF53B901EE24FEC00F567C4 /* Compression.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Compression.mm; path = source/Compression/Compression.mm; sourceTree = "<group>"; };
+		CFF53B921EE2515400F567C4 /* CompressionJob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CompressionJob.h; path = source/Compression/CompressionJob.h; sourceTree = "<group>"; };
+		CFF53B931EE2515400F567C4 /* CompressionJob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CompressionJob.cpp; path = source/Compression/CompressionJob.cpp; sourceTree = "<group>"; };
+		CFF53B951EE252F200F567C4 /* Compression_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Compression_IT.cpp; path = tests/Compression_IT.cpp; sourceTree = SOURCE_ROOT; };
+		CFF53BAC1EEA840600F567C4 /* Statistics.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Statistics.h; path = source/Statistics.h; sourceTree = "<group>"; };
+		CFF53BAD1EEA840600F567C4 /* Statistics.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Statistics.cpp; path = source/Statistics.cpp; sourceTree = "<group>"; };
+		CFF53BCC1EF3913B00F567C4 /* Progress.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Progress.cpp; path = source/Progress.cpp; sourceTree = "<group>"; };
+		CFF53BCD1EF3913B00F567C4 /* Progress.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Progress.h; path = source/Progress.h; sourceTree = "<group>"; };
+		CFF544942620F2BC00A6C49C /* CopyingJobCallbacks.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyingJobCallbacks.h; path = source/Copying/CopyingJobCallbacks.h; sourceTree = "<group>"; };
+		CFFA953F1F4C0C390035E606 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/AttrsChangingDialog.xib; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CF22F0CF258F43610033E850 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF2C100E22A072BE00A5359D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF46FF2F255FCA770095FC73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF46FFAB255FCF690095FC73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CF2C101D22A2EFED00A5359D /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				CF2C101E22A2F00F00A5359D /* FilenameTextControl.h */,
+				CF2C101F22A2F00F00A5359D /* FilenameTextControl.mm */,
+			);
+			name = Views;
+			sourceTree = "<group>";
+		};
+		CF4BCEE21F1D9C9A005F8414 /* Copying */ = {
+			isa = PBXGroup;
+			children = (
+				CF4BCF3D1F29A326005F8414 /* ChecksumExpectation.cpp */,
+				CF4BCF3E1F29A326005F8414 /* ChecksumExpectation.h */,
+				CF4BCEED1F1DA207005F8414 /* Copying.h */,
+				CF4BCEEE1F1DA207005F8414 /* Copying.mm */,
+				CF4BCF4E1F2F07DB005F8414 /* CopyingDialog.h */,
+				CF4BCF4F1F2F07DB005F8414 /* CopyingDialog.mm */,
+				CF4BCF4C1F2F07DB005F8414 /* CopyingDialog.xib */,
+				CF197C271FB4381E009F6C59 /* CopyingDialogDisclosedView.xib */,
+				CF4BCEE41F1D9CAA005F8414 /* CopyingJob.cpp */,
+				CF4BCEE51F1D9CAA005F8414 /* CopyingJob.h */,
+				CFF544942620F2BC00A6C49C /* CopyingJobCallbacks.h */,
+				CFAAF0721FA9D8B8009230B3 /* CopyingTitleBuilder.h */,
+				CFAAF0731FA9D8B8009230B3 /* CopyingTitleBuilder.mm */,
+				CF4BCF561F2F1508005F8414 /* DisclosureViewController.h */,
+				CF4BCF571F2F1508005F8414 /* DisclosureViewController.m */,
+				CF4BCF0A1F1EF579005F8414 /* FileAlreadyExistDialog.h */,
+				CF4BCF0B1F1EF579005F8414 /* FileAlreadyExistDialog.mm */,
+				CF4BCF081F1EF579005F8414 /* FileAlreadyExistDialog.xib */,
+				CF238E0E21A1948800569809 /* Helpers.cpp */,
+				CF238E0F21A1948800569809 /* Helpers.h */,
+				CF4BCF001F1EEFCE005F8414 /* NativeFSHelpers.cpp */,
+				CF4BCF011F1EEFCE005F8414 /* NativeFSHelpers.h */,
+				CF4BCEE71F1D9CAA005F8414 /* Options.h */,
+				CF4BCEE61F1D9CAA005F8414 /* SourceItems.cpp */,
+				CF4BCF041F1EF0F2005F8414 /* SourceItems.h */,
+			);
+			name = Copying;
+			sourceTree = "<group>";
+		};
+		CF5FD93D1FA2D39F00752E59 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CF5FD93E1FA2D3B400752E59 /* default.xcconfig */,
+				CF2C101B22A073AF00A5359D /* tests.xcconfig */,
+			);
+			name = Config;
+			sourceTree = "<group>";
+		};
+		CFC4F8E11EFCD9B40000B3EE /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				CFE0D33525A08DC200EFF0EB /* OperationsResources.plist */,
+				CFCFAC702D3D2F8D008C6E26 /* Localizable.xcstrings */,
+				CFF53B3F1EDD197300F567C4 /* Info-Tests.plist */,
+				CFF53B331EDD197300F567C4 /* Info-Framework.plist */,
+				CFC4F8DF1EFCD9A50000B3EE /* Media.xcassets */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		CFC4F9031F0625090000B3EE /* DirectoryCreation */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9041F06253D0000B3EE /* DirectoryCreation.h */,
+				CFC4F9051F06253D0000B3EE /* DirectoryCreation.mm */,
+				CFC4F94C1F0CA84D0000B3EE /* DirectoryCreationDialog.h */,
+				CFC4F94D1F0CA84D0000B3EE /* DirectoryCreationDialog.mm */,
+				CFC4F94A1F0CA84D0000B3EE /* DirectoryCreationDialog.xib */,
+				CFC4F9071F06253D0000B3EE /* DirectoryCreationJob.cpp */,
+				CFC4F9061F06253D0000B3EE /* DirectoryCreationJob.h */,
+			);
+			name = DirectoryCreation;
+			sourceTree = "<group>";
+		};
+		CFC4F90E1F0745170000B3EE /* Base */ = {
+			isa = PBXGroup;
+			children = (
+				CF4BCF5A1F301303005F8414 /* AggregateProgressTracker.h */,
+				CF4BCF5B1F301303005F8414 /* AggregateProgressTracker.mm */,
+				CFC4F8ED1F0224710000B3EE /* AsyncDialogResponse.cpp */,
+				CFC4F8EC1F0224710000B3EE /* AsyncDialogResponse.h */,
+				CFC4F8E21EFCE0380000B3EE /* BriefOperationView.h */,
+				CFC4F8E31EFCE0380000B3EE /* BriefOperationView.mm */,
+				CFC4F8D51EFB5F780000B3EE /* BriefOperationViewController.h */,
+				CFC4F8D61EFB5F780000B3EE /* BriefOperationViewController.mm */,
+				CFC4F8D91EFB5FAB0000B3EE /* BriefOperationViewController.xib */,
+				CFC4F8F01F0243D30000B3EE /* GenericErrorDialog.h */,
+				CFC4F8F11F0243D30000B3EE /* GenericErrorDialog.mm */,
+				CFC4F8F21F0243D30000B3EE /* GenericErrorDialog.xib */,
+				CFC4F8E61F00E5D30000B3EE /* HaltReasonDialog.h */,
+				CFC4F8E71F00E5D30000B3EE /* HaltReasonDialog.mm */,
+				CFC4F8E81F00E5D30000B3EE /* HaltReasonDialog.xib */,
+				CFC4F8D11EFA17070000B3EE /* Internal.h */,
+				CFC4F8D21EFA17070000B3EE /* Internal.mm */,
+				CFF340462557E21E00B3C92C /* ItemStateReport.h */,
+				CFF53B791EDEA83900F567C4 /* Job.cpp */,
+				CFF53B781EDEA83900F567C4 /* Job.h */,
+				CFC4F9011F0617E20000B3EE /* ModalDialogResponses.h */,
+				CFF53B741EDE53E800F567C4 /* Operation.h */,
+				CFF53B751EDE53E800F567C4 /* Operation.mm */,
+				CF7084D61EF7CC770072F0F6 /* Pool.h */,
+				CF7084D71EF7CC770072F0F6 /* Pool.mm */,
+				CF287FF126F6876200FC24B5 /* PoolEnqueueFilter.cpp */,
+				CF287FF226F6876200FC24B5 /* PoolEnqueueFilter.h */,
+				CFC4F8C31EFA05B00000B3EE /* PoolView.h */,
+				CFC4F8C41EFA05B00000B3EE /* PoolView.mm */,
+				CFC4F8C51EFA05B00000B3EE /* PoolViewController.h */,
+				CFC4F8C61EFA05B00000B3EE /* PoolViewController.mm */,
+				CFC4F8CB1EFA05DA0000B3EE /* PoolViewController.xib */,
+				CFF53BCC1EF3913B00F567C4 /* Progress.cpp */,
+				CFF53BCD1EF3913B00F567C4 /* Progress.h */,
+				CFF53BAD1EEA840600F567C4 /* Statistics.cpp */,
+				CFF53BAC1EEA840600F567C4 /* Statistics.h */,
+				CFC4F8DB1EFCC0040000B3EE /* StatisticsFormatter.h */,
+				CFC4F8DC1EFCC0040000B3EE /* StatisticsFormatter.mm */,
+			);
+			name = Base;
+			sourceTree = "<group>";
+		};
+		CFC4F9161F09D9620000B3EE /* Deletion */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9171F09D9740000B3EE /* Deletion.h */,
+				CFC4F9181F09D9740000B3EE /* Deletion.mm */,
+				CFC4F95A1F0CB07A0000B3EE /* DeletionDialog.h */,
+				CFC4F95B1F0CB07A0000B3EE /* DeletionDialog.mm */,
+				CFC4F9581F0CB07A0000B3EE /* DeletionDialog.xib */,
+				CFC4F9191F09D9740000B3EE /* DeletionJob.cpp */,
+				CFC4F91A1F09D9740000B3EE /* DeletionJob.h */,
+				CFB7BD40260F696C00E2EA4D /* DeletionJobCallbacks.cpp */,
+				CFB7BD41260F696C00E2EA4D /* DeletionJobCallbacks.h */,
+				CFC4F91F1F09DCC80000B3EE /* Options.h */,
+			);
+			name = Deletion;
+			sourceTree = "<group>";
+		};
+		CFC4F9601F0CC6480000B3EE /* BatchRenaming */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9691F0CEFB60000B3EE /* BatchRenaming.h */,
+				CFC4F96A1F0CEFB60000B3EE /* BatchRenaming.mm */,
+				CFC4F9791F0DEC280000B3EE /* BatchRenamingDialog.h */,
+				CFC4F97A1F0DEC280000B3EE /* BatchRenamingDialog.mm */,
+				CFC4F9751F0DEC280000B3EE /* BatchRenamingDialog.xib */,
+				CFC4F96B1F0CEFB60000B3EE /* BatchRenamingJob.cpp */,
+				CFC4F96C1F0CEFB60000B3EE /* BatchRenamingJob.h */,
+				CFC4F97B1F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.h */,
+				CFC4F97C1F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.mm */,
+				CFC4F9771F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.xib */,
+				CFC4F9621F0CC66E0000B3EE /* BatchRenamingScheme.h */,
+				CFC4F9631F0CC66E0000B3EE /* BatchRenamingScheme.mm */,
+			);
+			name = BatchRenaming;
+			sourceTree = "<group>";
+		};
+		CFC4F9611F0CC6550000B3EE /* Operations */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9CA1F14BEA30000B3EE /* AttrsChanging */,
+				CFC4F9601F0CC6480000B3EE /* BatchRenaming */,
+				CFF53B8E1EE24FC300F567C4 /* Compression */,
+				CF4BCEE21F1D9C9A005F8414 /* Copying */,
+				CFC4F9161F09D9620000B3EE /* Deletion */,
+				CFC4F9031F0625090000B3EE /* DirectoryCreation */,
+				CFC4F9851F0F22700000B3EE /* Linkage */,
+			);
+			name = Operations;
+			sourceTree = "<group>";
+		};
+		CFC4F9851F0F22700000B3EE /* Linkage */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9AE1F10890B0000B3EE /* AlterSymlinkDialog.h */,
+				CFC4F9AF1F10890B0000B3EE /* AlterSymlinkDialog.mm */,
+				CFC4F9A81F10890B0000B3EE /* AlterSymlinkDialog.xib */,
+				CFC4F9B01F10890B0000B3EE /* CreateHardlinkDialog.h */,
+				CFC4F9B11F10890B0000B3EE /* CreateHardlinkDialog.mm */,
+				CFC4F9AA1F10890B0000B3EE /* CreateHardlinkDialog.xib */,
+				CFC4F9B21F10890B0000B3EE /* CreateSymlinkDialog.h */,
+				CFC4F9B31F10890B0000B3EE /* CreateSymlinkDialog.mm */,
+				CFC4F9AC1F10890B0000B3EE /* CreateSymlinkDialog.xib */,
+				CFC4F9861F0F22850000B3EE /* Linkage.h */,
+				CFC4F9871F0F22850000B3EE /* Linkage.mm */,
+				CFC4F9881F0F22850000B3EE /* LinkageJob.cpp */,
+				CFC4F9891F0F22850000B3EE /* LinkageJob.h */,
+				CFC4F98A1F0F22850000B3EE /* Options.h */,
+			);
+			name = Linkage;
+			sourceTree = "<group>";
+		};
+		CFC4F9CA1F14BEA30000B3EE /* AttrsChanging */ = {
+			isa = PBXGroup;
+			children = (
+				CFC4F9CD1F14BFFE0000B3EE /* AttrsChanging.h */,
+				CFC4F9CE1F14BFFE0000B3EE /* AttrsChanging.mm */,
+				CFC4F9D11F14C4030000B3EE /* AttrsChangingJob.cpp */,
+				CFC4F9D21F14C4030000B3EE /* AttrsChangingJob.h */,
+				CFC4F9CB1F14BECA0000B3EE /* Options.h */,
+				CFC4F9E61F15BA800000B3EE /* AttrsChangingDialog.h */,
+				CFC4F9E71F15BA800000B3EE /* AttrsChangingDialog.mm */,
+				CFFA95401F4C0C390035E606 /* AttrsChangingDialog.xib */,
+			);
+			name = AttrsChanging;
+			sourceTree = "<group>";
+		};
+		CFF53B251EDD197300F567C4 = {
+			isa = PBXGroup;
+			children = (
+				CF5FD93D1FA2D39F00752E59 /* Config */,
+				CFF53B8A1EE24F1B00F567C4 /* Headers */,
+				CFF53B8B1EE24F2400F567C4 /* Source */,
+				CFF53B3C1EDD197300F567C4 /* Tests */,
+				CFC4F8E11EFCD9B40000B3EE /* Resources */,
+				CFF53B301EDD197300F567C4 /* Products */,
+				CFF53B711EDD401900F567C4 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		CFF53B301EDD197300F567C4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CF2C101122A072BE00A5359D /* OperationsIT */,
+				CF46FF32255FCA770095FC73 /* OperationsResources.bundle */,
+				CF46FFAD255FCF690095FC73 /* libOperations.a */,
+				CF22F0D5258F43610033E850 /* OperationsUT */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CFF53B3C1EDD197300F567C4 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				CF9179112EEAC9BB00A5A578 /* _OperationsIT.cpp */,
+				CF91790F2EEAC76900A5A578 /* _OperationsUT.cpp */,
+				CF91790D2EEAC60100A5A578 /* _OperationsUT.mm */,
+				CF402389256DA6850028E0B3 /* Archive_IT.cpp */,
+				CF86D5E1255E8AF00049F7F8 /* AttrsChanging_IT.cpp */,
+				CF402371256D9C440028E0B3 /* BasicOperationsSemantics_UT.mm */,
+				CF2F1152256C528400622405 /* BatchRenaming_UT.mm */,
+				CFF53B951EE252F200F567C4 /* Compression_IT.cpp */,
+				CF3ABD8023BA1B1A00D1878B /* Copying_IT.cpp */,
+				CFAB6D7D258A742D00397DB5 /* CopyingFindNonExistingItemPath_UT.cpp */,
+				CFC4F9211F09DFD80000B3EE /* Deletion_IT.cpp */,
+				CF22F0F4258F43A80033E850 /* Deletion_UT.cpp */,
+				CFC4F90C1F0628CC0000B3EE /* DirectoryCreations_IT.cpp */,
+				CF2C102422A4116B00A5359D /* DirectoryPathAutoCompetion_IT.mm */,
+				CF3ABD8223BA1B2800D1878B /* Environment.h */,
+				CF40237B256D9F1A0028E0B3 /* Linkage_IT.cpp */,
+				CF287FDB26EE0A5600FC24B5 /* Pool_UT.mm */,
+				CFE08AFB23D3719B007E99B8 /* TestEnv.h */,
+				CFE08AFC23D3719B007E99B8 /* TestEnv.mm */,
+				CF2C101822A0731500A5359D /* Tests.cpp */,
+				CF2C101922A0731500A5359D /* Tests.h */,
+			);
+			name = Tests;
+			path = tests;
+			sourceTree = SOURCE_ROOT;
+		};
+		CFF53B711EDD401900F567C4 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CFDE716E215267BB005449C8 /* libiconv.tbd */,
+				CFF53B721EDD401900F567C4 /* Cocoa.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		CFF53B8A1EE24F1B00F567C4 /* Headers */ = {
+			isa = PBXGroup;
+			children = (
+				CF47861D2EE716AE00736117 /* AggregateProgressTracker.h */,
+				CFC4F9C41F11D5A10000B3EE /* AlterSymlinkDialog.h */,
+				CF4BCEF11F1DA5AF005F8414 /* AttrsChanging.h */,
+				CF4BCEF21F1DA5AF005F8414 /* AttrsChangingDialog.h */,
+				CFC4F9901F0F22900000B3EE /* BatchRenaming.h */,
+				CFC4F9911F0F22900000B3EE /* BatchRenamingDialog.h */,
+				CFC4F9921F0F22900000B3EE /* BatchRenamingScheme.h */,
+				CF2C100B229F1B9B00A5359D /* CompressDialog.h */,
+				CF7084DC1EF7CF7E0072F0F6 /* Compression.h */,
+				CF4BCEF31F1DA5AF005F8414 /* Copying.h */,
+				CF4BCF5E1F30130B005F8414 /* CopyingDialog.h */,
+				CF4BCEF41F1DA5AF005F8414 /* CopyingOptions.h */,
+				CFC4F9C51F11D5A10000B3EE /* CreateHardlinkDialog.h */,
+				CFC4F9C61F11D5A10000B3EE /* CreateSymlinkDialog.h */,
+				CFC4F92B1F0B49C00000B3EE /* Deletion.h */,
+				CFC4F9931F0F22900000B3EE /* DeletionDialog.h */,
+				CFC4F92C1F0B49C00000B3EE /* DirectoryCreation.h */,
+				CFC4F9561F0CB0260000B3EE /* DirectoryCreationDialog.h */,
+				CF2C102222A2F02E00A5359D /* FilenameTextControl.h */,
+				CFF53B8C1EE24F9E00F567C4 /* Job.h */,
+				CFC4F99B1F0F33C20000B3EE /* Linkage.h */,
+				CF47861E2EE716AE00736117 /* Localizable.h */,
+				CFF53B8D1EE24F9E00F567C4 /* Operation.h */,
+				CF7084DA1EF7CCB00072F0F6 /* Pool.h */,
+				CF47861F2EE716AE00736117 /* PoolEnqueueFilter.h */,
+				CFC4F8CD1EFA07F00000B3EE /* PoolView.h */,
+				CFC4F8CE1EFA07F00000B3EE /* PoolViewController.h */,
+				CF4BCF061F1EF0FE005F8414 /* Statistics.h */,
+			);
+			name = Headers;
+			sourceTree = "<group>";
+		};
+		CFF53B8B1EE24F2400F567C4 /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				CF4786192EE7127500736117 /* _Operations.cpp */,
+				CF47861B2EE7144500736117 /* _Operations.mm */,
+				CF4786202EE7171400736117 /* Localizable.mm */,
+				CFC4F90E1F0745170000B3EE /* Base */,
+				CFC4F9611F0CC6550000B3EE /* Operations */,
+				CF2C101D22A2EFED00A5359D /* Views */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
+		CFF53B8E1EE24FC300F567C4 /* Compression */ = {
+			isa = PBXGroup;
+			children = (
+				CFF53B8F1EE24FEC00F567C4 /* Compression.h */,
+				CFF53B901EE24FEC00F567C4 /* Compression.mm */,
+				CFF53B921EE2515400F567C4 /* CompressionJob.h */,
+				CFF53B931EE2515400F567C4 /* CompressionJob.cpp */,
+				CF2C1005229F16E400A5359D /* CompressDialog.h */,
+				CF2C1006229F16E400A5359D /* CompressDialog.mm */,
+				CF5C8BDD22D0D69100619F45 /* CompressDialog.xib */,
+			);
+			name = Compression;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		CF46FFA9255FCF690095FC73 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFB7BD43260F696C00E2EA4D /* DeletionJobCallbacks.h in Headers */,
+				CF287FF426F6876200FC24B5 /* PoolEnqueueFilter.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		CF22F0C0258F43610033E850 /* OperationsUT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF22F0D2258F43610033E850 /* Build configuration list for PBXNativeTarget "OperationsUT" */;
+			buildPhases = (
+				CF22F0C1258F43610033E850 /* Sources */,
+				CF22F0CF258F43610033E850 /* Frameworks */,
+				CF22F0D1258F43610033E850 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OperationsUT;
+			productName = OperationsIT;
+			productReference = CF22F0D5258F43610033E850 /* OperationsUT */;
+			productType = "com.apple.product-type.tool";
+		};
+		CF2C101022A072BE00A5359D /* OperationsIT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF2C101522A072BE00A5359D /* Build configuration list for PBXNativeTarget "OperationsIT" */;
+			buildPhases = (
+				CF2C100D22A072BE00A5359D /* Sources */,
+				CF2C100E22A072BE00A5359D /* Frameworks */,
+				CF2C100F22A072BE00A5359D /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OperationsIT;
+			productName = OperationsIT;
+			productReference = CF2C101122A072BE00A5359D /* OperationsIT */;
+			productType = "com.apple.product-type.tool";
+		};
+		CF46FF31255FCA770095FC73 /* OperationsResources */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF46FF37255FCA770095FC73 /* Build configuration list for PBXNativeTarget "OperationsResources" */;
+			buildPhases = (
+				CF46FF2E255FCA770095FC73 /* Sources */,
+				CF46FF2F255FCA770095FC73 /* Frameworks */,
+				CF46FF30255FCA770095FC73 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OperationsResources;
+			productName = OperationsResources;
+			productReference = CF46FF32255FCA770095FC73 /* OperationsResources.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		CF46FFAC255FCF690095FC73 /* Operations */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF46FFAE255FCF690095FC73 /* Build configuration list for PBXNativeTarget "Operations" */;
+			buildPhases = (
+				CF46FFA9255FCF690095FC73 /* Headers */,
+				CF46FFAA255FCF690095FC73 /* Sources */,
+				CF46FFAB255FCF690095FC73 /* Frameworks */,
+				CFB7BD192606ACBD00E2EA4D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CF2F110625680BF400622405 /* PBXTargetDependency */,
+			);
+			name = Operations;
+			productName = Operations;
+			productReference = CF46FFAD255FCF690095FC73 /* libOperations.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CFF53B261EDD197300F567C4 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1320;
+				ORGANIZATIONNAME = "Michael G. Kazakov";
+				TargetAttributes = {
+					CF2C101022A072BE00A5359D = {
+						CreatedOnToolsVersion = 10.2.1;
+					};
+					CF46FF31255FCA770095FC73 = {
+						CreatedOnToolsVersion = 12.0;
+					};
+					CF46FFAC255FCF690095FC73 = {
+						CreatedOnToolsVersion = 12.0;
+					};
+				};
+			};
+			buildConfigurationList = CFF53B291EDD197300F567C4 /* Build configuration list for PBXProject "Operations" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				ru,
+			);
+			mainGroup = CFF53B251EDD197300F567C4;
+			productRefGroup = CFF53B301EDD197300F567C4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CF46FFAC255FCF690095FC73 /* Operations */,
+				CF46FF31255FCA770095FC73 /* OperationsResources */,
+				CF22F0C0258F43610033E850 /* OperationsUT */,
+				CF2C101022A072BE00A5359D /* OperationsIT */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CF46FF30255FCA770095FC73 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF46FF86255FCC980095FC73 /* DeletionDialog.xib in Resources */,
+				CF46FF90255FCCA90095FC73 /* AlterSymlinkDialog.xib in Resources */,
+				CF46FF72255FCC820095FC73 /* CompressDialog.xib in Resources */,
+				CF46FF4F255FCC4C0095FC73 /* PoolViewController.xib in Resources */,
+				CF46FF45255FCC350095FC73 /* Media.xcassets in Resources */,
+				CF46FF6D255FCC7C0095FC73 /* BatchRenamingRangeSelectionPopover.xib in Resources */,
+				CFCFAC722D3D2F8D008C6E26 /* Localizable.xcstrings in Resources */,
+				CF46FF59255FCC540095FC73 /* GenericErrorDialog.xib in Resources */,
+				CF46FF9A255FCCAF0095FC73 /* CreateSymlinkDialog.xib in Resources */,
+				CF46FF8B255FCCA20095FC73 /* DirectoryCreationDialog.xib in Resources */,
+				CF46FF5E255FCC590095FC73 /* BriefOperationViewController.xib in Resources */,
+				CF46FF95255FCCAD0095FC73 /* CreateHardlinkDialog.xib in Resources */,
+				CF46FF77255FCC890095FC73 /* CopyingDialog.xib in Resources */,
+				CF46FF81255FCC900095FC73 /* FileAlreadyExistDialog.xib in Resources */,
+				CF46FF68255FCC770095FC73 /* BatchRenamingDialog.xib in Resources */,
+				CF46FF63255FCC6B0095FC73 /* AttrsChangingDialog.xib in Resources */,
+				CF46FF7C255FCC8C0095FC73 /* CopyingDialogDisclosedView.xib in Resources */,
+				CF46FF54255FCC500095FC73 /* HaltReasonDialog.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CFB7BD192606ACBD00E2EA4D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFCFAC712D3D2F8D008C6E26 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CF22F0C1258F43610033E850 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF22F0C2258F43610033E850 /* Tests.cpp in Sources */,
+				CF91790E2EEAC60100A5A578 /* _OperationsUT.mm in Sources */,
+				CF9179102EEAC76900A5A578 /* _OperationsUT.cpp in Sources */,
+				CF22F0CA258F43610033E850 /* TestEnv.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF2C100D22A072BE00A5359D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF2C101A22A0731500A5359D /* Tests.cpp in Sources */,
+				CF2C102622A4116F00A5359D /* DirectoryPathAutoCompetion_IT.mm in Sources */,
+				CFE08AFE23D3719B007E99B8 /* TestEnv.mm in Sources */,
+				CF9179122EEAC9BB00A5A578 /* _OperationsIT.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF46FF2E255FCA770095FC73 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF46FFAA255FCF690095FC73 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF47861A2EE7127500736117 /* _Operations.cpp in Sources */,
+				CF4786212EE7171400736117 /* Localizable.mm in Sources */,
+				CF47861C2EE7144500736117 /* _Operations.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		CF2F110625680BF400622405 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CF46FF31255FCA770095FC73 /* OperationsResources */;
+			targetProxy = CF2F110525680BF400622405 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		CF197C271FB4381E009F6C59 /* CopyingDialogDisclosedView.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CF197C261FB4381E009F6C59 /* Base */,
+				CFCFAC6E2D3D2F8C008C6E26 /* mul */,
+			);
+			name = CopyingDialogDisclosedView.xib;
+			path = source/Copying;
+			sourceTree = "<group>";
+		};
+		CF4BCF081F1EF579005F8414 /* FileAlreadyExistDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CF4BCF091F1EF579005F8414 /* Base */,
+				CFCFAC6C2D3D2F8C008C6E26 /* mul */,
+			);
+			name = FileAlreadyExistDialog.xib;
+			sourceTree = "<group>";
+		};
+		CF4BCF4C1F2F07DB005F8414 /* CopyingDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CF4BCF4D1F2F07DB005F8414 /* Base */,
+				CFCFAC6B2D3D2F8B008C6E26 /* mul */,
+			);
+			name = CopyingDialog.xib;
+			sourceTree = "<group>";
+		};
+		CF5C8BDD22D0D69100619F45 /* CompressDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CF5C8BDC22D0D69100619F45 /* Base */,
+				CFCFAC742D3D2F8E008C6E26 /* mul */,
+			);
+			name = CompressDialog.xib;
+			path = source/Compression;
+			sourceTree = "<group>";
+		};
+		CFC4F94A1F0CA84D0000B3EE /* DirectoryCreationDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F94B1F0CA84D0000B3EE /* Base */,
+				CFCFAC6A2D3D2F8B008C6E26 /* mul */,
+			);
+			name = DirectoryCreationDialog.xib;
+			sourceTree = "<group>";
+		};
+		CFC4F9581F0CB07A0000B3EE /* DeletionDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F9591F0CB07A0000B3EE /* Base */,
+				CFCFAC772D3D2F8F008C6E26 /* mul */,
+			);
+			name = DeletionDialog.xib;
+			sourceTree = "<group>";
+		};
+		CFC4F9751F0DEC280000B3EE /* BatchRenamingDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F9761F0DEC280000B3EE /* Base */,
+				CFCFAC752D3D2F8E008C6E26 /* mul */,
+			);
+			name = BatchRenamingDialog.xib;
+			sourceTree = "<group>";
+		};
+		CFC4F9771F0DEC280000B3EE /* BatchRenamingRangeSelectionPopover.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F9781F0DEC280000B3EE /* Base */,
+				CFCFAC732D3D2F8D008C6E26 /* mul */,
+			);
+			name = BatchRenamingRangeSelectionPopover.xib;
+			sourceTree = "<group>";
+		};
+		CFC4F9A81F10890B0000B3EE /* AlterSymlinkDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F9A91F10890B0000B3EE /* Base */,
+				CFCFAC6D2D3D2F8C008C6E26 /* mul */,
+			);
+			name = AlterSymlinkDialog.xib;
+			sourceTree = "<group>";
+		};
+		CFC4F9AA1F10890B0000B3EE /* CreateHardlinkDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F9AB1F10890B0000B3EE /* Base */,
+				CFCFAC6F2D3D2F8D008C6E26 /* mul */,
+			);
+			name = CreateHardlinkDialog.xib;
+			sourceTree = "<group>";
+		};
+		CFC4F9AC1F10890B0000B3EE /* CreateSymlinkDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFC4F9AD1F10890B0000B3EE /* Base */,
+				CFCFAC782D3D2F8F008C6E26 /* mul */,
+			);
+			name = CreateSymlinkDialog.xib;
+			sourceTree = "<group>";
+		};
+		CFFA95401F4C0C390035E606 /* AttrsChangingDialog.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFFA953F1F4C0C390035E606 /* Base */,
+				CFCFAC762D3D2F8E008C6E26 /* mul */,
+			);
+			name = AttrsChangingDialog.xib;
+			path = source/AttrsChanging;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		CF22F0D3258F43610033E850 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF2C101B22A073AF00A5359D /* tests.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		CF22F0D4258F43610033E850 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF2C101B22A073AF00A5359D /* tests.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		CF2C101622A072BE00A5359D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF2C101B22A073AF00A5359D /* tests.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		CF2C101722A072BE00A5359D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF2C101B22A073AF00A5359D /* tests.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		CF46FF35255FCA770095FC73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = resources/OperationsResources.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.OperationsResources;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		CF46FF36255FCA770095FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = resources/OperationsResources.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.OperationsResources;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		CF46FFAF255FCF690095FC73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		CF46FFB0255FCF690095FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		CFF53B411EDD197300F567C4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF5FD93E1FA2D3B400752E59 /* default.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+			};
+			name = Debug;
+		};
+		CFF53B421EDD197300F567C4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CF5FD93E1FA2D3B400752E59 /* default.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CF22F0D2258F43610033E850 /* Build configuration list for PBXNativeTarget "OperationsUT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF22F0D3258F43610033E850 /* Debug */,
+				CF22F0D4258F43610033E850 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF2C101522A072BE00A5359D /* Build configuration list for PBXNativeTarget "OperationsIT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF2C101622A072BE00A5359D /* Debug */,
+				CF2C101722A072BE00A5359D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF46FF37255FCA770095FC73 /* Build configuration list for PBXNativeTarget "OperationsResources" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF46FF35255FCA770095FC73 /* Debug */,
+				CF46FF36255FCA770095FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF46FFAE255FCF690095FC73 /* Build configuration list for PBXNativeTarget "Operations" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF46FFAF255FCF690095FC73 /* Debug */,
+				CF46FFB0255FCF690095FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CFF53B291EDD197300F567C4 /* Build configuration list for PBXProject "Operations" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFF53B411EDD197300F567C4 /* Debug */,
+				CFF53B421EDD197300F567C4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CFF53B261EDD197300F567C4 /* Project object */;
+}

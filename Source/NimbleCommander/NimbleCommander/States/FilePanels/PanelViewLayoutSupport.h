@@ -1,0 +1,123 @@
+// Copyright (C) 2016-2026 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include <Base/Observable.h>
+#include "Brief/Layout.h"
+#include "Gallery/Layout.h"
+#include "List/Layout.h"
+#include <any>
+#include <string>
+#include <vector>
+#include <memory>
+#include <variant>
+#include <Cocoa/Cocoa.h>
+
+namespace nc::panel {
+
+struct PanelViewDisabledLayout {
+    /* dummy layout, used to indicate that this layout is not active */
+    constexpr bool operator==(const PanelViewDisabledLayout &) const noexcept = default;
+};
+
+struct PanelViewLayout {
+    enum class Type : unsigned char {
+        Disabled = 0,
+        Brief = 1,
+        List = 2,
+        Gallery = 3
+    };
+
+    using LayoutVariant = std::variant<PanelViewDisabledLayout,
+                                       PanelBriefViewColumnsLayout,
+                                       PanelListViewColumnsLayout,
+                                       PanelGalleryViewLayout>;
+
+    // Returns true if this layout is disabled (PanelViewDisabledLayout).
+    [[nodiscard]] bool is_disabled() const noexcept;
+
+    // Returns an type of the layout decorated as the Type enumeration, effectively "layout.index()".
+    [[nodiscard]] Type type() const noexcept;
+
+    // Returns a Brief layout configuration if this layout is stored, otherwise nullptr
+    [[nodiscard]] const PanelBriefViewColumnsLayout *brief() const noexcept;
+
+    // Returns a List layout configuration if this layout is stored, otherwise nullptr
+    [[nodiscard]] const PanelListViewColumnsLayout *list() const noexcept;
+
+    // Returns a Gallery layout configuration if this layout is stored, otherwise nullptr
+    [[nodiscard]] const PanelGalleryViewLayout *gallery() const noexcept;
+
+    // Equality operator
+    bool operator==(const PanelViewLayout &) const noexcept;
+
+    // User-facing name of the layout
+    std::string name;
+
+    // Layout configuration, specific to its type
+    LayoutVariant layout;
+};
+
+// supposed to be thread-safe
+class PanelViewLayoutsStorage : public base::ObservableBase
+{
+public:
+    PanelViewLayoutsStorage(const char *_config_path);
+
+    /**
+     * Will return total layouts count, including disabled onces (PanelViewDisabledLayout).
+     */
+    int LayoutsCount() const;
+
+    /**
+     * Will return nullptr on invalid index.
+     */
+    std::shared_ptr<const PanelViewLayout> GetLayout(int _index) const;
+
+    /**
+     * Get all layouts this storage has.
+     */
+    std::vector<std::shared_ptr<const PanelViewLayout>> GetAllLayouts() const;
+
+    /**
+     * Will ignore requests on invalid index.
+     */
+    void ReplaceLayout(PanelViewLayout _layout, int _at_index);
+
+    /**
+     * Will ignore requests on invalid index.
+     * Will fire observers on layouts change.
+     */
+    void ReplaceLayoutWithMandatoryNotification(PanelViewLayout _layout, int _at_index);
+
+    /**
+     * Should be used when panel is forced to use a disabled layout.
+     */
+    static const std::shared_ptr<const PanelViewLayout> LastResortLayout();
+
+    /**
+     * Default layout that will be used by file panel upon initialization.
+     */
+    const std::shared_ptr<const PanelViewLayout> DefaultLayout() const;
+    int DefaultLayoutIndex() const;
+
+    using ObservationTicket = ObservableBase::ObservationTicket;
+    ObservationTicket ObserveChanges(std::function<void()> _callback);
+
+private:
+    void ReplaceLayout(PanelViewLayout _layout, int _at_index, bool _mandatory);
+    void LoadLayoutsFromConfig();
+    void WriteLayoutsToConfig() const;
+    void CommitChanges(bool _fire_observers);
+
+    mutable spinlock m_LayoutsLock;
+    std::vector<std::shared_ptr<const PanelViewLayout>> m_Layouts;
+    const char *m_ConfigPath;
+};
+
+} // namespace nc::panel
+
+@interface PanelViewLayoutsMenuDelegate : NSObject <NSMenuDelegate>
+
+- (id)initWithStorage:(nc::panel::PanelViewLayoutsStorage &)_storage;
+
+@end

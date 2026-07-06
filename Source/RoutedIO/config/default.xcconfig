@@ -1,0 +1,2 @@
+#include "../XCConfig/common.xcconfig"
+HEADER_SEARCH_PATHS = $(inherited) $(LIBS)/Base/include $(LIBS)/Utility/include $(PROJECT_DIR)/include

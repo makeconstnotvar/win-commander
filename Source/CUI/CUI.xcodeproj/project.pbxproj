@@ -1,0 +1,335 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CF46017425612B9D0095FC73 /* ProcessSheetController.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFD79AEE21FE475F0043A26D /* ProcessSheetController.xib */; };
+		CF46018425612BFD0095FC73 /* ProcessSheetController.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFD79AEC21FE47560043A26D /* ProcessSheetController.mm */; };
+		CFAA4D0F2BBADD0D003073A2 /* CommandPopover.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFAA4D0E2BBADD0D003073A2 /* CommandPopover.mm */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		CF46016C25612B020095FC73 /* CUIResources.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CUIResources.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF46017C25612BDC0095FC73 /* libCUI.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libCUI.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF46018725612CFD0095FC73 /* CUIResources.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = CUIResources.plist; path = resources/CUIResources.plist; sourceTree = "<group>"; };
+		CFAA4D0D2BBADD03003073A2 /* CommandPopover.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandPopover.h; path = include/CUI/CommandPopover.h; sourceTree = "<group>"; };
+		CFAA4D0E2BBADD0D003073A2 /* CommandPopover.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = CommandPopover.mm; path = source/CommandPopover.mm; sourceTree = "<group>"; };
+		CFCFAC792D3D31CA008C6E26 /* mul */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = mul; path = resources/mul.lproj/ProcessSheetController.xcstrings; sourceTree = "<group>"; };
+		CFD79AE121FE29900043A26D /* default.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = default.xcconfig; path = config/default.xcconfig; sourceTree = "<group>"; };
+		CFD79AEA21FE474B0043A26D /* ProcessSheetController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ProcessSheetController.h; path = include/CUI/ProcessSheetController.h; sourceTree = "<group>"; };
+		CFD79AEC21FE47560043A26D /* ProcessSheetController.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = ProcessSheetController.mm; path = source/ProcessSheetController.mm; sourceTree = "<group>"; };
+		CFD79AEF21FE475F0043A26D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = resources/Base.lproj/ProcessSheetController.xib; sourceTree = "<group>"; };
+		CFD79AFA21FE482D0043A26D /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		CFD79AFC21FE48310043A26D /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		CFD79AFE21FE48350043A26D /* libUtility.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = libUtility.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		CFD79B0021FE48390043A26D /* libHabanero.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = libHabanero.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		CF46016925612B020095FC73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF46017A25612BDC0095FC73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CFD79ABD21FE29130043A26D = {
+			isa = PBXGroup;
+			children = (
+				CFD79AE621FE29950043A26D /* Config */,
+				CFD79AE821FE45C30043A26D /* Headers */,
+				CFD79AE921FE45CB0043A26D /* Source */,
+				CFD79AE721FE2AB40043A26D /* Resources */,
+				CFD79AC821FE29130043A26D /* Products */,
+				CFD79AF921FE482D0043A26D /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		CFD79AC821FE29130043A26D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CF46016C25612B020095FC73 /* CUIResources.bundle */,
+				CF46017C25612BDC0095FC73 /* libCUI.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CFD79AE621FE29950043A26D /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CFD79AE121FE29900043A26D /* default.xcconfig */,
+			);
+			name = Config;
+			sourceTree = "<group>";
+		};
+		CFD79AE721FE2AB40043A26D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				CF46018725612CFD0095FC73 /* CUIResources.plist */,
+				CFD79AEE21FE475F0043A26D /* ProcessSheetController.xib */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		CFD79AE821FE45C30043A26D /* Headers */ = {
+			isa = PBXGroup;
+			children = (
+				CFAA4D0D2BBADD03003073A2 /* CommandPopover.h */,
+				CFD79AEA21FE474B0043A26D /* ProcessSheetController.h */,
+			);
+			name = Headers;
+			sourceTree = "<group>";
+		};
+		CFD79AE921FE45CB0043A26D /* Source */ = {
+			isa = PBXGroup;
+			children = (
+				CFAA4D0E2BBADD0D003073A2 /* CommandPopover.mm */,
+				CFD79AEC21FE47560043A26D /* ProcessSheetController.mm */,
+			);
+			name = Source;
+			sourceTree = "<group>";
+		};
+		CFD79AF921FE482D0043A26D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				CFD79B0021FE48390043A26D /* libHabanero.dylib */,
+				CFD79AFE21FE48350043A26D /* libUtility.dylib */,
+				CFD79AFC21FE48310043A26D /* AppKit.framework */,
+				CFD79AFA21FE482D0043A26D /* Cocoa.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		CF46017825612BDC0095FC73 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		CF46016B25612B020095FC73 /* CUIResources */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF46017125612B020095FC73 /* Build configuration list for PBXNativeTarget "CUIResources" */;
+			buildPhases = (
+				CF46016825612B020095FC73 /* Sources */,
+				CF46016925612B020095FC73 /* Frameworks */,
+				CF46016A25612B020095FC73 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CUIResources;
+			productName = CUIResources;
+			productReference = CF46016C25612B020095FC73 /* CUIResources.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		CF46017B25612BDC0095FC73 /* CUI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF46017D25612BDD0095FC73 /* Build configuration list for PBXNativeTarget "CUI" */;
+			buildPhases = (
+				CF46017825612BDC0095FC73 /* Headers */,
+				CF46017925612BDC0095FC73 /* Sources */,
+				CF46017A25612BDC0095FC73 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CUI;
+			productName = CUI;
+			productReference = CF46017C25612BDC0095FC73 /* libCUI.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CFD79ABE21FE29130043A26D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1220;
+				ORGANIZATIONNAME = "Michael G. Kazakov";
+				TargetAttributes = {
+					CF46016B25612B020095FC73 = {
+						CreatedOnToolsVersion = 12.0;
+					};
+					CF46017B25612BDC0095FC73 = {
+						CreatedOnToolsVersion = 12.0;
+					};
+				};
+			};
+			buildConfigurationList = CFD79AC121FE29130043A26D /* Build configuration list for PBXProject "CUI" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				ru,
+			);
+			mainGroup = CFD79ABD21FE29130043A26D;
+			productRefGroup = CFD79AC821FE29130043A26D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CF46017B25612BDC0095FC73 /* CUI */,
+				CF46016B25612B020095FC73 /* CUIResources */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CF46016A25612B020095FC73 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF46017425612B9D0095FC73 /* ProcessSheetController.xib in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		CF46016825612B020095FC73 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF46017925612BDC0095FC73 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CFAA4D0F2BBADD0D003073A2 /* CommandPopover.mm in Sources */,
+				CF46018425612BFD0095FC73 /* ProcessSheetController.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		CFD79AEE21FE475F0043A26D /* ProcessSheetController.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				CFD79AEF21FE475F0043A26D /* Base */,
+				CFCFAC792D3D31CA008C6E26 /* mul */,
+			);
+			name = ProcessSheetController.xib;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		CF46016F25612B020095FC73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				INFOPLIST_FILE = resources/CUIResources.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.CUIResources;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		CF46017025612B020095FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				INFOPLIST_FILE = resources/CUIResources.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.magnumbytes.NimbleCommander.CUIResources;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		CF46017E25612BDD0095FC73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		CF46017F25612BDD0095FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		CFD79ACD21FE29130043A26D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CFD79AE121FE29900043A26D /* default.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+			};
+			name = Debug;
+		};
+		CFD79ACE21FE29130043A26D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CFD79AE121FE29900043A26D /* default.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CF46017125612B020095FC73 /* Build configuration list for PBXNativeTarget "CUIResources" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF46016F25612B020095FC73 /* Debug */,
+				CF46017025612B020095FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CF46017D25612BDD0095FC73 /* Build configuration list for PBXNativeTarget "CUI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF46017E25612BDD0095FC73 /* Debug */,
+				CF46017F25612BDD0095FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CFD79AC121FE29130043A26D /* Build configuration list for PBXProject "CUI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFD79ACD21FE29130043A26D /* Debug */,
+				CFD79ACE21FE29130043A26D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CFD79ABE21FE29130043A26D /* Project object */;
+}

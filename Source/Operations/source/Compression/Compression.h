@@ -1,0 +1,47 @@
+// Copyright (C) 2017-2025 Michael Kazakov. Subject to GNU General Public License version 3.
+#pragma once
+
+#include "../Operation.h"
+#include <VFS/VFS.h>
+
+/*
++TODO:
+- adjusting stats on skips
+*/
+
+namespace nc::ops {
+
+class CompressionJob;
+struct CompressionJobCallbacks;
+
+class Compression final : public Operation
+{
+public:
+    Compression(std::vector<VFSListingItem> _src_files,
+                std::string _dst_root,
+                VFSHostPtr _dst_vfs,
+                std::string _passphrase = "");
+    ~Compression() override;
+
+    std::string ArchivePath() const;
+
+private:
+    using Callbacks = CompressionJobCallbacks;
+
+    Job *GetJob() noexcept override;
+    NSString *BuildTitlePrefix() const;
+    std::string BuildInitialTitle() const;
+    std::string BuildTitleWithArchiveFilename() const;
+    void OnTargetPathDefined();
+    void OnTargetWriteError(Error _err, const std::string &_path, VFSHost &_vfs);
+    int OnSourceReadError(Error _err, const std::string &_path, VFSHost &_vfs);
+    int OnSourceScanError(Error _err, const std::string &_path, VFSHost &_vfs);
+    int OnSourceAccessError(Error _err, const std::string &_path, VFSHost &_vfs);
+
+    std::unique_ptr<CompressionJob> m_Job;
+    bool m_SkipAll = false;
+    int m_InitialSourceItemsAmount = 0;
+    std::string m_InitialSingleItemFilename;
+};
+
+} // namespace nc::ops

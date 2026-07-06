@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="32700.99.1234" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES" customObjectInstantitationMethod="direct">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22690"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="InternalViewerWindowController">
+            <connections>
+                <outlet property="viewerPlaceholder" destination="S6g-eR-FJD" id="XBc-YD-4Ea"/>
+                <outlet property="window" destination="F0z-JX-Cv5" id="gIp-Ho-8D9"/>
+            </connections>
+        </customObject>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject"/>
+        <window allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" visibleAtLaunch="NO" frameAutosaveName="InternalViewerFloatingWindow" animationBehavior="default" id="F0z-JX-Cv5" customClass="InternalViewerWindow">
+            <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
+            <rect key="contentRect" x="542" y="386" width="520" height="400"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1055"/>
+            <value key="minSize" type="size" width="520" height="400"/>
+            <view key="contentView" id="se5-gp-TjO">
+                <rect key="frame" x="0.0" y="0.0" width="520" height="400"/>
+                <autoresizingMask key="autoresizingMask"/>
+                <subviews>
+                    <customView translatesAutoresizingMaskIntoConstraints="NO" id="S6g-eR-FJD">
+                        <rect key="frame" x="0.0" y="0.0" width="520" height="400"/>
+                    </customView>
+                </subviews>
+                <constraints>
+                    <constraint firstItem="S6g-eR-FJD" firstAttribute="top" secondItem="se5-gp-TjO" secondAttribute="top" id="9WG-f6-FFd"/>
+                    <constraint firstItem="S6g-eR-FJD" firstAttribute="leading" secondItem="se5-gp-TjO" secondAttribute="leading" id="pQI-cn-W4J"/>
+                    <constraint firstAttribute="trailing" secondItem="S6g-eR-FJD" secondAttribute="trailing" id="vgK-vJ-s1R"/>
+                    <constraint firstAttribute="bottom" secondItem="S6g-eR-FJD" secondAttribute="bottom" id="z1S-D3-gU8"/>
+                </constraints>
+            </view>
+            <connections>
+                <outlet property="delegate" destination="-2" id="0bl-1N-AYu"/>
+            </connections>
+            <point key="canvasLocation" x="27" y="478"/>
+        </window>
+    </objects>
+</document>

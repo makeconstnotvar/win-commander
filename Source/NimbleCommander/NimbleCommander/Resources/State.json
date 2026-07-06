@@ -1,0 +1,12 @@
+{
+    "general": {},
+    "filePanel": {
+        "findFilesSheet": {},
+        "findWithSpotlightPopup": {},
+        "selectWithMaskPopup": {},
+        "batchRename": {},
+        "favorites": {}
+    },
+    "viewer": {
+    }
+}
