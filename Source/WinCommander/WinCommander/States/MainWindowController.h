@@ -9,6 +9,7 @@
 @class MainWindowFilePanelState;
 @class NCTermShellState;
 @class NCMainWindow;
+@class NCExplorerState;
 
 namespace nc::ops {
 class Pool;
@@ -48,6 +49,10 @@ class Operation;
 
 // Toolbar support
 - (void)OnShowToolbar:(id)sender;
+
+// Toggles between the dual-pane Commander mode (the permanent base state) and the single-pane
+// Explorer mode, pushing/popping NCExplorerState on top of the base state.
+- (IBAction)toggleExplorerMode:(id)sender;
 
 + (NCMainWindowController *)lastFocused;
 

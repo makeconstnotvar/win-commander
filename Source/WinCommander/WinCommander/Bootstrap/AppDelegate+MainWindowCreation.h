@@ -3,6 +3,8 @@
 
 #include "AppDelegate.h"
 
+@class PanelController;
+
 // this category is private to NCAppDelegate
 @interface NCAppDelegate (MainWindowCreation)
 
@@ -11,5 +13,9 @@
 - (NCMainWindowController *)allocateDefaultMainWindow;
 - (NCMainWindowController *)allocateMainWindowRestoredManually;
 - (NCMainWindowController *)allocateMainWindowRestoredBySystem;
+
+// Builds a standalone PanelController (own PanelView, icon repository, actions dispatcher) with no
+// dual-pane assumptions, for hosting inside NCExplorerState.
+- (PanelController *)allocateExplorerPanelController;
 
 @end

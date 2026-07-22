@@ -4,6 +4,7 @@
 #include <VFS/VFS.h>
 #include <Panel/UI/PanelTabBarView.h>
 #include "../MainWindowStateProtocol.h"
+#include "../Explorer/NCPanelControllerHostingState.h"
 #include <Config/Config.h>
 #include <Panel/PanelViewKeystrokeSink.h>
 #include "PanelPreview.h"
@@ -38,7 +39,8 @@ class Model;
 
 struct MainWindowFilePanelState_OverlappedTerminalSupport;
 
-@interface MainWindowFilePanelState : NSView <NCMainWindowState, NCPanelViewKeystrokeSink, NCPanelTabBarViewDelegate> {
+@interface MainWindowFilePanelState
+    : NSView <NCMainWindowState, NCPanelViewKeystrokeSink, NCPanelTabBarViewDelegate, NCPanelControllerHostingState> {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wobjc-interface-ivars"
     std::function<PanelController *()> m_PanelFactory;

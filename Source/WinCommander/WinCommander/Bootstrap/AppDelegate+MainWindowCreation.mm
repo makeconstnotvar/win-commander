@@ -205,6 +205,11 @@ static PanelController *PanelFactory()
     return [NCAppDelegate.me allocatePanelController];
 }
 
+- (PanelController *)allocateExplorerPanelController
+{
+    return [self allocatePanelController];
+}
+
 - (MainWindowFilePanelState *)allocateFilePanelsWithFrame:(NSRect)_frame
                                                 inContext:(CreationContext)_context
                                               withOpsPool:(nc::ops::Pool &)_operations_pool

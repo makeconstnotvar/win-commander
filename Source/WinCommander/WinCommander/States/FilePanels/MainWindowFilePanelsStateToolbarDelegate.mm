@@ -1,5 +1,6 @@
 // Copyright (C) 2016-2025 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "MainWindowFilePanelState.h"
+#include "../MainWindowController.h"
 #include "StateActionsDispatcher.h"
 #include <Utility/ActionsShortcutsManager.h>
 #include "MainWindowFilePanelsStateToolbarDelegate.h"
@@ -25,6 +26,7 @@ static std::string_view g_ExternalToolsIdentifiersPrefix = "external_tool_";
     NSToolbar *m_Toolbar;
     NSButton *m_LeftPanelGoToButton;
     NSButton *m_RightPanelGoToButton;
+    NSButton *m_ExplorerModeButton;
 
     NCOpsPoolViewController *m_PoolViewController;
     NSToolbarItem *m_PoolViewToolbarItem;
@@ -84,6 +86,14 @@ static std::string_view g_ExternalToolsIdentifiersPrefix = "external_tool_";
     m_RightPanelGoToButton.image = [NSImage imageNamed:NSImageNamePathTemplate];
     m_RightPanelGoToButton.target = nil;
     m_RightPanelGoToButton.action = @selector(onRightPanelGoToButtonAction:);
+
+    m_ExplorerModeButton = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 32, 27)];
+    m_ExplorerModeButton.bezelStyle = NSBezelStyleTexturedRounded;
+    m_ExplorerModeButton.refusesFirstResponder = true;
+    m_ExplorerModeButton.title = @"";
+    m_ExplorerModeButton.image = [NSImage imageWithSystemSymbolName:@"sidebar.left" accessibilityDescription:nil];
+    m_ExplorerModeButton.target = nil;
+    m_ExplorerModeButton.action = @selector(toggleExplorerMode:);
 }
 
 - (void)buildToolbar
@@ -186,6 +196,13 @@ static NSString *EncodeToolIdentifier(const ExternalTool &_et)
         item.toolTip = shortcuts.empty() ? @"" : shortcuts.front().PrettyString();
         return item;
     }
+    if( [itemIdentifier isEqualToString:@"explorer_mode_toggle"] ) {
+        NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
+        item.view = m_ExplorerModeButton;
+        item.paletteLabel = item.label = NSLocalizedString(@"Explorer Mode", "Toolbar palette");
+        item.toolTip = item.label;
+        return item;
+    }
     if( [itemIdentifier isEqualToString:@"operations_pool"] ) {
         NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
         item.view = m_PoolViewController.view;
@@ -225,6 +242,7 @@ static NSString *EncodeToolIdentifier(const ExternalTool &_et)
         NSToolbarFlexibleSpaceItemIdentifier,
         @"operations_pool",
         NSToolbarFlexibleSpaceItemIdentifier,
+        @"explorer_mode_toggle",
         @"filepanels_right_goto_button"
     ];
 
@@ -244,6 +262,7 @@ static NSString *EncodeToolIdentifier(const ExternalTool &_et)
     [a addObject:@"filepanels_left_goto_button"];
     [a addObject:@"filepanels_right_goto_button"];
     [a addObject:@"operations_pool"];
+    [a addObject:@"explorer_mode_toggle"];
 
     const std::vector<std::shared_ptr<const ExternalTool>> tools = m_Storage->GetAllTools();
     for( const auto &tool : tools ) {

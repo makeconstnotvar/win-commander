@@ -10,6 +10,7 @@
 #include "Terminal/ShellState.h"
 #include "Terminal/ExternalEditorState.h"
 #include "InternalViewer/MainWindowInternalViewerState.h"
+#include "Explorer/NCExplorerState.h"
 #include <Utility/NativeFSManager.h>
 #include "MainWindow.h"
 #include "../Bootstrap/AppDelegate.h"
@@ -46,6 +47,7 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
     MainWindowFilePanelState *m_PanelState;
     NCTermShellState *m_Terminal;
     MainWindowInternalViewerState *m_Viewer;
+    NCExplorerState *m_Explorer;
 
     nc::base::SerialQueue m_BigFileViewLoadingQ;
     bool m_ToolbarVisible;
@@ -222,6 +224,7 @@ static int CountMainWindows()
     }
     m_PanelState = nil;
     m_Terminal = nil;
+    m_Explorer = nil;
 }
 
 - (BOOL)windowShouldClose:(id) [[maybe_unused]] _sender
@@ -246,6 +249,21 @@ static int CountMainWindows()
 - (IBAction)OnShowToolbar:(id) [[maybe_unused]] _sender
 {
     GlobalConfig().Set(g_ConfigShowToolbar, !GlobalConfig().GetBool(g_ConfigShowToolbar));
+}
+
+- (IBAction)toggleExplorerMode:(id) [[maybe_unused]] _sender
+{
+    dispatch_assert_main_queue();
+
+    if( self.topmostState == m_Explorer ) {
+        [self ResignAsWindowState:m_Explorer];
+        return;
+    }
+
+    if( m_Explorer == nil )
+        m_Explorer = [[NCExplorerState alloc] initWithFrame:self.window.contentView.frame];
+
+    [self pushState:m_Explorer];
 }
 
 - (void)onConfigShowToolbarChanged

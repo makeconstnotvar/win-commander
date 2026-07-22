@@ -151,6 +151,13 @@
 		CF0A486C2BDDA40600833160 /* PanelListViewTagsView.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFAA4D1F2BC6A330003073A2 /* PanelListViewTagsView.mm */; };
 		CF0A486D2BDDA40E00833160 /* PanelViewDummyPresentation.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF7D7D4621576E0100DA1794 /* PanelViewDummyPresentation.mm */; };
 		CF0A486E2BDDA41200833160 /* PanelViewFooter.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF24376F1DEDF9B300245C14 /* PanelViewFooter.mm */; };
+		312F94DB7F9FD5500040EDCE /* NCExplorerState.mm in Sources */ = {isa = PBXBuildFile; fileRef = 72A17403241CCD58B1CAF648 /* NCExplorerState.mm */; };
+		A61A893DB9E78C69900DE4FC /* NCExplorerToolbarDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1FB1B7A080C443ECC6E3BCA5 /* NCExplorerToolbarDelegate.mm */; };
+		F3D36B1533F338074AF5A0A0 /* NCExplorerSidebarView.mm in Sources */ = {isa = PBXBuildFile; fileRef = F0D515EC1FDB1ED4CA16F786 /* NCExplorerSidebarView.mm */; };
+		7057AAAE7FC2335552EA59A1 /* NCExplorerBreadcrumbControl.mm in Sources */ = {isa = PBXBuildFile; fileRef = E6F783314A1B09A96A343A98 /* NCExplorerBreadcrumbControl.mm */; };
+		D49B9F11561841E7031BA271 /* NCExplorerCommandBarView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A3DB0EBE07157AC08219105D /* NCExplorerCommandBarView.mm */; };
+		ABDE9900C1127276C1595B54 /* NCExplorerStatusBarView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 52E86FCE0ECC8CA2631FAD7B /* NCExplorerStatusBarView.mm */; };
+		E1C207A743F487580D16B3EA /* NCExplorerInspectorPlaceholderView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7EE84C1A9219C51677C3AF1B /* NCExplorerInspectorPlaceholderView.mm */; };
 		CF0A486F2BDDA41600833160 /* PanelViewFooterTheme.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFB2AB5B21560CDB0009EB81 /* PanelViewFooterTheme.mm */; };
 		CF0A48702BDDA41A00833160 /* PanelViewFooterThemeImpl.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFB2AB6021560EA90009EB81 /* PanelViewFooterThemeImpl.mm */; };
 		CF0A48712BDDA41E00833160 /* PanelViewFooterVolumeInfoFetcher.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFDAC2101DF95D370039A104 /* PanelViewFooterVolumeInfoFetcher.mm */; };
@@ -914,6 +921,21 @@
 		CF2437661DEC268A00245C14 /* PanelBriefViewItemCarrier.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelBriefViewItemCarrier.mm; path = WinCommander/States/FilePanels/Brief/PanelBriefViewItemCarrier.mm; sourceTree = SOURCE_ROOT; };
 		CF24376E1DEDF9B300245C14 /* PanelViewFooter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PanelViewFooter.h; path = WinCommander/States/FilePanels/PanelViewFooter.h; sourceTree = SOURCE_ROOT; };
 		CF24376F1DEDF9B300245C14 /* PanelViewFooter.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelViewFooter.mm; path = WinCommander/States/FilePanels/PanelViewFooter.mm; sourceTree = SOURCE_ROOT; };
+		AD8A7BD10209170D0BBF6F10 /* NCPanelControllerHostingState.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCPanelControllerHostingState.h; path = WinCommander/States/Explorer/NCPanelControllerHostingState.h; sourceTree = SOURCE_ROOT; };
+		E82EE413095991A772595753 /* NCExplorerState.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerState.h; path = WinCommander/States/Explorer/NCExplorerState.h; sourceTree = SOURCE_ROOT; };
+		72A17403241CCD58B1CAF648 /* NCExplorerState.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerState.mm; path = WinCommander/States/Explorer/NCExplorerState.mm; sourceTree = SOURCE_ROOT; };
+		A67CCC557B0BEA9C306817AF /* NCExplorerToolbarDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerToolbarDelegate.h; path = WinCommander/States/Explorer/NCExplorerToolbarDelegate.h; sourceTree = SOURCE_ROOT; };
+		1FB1B7A080C443ECC6E3BCA5 /* NCExplorerToolbarDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerToolbarDelegate.mm; path = WinCommander/States/Explorer/NCExplorerToolbarDelegate.mm; sourceTree = SOURCE_ROOT; };
+		45F6D7F16585F720F0FA570F /* NCExplorerSidebarView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerSidebarView.h; path = WinCommander/States/Explorer/NCExplorerSidebarView.h; sourceTree = SOURCE_ROOT; };
+		F0D515EC1FDB1ED4CA16F786 /* NCExplorerSidebarView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerSidebarView.mm; path = WinCommander/States/Explorer/NCExplorerSidebarView.mm; sourceTree = SOURCE_ROOT; };
+		DC35C0A860F36F5472DFDBD0 /* NCExplorerBreadcrumbControl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerBreadcrumbControl.h; path = WinCommander/States/Explorer/NCExplorerBreadcrumbControl.h; sourceTree = SOURCE_ROOT; };
+		E6F783314A1B09A96A343A98 /* NCExplorerBreadcrumbControl.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerBreadcrumbControl.mm; path = WinCommander/States/Explorer/NCExplorerBreadcrumbControl.mm; sourceTree = SOURCE_ROOT; };
+		9FFC0D40F94DC445DAC7B5D4 /* NCExplorerCommandBarView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandBarView.h; path = WinCommander/States/Explorer/NCExplorerCommandBarView.h; sourceTree = SOURCE_ROOT; };
+		A3DB0EBE07157AC08219105D /* NCExplorerCommandBarView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandBarView.mm; path = WinCommander/States/Explorer/NCExplorerCommandBarView.mm; sourceTree = SOURCE_ROOT; };
+		46D557F68546EF2C975C20CF /* NCExplorerStatusBarView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerStatusBarView.h; path = WinCommander/States/Explorer/NCExplorerStatusBarView.h; sourceTree = SOURCE_ROOT; };
+		52E86FCE0ECC8CA2631FAD7B /* NCExplorerStatusBarView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerStatusBarView.mm; path = WinCommander/States/Explorer/NCExplorerStatusBarView.mm; sourceTree = SOURCE_ROOT; };
+		BB294F0B2C69547454CF82C9 /* NCExplorerInspectorPlaceholderView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerInspectorPlaceholderView.h; path = WinCommander/States/Explorer/NCExplorerInspectorPlaceholderView.h; sourceTree = SOURCE_ROOT; };
+		7EE84C1A9219C51677C3AF1B /* NCExplorerInspectorPlaceholderView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerInspectorPlaceholderView.mm; path = WinCommander/States/Explorer/NCExplorerInspectorPlaceholderView.mm; sourceTree = SOURCE_ROOT; };
 		CF2740821E57F5DD000D4365 /* Alert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Alert.h; path = WinCommander/Core/Alert.h; sourceTree = SOURCE_ROOT; };
 		CF2740831E57F5DD000D4365 /* Alert.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = Alert.mm; path = WinCommander/Core/Alert.mm; sourceTree = SOURCE_ROOT; };
 		CF27408C1E594C46000D4365 /* TabsManagement.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = TabsManagement.h; path = WinCommander/States/FilePanels/Actions/TabsManagement.h; sourceTree = SOURCE_ROOT; };
@@ -1659,6 +1681,28 @@
 			name = Gallery;
 			sourceTree = "<group>";
 		};
+		7807AA70A1FA912BC203C9F3 /* Explorer */ = {
+			isa = PBXGroup;
+			children = (
+				AD8A7BD10209170D0BBF6F10 /* NCPanelControllerHostingState.h */,
+				E82EE413095991A772595753 /* NCExplorerState.h */,
+				72A17403241CCD58B1CAF648 /* NCExplorerState.mm */,
+				A67CCC557B0BEA9C306817AF /* NCExplorerToolbarDelegate.h */,
+				1FB1B7A080C443ECC6E3BCA5 /* NCExplorerToolbarDelegate.mm */,
+				45F6D7F16585F720F0FA570F /* NCExplorerSidebarView.h */,
+				F0D515EC1FDB1ED4CA16F786 /* NCExplorerSidebarView.mm */,
+				DC35C0A860F36F5472DFDBD0 /* NCExplorerBreadcrumbControl.h */,
+				E6F783314A1B09A96A343A98 /* NCExplorerBreadcrumbControl.mm */,
+				9FFC0D40F94DC445DAC7B5D4 /* NCExplorerCommandBarView.h */,
+				A3DB0EBE07157AC08219105D /* NCExplorerCommandBarView.mm */,
+				46D557F68546EF2C975C20CF /* NCExplorerStatusBarView.h */,
+				52E86FCE0ECC8CA2631FAD7B /* NCExplorerStatusBarView.mm */,
+				BB294F0B2C69547454CF82C9 /* NCExplorerInspectorPlaceholderView.h */,
+				7EE84C1A9219C51677C3AF1B /* NCExplorerInspectorPlaceholderView.mm */,
+			);
+			name = Explorer;
+			sourceTree = "<group>";
+		};
 		CF536C0D16C92EA200F37203 /* FilePanels */ = {
 			isa = PBXGroup;
 			children = (
@@ -1924,6 +1968,7 @@
 				CF396AEB173FA89A00A20C42 /* Viewer */,
 				CF536C0D16C92EA200F37203 /* FilePanels */,
 				CFB3E4771844AC3000D375E2 /* Terminal */,
+				7807AA70A1FA912BC203C9F3 /* Explorer */,
 			);
 			name = States;
 			sourceTree = "<group>";
@@ -3126,6 +3171,13 @@
 				CF0A47FF2BDD9F2600833160 /* ActionsShortcutsManager.cpp in Sources */,
 				CF0A48222BDDA04400833160 /* PanelDataOptionsPersistence.mm in Sources */,
 				CF0A486E2BDDA41200833160 /* PanelViewFooter.mm in Sources */,
+				312F94DB7F9FD5500040EDCE /* NCExplorerState.mm in Sources */,
+				A61A893DB9E78C69900DE4FC /* NCExplorerToolbarDelegate.mm in Sources */,
+				F3D36B1533F338074AF5A0A0 /* NCExplorerSidebarView.mm in Sources */,
+				7057AAAE7FC2335552EA59A1 /* NCExplorerBreadcrumbControl.mm in Sources */,
+				D49B9F11561841E7031BA271 /* NCExplorerCommandBarView.mm in Sources */,
+				ABDE9900C1127276C1595B54 /* NCExplorerStatusBarView.mm in Sources */,
+				E1C207A743F487580D16B3EA /* NCExplorerInspectorPlaceholderView.mm in Sources */,
 				CF0A487E2BDDA52A00833160 /* NetworkShareSheetController.mm in Sources */,
 				CF0A485B2BDDA3A400833160 /* PanelBriefViewCollectionViewBackground.mm in Sources */,
 				CF0A488D2BDDA5A400833160 /* SettingsAdaptor.mm in Sources */,

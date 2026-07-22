@@ -9,12 +9,12 @@
 #include <VFS/VFS.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include "../Explorer/NCPanelControllerHostingState.h"
 
 @class PanelController;
 @class NCPanelContextMenu;
 @class PanelView;
 @class BriefSystemOverview;
-@class MainWindowFilePanelState;
 @class NCMainWindowController;
 
 namespace nc {
@@ -121,7 +121,7 @@ using ContextMenuProvider =
  */
 @interface PanelController : AttachedResponder <PanelViewDelegate, NCPanelViewKeystrokeSink, NCPanelQuickSearchDelegate>
 
-@property(nonatomic) MainWindowFilePanelState *state;
+@property(nonatomic) id<NCPanelControllerHostingState> state;
 @property(nonatomic, readonly) NCMainWindowController *mainWindowController;
 @property(nonatomic, readonly) PanelView *view;
 @property(nonatomic, readonly) const nc::panel::data::Model &data;
