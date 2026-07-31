@@ -16,6 +16,7 @@
 @class PanelView;
 @class BriefSystemOverview;
 @class NCMainWindowController;
+@protocol NCPanelQuickSearchPresentation;
 
 namespace nc {
 
@@ -142,6 +143,8 @@ using ContextMenuProvider =
 @property(nonatomic, readonly) nc::panel::PanelViewLayoutsStorage &layoutStorage;
 @property(nonatomic, readonly) nc::core::VFSInstanceManager &vfsInstanceManager;
 @property(nonatomic, readonly) bool isDoingBackgroundLoading;
+// Defaults to PanelViewHeader. Explorer replaces it with a floating presenter.
+@property(nonatomic, weak) id<NCPanelQuickSearchPresentation> quickSearchPresentation;
 
 - (instancetype)initWithView:(PanelView *)_panel_view
                      layouts:(std::shared_ptr<nc::panel::PanelViewLayoutsStorage>)_layouts

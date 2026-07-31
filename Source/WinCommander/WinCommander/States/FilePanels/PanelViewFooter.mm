@@ -8,6 +8,7 @@
 #include <Base/dispatch_cpp.h>
 #include "PanelViewPresentationSettings.h"
 #include "PanelViewFooterVolumeInfoFetcher.h"
+#include "PanelControllerActionsDispatcher.h"
 
 using namespace nc::panel;
 using nc::utility::AdaptiveDateFormatting;
@@ -116,21 +117,33 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     NSTextField *m_ItemsLabel;
     NSTextField *m_VolumeLabel;
     NSTextField *m_SelectionLabel;
+    NSButton *m_DetailsButton;
+    NSButton *m_IconsButton;
+    NSButton *m_ContentButton;
 
     data::Statistics m_Stats;
     FooterVolumeInfoFetcher m_VolumeInfoFetcher;
     std::unique_ptr<nc::panel::FooterTheme> m_Theme;
 
     bool m_Active;
+    bool m_ExplorerAppearance;
 
     time_t m_ItemMTime; // need to store this to be able to re-format time when date changes
 }
 
 - (id)initWithFrame:(NSRect)frameRect theme:(std::unique_ptr<nc::panel::FooterTheme>)_theme
 {
+    return [self initWithFrame:frameRect theme:std::move(_theme) explorerAppearance:false];
+}
+
+- (id)initWithFrame:(NSRect)frameRect
+                theme:(std::unique_ptr<nc::panel::FooterTheme>)_theme
+    explorerAppearance:(bool)_explorer_appearance
+{
     self = [super initWithFrame:frameRect];
     if( self ) {
         m_Active = false;
+        m_ExplorerAppearance = _explorer_appearance;
         m_ItemMTime = 0;
         m_Theme = std::move(_theme);
 
@@ -138,14 +151,24 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
         [self setupPresentation];
 
         [self addSubview:m_SeparatorLine];
-        [self addSubview:m_FilenameLabel];
-        [self addSubview:m_SizeLabel];
-        [self addSubview:m_ModTime];
-        [self addSubview:m_SelectionLabel];
-        [self addSubview:m_ItemsLabel];
-        [self addSubview:m_VolumeLabel];
-        [self addSubview:m_VSeparatorLine1];
-        [self addSubview:m_VSeparatorLine2];
+        if( m_ExplorerAppearance ) {
+            [self addSubview:m_ItemsLabel];
+            [self addSubview:m_SelectionLabel];
+            [self addSubview:m_DetailsButton];
+            [self addSubview:m_IconsButton];
+            [self addSubview:m_ContentButton];
+            [self addSubview:m_VolumeLabel];
+        }
+        else {
+            [self addSubview:m_FilenameLabel];
+            [self addSubview:m_SizeLabel];
+            [self addSubview:m_ModTime];
+            [self addSubview:m_SelectionLabel];
+            [self addSubview:m_ItemsLabel];
+            [self addSubview:m_VolumeLabel];
+            [self addSubview:m_VSeparatorLine1];
+            [self addSubview:m_VSeparatorLine2];
+        }
 
         [self installConstraints];
 
@@ -226,7 +249,7 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     m_SelectionLabel.drawsBackground = false;
     m_SelectionLabel.lineBreakMode = NSLineBreakByTruncatingHead;
     m_SelectionLabel.maximumNumberOfLines = 1;
-    m_SelectionLabel.alignment = NSTextAlignmentCenter;
+    m_SelectionLabel.alignment = m_ExplorerAppearance ? NSTextAlignmentLeft : NSTextAlignmentCenter;
     [m_SelectionLabel setContentHuggingPriority:NSLayoutPriorityFittingSizeCompression
                                  forOrientation:NSLayoutConstraintOrientationHorizontal];
 
@@ -238,7 +261,7 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     m_ItemsLabel.drawsBackground = false;
     m_ItemsLabel.lineBreakMode = NSLineBreakByClipping;
     m_ItemsLabel.maximumNumberOfLines = 1;
-    m_ItemsLabel.alignment = NSTextAlignmentCenter;
+    m_ItemsLabel.alignment = m_ExplorerAppearance ? NSTextAlignmentLeft : NSTextAlignmentCenter;
     [m_ItemsLabel setContentCompressionResistancePriority:NSLayoutPriorityDefaultHigh
                                            forOrientation:NSLayoutConstraintOrientationHorizontal];
 
@@ -253,19 +276,86 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     m_VolumeLabel.lineBreakMode = NSLineBreakByClipping;
     [m_VolumeLabel setContentCompressionResistancePriority:40 forOrientation:NSLayoutConstraintOrientationHorizontal];
 
-    m_VSeparatorLine1 = [[ColoredSeparatorLine alloc] initWithFrame:NSRect()];
-    m_VSeparatorLine1.translatesAutoresizingMaskIntoConstraints = false;
-    [m_VSeparatorLine1 setContentCompressionResistancePriority:40
-                                                forOrientation:NSLayoutConstraintOrientationHorizontal];
+    if( m_ExplorerAppearance ) {
+        m_DetailsButton = [self makeExplorerViewButtonWithSymbol:@"list.bullet"
+                                                           label:NSLocalizedString(@"Details", "Explorer status bar view")
+                                                          action:@selector(onToggleViewLayout2:)];
+        m_IconsButton = [self makeExplorerViewButtonWithSymbol:@"square.grid.2x2"
+                                                         label:NSLocalizedString(@"Icons", "Explorer status bar view")
+                                                        action:@selector(onToggleViewLayout3:)];
+        m_ContentButton = [self makeExplorerViewButtonWithSymbol:@"rectangle.grid.1x2"
+                                                           label:NSLocalizedString(@"Content", "Explorer status bar view")
+                                                          action:@selector(onToggleViewLayout5:)];
+    }
+    else {
+        m_VSeparatorLine1 = [[ColoredSeparatorLine alloc] initWithFrame:NSRect()];
+        m_VSeparatorLine1.translatesAutoresizingMaskIntoConstraints = false;
+        [m_VSeparatorLine1 setContentCompressionResistancePriority:40
+                                                    forOrientation:NSLayoutConstraintOrientationHorizontal];
 
-    m_VSeparatorLine2 = [[ColoredSeparatorLine alloc] initWithFrame:NSRect()];
-    m_VSeparatorLine2.translatesAutoresizingMaskIntoConstraints = false;
-    [m_VSeparatorLine2 setContentCompressionResistancePriority:40
-                                                forOrientation:NSLayoutConstraintOrientationHorizontal];
+        m_VSeparatorLine2 = [[ColoredSeparatorLine alloc] initWithFrame:NSRect()];
+        m_VSeparatorLine2.translatesAutoresizingMaskIntoConstraints = false;
+        [m_VSeparatorLine2 setContentCompressionResistancePriority:40
+                                                    forOrientation:NSLayoutConstraintOrientationHorizontal];
+    }
+}
+
+- (NSButton *)makeExplorerViewButtonWithSymbol:(NSString *)_symbol label:(NSString *)_label action:(SEL)_action
+{
+    NSImage *const image = [[NSImage imageWithSystemSymbolName:_symbol accessibilityDescription:_label]
+        imageWithSymbolConfiguration:[NSImageSymbolConfiguration configurationWithPointSize:12.0
+                                                                                      weight:NSFontWeightRegular]];
+    NSButton *const button = [NSButton buttonWithImage:image target:nil action:_action];
+    button.translatesAutoresizingMaskIntoConstraints = false;
+    button.bordered = false;
+    button.bezelStyle = NSBezelStyleInline;
+    button.imagePosition = NSImageOnly;
+    button.contentTintColor = NSColor.secondaryLabelColor;
+    button.toolTip = _label;
+    button.accessibilityLabel = _label;
+    [button setContentHuggingPriority:NSLayoutPriorityRequired
+                      forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [button setContentCompressionResistancePriority:NSLayoutPriorityRequired
+                                     forOrientation:NSLayoutConstraintOrientationHorizontal];
+    return button;
 }
 
 - (void)installConstraints
 {
+    if( m_ExplorerAppearance ) {
+        [NSLayoutConstraint activateConstraints:@[
+            [m_SeparatorLine.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [m_SeparatorLine.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [m_SeparatorLine.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [m_SeparatorLine.heightAnchor constraintEqualToConstant:1.0],
+
+            [m_ItemsLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8.0],
+            [m_ItemsLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor constant:0.5],
+            [m_SelectionLabel.leadingAnchor constraintEqualToAnchor:m_ItemsLabel.trailingAnchor constant:10.0],
+            [m_SelectionLabel.centerYAnchor constraintEqualToAnchor:m_ItemsLabel.centerYAnchor],
+            [m_SelectionLabel.trailingAnchor constraintLessThanOrEqualToAnchor:m_DetailsButton.leadingAnchor
+                                                                       constant:-8.0],
+
+            [m_DetailsButton.widthAnchor constraintEqualToConstant:24.0],
+            [m_DetailsButton.heightAnchor constraintEqualToConstant:20.0],
+            [m_DetailsButton.centerYAnchor constraintEqualToAnchor:self.centerYAnchor constant:0.5],
+            [m_IconsButton.leadingAnchor constraintEqualToAnchor:m_DetailsButton.trailingAnchor constant:1.0],
+            [m_IconsButton.widthAnchor constraintEqualToConstant:24.0],
+            [m_IconsButton.heightAnchor constraintEqualToConstant:20.0],
+            [m_IconsButton.centerYAnchor constraintEqualToAnchor:m_DetailsButton.centerYAnchor],
+            [m_ContentButton.leadingAnchor constraintEqualToAnchor:m_IconsButton.trailingAnchor constant:1.0],
+            [m_ContentButton.widthAnchor constraintEqualToConstant:24.0],
+            [m_ContentButton.heightAnchor constraintEqualToConstant:20.0],
+            [m_ContentButton.centerYAnchor constraintEqualToAnchor:m_DetailsButton.centerYAnchor],
+
+            [m_VolumeLabel.leadingAnchor constraintEqualToAnchor:m_ContentButton.trailingAnchor constant:10.0],
+            [m_VolumeLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8.0],
+            [m_VolumeLabel.centerYAnchor constraintEqualToAnchor:m_ItemsLabel.centerYAnchor],
+            [m_VolumeLabel.widthAnchor constraintGreaterThanOrEqualToConstant:100.0],
+        ]];
+        return;
+    }
+
     const auto views = NSDictionaryOfVariableBindings(m_SeparatorLine,
                                                       m_FilenameLabel,
                                                       m_SizeLabel,
@@ -325,6 +415,9 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 
 - (void)updateFocusedItem:(const VFSListingItem &)_item VD:(data::ItemVolatileData)_vd // may be empty
 {
+    if( m_ExplorerAppearance )
+        return;
+
     if( _item ) {
         m_FilenameLabel.stringValue = ComposeFooterFileNameForEntry(_item);
         m_FilenameLabel.toolTip = [NSString stringWithUTF8StdString:_item.Path()];
@@ -374,6 +467,20 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 
 - (void)setupPresentation
 {
+    if( m_ExplorerAppearance ) {
+        m_Background = NSColor.controlBackgroundColor;
+        const auto font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+        m_ItemsLabel.font = font;
+        m_SelectionLabel.font = font;
+        m_VolumeLabel.font = font;
+        m_ItemsLabel.textColor = NSColor.labelColor;
+        m_SelectionLabel.textColor = NSColor.secondaryLabelColor;
+        m_VolumeLabel.textColor = NSColor.secondaryLabelColor;
+        m_SeparatorLine.borderColor = NSColor.separatorColor;
+        [self setNeedsDisplay:true];
+        return;
+    }
+
     const bool active = m_Active;
     m_Background = active ? m_Theme->ActiveBackgroundColor() : m_Theme->InactiveBackgroundColor();
 
@@ -403,10 +510,29 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 
 - (void)updateStatistics:(const data::Statistics &)_stats
 {
-    if( m_Stats == _stats )
+    if( m_Stats == _stats && !(m_ExplorerAppearance && m_ItemsLabel.stringValue.length == 0) )
         return;
 
     m_Stats = _stats;
+
+    if( m_ExplorerAppearance ) {
+        const auto items_fmt =
+            NSLocalizedString(@"%d items", "Explorer status bar, total number of items in the current directory");
+        m_ItemsLabel.stringValue = [NSString stringWithFormat:items_fmt, m_Stats.total_entries_amount];
+
+        if( m_Stats.selected_entries_amount > 0 ) {
+            const auto size = ByteCountFormatter::Instance().ToNSString(m_Stats.bytes_in_selected_entries,
+                                                                        ByteCountFormatter::Adaptive6);
+            const auto selection_fmt = NSLocalizedString(
+                @"%d selected (%@)", "Explorer status bar, number and total size of currently selected items");
+            m_SelectionLabel.stringValue =
+                [NSString stringWithFormat:selection_fmt, m_Stats.selected_entries_amount, size];
+        }
+        else {
+            m_SelectionLabel.stringValue = @"";
+        }
+        return;
+    }
 
     m_ItemsLabel.stringValue = [NSString stringWithFormat:@"(%d)", m_Stats.total_entries_amount];
 
@@ -438,12 +564,36 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 
 - (void)updateVolumeInfo
 {
+    if( m_ExplorerAppearance ) {
+        const auto &fmter = ByteCountFormatter::Instance();
+        const auto avail = fmter.ToNSString(m_VolumeInfoFetcher.Current().avail_bytes, ByteCountFormatter::Adaptive6);
+        const auto fmt = NSLocalizedString(@"%@ available", "Explorer status bar, free space available on volume");
+        m_VolumeLabel.stringValue = [NSString stringWithFormat:fmt, avail];
+        m_VolumeLabel.toolTip = [NSString stringWithUTF8StdString:m_VolumeInfoFetcher.Current().volume_name];
+        return;
+    }
+
     const auto fmt = NSLocalizedString(@"%@ available", "Panels bottom volume bar, showing amount of bytes available");
     const auto &fmter = ByteCountFormatter::Instance();
     const auto avail = fmter.ToNSString(m_VolumeInfoFetcher.Current().avail_bytes, ByteCountFormatter::Adaptive6);
     m_VolumeLabel.stringValue = [NSString stringWithFormat:fmt, avail];
 
     m_VolumeLabel.toolTip = [NSString stringWithUTF8StdString:m_VolumeInfoFetcher.Current().volume_name];
+}
+
+- (void)updateExplorerLayoutKind:(NCPanelViewFooterLayoutKind)_layout_kind
+{
+    if( !m_ExplorerAppearance )
+        return;
+
+    const auto update = ^(NSButton *_button, bool _selected) {
+      _button.state = _selected ? NSControlStateValueOn : NSControlStateValueOff;
+      _button.contentTintColor = _selected ? NSColor.controlAccentColor : NSColor.secondaryLabelColor;
+      _button.accessibilityValue = _selected ? NSLocalizedString(@"Selected", "Accessibility value") : @"";
+    };
+    update(m_DetailsButton, _layout_kind == NCPanelViewFooterLayoutKindDetails);
+    update(m_IconsButton, _layout_kind == NCPanelViewFooterLayoutKindIcons);
+    update(m_ContentButton, _layout_kind == NCPanelViewFooterLayoutKindContent);
 }
 
 - (void)viewDidMoveToWindow
@@ -466,6 +616,16 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 - (bool)active
 {
     return m_Active;
+}
+
+- (bool)explorerAppearance
+{
+    return m_ExplorerAppearance;
+}
+
+- (CGFloat)preferredHeight
+{
+    return m_ExplorerAppearance ? 24.0 : 20.0;
 }
 
 - (void)dateDidChange:(NSNotification *) [[maybe_unused]] _notification

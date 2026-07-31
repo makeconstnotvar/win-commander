@@ -27,6 +27,8 @@
 using namespace nc::panel;
 using nc::vfsicon::IconRepository;
 
+NSNotificationName const NCPanelViewContextDidChangeNotification = @"NCPanelViewContextDidChangeNotification";
+
 namespace nc::panel {
 
 enum class CursorSelectionType : int8_t {
@@ -60,12 +62,15 @@ struct StateStorage {
     NSView<NCPanelViewPresentationProtocol> *m_ItemsView;
     NCPanelViewHeader *m_HeaderView;
     NCPanelViewFooter *m_FooterView;
+    NSLayoutConstraint *m_HeaderHeightConstraint;
+    __weak NSProgressIndicator *m_BusyIndicatorOverride;
 
     std::unique_ptr<IconRepository> m_IconRepository;
     std::shared_ptr<nc::vfs::NativeHost> m_NativeHost;
     const nc::utility::ActionsShortcutsManager *m_ActionsShortcutsManager;
 
     int m_CursorPos;
+    bool m_ExplorerDetailsGroupingEnabled;
     nc::utility::NSEventModifierFlagsHolder m_KeyboardModifierFlags;
     CursorSelectionType m_KeyboardCursorSelectionType;
 }
@@ -85,6 +90,7 @@ struct StateStorage {
     if( self ) {
         m_Data = nullptr;
         m_CursorPos = -1;
+        m_ExplorerDetailsGroupingEnabled = false;
         m_HeaderTitle = @"";
         m_IconRepository = std::move(_icon_repository);
         m_NativeHost = _native_vfs.SharedPtr();
@@ -123,14 +129,17 @@ struct StateStorage {
 - (void)setupLayout
 {
     const auto views = NSDictionaryOfVariableBindings(m_ItemsView, m_HeaderView, m_FooterView);
-    const auto constraints = {@"V:|-(==0)-[m_HeaderView(==20)]-(==0)-[m_ItemsView]-(==0)-[m_FooterView(==20)]-(==0)-|",
+    m_HeaderHeightConstraint = [m_HeaderView.heightAnchor constraintEqualToConstant:20.0];
+    const auto metrics = @{@"footerHeight": @(m_FooterView.preferredHeight)};
+    const auto constraints = {@"V:|-(==0)-[m_HeaderView]-(==0)-[m_ItemsView]-(==0)-[m_FooterView(==footerHeight)]-(==0)-|",
                               @"|-(0)-[m_HeaderView]-(0)-|",
                               @"|-(0)-[m_ItemsView]-(0)-|",
                               @"|-(0)-[m_FooterView]-(0)-|"};
+    m_HeaderHeightConstraint.active = true;
     for( auto constraint : constraints )
         [self addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:constraint
                                                                      options:0
-                                                                     metrics:nil
+                                                                     metrics:metrics
                                                                        views:views]];
 }
 
@@ -187,12 +196,27 @@ struct StateStorage {
 {
     NCPanelListView *const view = m_PresentationFactory.create_list_view(self.bounds, *m_IconRepository);
     view.translatesAutoresizingMaskIntoConstraints = false;
+    view.groupingEnabled = m_ExplorerDetailsGroupingEnabled;
     __weak PanelView *weak_self = self;
     view.sortModeChangeCallback = [=](data::SortMode _sm) {
         if( PanelView *const strong_self = weak_self )
             [strong_self.controller changeSortingModeTo:_sm];
     };
     return view;
+}
+
+- (bool)explorerDetailsGroupingEnabled
+{
+    return m_ExplorerDetailsGroupingEnabled;
+}
+
+- (void)setExplorerDetailsGroupingEnabled:(bool)_enabled
+{
+    if( m_ExplorerDetailsGroupingEnabled == _enabled )
+        return;
+    m_ExplorerDetailsGroupingEnabled = _enabled;
+    if( NCPanelListView *const list_view = nc::objc_cast<NCPanelListView>(m_ItemsView) )
+        list_view.groupingEnabled = _enabled;
 }
 
 - (NCPanelBriefView *)spawnBriefView
@@ -513,6 +537,7 @@ struct StateStorage {
     dispatch_assert_main_queue();
     [m_ItemsView setCursorPosition:m_CursorPos];
     [m_FooterView updateFocusedItem:self.item VD:self.item_vd];
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:self];
 
     if( id<PanelViewDelegate> del = self.delegate )
         if( [del respondsToSelector:@selector(panelViewCursorChanged:)] )
@@ -855,12 +880,15 @@ struct StateStorage {
 {
     if( const PanelListViewColumnsLayout *list_layout = _layout.list() ) {
         [self setupListPresentationWithLayout:*list_layout];
+        [m_FooterView updateExplorerLayoutKind:NCPanelViewFooterLayoutKindDetails];
     }
     else if( const PanelBriefViewColumnsLayout *brief_layout = _layout.brief() ) {
         [self setupBriefPresentationWithLayout:*brief_layout];
+        [m_FooterView updateExplorerLayoutKind:NCPanelViewFooterLayoutKindIcons];
     }
     else if( const PanelGalleryViewLayout *gallery_layout = _layout.gallery() ) {
         [self setupGalleryPresentationWithLayout:*gallery_layout];
+        [m_FooterView updateExplorerLayoutKind:NCPanelViewFooterLayoutKindContent];
     }
 }
 
@@ -1042,6 +1070,7 @@ struct StateStorage {
     [m_ItemsView onVolatileDataChanged];
     [m_FooterView updateFocusedItem:self.item VD:self.item_vd];
     [m_FooterView updateStatistics:m_Data->Stats()];
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:self];
 }
 
 - (void)windowStatusDidChange
@@ -1162,7 +1191,28 @@ struct StateStorage {
 
 - (int)headerBarHeight
 {
-    return 20;
+    return self.headerBarVisible ? 20 : 0;
+}
+
+- (bool)headerBarVisible
+{
+    return !m_HeaderView.hidden;
+}
+
+- (void)setHeaderBarVisible:(bool)_visible
+{
+    m_HeaderView.hidden = !_visible;
+    m_HeaderHeightConstraint.constant = _visible ? 20.0 : 0.0;
+}
+
+- (NSProgressIndicator *)busyIndicatorOverride
+{
+    return m_BusyIndicatorOverride;
+}
+
+- (void)setBusyIndicatorOverride:(NSProgressIndicator *)_indicator
+{
+    m_BusyIndicatorOverride = _indicator;
 }
 
 + (NSArray *)acceptedDragAndDropTypes
@@ -1198,7 +1248,7 @@ struct StateStorage {
 
 - (NSProgressIndicator *)busyIndicator
 {
-    return m_HeaderView.busyIndicator;
+    return m_BusyIndicatorOverride ? m_BusyIndicatorOverride : m_HeaderView.busyIndicator;
 }
 
 - (void)notifyAboutPresentationLayoutChange

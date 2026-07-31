@@ -145,6 +145,7 @@ static void HeatUpConfigValues()
     nc::base::SerialQueue m_DirectoryReLoadingQ;
 
     NCPanelQuickSearch *m_QuickSearch;
+    __weak id<NCPanelQuickSearchPresentation> m_QuickSearchPresentation;
 
     // navigation support
     History m_History;
@@ -197,6 +198,28 @@ static void HeatUpConfigValues()
 @synthesize layoutIndex = m_ViewLayoutIndex;
 @synthesize vfsFetchingFlags = m_VFSFetchingFlags;
 @synthesize dataGeneration = m_DataGeneration;
+
+- (id<NCPanelQuickSearchPresentation>)quickSearchPresentation
+{
+    return m_QuickSearchPresentation;
+}
+
+- (void)setQuickSearchPresentation:(id<NCPanelQuickSearchPresentation>)_presentation
+{
+    id<NCPanelQuickSearchPresentation> const old_presentation = m_QuickSearchPresentation;
+    if( old_presentation == _presentation )
+        return;
+
+    old_presentation.searchRequestChangeCallback = {};
+    m_QuickSearchPresentation = _presentation ? _presentation : m_View.headerView;
+    m_QuickSearchPresentation.defaultResponder = m_View;
+
+    __weak NCPanelQuickSearch *weak_qs = m_QuickSearch;
+    m_QuickSearchPresentation.searchRequestChangeCallback = [weak_qs](NSString *_request) {
+        if( NCPanelQuickSearch *const strong_qs = weak_qs )
+            strong_qs.searchCriteria = _request;
+    };
+}
 
 - (instancetype)initWithView:(PanelView *)_panel_view
                      layouts:(std::shared_ptr<nc::panel::PanelViewLayoutsStorage>)_layouts
@@ -255,12 +278,7 @@ static void HeatUpConfigValues()
         [self configVFSFetchFlagsChanged];
 
         m_QuickSearch = [[NCPanelQuickSearch alloc] initWithData:m_Data delegate:self config:GlobalConfig()];
-        __weak NCPanelQuickSearch *weak_qs = m_QuickSearch;
-        auto callback = [weak_qs](NSString *_request) {
-            if( NCPanelQuickSearch *const strong_qs = weak_qs )
-                strong_qs.searchCriteria = _request;
-        };
-        m_View.headerView.searchRequestChangeCallback = std::move(callback);
+        self.quickSearchPresentation = m_View.headerView;
 
         [m_View addKeystrokeSink:self];
         [m_View addKeystrokeSink:m_QuickSearch];
@@ -1141,8 +1159,10 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     wantsToSetSearchPrompt:(NSString *)_prompt
           withMatchesCount:(int)_count
 {
-    m_View.headerView.searchPrompt = _prompt;
-    m_View.headerView.searchMatches = _count;
+    id<NCPanelQuickSearchPresentation> const presentation = m_QuickSearchPresentation ? m_QuickSearchPresentation
+                                                                                       : m_View.headerView;
+    presentation.searchPrompt = _prompt;
+    presentation.searchMatches = _count;
 }
 
 - (bool)isDoingBackgroundLoading

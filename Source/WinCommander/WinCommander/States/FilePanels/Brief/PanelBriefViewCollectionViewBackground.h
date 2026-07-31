@@ -6,5 +6,6 @@
 @interface PanelBriefViewCollectionViewBackground : NSView
 
 @property(nonatomic) int rowHeight;
+@property(nonatomic) bool explorerAppearance;
 
 @end

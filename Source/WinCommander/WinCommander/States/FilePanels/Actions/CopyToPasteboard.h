@@ -3,6 +3,7 @@
 
 #include <VFS/VFS.h>
 #include "DefaultAction.h"
+#include "../Helpers/Pasteboard.h"
 
 namespace nc::panel::actions {
 
@@ -12,7 +13,14 @@ struct CopyToPasteboard : PanelAction {
     void Perform(PanelController *_target, id _sender) const override;
 
 protected:
-    static void PerformWithItems(const std::vector<VFSListingItem> &_items);
+    static void PerformWithItems(const std::vector<VFSListingItem> &_items,
+                                 PasteboardFileOperation _operation = PasteboardFileOperation::Copy);
+};
+
+struct CutToPasteboard final : CopyToPasteboard {
+    [[nodiscard]] bool Predicate(PanelController *_target) const override;
+    [[nodiscard]] bool ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const override;
+    void Perform(PanelController *_target, id _sender) const override;
 };
 
 namespace context {

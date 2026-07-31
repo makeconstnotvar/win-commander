@@ -3,6 +3,8 @@
 
 @interface PanelListViewTableView : NSTableView
 
+@property(nonatomic) bool explorerAppearance;
+
 + (void)drawVerticalSeparatorForView:(NSView *)_view;
 
 @end

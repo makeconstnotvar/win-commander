@@ -176,7 +176,10 @@ using nc::utility::AdaptiveDateFormatting;
 
 - (void)buildPresentation
 {
-    self.font = nc::CurrentTheme().FilePanelsListFont();
+    if( auto row_view = nc::objc_cast<PanelListViewRowView>(self.superview) )
+        self.font = row_view.listView.font;
+    else
+        self.font = nc::CurrentTheme().FilePanelsListFont();
     [self setNeedsDisplay:true];
 }
 

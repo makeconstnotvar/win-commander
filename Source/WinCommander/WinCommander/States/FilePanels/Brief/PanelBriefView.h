@@ -35,6 +35,9 @@ struct PanelBriefViewItemLayoutConstants {
                                       NSCollectionViewDataSource>
 
 - (id)initWithFrame:(NSRect)frameRect iconRepository:(nc::vfsicon::IconRepository &)_ir;
+- (id)initWithFrame:(NSRect)frameRect
+         iconRepository:(nc::vfsicon::IconRepository &)_ir
+    explorerAppearance:(bool)_explorer_appearance;
 
 - (void)onDataChanged;
 - (void)onVolatileDataChanged;
@@ -44,8 +47,10 @@ struct PanelBriefViewItemLayoutConstants {
 @property(nonatomic) int cursorPosition;
 
 @property(nonatomic) nc::panel::PanelBriefViewColumnsLayout columnsLayout;
+@property(nonatomic, readonly) bool explorerAppearance;
 
 - (PanelBriefViewItemLayoutConstants)layoutConstants;
+- (NSFont *)font;
 
 - (PanelView *)panelView;
 

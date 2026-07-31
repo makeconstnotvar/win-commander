@@ -5,6 +5,7 @@
 #include <Panel/PanelData.h>
 #include "../PanelView.h"
 #include <VFS/VFS.h>
+#include <algorithm>
 
 // TODO: move localizable string to a new file. FilePanelsContextMenu.string was a bad idea!
 
@@ -39,15 +40,42 @@ bool CopyToPasteboard::ValidateMenuItem(PanelController *_target, NSMenuItem *_i
     return Predicate(_target);
 }
 
-void CopyToPasteboard::PerformWithItems(const std::vector<VFSListingItem> &_items)
+void CopyToPasteboard::PerformWithItems(const std::vector<VFSListingItem> &_items, PasteboardFileOperation _operation)
 {
-    if( !PasteboardSupport::WriteFilesnamesPBoard(_items, NSPasteboard.generalPasteboard) )
+    if( !PasteboardSupport::WriteFilesnamesPBoard(_items, NSPasteboard.generalPasteboard, _operation) )
         NSBeep();
 }
 
 void CopyToPasteboard::Perform(PanelController *_target, id /*_sender*/) const
 {
     PerformWithItems(_target.selectedEntriesOrFocusedEntryWithDotDot);
+}
+
+bool CutToPasteboard::Predicate(PanelController *_target) const
+{
+    const auto items = _target.selectedEntriesOrFocusedEntry;
+    return !items.empty() && std::ranges::all_of(items, [](const VFSListingItem &_item) {
+        return _item.Host() && _item.Host()->IsNativeFS();
+    });
+}
+
+bool CutToPasteboard::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
+{
+    const auto items = _target.selectedEntriesOrFocusedEntry;
+    if( items.size() > 1 ) {
+        _item.title = [NSString stringWithFormat:NSLocalizedString(@"Cut %lu Items", "Cut many items"),
+                                                  static_cast<unsigned long>(items.size())];
+    }
+    else if( items.size() == 1 ) {
+        _item.title = [NSString stringWithFormat:NSLocalizedString(@"Cut “%@”", "Cut one item"),
+                                                  items.front().DisplayNameNS()];
+    }
+    return Predicate(_target);
+}
+
+void CutToPasteboard::Perform(PanelController *_target, [[maybe_unused]] id _sender) const
+{
+    PerformWithItems(_target.selectedEntriesOrFocusedEntry, PasteboardFileOperation::Move);
 }
 
 context::CopyToPasteboard::CopyToPasteboard(const std::vector<VFSListingItem> &_items) : m_Items(_items)

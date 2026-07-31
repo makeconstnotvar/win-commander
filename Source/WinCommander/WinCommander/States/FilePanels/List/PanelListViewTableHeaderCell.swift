@@ -7,6 +7,7 @@ public class PanelListViewTableHeaderCell: NSTableHeaderCell {
     var sortIndicator: NSImage?
     var tintedSortIndicator: NSImage?
     @objc public var leftOffset: Double = 4.0
+    @objc public var drawsVerticalSeparator = true
     
     // RTFM "NSCopyObject() + NSCell + crash" to learn why this abomination is required
     public override func copy(with zone: NSZone? = nil) -> Any {
@@ -60,7 +61,9 @@ public class PanelListViewTableHeaderCell: NSTableHeaderCell {
     public override func draw(withFrame cellFrame: NSRect, in view: NSView) {
         drawBackground(cellFrame: cellFrame)
         drawHorizontalSeparator(in: cellFrame)
-        drawVerticalSeparator(in: cellFrame, inView: view)
+        if drawsVerticalSeparator {
+            drawVerticalSeparator(in: cellFrame, inView: view)
+        }
         
         // Draw the sorting indicator
         var sortIndicatorRect:NSRect?

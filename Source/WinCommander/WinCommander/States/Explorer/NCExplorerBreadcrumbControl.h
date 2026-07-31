@@ -5,17 +5,7 @@
 
 @class PanelController;
 
-/**
- * A breadcrumb / address bar for NCExplorerState.
- * Shows the panel's current directory as clickable path segments ("Macintosh HD > Users > alex >
- * Documents") backed by a native NSPathControl when the panel's listing is uniform and resides on
- * a native filesystem. For anything else (a non-native VFS location, or a non-uniform listing such
- * as search results) it falls back to a plain, non-interactive text label describing the location.
- *
- * This control does not observe the panel controller on its own - the owner must call
- * -panelPathChanged explicitly whenever the panel's directory/listing changes (e.g. from
- * NCPanelControllerHostingState.PanelPathChanged:).
- */
+/** Explorer address bar: path segments, sibling menus, editable path and Find Files entry point. */
 @interface NCExplorerBreadcrumbControl : NSView
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel;
@@ -26,5 +16,11 @@
  * path changes.
  */
 - (void)panelPathChanged;
+
+/** Switches to editable path mode and focuses the path field. */
+- (void)focusAddressField;
+
+/** Loading feedback hosted by the visible Explorer chrome. */
+@property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
 
 @end

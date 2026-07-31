@@ -1,6 +1,7 @@
 // Copyright (C) 2024 Michael Kazakov. Subject to GNU General Public License version 3.
 #pragma once
 
+#include <Base/Observable.h>
 #include <Utility/Tags.h>
 #include <vector>
 #include <span>
@@ -13,7 +14,7 @@ class Config;
 
 namespace nc::panel {
 
-class TagsStorage
+class TagsStorage : private base::ObservableBase
 {
 public:
     TagsStorage(config::Config &_persistant_storage, std::string_view _path);
@@ -21,6 +22,9 @@ public:
     bool Initialized() const noexcept;
     std::vector<utility::Tags::Tag> Get() const;
     void Set(std::span<const utility::Tags::Tag> _tags);
+
+    using ObservationTicket = base::ObservableBase::ObservationTicket;
+    ObservationTicket ObserveChanges(std::function<void()> _callback);
 
 private:
     bool Load();

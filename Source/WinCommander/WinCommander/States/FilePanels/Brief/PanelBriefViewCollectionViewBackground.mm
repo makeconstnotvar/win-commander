@@ -7,9 +7,11 @@
 
 @implementation PanelBriefViewCollectionViewBackground {
     int m_RowHeight;
+    bool m_ExplorerAppearance;
 }
 
 @synthesize rowHeight = m_RowHeight;
+@synthesize explorerAppearance = m_ExplorerAppearance;
 
 - (id)initWithFrame:(NSRect)frameRect
 {
@@ -58,8 +60,10 @@
     const auto top = static_cast<int>(dirtyRect.origin.y);
     const auto bottom = static_cast<int>(dirtyRect.origin.y + dirtyRect.size.height);
     for( int y = top; y < bottom; y += m_RowHeight - (y % m_RowHeight) ) {
-        auto c = (y / m_RowHeight) % 2 ? nc::CurrentTheme().FilePanelsBriefRegularOddRowBackgroundColor()
-                                       : nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor();
+        auto c = m_ExplorerAppearance
+                     ? NSColor.controlBackgroundColor
+                     : ((y / m_RowHeight) % 2 ? nc::CurrentTheme().FilePanelsBriefRegularOddRowBackgroundColor()
+                                              : nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor());
         CGContextSetFillColorWithColor(context, c.CGColor);
         CGContextFillRect(context, CGRectMake(dirtyRect.origin.x, y, dirtyRect.size.width, m_RowHeight));
     }
@@ -67,6 +71,8 @@
 
 - (void)drawGrid:(NSRect)_dirty_rect
 {
+    if( m_ExplorerAppearance )
+        return;
     static const bool draws_grid =
         [self.collectionView respondsToSelector:@selector(setBackgroundViewScrollsWithContent:)];
     if( !draws_grid )

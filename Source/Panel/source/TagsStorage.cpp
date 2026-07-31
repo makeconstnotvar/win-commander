@@ -46,6 +46,12 @@ void TagsStorage::Set(std::span<const utility::Tags::Tag> _tags)
         m_Initialized = true;
     }
     Store();
+    FireObservers();
+}
+
+TagsStorage::ObservationTicket TagsStorage::ObserveChanges(std::function<void()> _callback)
+{
+    return AddObserver(std::move(_callback));
 }
 
 bool TagsStorage::Initialized() const noexcept

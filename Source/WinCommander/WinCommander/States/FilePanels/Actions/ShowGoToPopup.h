@@ -3,6 +3,7 @@
 
 #include "DefaultAction.h"
 
+#include <any>
 #include <vector>
 
 @class GoToPopupListActionMediator;
@@ -23,6 +24,13 @@ class NetworkConnectionsManager;
 } // namespace nc::panel
 
 namespace nc::panel::actions {
+
+/**
+ * Navigates a panel to one of the location context types produced by the Go-To data sources.
+ * Both the keyboard popovers and the persistent Explorer sidebar use this entry point so that
+ * restoring VFS locations, opening network connections and loading tag results stay identical.
+ */
+void NavigateToLocation(PanelController *_panel, NetworkConnectionsManager &_net_mgr, const std::any &_context);
 
 // external dependencies:   AppDelegate.me.favoriteLocationsStorage
 //                          AppDelegate.me.mainWindowControllers

@@ -10,7 +10,7 @@ namespace nc::utility {
 class NativeFSManager;
 }
 
-class ConfigBackedNetworkConnectionsManager : public nc::panel::NetworkConnectionsManager
+class ConfigBackedNetworkConnectionsManager : public nc::panel::NetworkConnectionsManager, private nc::base::ObservableBase
 {
 public:
     ConfigBackedNetworkConnectionsManager(nc::config::Config &_config, nc::utility::NativeFSManager &_native_fs_man);
@@ -23,6 +23,7 @@ public:
     void RemoveConnection(const Connection &_connection) override;
 
     void ReportUsage(const Connection &_connection) override;
+    ObservationTicket ObserveChanges(std::function<void()> _callback) override;
 
     std::vector<Connection> AllConnectionsByMRU() const override;
     std::vector<Connection> FTPConnectionsByMRU() const override;

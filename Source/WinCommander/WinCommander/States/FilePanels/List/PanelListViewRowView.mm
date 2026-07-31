@@ -28,6 +28,8 @@ using namespace nc::panel;
     bool m_PanelActive;
     bool m_DropTarget;
     bool m_Highlighted;
+    bool m_Hovered;
+    NSTrackingArea *m_TrackingArea;
 }
 @synthesize rowBackgroundColor = m_RowColor;
 @synthesize rowTextColor = m_TextColor;
@@ -44,6 +46,7 @@ using namespace nc::panel;
         m_PanelActive = false;
         m_DropTarget = false;
         m_Highlighted = false;
+        m_Hovered = false;
         m_Item = _item;
         m_ItemIndex = 0;
         m_RowColor = NSColor.whiteColor;
@@ -83,6 +86,8 @@ using namespace nc::panel;
 {
     if( m_Item != item ) {
         m_Item = item;
+        m_Hovered = false;
+        [self updateColors];
     }
 }
 
@@ -206,6 +211,18 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
 
 - (NSColor *)findCurrentBackgroundColor
 {
+    if( self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer ) {
+        if( self.selected ) {
+            if( m_PanelActive )
+                return [NSColor.controlAccentColor colorWithAlphaComponent:0.20];
+            return NSColor.unemphasizedSelectedContentBackgroundColor;
+        }
+        if( m_VD.is_selected() )
+            return [NSColor.controlAccentColor colorWithAlphaComponent:0.12];
+        if( m_Hovered )
+            return [NSColor.controlAccentColor colorWithAlphaComponent:0.07];
+        return NSColor.controlBackgroundColor;
+    }
     return FindBackgroundColor(self.selected, m_PanelActive, m_VD.is_selected(), m_ItemIndex % 2);
 }
 
@@ -214,19 +231,25 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
     if( !m_Item )
         return NSColor.blackColor;
 
+    const auto explorer = self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer;
+    if( explorer && self.selected )
+        return NSColor.labelColor;
+
     const auto &rules = nc::CurrentTheme().FilePanelsItemsColoringRules();
 
-    const auto focus = self.selected && m_PanelActive;
+    const auto focus = !explorer && self.selected && m_PanelActive;
     for( const auto &i : rules )
         if( i.filter.Filter(m_Item, m_VD) )
             return focus ? i.focused : i.regular;
 
-    return NSColor.blackColor;
+    return explorer ? NSColor.labelColor : NSColor.blackColor;
 }
 
 - (NSColor *)findCurrentTagAccentColor
 {
     if( m_Item && m_PanelActive && m_Item.HasTags() && (m_VD.is_selected() || self.selected) ) {
+        if( self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer )
+            return nil;
         return NSColor.whiteColor; // TODO: Pick from Themes
     }
     else {
@@ -248,7 +271,9 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
     if( new_row_fg_color != m_TextColor ) {
         m_TextColor = new_row_fg_color;
 
-        if( const unsigned opacity = nc::CurrentTheme().FilePanelsListSecondaryColumnsOpacity(); opacity < 100 )
+        if( self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer )
+            m_TextSecondaryColor = NSColor.secondaryLabelColor;
+        else if( const unsigned opacity = nc::CurrentTheme().FilePanelsListSecondaryColumnsOpacity(); opacity < 100 )
             m_TextSecondaryColor = [m_TextColor colorWithAlphaComponent:static_cast<double>(opacity) / 100.];
         else
             m_TextSecondaryColor = m_TextColor;
@@ -264,6 +289,41 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
     if( colors_has_changed ) {
         [self setNeedsDisplay:true];
         [self notifySubviewsToRebuildPresentation];
+    }
+}
+
+- (void)setListView:(NCPanelListView *)_list_view
+{
+    listView = _list_view;
+    [self updateColors];
+}
+
+- (void)updateTrackingAreas
+{
+    [super updateTrackingAreas];
+    if( m_TrackingArea )
+        [self removeTrackingArea:m_TrackingArea];
+    m_TrackingArea = [[NSTrackingArea alloc]
+        initWithRect:NSZeroRect
+             options:NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect
+               owner:self
+            userInfo:nil];
+    [self addTrackingArea:m_TrackingArea];
+}
+
+- (void)mouseEntered:(NSEvent *) [[maybe_unused]] _event
+{
+    if( !m_Hovered ) {
+        m_Hovered = true;
+        [self updateColors];
+    }
+}
+
+- (void)mouseExited:(NSEvent *) [[maybe_unused]] _event
+{
+    if( m_Hovered ) {
+        m_Hovered = false;
+        [self updateColors];
     }
 }
 

@@ -24,10 +24,18 @@ class QuickLookVFSBridge;
                iconRepository:(nc::vfsicon::IconRepository &)_ir
                         UTIDB:(const nc::utility::UTIDB &)_UTIDB
                   QLVFSBridge:(nc::panel::QuickLookVFSBridge &)_ql_vfs_bridge;
+- (instancetype)initWithFrame:(NSRect)_frame
+               iconRepository:(nc::vfsicon::IconRepository &)_ir
+                        UTIDB:(const nc::utility::UTIDB &)_UTIDB
+                  QLVFSBridge:(nc::panel::QuickLookVFSBridge &)_ql_vfs_bridge
+           explorerAppearance:(bool)_explorer_appearance;
 
 @property(nonatomic) nc::panel::PanelGalleryViewLayout galleryLayout;
 
 // Provides access to the parent PanelView that contains this gallery view.
 @property(nonatomic, readonly) PanelView *panelView;
+@property(nonatomic, readonly) bool explorerAppearance;
+
+- (NSFont *)font;
 
 @end

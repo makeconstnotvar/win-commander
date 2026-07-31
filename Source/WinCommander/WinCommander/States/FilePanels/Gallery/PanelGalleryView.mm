@@ -45,6 +45,7 @@ static constexpr auto g_SmoothScrolling = "filePanel.presentation.smoothScrollin
     vfsicon::IconRepository *m_IconRepository;
 
     nc::ThemesManager::ObservationTicket m_ThemeObservation;
+    bool m_ExplorerAppearance;
 }
 
 - (instancetype)initWithFrame:(NSRect)_frame
@@ -52,12 +53,26 @@ static constexpr auto g_SmoothScrolling = "filePanel.presentation.smoothScrollin
                         UTIDB:(const nc::utility::UTIDB &)_UTIDB
                   QLVFSBridge:(nc::panel::QuickLookVFSBridge &)_ql_vfs_bridge
 {
+    return [self initWithFrame:_frame
+                 iconRepository:_ir
+                          UTIDB:_UTIDB
+                    QLVFSBridge:_ql_vfs_bridge
+             explorerAppearance:false];
+}
+
+- (instancetype)initWithFrame:(NSRect)_frame
+               iconRepository:(nc::vfsicon::IconRepository &)_ir
+                        UTIDB:(const nc::utility::UTIDB &)_UTIDB
+                  QLVFSBridge:(nc::panel::QuickLookVFSBridge &)_ql_vfs_bridge
+           explorerAppearance:(bool)_explorer_appearance
+{
     self = [super initWithFrame:_frame];
     if( !self )
         return nil;
 
     m_Data = nullptr;
     m_IconRepository = &_ir;
+    m_ExplorerAppearance = _explorer_appearance;
 
     [self rebuildItemLayout];
 
@@ -343,7 +358,7 @@ static constexpr auto g_SmoothScrolling = "filePanel.presentation.smoothScrollin
         m_IconRepository->SetPxSize(physical_icon_size);
     }
 
-    nc::utility::FontGeometryInfo info(nc::CurrentTheme().FilePanelsGalleryFont());
+    nc::utility::FontGeometryInfo info(self.font);
     m_ItemLayout = BuildItemLayout(
         logical_icon_size, static_cast<unsigned>(info.LineHeight()), static_cast<unsigned>(info.Descent()), text_lines);
 
@@ -365,9 +380,11 @@ static constexpr auto g_SmoothScrolling = "filePanel.presentation.smoothScrollin
         [m_CollectionView reloadData];
         self.cursorPosition = cursor_position; // TODO: why is this here?
     }
-    m_CollectionView.backgroundColors = @[nc::CurrentTheme().FilePanelsGalleryBackgroundColor()];
-    m_CollectionScrollView.backgroundColor = nc::CurrentTheme().FilePanelsGalleryBackgroundColor();
-    m_CentralView.backgroundColor = nc::CurrentTheme().FilePanelsGalleryBackgroundColor();
+    NSColor *const background =
+        m_ExplorerAppearance ? NSColor.controlBackgroundColor : nc::CurrentTheme().FilePanelsGalleryBackgroundColor();
+    m_CollectionView.backgroundColors = @[background];
+    m_CollectionScrollView.backgroundColor = background;
+    m_CentralView.backgroundColor = background;
 }
 
 - (void)viewDidMoveToWindow
@@ -380,6 +397,18 @@ static constexpr auto g_SmoothScrolling = "filePanel.presentation.smoothScrollin
 - (PanelView *)panelView
 {
     return m_PanelView;
+}
+
+- (bool)explorerAppearance
+{
+    return m_ExplorerAppearance;
+}
+
+- (NSFont *)font
+{
+    if( m_ExplorerAppearance )
+        return [NSFont systemFontOfSize:13.0 weight:NSFontWeightRegular];
+    return nc::CurrentTheme().FilePanelsGalleryFont();
 }
 
 - (void)onPageUp:(NSEvent *) [[maybe_unused]] _event

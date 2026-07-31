@@ -27,6 +27,11 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
 
 @synthesize toolbar = m_Toolbar;
 
+- (NSProgressIndicator *)busyIndicator
+{
+    return m_Breadcrumb.busyIndicator;
+}
+
 - (instancetype)initWithPanelController:(PanelController *)_panel
 {
     self = [super init];
@@ -63,13 +68,18 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
                                                  target:nil
                                                  action:@selector(toggleExplorerMode:)];
 
-    m_Breadcrumb = [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 0, 360, 27)
+    m_Breadcrumb = [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 0, 600, 27)
                                                         panelController:_panel];
 }
 
 - (void)panelPathChanged
 {
     [m_Breadcrumb panelPathChanged];
+}
+
+- (void)focusAddressField
+{
+    [m_Breadcrumb focusAddressField];
 }
 
 - (void)buildToolbar
@@ -110,8 +120,8 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
         NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
         item.view = m_Breadcrumb;
         item.paletteLabel = item.label = NSLocalizedString(@"Path", "Toolbar palette");
-        item.minSize = NSMakeSize(240, 27);
-        item.maxSize = NSMakeSize(900, 27);
+        item.minSize = NSMakeSize(420, 27);
+        item.maxSize = NSMakeSize(1100, 27);
         return item;
     }
 

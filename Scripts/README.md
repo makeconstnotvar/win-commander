@@ -27,6 +27,16 @@ Builds Win Commander with the `WinCommander-Unsigned` scheme / `Release` configu
 Builds Win Commander with the `WinCommander-Unsigned` scheme / `Debug` configuration and runs it afterwards.  
 `xcodebuild` must be available in the environment in order for this script to run.
 
+## `build_stable_dev_and_run.sh [--no-run]`
+Builds the Debug application, signs it with a persistent local development identity, installs it at
+`~/Applications/WinCommander-Codex.app`, and runs that stable copy. This preserves the macOS TCC identity across
+rebuilds, so filesystem and automation permissions normally need to be granted only once for this identity. The
+grant is needed again only after a TCC reset or an intentional certificate replacement. The signing key is kept in a
+dedicated keychain that is exposed to `codesign` only while signing. Pass `--no-run` to build, sign, and install
+without launching the application. This local build disables Sparkle/LetsMove and excludes Admin Mode because the
+privileged helper is intentionally bound to the upstream Developer ID certificate. Library validation alone is
+disabled for this development bundle because a self-signed certificate has no Apple Team ID for the Debug dylibs.
+
 ## `run_all_integration_tests.sh`
 Builds and executes all integration tests with the Debug/ASAN configuration.  
 `xcodebuild` and `xcpretty` must be available in the environment in order for this script to run.  

@@ -6,14 +6,9 @@
 @class PanelController;
 
 /**
- * A persistent, Finder-like sidebar for NCExplorerState: static "Favorites" / "This Mac" /
- * "Network" sections built from the app-wide FavoriteLocationsStorage / NativeFSManager /
- * NetworkConnectionsManager (see NCAppDelegate.me). Clicking a row navigates the PanelController
- * supplied at construction time to that location via -GoToDirWithContext:, reusing the same
- * location-resolution logic as the dual-pane "Go to" popups (see Actions/ShowGoToPopup.mm).
- *
- * This view does not observe the underlying storages on its own - the owner may call -reloadData
- * to rebuild the sections (e.g. after the app-wide favorites/volumes/connections change).
+ * A persistent source-list sidebar for NCExplorerState. Its collapsible sections are populated
+ * from FavoriteLocationsStorage, NativeFSManager, NetworkConnectionsManager and TagsStorage.
+ * Row activation shares the location-resolution path used by the keyboard Go-To popovers.
  */
 @interface NCExplorerSidebarView : NSView
 
@@ -22,9 +17,12 @@
 @property(nonatomic, readonly) PanelController *panelController;
 
 /**
- * Rebuilds the Favorites/This Mac/Network sections from the current app-wide storages.
+ * Rebuilds all sections from the current app-wide storages.
  * Called automatically once at construction time.
  */
 - (void)reloadData;
+
+/** Synchronizes the selected source-list item with the panel's current location. */
+- (void)panelPathChanged;
 
 @end

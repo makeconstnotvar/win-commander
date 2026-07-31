@@ -278,9 +278,11 @@ CutFilenameIntoWrappedAndTailSubstrings(NSAttributedString *_attr_string, double
 
     assert(m_Filename != nil);
 
+    NSFont *const font = m_Controller.galleryView.font;
+
     // Build a minimal set of attributes solely for typesetting
     NSDictionary *typesetting_attrs = @{
-        NSFontAttributeName: nc::CurrentTheme().FilePanelsGalleryFont(),
+        NSFontAttributeName: font,
         NSParagraphStyleAttributeName: breaking_paragraph_style
     };
 
@@ -293,7 +295,7 @@ CutFilenameIntoWrappedAndTailSubstrings(NSAttributedString *_attr_string, double
 
     // Build the final text attributes for rendering
     NSDictionary *final_attrs = @{
-        NSFontAttributeName: nc::CurrentTheme().FilePanelsGalleryFont(),
+        NSFontAttributeName: font,
         NSForegroundColorAttributeName: m_FilenameColor,
         NSParagraphStyleAttributeName: ParagraphStyle(GetCurrentFilenamesTrimmingMode())
     };
@@ -453,13 +455,13 @@ static bool HasNoModifiers(NSEvent *_event)
 
     const NSRect bounds = self.bounds;
     NSRect text_segment_rect = [self calculateTextSegmentFromBounds:bounds];
-    auto fi = nc::utility::FontGeometryInfo(nc::CurrentTheme().FilePanelsGalleryFont());
+    auto fi = nc::utility::FontGeometryInfo(m_Controller.galleryView.font);
 
     _editor.frame = text_segment_rect;
 
     // TODO: enable multi-line editing to match the behaviour of this carrier
     NSTextView *tv = _editor.documentView;
-    tv.font = nc::CurrentTheme().FilePanelsGalleryFont();
+    tv.font = m_Controller.galleryView.font;
     tv.textContainerInset = NSMakeSize(0, text_segment_rect.size.height - fi.LineHeight());
     tv.textContainer.lineFragmentPadding = line_padding;
 
@@ -508,7 +510,10 @@ static bool HasNoModifiers(NSEvent *_event)
 {
     if( m_IsDropTarget || m_Highlighted ) {
         self.layer.borderWidth = 1;
-        self.layer.borderColor = nc::CurrentTheme().FilePanelsGeneralDropBorderColor().CGColor;
+        self.layer.borderColor = (m_Controller.galleryView.explorerAppearance
+                                      ? NSColor.controlAccentColor
+                                      : nc::CurrentTheme().FilePanelsGeneralDropBorderColor())
+                                     .CGColor;
     }
     else
         self.layer.borderWidth = 0;

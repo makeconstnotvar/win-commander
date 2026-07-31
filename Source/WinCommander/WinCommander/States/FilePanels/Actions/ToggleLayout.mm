@@ -18,8 +18,16 @@ bool ToggleLayout::Predicate(PanelController *_target) const
 
 bool ToggleLayout::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
 {
-    _item.state = _target.layoutIndex == m_Index;
-    return Predicate(_target);
+    if( auto layout = _target.layoutStorage.GetLayout(m_Index) ) {
+        _item.hidden = false;
+        _item.title = layout->name.empty() ? [NSString stringWithFormat:@"Layout #%d", m_Index + 1]
+                                          : [NSString stringWithUTF8String:layout->name.c_str()];
+        _item.state = _target.layoutIndex == m_Index;
+        return !layout->is_disabled();
+    }
+    _item.hidden = true;
+    _item.state = NSControlStateValueOff;
+    return false;
 }
 
 void ToggleLayout::Perform(PanelController *_target, [[maybe_unused]] id _sender) const

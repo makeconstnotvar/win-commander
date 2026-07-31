@@ -44,6 +44,7 @@ struct FindFilesSheetViewRequest {
 
 @property(nonatomic) VFSHostPtr host;
 @property(nonatomic) std::string path;
+@property(nonatomic) NSString *initialFilenameMask;
 @property(nonatomic) std::function<void(const std::vector<nc::vfs::VFSPath> &_filepaths)> onPanelize;
 @property(nonatomic) std::function<void(const nc::panel::FindFilesSheetViewRequest &)> onView;
 @property(nonatomic) nc::core::VFSInstanceManager *vfsInstanceManager;

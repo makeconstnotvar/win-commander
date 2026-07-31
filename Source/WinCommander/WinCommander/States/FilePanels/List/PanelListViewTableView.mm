@@ -22,9 +22,11 @@ using namespace nc::panel;
 
 @implementation PanelListViewTableView {
     bool m_IsDropTarget;
+    bool m_ExplorerAppearance;
     ThemesManager::ObservationTicket m_ThemeObservation;
 }
 @synthesize alternateBackgroundColor;
+@synthesize explorerAppearance = m_ExplorerAppearance;
 
 - (id)initWithFrame:(NSRect)frameRect
 {
@@ -45,9 +47,23 @@ using namespace nc::panel;
 
 - (void)setupColors
 {
-    self.backgroundColor = CurrentTheme().FilePanelsListRegularEvenRowBackgroundColor();
-    self.alternateBackgroundColor = CurrentTheme().FilePanelsListRegularOddRowBackgroundColor();
+    if( m_ExplorerAppearance ) {
+        self.backgroundColor = NSColor.controlBackgroundColor;
+        self.alternateBackgroundColor = nil;
+    }
+    else {
+        self.backgroundColor = CurrentTheme().FilePanelsListRegularEvenRowBackgroundColor();
+        self.alternateBackgroundColor = CurrentTheme().FilePanelsListRegularOddRowBackgroundColor();
+    }
     self.needsDisplay = true;
+}
+
+- (void)setExplorerAppearance:(bool)_explorer_appearance
+{
+    if( m_ExplorerAppearance == _explorer_appearance )
+        return;
+    m_ExplorerAppearance = _explorer_appearance;
+    [self setupColors];
 }
 
 - (BOOL)acceptsFirstResponder

@@ -4,7 +4,20 @@
 #include <Panel/PanelDataSortMode.h>
 #include "PanelViewHeaderTheme.h"
 
-@interface NCPanelViewHeader : NSView <NSTextFieldDelegate>
+/**
+ * The part of a panel chrome that presents Quick Search. Explorer mode supplies a floating
+ * presenter while Commander mode keeps using NCPanelViewHeader.
+ */
+@protocol NCPanelQuickSearchPresentation <NSObject>
+
+@property(nonatomic) NSString *searchPrompt;
+@property(nonatomic) int searchMatches;
+@property(nonatomic) std::function<void(NSString *_query)> searchRequestChangeCallback;
+@property(nonatomic, weak) NSResponder *defaultResponder;
+
+@end
+
+@interface NCPanelViewHeader : NSView <NSTextFieldDelegate, NCPanelQuickSearchPresentation>
 
 - (id)initWithFrame:(NSRect)frameRect NS_UNAVAILABLE;
 - (id)initWithFrame:(NSRect)frameRect theme:(std::unique_ptr<nc::panel::HeaderTheme>)_theme;

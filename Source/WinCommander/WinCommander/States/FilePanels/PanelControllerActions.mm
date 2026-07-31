@@ -66,6 +66,7 @@ PanelActionsMap BuildPanelActionsMap(nc::config::Config &_global_config,
     add(@selector(OnQuickNewFile:), new MakeNewFile);
     add(@selector(OnQuickNewFolder:), new MakeNewFolder);
     add(@selector(OnQuickNewFolderWithSelection:), new MakeNewFolderWithSelection);
+    add(@selector(cut:), new CutToPasteboard);
     add(@selector(copy:), new CopyToPasteboard);
     add(@selector(paste:), new PasteFromPasteboard{_native_host});
     add(@selector(moveItemHere:), new MoveFromPasteboard{_native_host});

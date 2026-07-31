@@ -303,6 +303,10 @@ static void Perform(SEL _sel, const PanelActionsMap &_map, PanelController *_tar
 {
     PERFORM;
 }
+- (IBAction)cut:(id)sender
+{
+    PERFORM;
+}
 - (IBAction)copy:(id)sender
 {
     PERFORM;

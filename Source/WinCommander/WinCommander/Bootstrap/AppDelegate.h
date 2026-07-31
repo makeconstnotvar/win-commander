@@ -112,6 +112,9 @@ class NativeHost;
 
 @property(nonatomic, readonly) const std::shared_ptr<nc::panel::PanelViewLayoutsStorage> &panelLayouts;
 
+// Explorer owns its view presets so resizing or reordering its columns never mutates Commander layouts.
+@property(nonatomic, readonly) const std::shared_ptr<nc::panel::PanelViewLayoutsStorage> &explorerPanelLayouts;
+
 @property(nonatomic, readonly) nc::ThemesManager &themesManager;
 
 @property(nonatomic, readonly) ExternalEditorsStorage &externalEditorsStorage;

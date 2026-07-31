@@ -11,12 +11,16 @@
 #include <Panel/PanelDataSortMode.h>
 
 #include "../Helpers/IconRepositoryCleaner.h"
+#include "../Helpers/Pasteboard.h"
 #include "../PanelView.h"
 #include "Layout.h"
 #include "PanelListViewDateTimeView.h"
 #include "PanelListViewExtensionView.h"
 #include "PanelListViewGeometry.h"
+#include "PanelListViewGrouping.h"
+#include "PanelListViewGroupRowView.h"
 #include "PanelListViewNameView.h"
+#include "PanelListViewProjection.h"
 #include "PanelListViewRowView.h"
 #include "PanelListViewSizeView.h"
 #include "PanelListViewTableHeaderView.h"
@@ -84,6 +88,9 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
 
     PanelListViewColumnsLayout m_AssignedLayout;
     ThemesManager::ObservationTicket m_ThemeObservation;
+    NCPanelListViewPresentationStyle m_PresentationStyle;
+    PanelListViewProjection m_Projection;
+    bool m_GroupingEnabled;
 }
 
 @synthesize dateCreatedFormattingStyle = m_DateCreatedFormattingStyle;
@@ -94,9 +101,20 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
 
 - (id)initWithFrame:(NSRect)_frame iconRepository:(nc::vfsicon::IconRepository &)_ir
 {
+    return [self initWithFrame:_frame
+                iconRepository:_ir
+             presentationStyle:NCPanelListViewPresentationStyleCommander];
+}
+
+- (id)initWithFrame:(NSRect)_frame
+       iconRepository:(nc::vfsicon::IconRepository &)_ir
+    presentationStyle:(NCPanelListViewPresentationStyle)_style
+{
     self = [super initWithFrame:_frame];
     if( self ) {
         m_IconRepository = &_ir;
+        m_PresentationStyle = _style;
+        m_GroupingEnabled = false;
 
         [self calculateItemLayout];
 
@@ -121,13 +139,15 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
                                                                        views:views]];
 
         m_TableView = [[PanelListViewTableView alloc] initWithFrame:_frame];
+        m_TableView.explorerAppearance = m_PresentationStyle == NCPanelListViewPresentationStyleExplorer;
         m_TableView.dataSource = self;
         m_TableView.delegate = self;
         m_TableView.allowsMultipleSelection = false;
         m_TableView.allowsEmptySelection = false;
         m_TableView.allowsColumnSelection = false;
         m_TableView.allowsColumnReordering = true;
-        m_TableView.usesAlternatingRowBackgroundColors = true;
+        m_TableView.usesAlternatingRowBackgroundColors =
+            m_PresentationStyle == NCPanelListViewPresentationStyleCommander;
         m_TableView.rowSizeStyle = NSTableViewRowSizeStyleCustom;
         m_TableView.rowHeight = m_Geometry.LineHeight();
         m_TableView.intercellSpacing = NSMakeSize(0, 0);
@@ -137,7 +157,13 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
         // drawBackgroundInClipRect:
         m_TableView.gridStyleMask = NSTableViewGridNone;
         m_TableView.style = NSTableViewStylePlain;
+        m_TableView.floatsGroupRows = false;
         m_TableView.headerView = [[PanelListViewTableHeaderView alloc] init];
+        if( m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ) {
+            NSRect header_frame = m_TableView.headerView.frame;
+            header_frame.size.height = 28.0;
+            m_TableView.headerView.frame = header_frame;
+        }
         [self setupColumns];
 
         m_ScrollView.documentView = m_TableView;
@@ -162,6 +188,10 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
                                                selector:@selector(dateDidChange:)
                                                    name:NSCalendarDayChangedNotification
                                                  object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(pasteboardCutStateDidChange:)
+                                                   name:NCPanelPasteboardCutStateDidChangeNotification
+                                                 object:NSPasteboard.generalPasteboard];
 
         [self handleThemeChanges];
     }
@@ -174,7 +204,8 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
     m_NameColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
     m_NameColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_NAME", "");
     m_NameColumn.width = 200;
-    m_NameColumn.minWidth = 180;
+    m_NameColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 220 : 180;
     m_NameColumn.maxWidth = 2000;
     m_NameColumn.headerCell.alignment = NSTextAlignmentLeft;
     m_NameColumn.resizingMask = NSTableColumnUserResizingMask | NSTableColumnAutoresizingMask;
@@ -182,9 +213,12 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
 
     m_ExtensionColumn = [[NSTableColumn alloc] initWithIdentifier:ToKindIdentifier(PanelListViewColumns::Extension)];
     m_ExtensionColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
-    m_ExtensionColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_EXTENSION", "");
+    m_ExtensionColumn.title = m_PresentationStyle == NCPanelListViewPresentationStyleExplorer
+                                  ? NSLocalizedString(@"Type", "Explorer Details column title")
+                                  : NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_EXTENSION", "");
     m_ExtensionColumn.width = 60;
-    m_ExtensionColumn.minWidth = 50;
+    m_ExtensionColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 110 : 50;
     m_ExtensionColumn.maxWidth = 200;
     m_ExtensionColumn.headerCell.alignment = NSTextAlignmentLeft;
     m_ExtensionColumn.resizingMask = NSTableColumnUserResizingMask;
@@ -194,9 +228,12 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
     m_SizeColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
     m_SizeColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_SIZE", "");
     m_SizeColumn.width = 90;
-    m_SizeColumn.minWidth = 75;
+    m_SizeColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 80 : 75;
     m_SizeColumn.maxWidth = 110;
-    m_SizeColumn.headerCell.alignment = NSTextAlignmentLeft;
+    m_SizeColumn.headerCell.alignment = m_PresentationStyle == NCPanelListViewPresentationStyleExplorer
+                                            ? NSTextAlignmentRight
+                                            : NSTextAlignmentLeft;
     m_SizeColumn.resizingMask = NSTableColumnUserResizingMask;
     [m_SizeColumn addObserver:self forKeyPath:@"width" options:0 context:nullptr];
 
@@ -205,7 +242,8 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
     m_DateCreatedColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
     m_DateCreatedColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_DATE_CREATED", "");
     m_DateCreatedColumn.width = 90;
-    m_DateCreatedColumn.minWidth = 75;
+    m_DateCreatedColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 140 : 75;
     m_DateCreatedColumn.maxWidth = 300;
     m_DateCreatedColumn.headerCell.alignment = NSTextAlignmentLeft;
     m_DateCreatedColumn.resizingMask = NSTableColumnUserResizingMask;
@@ -216,7 +254,8 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
     m_DateAddedColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
     m_DateAddedColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_DATE_ADDED", "");
     m_DateAddedColumn.width = 90;
-    m_DateAddedColumn.minWidth = 75;
+    m_DateAddedColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 140 : 75;
     m_DateAddedColumn.maxWidth = 300;
     m_DateAddedColumn.headerCell.alignment = NSTextAlignmentLeft;
     m_DateAddedColumn.resizingMask = NSTableColumnUserResizingMask;
@@ -228,7 +267,8 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
     m_DateModifiedColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
     m_DateModifiedColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_DATE_MODIFIED", "");
     m_DateModifiedColumn.width = 90;
-    m_DateModifiedColumn.minWidth = 75;
+    m_DateModifiedColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 140 : 75;
     m_DateModifiedColumn.maxWidth = 300;
     m_DateModifiedColumn.headerCell.alignment = NSTextAlignmentLeft;
     m_DateModifiedColumn.resizingMask = NSTableColumnUserResizingMask;
@@ -240,7 +280,8 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
     m_DateAccessedColumn.headerCell = [[PanelListViewTableHeaderCell alloc] init];
     m_DateAccessedColumn.title = NSLocalizedString(@"__PANELVIEW_LIST_COLUMN_TITLE_DATE_ACCESSED", "");
     m_DateAccessedColumn.width = 90;
-    m_DateAccessedColumn.minWidth = 75;
+    m_DateAccessedColumn.minWidth =
+        m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ? 140 : 75;
     m_DateAccessedColumn.maxWidth = 300;
     m_DateAccessedColumn.headerCell.alignment = NSTextAlignmentLeft;
     m_DateAccessedColumn.resizingMask = NSTableColumnUserResizingMask;
@@ -342,14 +383,40 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *) [[maybe_unused]] _table_view
 {
-    return m_Data ? m_Data->SortedEntriesCount() : 0;
+    return m_Projection.RowsCount();
+}
+
+- (void)rebuildProjection
+{
+    if( !m_Data ) {
+        m_Projection.RebuildIdentity(0);
+        return;
+    }
+
+    if( m_GroupingEnabled && m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ) {
+        const auto items = BuildPanelListViewProjectionItems(*m_Data, std::time(nullptr));
+        m_Projection.RebuildGrouped(items);
+    }
+    else {
+        m_Projection.RebuildIdentity(m_Data->SortedEntriesCount());
+    }
+}
+
+- (int)sortedIndexForTableRow:(NSInteger)_row
+{
+    return m_Projection.SortedIndexForRow(static_cast<int>(_row));
+}
+
+- (int)tableRowForSortedIndex:(int)_sorted_index
+{
+    return m_Projection.RowForSortedIndex(_sorted_index);
 }
 
 - (void)calculateItemLayout
 {
-    m_Geometry = PanelListViewGeometry(CurrentTheme().FilePanelsListFont(),
-                                       m_AssignedLayout.icon_scale,
-                                       CurrentTheme().FilePanelsListRowVerticalPadding());
+    const bool explorer = m_PresentationStyle == NCPanelListViewPresentationStyleExplorer;
+    m_Geometry = PanelListViewGeometry(
+        self.font, m_AssignedLayout.icon_scale, explorer ? 9U : CurrentTheme().FilePanelsListRowVerticalPadding());
 
     [self setupIconsPxSize];
 
@@ -408,9 +475,11 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
     if( !m_Data )
         return nil;
 
-    const int row = static_cast<int>(_row_index);
+    const int row = [self sortedIndexForTableRow:_row_index];
+    if( row < 0 )
+        return nil;
 
-    const auto abstract_row_view = [m_TableView rowViewAtRow:row makeIfNecessary:false];
+    const auto abstract_row_view = [m_TableView rowViewAtRow:_row_index makeIfNecessary:false];
     const auto row_view = nc::objc_cast<PanelListViewRowView>(abstract_row_view);
     if( row_view == nil )
         return nil;
@@ -473,7 +542,24 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
     if( !m_Data )
         return nil;
 
-    const auto row = static_cast<int>(_row_index);
+    const auto table_row = static_cast<int>(_row_index);
+    if( const auto projection_row = m_Projection.RowAt(table_row);
+        projection_row && projection_row->kind == PanelListViewProjectionRow::Kind::GroupHeader ) {
+        static NSString *const identifier = @"PanelListViewGroupRow";
+        PanelListViewGroupRowView *row_view =
+            nc::objc_cast<PanelListViewGroupRowView>([m_TableView makeViewWithIdentifier:identifier owner:nil]);
+        if( !row_view ) {
+            row_view = [[PanelListViewGroupRowView alloc] initWithFrame:NSRect()];
+            row_view.identifier = identifier;
+        }
+        if( const auto group = m_Projection.GroupAt(projection_row->group_index) )
+            [row_view setTitle:PanelListViewGroupTitle(group->key) itemCount:group->item_count];
+        return row_view;
+    }
+
+    const auto row = [self sortedIndexForTableRow:_row_index];
+    if( row < 0 )
+        return nil;
     if( auto item = m_Data->EntryAtSortPosition(row) ) {
         auto &vd = m_Data->VolatileDataAtSortPosition(row);
 
@@ -490,10 +576,28 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
         row_view.itemIndex = row;
         row_view.vd = vd;
         row_view.panelActive = m_PanelView.active;
+        row_view.alphaValue = PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, item.Path()) ? 0.55 : 1.0;
 
         return row_view;
     }
     return nil;
+}
+
+- (BOOL)tableView:(NSTableView *) [[maybe_unused]] _table_view isGroupRow:(NSInteger)_row
+{
+    if( const auto projection_row = m_Projection.RowAt(static_cast<int>(_row)) )
+        return projection_row->kind == PanelListViewProjectionRow::Kind::GroupHeader;
+    return false;
+}
+
+- (CGFloat)tableView:(NSTableView *) [[maybe_unused]] _table_view heightOfRow:(NSInteger)_row
+{
+    return [self tableView:_table_view isGroupRow:_row] ? 32.0 : m_Geometry.LineHeight();
+}
+
+- (BOOL)tableView:(NSTableView *) [[maybe_unused]] _table_view shouldSelectRow:(NSInteger)_row
+{
+    return ![self tableView:_table_view isGroupRow:_row];
 }
 
 - (void)tableView:(NSTableView *) [[maybe_unused]] tableView
@@ -575,21 +679,41 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 
 - (void)onDataChanged
 {
+    if( !m_Data ) {
+        [self rebuildProjection];
+        [m_TableView reloadData];
+        return;
+    }
+
     data::Model *const data = m_Data;
+    const bool old_projection_was_identity = m_Projection.IsIdentity();
     const auto old_rows_count = static_cast<int>(m_TableView.numberOfRows);
     const auto new_rows_count = data->SortedEntriesCount();
+    [self rebuildProjection];
 
     IconRepositoryCleaner{*m_IconRepository, *m_Data}.SweepUnusedSlots();
 
-    auto block = ^(PanelListViewRowView *row_view, NSInteger rowIndex) {
-      const int row = static_cast<int>(rowIndex);
-      if( row >= new_rows_count )
+    // Inserting or removing group rows changes the presentation-to-model mapping. A full reload
+    // is both safer and cheaper than attempting a collection diff for this relatively small view.
+    if( !old_projection_was_identity || !m_Projection.IsIdentity() ) {
+        [m_TableView reloadData];
+        return;
+    }
+
+    auto block = ^(NSTableRowView *abstract_row_view, NSInteger rowIndex) {
+      PanelListViewRowView *const row_view = nc::objc_cast<PanelListViewRowView>(abstract_row_view);
+      if( !row_view )
+          return;
+      const int row = [self sortedIndexForTableRow:rowIndex];
+      if( row < 0 || row >= new_rows_count )
           return;
 
       if( auto item = data->EntryAtSortPosition(row) ) {
           auto &vd = data->VolatileDataAtSortPosition(row);
           row_view.item = item;
+          row_view.itemIndex = row;
           row_view.vd = vd;
+          row_view.alphaValue = PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, item.Path()) ? 0.55 : 1.0;
           for( NSView *v in row_view.subviews ) {
               NSString *identifier = v.identifier;
               if( identifier.length == 0 )
@@ -630,9 +754,11 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 }
 - (void)onVolatileDataChanged
 {
-    [m_TableView enumerateAvailableRowViewsUsingBlock:^(PanelListViewRowView *rowView, NSInteger row) {
-      if( m_Data->IsValidSortPosition(static_cast<int>(row)) )
-          rowView.vd = m_Data->VolatileDataAtSortPosition(static_cast<int>(row));
+    [m_TableView enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *abstractRowView, NSInteger row) {
+      PanelListViewRowView *const rowView = nc::objc_cast<PanelListViewRowView>(abstractRowView);
+      const int sorted_index = [self sortedIndexForTableRow:row];
+      if( rowView && m_Data->IsValidSortPosition(sorted_index) )
+          rowView.vd = m_Data->VolatileDataAtSortPosition(sorted_index);
     }];
 }
 
@@ -641,6 +767,22 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
     m_Data = _data;
     [self onDataChanged];
     [self placeSortIndicator];
+}
+
+- (bool)groupingEnabled
+{
+    return m_PresentationStyle == NCPanelListViewPresentationStyleExplorer && m_GroupingEnabled;
+}
+
+- (void)setGroupingEnabled:(bool)_enabled
+{
+    if( m_PresentationStyle != NCPanelListViewPresentationStyleExplorer || m_GroupingEnabled == _enabled )
+        return;
+
+    const int cursor_position = self.cursorPosition;
+    m_GroupingEnabled = _enabled;
+    [self onDataChanged];
+    self.cursorPosition = cursor_position;
 }
 
 - (int)itemsInColumn
@@ -655,13 +797,14 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 
 - (int)cursorPosition
 {
-    return static_cast<int>(m_TableView.selectedRow);
+    return [self sortedIndexForTableRow:m_TableView.selectedRow];
 }
 
 - (void)setCursorPosition:(int)_cursor_position
 {
-    if( _cursor_position >= 0 ) {
-        [m_TableView selectRowIndexes:[NSIndexSet indexSetWithIndex:_cursor_position] byExtendingSelection:false];
+    const int table_row = [self tableRowForSortedIndex:_cursor_position];
+    if( table_row >= 0 ) {
+        [m_TableView selectRowIndexes:[NSIndexSet indexSetWithIndex:table_row] byExtendingSelection:false];
         [self ensureItemIsVisible:_cursor_position];
     }
     else {
@@ -671,10 +814,11 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 
 - (void)ensureItemIsVisible:(int)_item_index
 {
-    if( _item_index < 0 )
+    const int table_row = [self tableRowForSortedIndex:_item_index];
+    if( table_row < 0 )
         return;
 
-    const auto item_rect = [m_TableView rectOfRow:_item_index];
+    const auto item_rect = [m_TableView rectOfRow:table_row];
     if( NSEqualRects(item_rect, NSZeroRect) )
         return; // failsafe if the invariant is broken
 
@@ -713,15 +857,23 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 
 - (NSFont *)font
 {
+    if( m_PresentationStyle == NCPanelListViewPresentationStyleExplorer )
+        return [NSFont systemFontOfSize:13.0 weight:NSFontWeightRegular];
     return CurrentTheme().FilePanelsListFont();
+}
+
+- (NCPanelListViewPresentationStyle)presentationStyle
+{
+    return m_PresentationStyle;
 }
 
 - (void)onIconUpdated:(IconRepository::SlotKey)_icon_no image:(NSImage *)_image
 {
     dispatch_assert_main_queue();
-    [m_TableView enumerateAvailableRowViewsUsingBlock:^(PanelListViewRowView *rowView, NSInteger row) {
-      const auto index = static_cast<int>(row);
-      if( m_Data->IsValidSortPosition(index) ) {
+    [m_TableView enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *abstractRowView, NSInteger row) {
+      PanelListViewRowView *const rowView = nc::objc_cast<PanelListViewRowView>(abstractRowView);
+      const auto index = [self sortedIndexForTableRow:row];
+      if( rowView && m_Data->IsValidSortPosition(index) ) {
           auto &vd = m_Data->VolatileDataAtSortPosition(index);
           if( vd.icon == _icon_no )
               rowView.nameView.icon = _image;
@@ -737,9 +889,10 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
     const auto col_index = [m_TableView.tableColumns indexOfObject:_column];
     if( col_index != NSNotFound )
         [m_TableView
-            enumerateAvailableRowViewsUsingBlock:^(PanelListViewRowView *rowView, [[maybe_unused]] NSInteger row) {
-              if( auto v = nc::objc_cast<PanelListViewDateTimeView>([rowView viewAtColumn:col_index]) )
-                  v.style = _style;
+            enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *abstractRowView, [[maybe_unused]] NSInteger row) {
+              if( auto rowView = nc::objc_cast<PanelListViewRowView>(abstractRowView) )
+                  if( auto v = nc::objc_cast<PanelListViewDateTimeView>([rowView viewAtColumn:col_index]) )
+                      v.style = _style;
             }];
 }
 
@@ -949,19 +1102,27 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
         return;
 
     for( int i = 0, e = static_cast<int>(m_TableView.numberOfRows); i != e; ++i )
-        [m_TableView viewAtColumn:cn - 1 row:i makeIfNecessary:false].needsDisplay = true;
+        if( NSView *const view = [m_TableView viewAtColumn:cn - 1 row:i makeIfNecessary:false] )
+            view.needsDisplay = true;
 }
 
 - (bool)isItemVisible:(int)_sorted_item_index
 {
+    const int table_row = [self tableRowForSortedIndex:_sorted_item_index];
+    if( table_row < 0 )
+        return false;
     CGRect visibleRect = m_ScrollView.contentView.visibleRect;
     NSRange range = [m_TableView rowsInRect:visibleRect];
-    return NSLocationInRange(_sorted_item_index, range);
+    return NSLocationInRange(static_cast<NSUInteger>(table_row), range);
 }
 
 - (void)setupFieldEditor:(NCPanelViewFieldEditor *)_editor forItemAtIndex:(int)_sorted_item_index
 {
-    if( PanelListViewRowView *rv = [m_TableView rowViewAtRow:_sorted_item_index makeIfNecessary:false] )
+    const int table_row = [self tableRowForSortedIndex:_sorted_item_index];
+    if( table_row < 0 )
+        return;
+    if( PanelListViewRowView *rv =
+            nc::objc_cast<PanelListViewRowView>([m_TableView rowViewAtRow:table_row makeIfNecessary:false]) )
         [rv.nameView setupFieldEditor:_editor];
 }
 
@@ -1079,8 +1240,12 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
     [self calculateItemLayout];
     [m_TableView reloadData];
     self.cursorPosition = cp;
-    m_TableView.gridColor = CurrentTheme().FilePanelsListGridColor();
-    m_ScrollView.backgroundColor = CurrentTheme().FilePanelsListRegularEvenRowBackgroundColor();
+    const bool explorer = m_PresentationStyle == NCPanelListViewPresentationStyleExplorer;
+    m_TableView.explorerAppearance = explorer;
+    m_TableView.usesAlternatingRowBackgroundColors = !explorer;
+    m_TableView.gridColor = explorer ? NSColor.clearColor : CurrentTheme().FilePanelsListGridColor();
+    m_ScrollView.backgroundColor =
+        explorer ? NSColor.controlBackgroundColor : CurrentTheme().FilePanelsListRegularEvenRowBackgroundColor();
 
     for( NSTableColumn *col : {m_NameColumn,
                                m_ExtensionColumn,
@@ -1091,16 +1256,27 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
                                m_DateAccessedColumn,
                                m_TagsColumn} ) {
         if( PanelListViewTableHeaderCell *cell = objc_cast<PanelListViewTableHeaderCell>(col.headerCell) ) {
-            [cell updateThemeWithTextFont:CurrentTheme().FilePanelsListHeaderFont()
-                                textColor:CurrentTheme().FilePanelsListHeaderTextColor()
-                           separatorColor:CurrentTheme().FilePanelsListHeaderSeparatorColor()
-                          backgroundColor:CurrentTheme().FilePanelsListHeaderBackgroundColor()];
+            cell.drawsVerticalSeparator = !explorer;
+            if( explorer ) {
+                [cell updateThemeWithTextFont:[NSFont systemFontOfSize:12.0 weight:NSFontWeightMedium]
+                                    textColor:NSColor.secondaryLabelColor
+                               separatorColor:NSColor.separatorColor
+                              backgroundColor:NSColor.controlBackgroundColor];
+            }
+            else {
+                [cell updateThemeWithTextFont:CurrentTheme().FilePanelsListHeaderFont()
+                                    textColor:CurrentTheme().FilePanelsListHeaderTextColor()
+                               separatorColor:CurrentTheme().FilePanelsListHeaderSeparatorColor()
+                              backgroundColor:CurrentTheme().FilePanelsListHeaderBackgroundColor()];
+            }
         }
     }
 
     // Notify both active and stashed rows about the theme change
-    [m_TableView enumerateAvailableRowViewsUsingBlock:^(PanelListViewRowView *_row_view, [[maybe_unused]] long _row) {
-      [_row_view notifyThemeChanged];
+    [m_TableView enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *_abstract_row_view,
+                                                        [[maybe_unused]] long _row) {
+      if( auto row_view = nc::objc_cast<PanelListViewRowView>(_abstract_row_view) )
+          [row_view notifyThemeChanged];
     }];
     for( PanelListViewRowView *row_view : m_RowsStash ) {
         [row_view notifyThemeChanged];
@@ -1118,10 +1294,29 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
     });
 }
 
+- (void)pasteboardCutStateDidChange:(NSNotification *) [[maybe_unused]] _notification
+{
+    [m_TableView enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *abstract_row_view,
+                                                        [[maybe_unused]] NSInteger row) {
+      if( PanelListViewRowView *const row_view = nc::objc_cast<PanelListViewRowView>(abstract_row_view) )
+          row_view.alphaValue =
+              PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, row_view.item.Path()) ? 0.55 : 1.0;
+    }];
+}
+
 - (void)dateDidChangeImpl
 {
     dispatch_assert_main_queue();
-    auto block = ^(PanelListViewRowView *row_view, NSInteger) {
+    if( self.groupingEnabled ) {
+        const int cursor_position = self.cursorPosition;
+        [self onDataChanged];
+        self.cursorPosition = cursor_position;
+        return;
+    }
+    auto block = ^(NSTableRowView *abstract_row_view, NSInteger) {
+      PanelListViewRowView *const row_view = nc::objc_cast<PanelListViewRowView>(abstract_row_view);
+      if( !row_view )
+          return;
       for( NSView *v in row_view.subviews ) {
           NSString *identifier = v.identifier;
           if( identifier.length == 0 )
@@ -1138,7 +1333,10 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 
 - (std::optional<NSRect>)frameOfItemAtIndex:(int)_sorted_item_index
 {
-    const NSRect rc = [m_TableView rectOfRow:_sorted_item_index];
+    const int table_row = [self tableRowForSortedIndex:_sorted_item_index];
+    if( table_row < 0 )
+        return {};
+    const NSRect rc = [m_TableView rectOfRow:table_row];
     if( rc.size.height == 0. )
         return {};
     return [self convertRect:rc fromView:m_TableView];

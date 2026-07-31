@@ -110,6 +110,7 @@ static nc::utility::TemporaryFileStorageImpl *g_TemporaryFileStorage = nullptr;
 static const auto g_ConfigForceFn = "general.alwaysUseFnKeysAsFunctional";
 static const auto g_ConfigExternalToolsList = "externalTools.tools_v1";
 static const auto g_ConfigLayoutsList = "filePanel.layout.layouts_v1";
+static const auto g_ConfigExplorerLayoutsList = "filePanel.layout.explorer_layouts_v1";
 static const auto g_ConfigSelectedTheme = "general.theme";
 static const auto g_ConfigThemes = "themes";
 static const auto g_ConfigExtEditorsList = "externalEditors.editors_v1";
@@ -307,8 +308,8 @@ static NCAppDelegate *g_Me = nil;
         return [NSApp.mainMenu itemWithTagHierarchical:*tag];
     };
 
-    static auto layouts_delegate = [[PanelViewLayoutsMenuDelegate alloc] initWithStorage:*self.panelLayouts];
-    item_for_action("menu.view.toggle_layout_1").menu.delegate = layouts_delegate;
+    // Layout titles are resolved by ToggleLayout validation against the active panel's storage.
+    // Commander and Explorer intentionally use separate layout sets.
 
     auto manage_fav_item = item_for_action("menu.go.favorites.manage");
     static auto favorites_delegate =
@@ -396,6 +397,7 @@ static NCAppDelegate *g_Me = nil;
 
     // Non-MAS version extended logic below:
     if( !nc::base::AmISandboxed() ) {
+#ifndef __NC_CODEX_DEV__
         // setup Sparkle updater stuff
         NSMenuItem *item = [[NSMenuItem alloc] init];
         item.title = NSLocalizedString(@"Check for Updates...",
@@ -403,11 +405,14 @@ static NCAppDelegate *g_Me = nil;
         item.target = NCBootstrapSharedSUUpdaterInstance();
         item.action = NCBootstrapSUUpdaterAction();
         [[NSApp.mainMenu itemAtIndex:0].submenu insertItem:item atIndex:1];
+#endif
 
         if( GlobalConfig().GetBool(g_ConfigForceFn) )
             nc::utility::FunctionalKeysPass::Instance().Enable(); // accessibility - remapping functional keys FnXX
 
+#ifndef __NC_CODEX_DEV__
         PFMoveToApplicationsFolderIfNecessary();
+#endif
     }
 
     m_ConfigWiring = std::make_unique<ConfigWiring>(GlobalConfig(), m_PoolEnqueueFilter);
@@ -662,6 +667,13 @@ static NCAppDelegate *g_Me = nil;
 - (const std::shared_ptr<nc::panel::PanelViewLayoutsStorage> &)panelLayouts
 {
     [[clang::no_destroy]] static auto i = std::make_shared<nc::panel::PanelViewLayoutsStorage>(g_ConfigLayoutsList);
+    return i;
+}
+
+- (const std::shared_ptr<nc::panel::PanelViewLayoutsStorage> &)explorerPanelLayouts
+{
+    [[clang::no_destroy]] static auto i =
+        std::make_shared<nc::panel::PanelViewLayoutsStorage>(g_ConfigExplorerLayoutsList);
     return i;
 }
 

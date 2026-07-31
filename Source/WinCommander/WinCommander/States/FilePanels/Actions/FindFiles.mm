@@ -63,9 +63,17 @@ static VFSListingPtr FetchSearchResultsAsListing(const std::vector<vfs::VFSPath>
     return VFSListing::Build(VFSListing::Compose(listings));
 }
 
-void FindFiles::Perform(PanelController *_target, id /*_sender*/) const
+void FindFiles::Perform(PanelController *_target, id _sender) const
 {
+    if( !Predicate(_target) )
+        return;
+
     FindFilesSheetController *const sheet = [FindFilesSheetController new];
+    if( [_sender isKindOfClass:NSTextField.class] ) {
+        NSString *const mask = static_cast<NSTextField *>(_sender).stringValue;
+        if( mask.length )
+            sheet.initialFilenameMask = mask;
+    }
     sheet.vfsInstanceManager = &_target.vfsInstanceManager;
     sheet.host = _target.isUniform ? _target.vfs : _target.view.item.Host();
     sheet.path = _target.isUniform ? _target.currentDirectoryPath : _target.view.item.Directory();

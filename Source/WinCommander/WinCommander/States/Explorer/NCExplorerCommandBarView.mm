@@ -3,7 +3,10 @@
 #include "../FilePanels/PanelController.h"
 #include "../FilePanels/PanelView.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
+#include "../FilePanels/Helpers/Pasteboard.h"
 #include <CUI/CommandPopover.h>
+#include <Panel/PanelData.h>
+#include <Panel/PanelDataSortMode.h>
 #include <Utility/ObjCpp.h>
 #include <Utility/StringExtras.h>
 #include <VFS/VFS.h>
@@ -15,6 +18,14 @@
     PanelController *m_Panel;
     NCCommandPopover *m_ActivePopover;
     NSSharingServicePicker *m_ActiveSharingPicker;
+    NSButton *m_CutButton;
+    NSButton *m_CopyButton;
+    NSButton *m_PasteButton;
+    NSButton *m_RenameButton;
+    NSButton *m_ShareButton;
+    NSButton *m_DeleteButton;
+    NSTimer *m_PasteboardMonitor;
+    NSInteger m_LastPasteboardChangeCount;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
@@ -22,9 +33,46 @@
     self = [super initWithFrame:frameRect];
     if( self ) {
         m_Panel = _panel;
+        m_LastPasteboardChangeCount = NSPasteboard.generalPasteboard.changeCount;
         [self buildLayout];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(commandContextDidChange:)
+                                                   name:NCPanelViewContextDidChangeNotification
+                                                 object:m_Panel.view];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(commandContextDidChange:)
+                                                   name:NSApplicationDidBecomeActiveNotification
+                                                 object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(commandContextDidChange:)
+                                                   name:nc::panel::NCPanelPasteboardCutStateDidChangeNotification
+                                                 object:NSPasteboard.generalPasteboard];
+        [self updateCommandAvailability];
     }
     return self;
+}
+
+- (void)dealloc
+{
+    [m_PasteboardMonitor invalidate];
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
+- (void)viewDidMoveToWindow
+{
+    [super viewDidMoveToWindow];
+    [m_PasteboardMonitor invalidate];
+    m_PasteboardMonitor = nil;
+    if( self.window ) {
+        __weak NCExplorerCommandBarView *weak_self = self;
+        m_PasteboardMonitor = [NSTimer scheduledTimerWithTimeInterval:0.5
+                                                              repeats:true
+                                                                block:^([[maybe_unused]] NSTimer *timer) {
+          if( NCExplorerCommandBarView *const strong_self = weak_self )
+              [strong_self checkPasteboardForChanges];
+        }];
+    }
+    [self updateCommandAvailability];
 }
 
 - (NSButton *)makeButtonWithTitle:(NSString *)_title symbol:(NSString *)_symbol target:(id)_target action:(SEL)_action
@@ -43,46 +91,34 @@
 
 - (void)buildLayout
 {
-    // Same idiom as NCExplorerToolbarDelegate: fetch the panel's own action dispatcher and wire
-    // buttons directly to its existing IBActions.
-    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
-
     NSButton *const new_button = [self makeButtonWithTitle:NSLocalizedString(@"New", "Explorer command bar button")
                                                       symbol:@"plus"
                                                       target:self
                                                       action:@selector(showNewPopover:)];
 
-    // NOTE: the dispatcher has no dedicated "cut" selector - MainMenu.xib wires a standard "cut:"
-    // edit action, but nothing in NCPanelControllerActionsDispatcher (or the wider codebase)
-    // implements it. The app's actual clipboard model is Copy (writes the pasteboard) + Paste
-    // (copies from the pasteboard) + moveItemHere: (moves from the pasteboard, the "paste as
-    // move" landing action used at the destination). There is no source-side action that marks
-    // items for a later destructive paste. Until such an action exists, Cut is wired to the same
-    // copy: selector as Copy, so it is at least functional (puts the selection on the pasteboard)
-    // rather than silently doing nothing.
-    NSButton *const cut_button = [self makeButtonWithTitle:NSLocalizedString(@"Cut", "Explorer command bar button")
-                                                      symbol:@"scissors"
-                                                      target:dispatcher
-                                                      action:@selector(copy:)];
+    m_CutButton = [self makeButtonWithTitle:NSLocalizedString(@"Cut", "Explorer command bar button")
+                                     symbol:@"scissors"
+                                     target:self
+                                     action:@selector(performCut:)];
 
-    NSButton *const copy_button = [self makeButtonWithTitle:NSLocalizedString(@"Copy", "Explorer command bar button")
-                                                       symbol:@"doc.on.doc"
-                                                       target:dispatcher
-                                                       action:@selector(copy:)];
+    m_CopyButton = [self makeButtonWithTitle:NSLocalizedString(@"Copy", "Explorer command bar button")
+                                      symbol:@"doc.on.doc"
+                                      target:self
+                                      action:@selector(performCopy:)];
 
-    NSButton *const paste_button =
+    m_PasteButton =
         [self makeButtonWithTitle:NSLocalizedString(@"Paste", "Explorer command bar button")
                             symbol:@"doc.on.clipboard"
-                            target:dispatcher
-                            action:@selector(paste:)];
+                            target:self
+                            action:@selector(performPaste:)];
 
-    NSButton *const rename_button =
+    m_RenameButton =
         [self makeButtonWithTitle:NSLocalizedString(@"Rename", "Explorer command bar button")
                             symbol:@"pencil"
-                            target:dispatcher
-                            action:@selector(OnRenameFileInPlace:)];
+                            target:self
+                            action:@selector(performRename:)];
 
-    NSButton *const share_button =
+    m_ShareButton =
         [self makeButtonWithTitle:NSLocalizedString(@"Share", "Explorer command bar button")
                             symbol:@"square.and.arrow.up"
                             target:self
@@ -91,11 +127,11 @@
     // Explorer-style "Delete" is a move-to-trash, not a permanent delete - OnDeleteCommand:/
     // OnDeletePermanentlyCommand: are also available on the dispatcher but are deliberately not
     // used here.
-    NSButton *const delete_button =
+    m_DeleteButton =
         [self makeButtonWithTitle:NSLocalizedString(@"Delete", "Explorer command bar button")
                             symbol:@"trash"
-                            target:dispatcher
-                            action:@selector(OnMoveToTrash:)];
+                            target:self
+                            action:@selector(performDelete:)];
 
     NSButton *const sort_button = [self makeButtonWithTitle:NSLocalizedString(@"Sort", "Explorer command bar button")
                                                        symbol:@"arrow.up.arrow.down"
@@ -114,12 +150,12 @@
 
     NSStackView *const stack = [NSStackView stackViewWithViews:@[
         new_button,
-        cut_button,
-        copy_button,
-        paste_button,
-        rename_button,
-        share_button,
-        delete_button,
+        m_CutButton,
+        m_CopyButton,
+        m_PasteButton,
+        m_RenameButton,
+        m_ShareButton,
+        m_DeleteButton,
         sort_button,
         view_button,
         more_button
@@ -140,6 +176,83 @@
     ]];
 }
 
+#pragma mark - Command validation
+
+- (void)commandContextDidChange:(NSNotification *) [[maybe_unused]] _notification
+{
+    [self updateCommandAvailability];
+}
+
+- (void)checkPasteboardForChanges
+{
+    const NSInteger change_count = NSPasteboard.generalPasteboard.changeCount;
+    if( change_count == m_LastPasteboardChangeCount )
+        return;
+    m_LastPasteboardChangeCount = change_count;
+    [self updateCommandAvailability];
+}
+
+- (void)updateCommandAvailability
+{
+    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
+    m_LastPasteboardChangeCount = NSPasteboard.generalPasteboard.changeCount;
+    m_CutButton.enabled = [dispatcher validateActionBySelector:@selector(cut:)];
+    m_CopyButton.enabled = [dispatcher validateActionBySelector:@selector(copy:)];
+    m_PasteButton.enabled = [dispatcher validateActionBySelector:@selector(paste:)];
+    m_RenameButton.enabled = [dispatcher validateActionBySelector:@selector(OnRenameFileInPlace:)];
+    m_DeleteButton.enabled = [dispatcher validateActionBySelector:@selector(OnMoveToTrash:)];
+
+    bool has_shareable_item = false;
+    for( const VFSListingItem &item : m_Panel.selectedEntriesOrFocusedEntry ) {
+        if( !item.IsDotDot() && item.Host() && item.Host()->IsNativeFS() ) {
+            has_shareable_item = true;
+            break;
+        }
+    }
+    m_ShareButton.enabled = has_shareable_item;
+}
+
+- (void)performAction:(SEL)_selector sender:(id)_sender
+{
+    [m_Panel.view.actionsDispatcher executeBySelectorIfValidOrBeep:_selector withSender:_sender];
+    [self updateCommandAvailability];
+}
+
+- (void)performCut:(id)_sender
+{
+    [self performAction:@selector(cut:) sender:_sender];
+}
+
+- (void)performCopy:(id)_sender
+{
+    [self performAction:@selector(copy:) sender:_sender];
+}
+
+- (void)performPaste:(id)_sender
+{
+    [self performAction:@selector(paste:) sender:_sender];
+}
+
+- (void)performRename:(id)_sender
+{
+    [self performAction:@selector(OnRenameFileInPlace:) sender:_sender];
+}
+
+- (void)performDelete:(id)_sender
+{
+    [self performAction:@selector(OnMoveToTrash:) sender:_sender];
+}
+
+- (void)performPopoverAction:(id)_sender
+{
+    NCCommandPopoverItem *const item = nc::objc_cast<NCCommandPopoverItem>(_sender);
+    if( !item || ![item.representedObject isKindOfClass:NSString.class] ) {
+        NSBeep();
+        return;
+    }
+    [self performAction:NSSelectorFromString(static_cast<NSString *>(item.representedObject)) sender:item];
+}
+
 #pragma mark - New
 
 - (void)showNewPopover:(id)sender
@@ -148,23 +261,23 @@
     if( !button )
         return;
 
-    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
-
     NCCommandPopover *const popover =
         [[NCCommandPopover alloc] initWithTitle:NSLocalizedString(@"New", "Explorer command bar - New popover title")];
 
     NCCommandPopoverItem *const new_folder = [[NCCommandPopoverItem alloc] init];
     new_folder.title = NSLocalizedString(@"New Folder", "Explorer command bar - New popover item");
     new_folder.image = [NSImage imageWithSystemSymbolName:@"folder.badge.plus" accessibilityDescription:nil];
-    new_folder.target = dispatcher;
-    new_folder.action = @selector(OnQuickNewFolder:);
+    new_folder.target = self;
+    new_folder.action = @selector(performPopoverAction:);
+    new_folder.representedObject = NSStringFromSelector(@selector(OnQuickNewFolder:));
     [popover addItem:new_folder];
 
     NCCommandPopoverItem *const new_file = [[NCCommandPopoverItem alloc] init];
     new_file.title = NSLocalizedString(@"New File", "Explorer command bar - New popover item");
     new_file.image = [NSImage imageWithSystemSymbolName:@"doc.badge.plus" accessibilityDescription:nil];
-    new_file.target = dispatcher;
-    new_file.action = @selector(OnQuickNewFile:);
+    new_file.target = self;
+    new_file.action = @selector(performPopoverAction:);
+    new_file.representedObject = NSStringFromSelector(@selector(OnQuickNewFile:));
     [popover addItem:new_file];
 
     [self presentPopover:popover relativeToButton:button];
@@ -178,8 +291,6 @@
     if( !button )
         return;
 
-    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
-
     NCCommandPopover *const popover = [[NCCommandPopover alloc]
         initWithTitle:NSLocalizedString(@"Sort by", "Explorer command bar - Sort popover title")];
 
@@ -188,7 +299,7 @@
     // registered on the dispatcher's action map under these exact selectors.
     NSArray<NSString *> *const sort_titles = @[
         NSLocalizedString(@"Name", "Explorer command bar - Sort popover item"),
-        NSLocalizedString(@"Extension", "Explorer command bar - Sort popover item"),
+        NSLocalizedString(@"Type", "Explorer command bar - Sort popover item"),
         NSLocalizedString(@"Size", "Explorer command bar - Sort popover item"),
         NSLocalizedString(@"Date Modified", "Explorer command bar - Sort popover item"),
         NSLocalizedString(@"Date Created", "Explorer command bar - Sort popover item"),
@@ -208,15 +319,97 @@
     for( NSUInteger i = 0; i < sort_titles.count; ++i ) {
         NCCommandPopoverItem *const item = [[NCCommandPopoverItem alloc] init];
         item.title = sort_titles[i];
-        item.target = dispatcher;
-        item.action = sort_actions[i];
+        item.target = self;
+        item.action = @selector(performPopoverAction:);
+        item.representedObject = NSStringFromSelector(sort_actions[i]);
+        [popover addItem:item];
+    }
+
+    [popover addItem:NCCommandPopoverItem.separatorItem];
+    [popover addItem:[NCCommandPopoverItem
+                         sectionHeaderWithTitle:NSLocalizedString(@"Group by",
+                                                                  "Explorer command bar - Group section")]];
+
+    const bool grouping_enabled = m_Panel.view.explorerDetailsGroupingEnabled;
+    const auto current_sort = m_Panel.data.SortMode().sort;
+
+    NCCommandPopoverItem *const no_grouping = [[NCCommandPopoverItem alloc] init];
+    no_grouping.title = NSLocalizedString(@"None", "Explorer command bar - Group popover item");
+    no_grouping.image = grouping_enabled
+                            ? nil
+                            : [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:nil];
+    no_grouping.target = self;
+    no_grouping.action = @selector(disableGrouping:);
+    [popover addItem:no_grouping];
+
+    NSArray<NSString *> *const group_titles = @[
+        NSLocalizedString(@"Name", "Explorer command bar - Group popover item"),
+        NSLocalizedString(@"Type", "Explorer command bar - Group popover item"),
+        NSLocalizedString(@"Size", "Explorer command bar - Group popover item"),
+        NSLocalizedString(@"Date Modified", "Explorer command bar - Group popover item")
+    ];
+    static const SEL group_actions[] = {
+        @selector(groupByName:), @selector(groupByType:), @selector(groupBySize:), @selector(groupByDateModified:)};
+    using SortMode = nc::panel::data::SortMode;
+    static const SortMode::Mode group_direct_modes[] = {
+        SortMode::SortByName, SortMode::SortByExt, SortMode::SortBySize, SortMode::SortByModTime};
+    static const SortMode::Mode group_reverse_modes[] = {
+        SortMode::SortByNameRev, SortMode::SortByExtRev, SortMode::SortBySizeRev, SortMode::SortByModTimeRev};
+
+    for( NSUInteger i = 0; i < group_titles.count; ++i ) {
+        NCCommandPopoverItem *const item = [[NCCommandPopoverItem alloc] init];
+        item.title = group_titles[i];
+        if( grouping_enabled && (current_sort == group_direct_modes[i] || current_sort == group_reverse_modes[i]) )
+            item.image = [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:nil];
+        item.target = self;
+        item.action = group_actions[i];
         [popover addItem:item];
     }
 
     [self presentPopover:popover relativeToButton:button];
 }
 
-#pragma mark - View (placeholder)
+- (void)enableGroupingForSortMode:(nc::panel::data::SortMode::Mode)_direct
+                      reverseMode:(nc::panel::data::SortMode::Mode)_reverse
+{
+    auto sort_mode = m_Panel.data.SortMode();
+    if( sort_mode.sort != _direct && sort_mode.sort != _reverse ) {
+        sort_mode.sort = _direct;
+        [m_Panel changeSortingModeTo:sort_mode];
+    }
+    m_Panel.view.explorerDetailsGroupingEnabled = true;
+}
+
+- (void)disableGrouping:(id) [[maybe_unused]] _sender
+{
+    m_Panel.view.explorerDetailsGroupingEnabled = false;
+}
+
+- (void)groupByName:(id) [[maybe_unused]] _sender
+{
+    using SortMode = nc::panel::data::SortMode;
+    [self enableGroupingForSortMode:SortMode::SortByName reverseMode:SortMode::SortByNameRev];
+}
+
+- (void)groupByType:(id) [[maybe_unused]] _sender
+{
+    using SortMode = nc::panel::data::SortMode;
+    [self enableGroupingForSortMode:SortMode::SortByExt reverseMode:SortMode::SortByExtRev];
+}
+
+- (void)groupBySize:(id) [[maybe_unused]] _sender
+{
+    using SortMode = nc::panel::data::SortMode;
+    [self enableGroupingForSortMode:SortMode::SortBySize reverseMode:SortMode::SortBySizeRev];
+}
+
+- (void)groupByDateModified:(id) [[maybe_unused]] _sender
+{
+    using SortMode = nc::panel::data::SortMode;
+    [self enableGroupingForSortMode:SortMode::SortByModTime reverseMode:SortMode::SortByModTimeRev];
+}
+
+#pragma mark - View
 
 - (void)showViewPopover:(id)sender
 {
@@ -224,23 +417,53 @@
     if( !button )
         return;
 
-    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
-
     NCCommandPopover *const popover =
         [[NCCommandPopover alloc] initWithTitle:NSLocalizedString(@"View", "Explorer command bar - View popover title")];
 
-    // The one genuinely useful, already-existing toggle that belongs here.
-    NCCommandPopoverItem *const show_hidden = [[NCCommandPopoverItem alloc] init];
-    show_hidden.title = NSLocalizedString(@"Show Hidden Items", "Explorer command bar - View popover item");
-    show_hidden.target = dispatcher;
-    show_hidden.action = @selector(ToggleViewHiddenFiles:);
-    [popover addItem:show_hidden];
+    [popover addItem:[NCCommandPopoverItem
+                          sectionHeaderWithTitle:NSLocalizedString(@"Layout", "Explorer command bar - View section")]];
+
+    NSArray<NSString *> *const view_titles = @[
+        NSLocalizedString(@"Small Icons", "Explorer command bar - View popover item"),
+        NSLocalizedString(@"Details", "Explorer command bar - View popover item"),
+        NSLocalizedString(@"Medium Icons", "Explorer command bar - View popover item"),
+        NSLocalizedString(@"Large Icons", "Explorer command bar - View popover item"),
+        NSLocalizedString(@"Content", "Explorer command bar - View popover item")
+    ];
+    NSArray<NSString *> *const view_symbols = @[
+        @"square.grid.3x3",
+        @"list.bullet",
+        @"square.grid.2x2",
+        @"square.grid.2x2.fill",
+        @"rectangle.grid.1x2"
+    ];
+    static const SEL view_actions[] = {
+        @selector(onToggleViewLayout1:),
+        @selector(onToggleViewLayout2:),
+        @selector(onToggleViewLayout3:),
+        @selector(onToggleViewLayout4:),
+        @selector(onToggleViewLayout5:)
+    };
+
+    for( NSUInteger i = 0; i < view_titles.count; ++i ) {
+        NCCommandPopoverItem *const item = [[NCCommandPopoverItem alloc] init];
+        item.title = view_titles[i];
+        NSString *const symbol = m_Panel.layoutIndex == static_cast<int>(i) ? @"checkmark" : view_symbols[i];
+        item.image = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil];
+        item.target = self;
+        item.action = @selector(performPopoverAction:);
+        item.representedObject = NSStringFromSelector(view_actions[i]);
+        [popover addItem:item];
+    }
 
     [popover addItem:NCCommandPopoverItem.separatorItem];
-    [popover addItem:[NCCommandPopoverItem
-                          sectionHeaderWithTitle:NSLocalizedString(
-                                                      @"Layout and density options are coming soon",
-                                                      "Explorer command bar - View popover placeholder")]];
+
+    NCCommandPopoverItem *const show_hidden = [[NCCommandPopoverItem alloc] init];
+    show_hidden.title = NSLocalizedString(@"Show Hidden Items", "Explorer command bar - View popover item");
+    show_hidden.target = self;
+    show_hidden.action = @selector(performPopoverAction:);
+    show_hidden.representedObject = NSStringFromSelector(@selector(ToggleViewHiddenFiles:));
+    [popover addItem:show_hidden];
 
     [self presentPopover:popover relativeToButton:button];
 }
@@ -253,8 +476,6 @@
     if( !button )
         return;
 
-    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
-
     NCCommandPopover *const popover =
         [[NCCommandPopover alloc] initWithTitle:NSLocalizedString(@"More", "Explorer command bar - More popover title")];
 
@@ -262,20 +483,23 @@
     // their own - a real overflow menu is out of scope for this pass.
     NCCommandPopoverItem *const get_info = [[NCCommandPopoverItem alloc] init];
     get_info.title = NSLocalizedString(@"Get Info", "Explorer command bar - More popover item");
-    get_info.target = dispatcher;
-    get_info.action = @selector(OnFileAttributes:);
+    get_info.target = self;
+    get_info.action = @selector(performPopoverAction:);
+    get_info.representedObject = NSStringFromSelector(@selector(OnFileAttributes:));
     [popover addItem:get_info];
 
     NCCommandPopoverItem *const compress = [[NCCommandPopoverItem alloc] init];
     compress.title = NSLocalizedString(@"Compress", "Explorer command bar - More popover item");
-    compress.target = dispatcher;
-    compress.action = @selector(onCompressItems:);
+    compress.target = self;
+    compress.action = @selector(performPopoverAction:);
+    compress.representedObject = NSStringFromSelector(@selector(onCompressItems:));
     [popover addItem:compress];
 
     NCCommandPopoverItem *const copy_path = [[NCCommandPopoverItem alloc] init];
     copy_path.title = NSLocalizedString(@"Copy Path", "Explorer command bar - More popover item");
-    copy_path.target = dispatcher;
-    copy_path.action = @selector(OnCopyCurrentFilePath:);
+    copy_path.target = self;
+    copy_path.action = @selector(performPopoverAction:);
+    copy_path.representedObject = NSStringFromSelector(@selector(OnCopyCurrentFilePath:));
     [popover addItem:copy_path];
 
     [popover addItem:NCCommandPopoverItem.separatorItem];

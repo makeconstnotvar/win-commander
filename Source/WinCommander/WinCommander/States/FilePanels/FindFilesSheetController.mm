@@ -246,11 +246,13 @@ private:
     FindFilesSheetFoundItem *m_DoubleClickedItem;
     std::function<void(const std::vector<nc::vfs::VFSPath> &_filepaths)> m_OnPanelize;
     std::function<void(const nc::panel::FindFilesSheetViewRequest &)> m_OnView;
+    NSString *m_InitialFilenameMask;
 }
 
 @synthesize FoundItems = m_FoundItems;
 @synthesize host = m_Host;
 @synthesize path = m_Path;
+@synthesize initialFilenameMask = m_InitialFilenameMask;
 @synthesize onPanelize = m_OnPanelize;
 @synthesize onView = m_OnView;
 @synthesize vfsInstanceManager;
@@ -324,7 +326,7 @@ private:
     [self updateMasksMenu];
     [self updateMaskSearchFieldPrompt];
     nc::objc_cast<NSSearchFieldCell>(self.maskSearchField.cell).cancelButtonCell = nil;
-    self.maskSearchField.stringValue = @"*";
+    self.maskSearchField.stringValue = m_InitialFilenameMask.length ? m_InitialFilenameMask : @"*";
 
     [self updateTextMenu];
     nc::objc_cast<NSSearchFieldCell>(self.textSearchField.cell).cancelButtonCell = nil;

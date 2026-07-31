@@ -85,8 +85,8 @@ BuildItemsLayout(NSFont *_font, PanelBriefViewColumnsLayout _layout, NSUInteger 
         line_height = short(font_info.LineHeight()) + insets[1] + insets[3];
         if( _layout.icon_scale == 1 && line_height < 17 )
             line_height = 17;
-        else if( _layout.icon_scale == 2 && line_height < 35 )
-            line_height = 35;
+        else if( _layout.icon_scale >= 2 && line_height < (_layout.icon_scale * 16) + 3 )
+            line_height = static_cast<short>((_layout.icon_scale * 16) + 3);
 
         text_baseline = insets[1] + short(font_info.Descent());
         icon_size = _layout.icon_scale * 16;
@@ -118,6 +118,7 @@ BuildItemsLayout(NSFont *_font, PanelBriefViewColumnsLayout _layout, NSUInteger 
     PanelBriefViewColumnsLayout m_ColumnsLayout;
     __weak PanelView *m_PanelView;
     nc::ThemesManager::ObservationTicket m_ThemeObservation;
+    bool m_ExplorerAppearance;
 }
 
 @synthesize columnsLayout = m_ColumnsLayout;
@@ -130,17 +131,26 @@ BuildItemsLayout(NSFont *_font, PanelBriefViewColumnsLayout _layout, NSUInteger 
 
 - (id)initWithFrame:(NSRect)frameRect iconRepository:(IconRepository &)_ir
 {
+    return [self initWithFrame:frameRect iconRepository:_ir explorerAppearance:false];
+}
+
+- (id)initWithFrame:(NSRect)frameRect
+         iconRepository:(IconRepository &)_ir
+    explorerAppearance:(bool)_explorer_appearance
+{
     self = [super initWithFrame:frameRect];
     if( !self )
         return nil;
 
     m_IconsRepository = &_ir;
+    m_ExplorerAppearance = _explorer_appearance;
 
     m_ScrollView = [[NSScrollView alloc] initWithFrame:frameRect];
     m_ScrollView.translatesAutoresizingMaskIntoConstraints = false;
     m_ScrollView.wantsLayer = true;
     m_ScrollView.drawsBackground = true;
-    m_ScrollView.backgroundColor = nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor();
+    m_ScrollView.backgroundColor = m_ExplorerAppearance ? NSColor.controlBackgroundColor
+                                                        : nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor();
     [self addSubview:m_ScrollView];
 
     const auto views_dict = NSDictionaryOfVariableBindings(m_ScrollView);
@@ -160,6 +170,7 @@ BuildItemsLayout(NSFont *_font, PanelBriefViewColumnsLayout _layout, NSUInteger 
     m_CollectionView.delegate = self;
 
     m_Background = [[PanelBriefViewCollectionViewBackground alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    m_Background.explorerAppearance = m_ExplorerAppearance;
     m_CollectionView.backgroundView = m_Background;
     m_CollectionView.backgroundColors = @[NSColor.clearColor];
 
@@ -299,7 +310,7 @@ static void PadWithSpaceForTags(std::span<unsigned short> _widths, const data::M
         return;
     }
 
-    const auto font = nc::CurrentTheme().FilePanelsBriefFont();
+    const auto font = self.font;
     auto widths = TextWidthsCache::Instance().Widths(strings, font);
     PadWithSpaceForTags(widths, m_Data);
     assert(static_cast<int>(widths.size()) == count);
@@ -375,9 +386,10 @@ static void PadWithSpaceForTags(std::span<unsigned short> _widths, const data::M
 - (void)calculateItemLayout
 {
     Log::Trace("[PanelBriefView calculateItemLayout]");
-    m_ItemLayout = BuildItemsLayout(nc::CurrentTheme().FilePanelsBriefFont(),
+    m_ItemLayout = BuildItemsLayout(self.font,
                                     m_ColumnsLayout,
-                                    nc::CurrentTheme().FilePanelsBriefRowVerticalPadding());
+                                    m_ExplorerAppearance ? 6U
+                                                         : nc::CurrentTheme().FilePanelsBriefRowVerticalPadding());
     [self updateItemsLayoutEngine];
 
     [self setupIconsPxSize];
@@ -549,6 +561,18 @@ static void PadWithSpaceForTags(std::span<unsigned short> _widths, const data::M
     return m_ItemLayout;
 }
 
+- (bool)explorerAppearance
+{
+    return m_ExplorerAppearance;
+}
+
+- (NSFont *)font
+{
+    if( m_ExplorerAppearance )
+        return [NSFont systemFontOfSize:13.0 weight:NSFontWeightRegular];
+    return nc::CurrentTheme().FilePanelsBriefFont();
+}
+
 - (void)onIconUpdated:(IconRepository::SlotKey)_icon_no image:(NSImage *)_image
 {
     dispatch_assert_main_queue();
@@ -641,7 +665,8 @@ static void PadWithSpaceForTags(std::span<unsigned short> _widths, const data::M
     [m_CollectionView reloadData];
     self.cursorPosition = cp;
     m_Background.needsDisplay = true;
-    m_ScrollView.backgroundColor = nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor();
+    m_ScrollView.backgroundColor = m_ExplorerAppearance ? NSColor.controlBackgroundColor
+                                                        : nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor();
 }
 
 - (void)collectionViewDidLayoutItems:(NSCollectionView *) [[maybe_unused]] collectionView

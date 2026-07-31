@@ -147,27 +147,35 @@ static std::vector<std::string> CommaSeparatedStrings(const nc::config::Config &
     return decoder;
 }
 
-- (PanelView *)allocatePanelView
+- (PanelView *)allocatePanelViewWithExplorerPresentation:(bool)_explorer
 {
     const auto header =
         [[NCPanelViewHeader alloc] initWithFrame:NSRect()
                                            theme:std::make_unique<nc::panel::HeaderThemeImpl>(self.themesManager)];
     const auto footer =
         [[NCPanelViewFooter alloc] initWithFrame:NSRect()
-                                           theme:std::make_unique<nc::panel::FooterThemeImpl>(self.themesManager)];
+                                           theme:std::make_unique<nc::panel::FooterThemeImpl>(self.themesManager)
+                              explorerAppearance:_explorer];
 
     nc::panel::PresentationFactory presentation_factory;
-    presentation_factory.create_brief_view = [](NSRect _rc, nc::vfsicon::IconRepository &_icon_repo) {
-        return [[NCPanelBriefView alloc] initWithFrame:_rc iconRepository:_icon_repo];
+    presentation_factory.create_brief_view = [_explorer](NSRect _rc, nc::vfsicon::IconRepository &_icon_repo) {
+        return [[NCPanelBriefView alloc] initWithFrame:_rc
+                                        iconRepository:_icon_repo
+                                   explorerAppearance:_explorer];
     };
-    presentation_factory.create_list_view = [](NSRect _rc, nc::vfsicon::IconRepository &_icon_repo) {
-        return [[NCPanelListView alloc] initWithFrame:_rc iconRepository:_icon_repo];
+    presentation_factory.create_list_view = [_explorer](NSRect _rc, nc::vfsicon::IconRepository &_icon_repo) {
+        return [[NCPanelListView alloc]
+                   initWithFrame:_rc
+                  iconRepository:_icon_repo
+               presentationStyle:_explorer ? NCPanelListViewPresentationStyleExplorer
+                                           : NCPanelListViewPresentationStyleCommander];
     };
-    presentation_factory.create_gallery_view = [](NSRect _rc, nc::vfsicon::IconRepository &_icon_repo) {
+    presentation_factory.create_gallery_view = [_explorer](NSRect _rc, nc::vfsicon::IconRepository &_icon_repo) {
         return [[NCPanelGalleryView alloc] initWithFrame:_rc
                                           iconRepository:_icon_repo
                                                    UTIDB:NCAppDelegate.me.utiDB
-                                             QLVFSBridge:NCAppDelegate.me.QLVFSBridge];
+                                             QLVFSBridge:NCAppDelegate.me.QLVFSBridge
+                                      explorerAppearance:_explorer];
     };
 
     const auto pv_rect = NSMakeRect(0, 0, 100, 100);
@@ -180,10 +188,11 @@ static std::vector<std::string> CommaSeparatedStrings(const nc::config::Config &
                         presentationFactory:presentation_factory];
 }
 
-- (PanelController *)allocatePanelController
+- (PanelController *)allocatePanelControllerWithLayouts:(std::shared_ptr<nc::panel::PanelViewLayoutsStorage>)_layouts
+                                    explorerPresentation:(bool)_explorer
 {
-    auto panel = [[PanelController alloc] initWithView:[self allocatePanelView]
-                                               layouts:self.panelLayouts
+    auto panel = [[PanelController alloc] initWithView:[self allocatePanelViewWithExplorerPresentation:_explorer]
+                                               layouts:std::move(_layouts)
                                     vfsInstanceManager:self.vfsInstanceManager
                                directoryAccessProvider:self.directoryAccessProvider
                                    contextMenuProvider:[self makePanelContextMenuProvider]
@@ -200,6 +209,11 @@ static std::vector<std::string> CommaSeparatedStrings(const nc::config::Config &
     return panel;
 }
 
+- (PanelController *)allocatePanelController
+{
+    return [self allocatePanelControllerWithLayouts:self.panelLayouts explorerPresentation:false];
+}
+
 static PanelController *PanelFactory()
 {
     return [NCAppDelegate.me allocatePanelController];
@@ -207,7 +221,7 @@ static PanelController *PanelFactory()
 
 - (PanelController *)allocateExplorerPanelController
 {
-    return [self allocatePanelController];
+    return [self allocatePanelControllerWithLayouts:self.explorerPanelLayouts explorerPresentation:true];
 }
 
 - (MainWindowFilePanelState *)allocateFilePanelsWithFrame:(NSRect)_frame

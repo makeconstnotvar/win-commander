@@ -261,7 +261,8 @@ static int CountMainWindows()
     }
 
     if( m_Explorer == nil )
-        m_Explorer = [[NCExplorerState alloc] initWithFrame:self.window.contentView.frame];
+        m_Explorer = [[NCExplorerState alloc] initWithFrame:self.window.contentView.frame
+                                            operationsPool:self.operationsPool];
 
     [self pushState:m_Explorer];
 }

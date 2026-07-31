@@ -26,6 +26,7 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
            actionsShortcutsManager:(const nc::utility::ActionsShortcutsManager &)_actions_shortcuts_manager;
 
 - (bool)validateActionBySelector:(SEL)_selector;
+- (void)executeBySelectorIfValidOrBeep:(SEL)_selector withSender:(id)_sender;
 
 - (IBAction)OnBriefSystemOverviewCommand:(id)sender;
 - (IBAction)OnRefreshPanel:(id)sender;
@@ -51,6 +52,7 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
 - (IBAction)onGoToWebDAV:(id)sender;
 - (IBAction)OnGoToNetworkShare:(id)sender;
 - (IBAction)OnConnectToNetworkServer:(id)sender;
+- (IBAction)cut:(id)sender;
 - (IBAction)copy:(id)sender;
 - (IBAction)OnSelectByMask:(id)sender;
 - (IBAction)OnDeselectByMask:(id)sender;

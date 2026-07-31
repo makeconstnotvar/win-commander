@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Base/UUID.h>
+#include <Base/Observable.h>
 #include <VFS/VFS.h>
 
 namespace nc::panel {
@@ -42,6 +43,9 @@ public:
     virtual void RemoveConnection(const Connection &_connection) = 0;
 
     virtual void ReportUsage(const Connection &_connection) = 0;
+
+    using ObservationTicket = base::ObservableBase::ObservationTicket;
+    virtual ObservationTicket ObserveChanges(std::function<void()> _callback) = 0;
 
     [[nodiscard]] virtual std::vector<Connection> AllConnectionsByMRU() const = 0;
     [[nodiscard]] virtual std::vector<Connection> FTPConnectionsByMRU() const = 0;

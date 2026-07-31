@@ -20,6 +20,8 @@
 @class NCPanelGalleryView;
 @class NCPanelListView;
 
+extern NSNotificationName const NCPanelViewContextDidChangeNotification;
+
 namespace nc::vfs {
 class NativeHost;
 }
@@ -58,6 +60,12 @@ struct PresentationFactory {
 @property(nonatomic, readonly) int headerBarHeight;
 @property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
 @property(nonatomic, readonly) NCPanelViewHeader *headerView;
+// Commander mode keeps the legacy header. Explorer hides it after installing its own address bar.
+@property(nonatomic) bool headerBarVisible;
+// Explorer Details keeps this presentation preference while switching layouts.
+@property(nonatomic) bool explorerDetailsGroupingEnabled;
+// Lets an owning state move loading feedback together with the visible navigation chrome.
+@property(nonatomic, weak) NSProgressIndicator *busyIndicatorOverride;
 @property(nonatomic, weak) NCPanelControllerActionsDispatcher *actionsDispatcher;
 
 - (id)initWithFrame:(NSRect)frame

@@ -267,6 +267,7 @@ void ConfigBackedNetworkConnectionsManager::InsertConnection(const NetworkConnec
             m_Connections.emplace_back(_conn);
     }
     dispatch_to_background([this] { Save(); });
+    FireObservers();
 }
 
 void ConfigBackedNetworkConnectionsManager::RemoveConnection(const Connection &_connection)
@@ -282,6 +283,7 @@ void ConfigBackedNetworkConnectionsManager::RemoveConnection(const Connection &_
             m_MRU.erase(i);
     }
     dispatch_to_background([this] { Save(); });
+    FireObservers();
 }
 
 std::optional<NetworkConnectionsManager::Connection>
@@ -321,21 +323,24 @@ void ConfigBackedNetworkConnectionsManager::Save()
 void ConfigBackedNetworkConnectionsManager::Load()
 {
     using namespace rapidjson;
-    auto lock = std::lock_guard{m_Lock};
-    m_Connections.clear();
-    m_MRU.clear();
+    {
+        auto lock = std::lock_guard{m_Lock};
+        m_Connections.clear();
+        m_MRU.clear();
 
-    auto connections = m_Config.Get(g_ConnectionsKey);
-    if( connections.GetType() == kArrayType )
-        for( auto i = connections.Begin(), e = connections.End(); i != e; ++i )
-            if( auto c = JSONObjectToConnection(*i) )
-                m_Connections.emplace_back(*c);
+        auto connections = m_Config.Get(g_ConnectionsKey);
+        if( connections.GetType() == kArrayType )
+            for( auto i = connections.Begin(), e = connections.End(); i != e; ++i )
+                if( auto c = JSONObjectToConnection(*i) )
+                    m_Connections.emplace_back(*c);
 
-    auto mru = m_Config.Get(g_MRUKey);
-    if( mru.GetType() == kArrayType )
-        for( auto i = mru.Begin(), e = mru.End(); i != e; ++i )
-            if( i->GetType() == kStringType && base::UUID::FromString(i->GetString()) )
-                m_MRU.emplace_back(*base::UUID::FromString(i->GetString()));
+        auto mru = m_Config.Get(g_MRUKey);
+        if( mru.GetType() == kArrayType )
+            for( auto i = mru.Begin(), e = mru.End(); i != e; ++i )
+                if( i->GetType() == kStringType && base::UUID::FromString(i->GetString()) )
+                    m_MRU.emplace_back(*base::UUID::FromString(i->GetString()));
+    }
+    FireObservers();
 }
 
 void ConfigBackedNetworkConnectionsManager::ReportUsage(const Connection &_connection)
@@ -349,6 +354,13 @@ void ConfigBackedNetworkConnectionsManager::ReportUsage(const Connection &_conne
             m_MRU.insert(begin(m_MRU), _connection.Uuid());
     }
     dispatch_to_background([this] { Save(); });
+    FireObservers();
+}
+
+ConfigBackedNetworkConnectionsManager::ObservationTicket
+ConfigBackedNetworkConnectionsManager::ObserveChanges(std::function<void()> _callback)
+{
+    return AddObserver(std::move(_callback));
 }
 
 std::vector<NetworkConnectionsManager::Connection> ConfigBackedNetworkConnectionsManager::FTPConnectionsByMRU() const

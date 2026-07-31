@@ -160,6 +160,10 @@ static NSColor *Blend(NSColor *_front, NSColor *_back)
 
 - (NSColor *)deduceBackground:(NSRect)_bounds
 {
+    if( m_Controller.briefView.explorerAppearance )
+        return m_BackgroundColor ? Blend(m_BackgroundColor, NSColor.controlBackgroundColor)
+                                 : NSColor.controlBackgroundColor;
+
     const bool is_odd = int(self.frame.origin.y / _bounds.size.height) % 2;
     auto c = is_odd ? nc::CurrentTheme().FilePanelsBriefRegularOddRowBackgroundColor()
                     : nc::CurrentTheme().FilePanelsBriefRegularEvenRowBackgroundColor();
@@ -184,9 +188,11 @@ static NSColor *Blend(NSColor *_front, NSColor *_back)
     CGContextSetFillColorWithColor(context, background.CGColor);
     CGContextFillRect(context, bounds);
 
-    const auto grid_color = nc::CurrentTheme().FilePanelsBriefGridColor();
-    CGContextSetFillColorWithColor(context, grid_color.CGColor);
-    CGContextFillRect(context, NSMakeRect(bounds.size.width - 1, 0, 1, bounds.size.height));
+    if( !m_Controller.briefView.explorerAppearance ) {
+        const auto grid_color = nc::CurrentTheme().FilePanelsBriefGridColor();
+        CGContextSetFillColorWithColor(context, grid_color.CGColor);
+        CGContextFillRect(context, NSMakeRect(bounds.size.width - 1, 0, 1, bounds.size.height));
+    }
 
     const auto text_segment_rect = [self calculateTextSegmentFromBounds:bounds];
     /* using additional 0.5 width to eliminame situations, when drawWithRect trims string due to,
@@ -397,7 +403,7 @@ static bool HasNoModifiers(NSEvent *_event)
 {
     const auto tm = GetCurrentFilenamesTrimmingMode();
     NSDictionary *attrs = @{
-        NSFontAttributeName: nc::CurrentTheme().FilePanelsBriefFont(),
+        NSFontAttributeName: m_Controller.briefView.font,
         NSForegroundColorAttributeName: m_TextColor,
         NSParagraphStyleAttributeName: ParagraphStyle(tm)
     };
@@ -444,7 +450,7 @@ static bool HasNoModifiers(NSEvent *_event)
 
     const auto bounds = self.bounds;
     auto text_segment_rect = [self calculateTextSegmentFromBounds:bounds];
-    auto fi = nc::utility::FontGeometryInfo(nc::CurrentTheme().FilePanelsBriefFont());
+    auto fi = nc::utility::FontGeometryInfo(m_Controller.briefView.font);
 
     // let the editor occupy the entire text segment and ensure that it is vertically centered within our view
     text_segment_rect.origin.y = m_LayoutConstants.font_baseline - fi.Descent();
@@ -454,7 +460,7 @@ static bool HasNoModifiers(NSEvent *_event)
     _editor.frame = text_segment_rect;
 
     NSTextView *tv = _editor.documentView;
-    tv.font = nc::CurrentTheme().FilePanelsBriefFont();
+    tv.font = m_Controller.briefView.font;
     tv.textContainerInset = NSMakeSize(0, text_segment_rect.size.height - fi.LineHeight());
     tv.textContainer.lineFragmentPadding = line_padding;
 
@@ -549,7 +555,10 @@ static bool HasNoModifiers(NSEvent *_event)
 {
     if( m_IsDropTarget || m_Highlighted ) {
         self.layer.borderWidth = 1;
-        self.layer.borderColor = nc::CurrentTheme().FilePanelsGeneralDropBorderColor().CGColor;
+        self.layer.borderColor = (m_Controller.briefView.explorerAppearance
+                                      ? NSColor.controlAccentColor
+                                      : nc::CurrentTheme().FilePanelsGeneralDropBorderColor())
+                                     .CGColor;
     }
     else
         self.layer.borderWidth = 0;

@@ -15,15 +15,25 @@ class Model;
 
 @class PanelView;
 
+typedef NS_ENUM(NSInteger, NCPanelListViewPresentationStyle) {
+    NCPanelListViewPresentationStyleCommander = 0,
+    NCPanelListViewPresentationStyleExplorer = 1,
+};
+
 @interface NCPanelListView
     : NSView <NCPanelViewPresentationProtocol, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation>
 
 - (id)initWithFrame:(NSRect)frameRect iconRepository:(nc::vfsicon::IconRepository &)_ir;
+- (id)initWithFrame:(NSRect)frameRect
+       iconRepository:(nc::vfsicon::IconRepository &)_ir
+    presentationStyle:(NCPanelListViewPresentationStyle)_style;
 
 @property(nonatomic, readonly) int itemsInColumn;
 @property(nonatomic) int cursorPosition;
 @property(nonatomic) std::function<void(nc::panel::data::SortMode)> sortModeChangeCallback;
 @property(nonatomic, readonly) PanelView *panelView;
+@property(nonatomic, readonly) NCPanelListViewPresentationStyle presentationStyle;
+@property(nonatomic) bool groupingEnabled;
 
 - (void)onDataChanged;
 - (void)onVolatileDataChanged;

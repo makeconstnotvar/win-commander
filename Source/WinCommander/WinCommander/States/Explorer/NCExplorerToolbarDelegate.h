@@ -15,10 +15,13 @@
 - (instancetype)initWithPanelController:(PanelController *)_panel;
 
 @property(nonatomic, readonly) NSToolbar *toolbar;
+@property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
 
 /**
  * Forwarded to the embedded breadcrumb control - call whenever the panel's directory changes.
  */
 - (void)panelPathChanged;
+
+- (void)focusAddressField;
 
 @end

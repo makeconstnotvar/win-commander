@@ -2,6 +2,7 @@
 #include "PanelListViewExtensionView.h"
 #include "PanelListView.h"
 #include "PanelListViewGeometry.h"
+#include "PanelListViewGrouping.h"
 #include "PanelListViewRowView.h"
 #include "PanelListViewTableView.h"
 #include <Utility/ObjCpp.h>
@@ -65,17 +66,19 @@ static NSParagraphStyle *const g_Style = [] {
 
 - (void)buildPresentation
 {
-    if( m_Extension != nil ) {
-        PanelListViewRowView *row_view = static_cast<PanelListViewRowView *>(self.superview);
-        if( !row_view )
-            return;
+    PanelListViewRowView *row_view = nc::objc_cast<PanelListViewRowView>(self.superview);
+    if( !row_view )
+        return;
 
+    const bool explorer = row_view.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer;
+    if( m_Extension != nil || explorer ) {
+        NSString *const display_string = explorer ? nc::panel::ExplorerFileTypeDescription(row_view.item) : m_Extension;
         NSDictionary *attrs = @{
             NSFontAttributeName: row_view.listView.font,
             NSForegroundColorAttributeName: row_view.rowSecondaryTextColor,
             NSParagraphStyleAttributeName: g_Style
         };
-        auto attr_str = [[NSMutableAttributedString alloc] initWithString:m_Extension attributes:attrs];
+        auto attr_str = [[NSMutableAttributedString alloc] initWithString:display_string attributes:attrs];
         m_Line = base::CFPtr<CTLineRef>::adopt(
             CTLineCreateWithAttributedString(static_cast<CFAttributedStringRef>(attr_str)));
     }

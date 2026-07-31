@@ -25,4 +25,7 @@ class Pool;
 
 @property(nonatomic, readonly) PanelController *panelController;
 
+// Called by NCMainWindow before Commander-mode configurable menu shortcuts are resolved.
+- (BOOL)handleModeSpecificKeyEquivalent:(NSEvent *)_event;
+
 @end

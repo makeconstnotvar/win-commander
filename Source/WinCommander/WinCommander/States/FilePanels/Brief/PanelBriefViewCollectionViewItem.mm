@@ -5,6 +5,7 @@
 #include "PanelBriefView.h"
 #include "PanelBriefViewItemCarrier.h"
 #include "PanelBriefViewCollectionViewItem.h"
+#include "../Helpers/Pasteboard.h"
 
 using namespace nc::panel;
 
@@ -26,6 +27,7 @@ using namespace nc::panel;
     self.carrier.backgroundColor = nil;
     self.carrier.tagAccentColor = nil;
     self.carrier.qsHighlight = {};
+    self.view.alphaValue = 1.0;
 }
 
 - (instancetype)initWithNibName:(nullable NSString *) [[maybe_unused]] nibNameOrNil
@@ -38,8 +40,17 @@ using namespace nc::panel;
         PanelBriefViewItemCarrier *v = [[PanelBriefViewItemCarrier alloc] initWithFrame:rc];
         v.controller = self;
         self.view = v;
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(pasteboardCutStateDidChange:)
+                                                   name:NCPanelPasteboardCutStateDidChangeNotification
+                                                 object:NSPasteboard.generalPasteboard];
     }
     return self;
+}
+
+- (void)dealloc
+{
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (PanelBriefViewItemCarrier *)carrier
@@ -57,7 +68,19 @@ using namespace nc::panel;
     m_Item = _item;
     self.carrier.filename = m_Item.DisplayNameNS();
     self.carrier.isSymlink = m_Item.IsSymlink();
+    [self updateCutAppearance];
     [self updateItemLayout];
+}
+
+- (void)pasteboardCutStateDidChange:(NSNotification *) [[maybe_unused]] _notification
+{
+    [self updateCutAppearance];
+}
+
+- (void)updateCutAppearance
+{
+    self.view.alphaValue =
+        m_Item && PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, m_Item.Path()) ? 0.55 : 1.0;
 }
 
 - (void)updateItemLayout
@@ -90,6 +113,11 @@ using namespace nc::panel;
 
 - (NSColor *)selectedBackgroundColor
 {
+    if( self.briefView.explorerAppearance ) {
+        if( m_PanelActive )
+            return [NSColor.controlAccentColor colorWithAlphaComponent:0.20];
+        return NSColor.unemphasizedSelectedContentBackgroundColor;
+    }
     if( m_PanelActive )
         return nc::CurrentTheme().FilePanelsBriefFocusedActiveItemBackgroundColor();
     else
@@ -128,8 +156,15 @@ using namespace nc::panel;
         return;
 
     if( self.briefView ) {
+        const auto explorer = self.briefView.explorerAppearance;
+        if( explorer && self.selected ) {
+            self.carrier.filenameColor = NSColor.labelColor;
+            return;
+        }
+        if( explorer )
+            self.carrier.filenameColor = NSColor.labelColor;
         const auto &rules = nc::CurrentTheme().FilePanelsItemsColoringRules();
-        const bool focus = self.selected && m_PanelActive;
+        const bool focus = !explorer && self.selected && m_PanelActive;
         for( const auto &i : rules )
             if( i.filter.Filter(m_Item, m_VD) ) {
                 self.carrier.filenameColor = focus ? i.focused : i.regular;
@@ -145,7 +180,9 @@ using namespace nc::panel;
     }
     else {
         if( m_VD.is_selected() ) {
-            self.carrier.backgroundColor = nc::CurrentTheme().FilePanelsBriefSelectedItemBackgroundColor();
+            self.carrier.backgroundColor = self.briefView.explorerAppearance
+                                               ? [NSColor.controlAccentColor colorWithAlphaComponent:0.12]
+                                               : nc::CurrentTheme().FilePanelsBriefSelectedItemBackgroundColor();
         }
         else {
             self.carrier.backgroundColor = nil;
@@ -159,7 +196,8 @@ using namespace nc::panel;
         return;
 
     if( m_PanelActive && m_Item.HasTags() && (m_VD.is_selected() || self.selected) ) {
-        self.carrier.tagAccentColor = NSColor.whiteColor; // TODO: Pick from Themes
+        self.carrier.tagAccentColor =
+            self.briefView.explorerAppearance ? nil : NSColor.whiteColor; // TODO: Pick from Themes
     }
     else {
         self.carrier.tagAccentColor = nil;

@@ -2,6 +2,7 @@
 #include "PanelGalleryCollectionViewItem.h"
 #include "PanelGalleryView.h"
 #include "PanelGalleryCollectionViewItemCarrier.h"
+#include "../Helpers/Pasteboard.h"
 #include <Panel/UI/PanelViewPresentationItemsColoringFilter.h>
 #include <WinCommander/Core/Theming/Theme.h>
 #include <Utility/ObjCpp.h>
@@ -25,8 +26,17 @@ using namespace nc::panel::gallery;
         const auto carrier = [[NCPanelGalleryCollectionViewItemCarrier alloc] initWithFrame:rc];
         carrier.controller = self;
         self.view = carrier;
+        [NSNotificationCenter.defaultCenter addObserver:self
+                                               selector:@selector(pasteboardCutStateDidChange:)
+                                                   name:nc::panel::NCPanelPasteboardCutStateDidChangeNotification
+                                                 object:NSPasteboard.generalPasteboard];
     }
     return self;
+}
+
+- (void)dealloc
+{
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)prepareForReuse
@@ -38,6 +48,7 @@ using namespace nc::panel::gallery;
     [super setSelected:false];
     //    self.carrier.backgroundColor = nil;
     self.carrier.qsHighlight = {};
+    self.view.alphaValue = 1.0;
 }
 
 - (NCPanelGalleryCollectionViewItemCarrier *)carrier
@@ -83,6 +94,18 @@ using namespace nc::panel::gallery;
     m_Item = _item;
     self.carrier.filename = m_Item.DisplayNameNS();
     self.carrier.isSymlink = m_Item.IsSymlink();
+    [self updateCutAppearance];
+}
+
+- (void)pasteboardCutStateDidChange:(NSNotification *) [[maybe_unused]] _notification
+{
+    [self updateCutAppearance];
+}
+
+- (void)updateCutAppearance
+{
+    self.view.alphaValue =
+        m_Item && nc::panel::PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, m_Item.Path()) ? 0.55 : 1.0;
 }
 
 - (void)setVd:(nc::panel::data::ItemVolatileData)_vd
@@ -104,6 +127,17 @@ using namespace nc::panel::gallery;
 
 - (NSColor *)deduceBackgroundColor
 {
+    if( self.galleryView.explorerAppearance ) {
+        if( self.selected ) {
+            if( m_PanelActive )
+                return [NSColor.controlAccentColor colorWithAlphaComponent:0.20];
+            return NSColor.unemphasizedSelectedContentBackgroundColor;
+        }
+        if( m_VD.is_selected() )
+            return [NSColor.controlAccentColor colorWithAlphaComponent:0.12];
+        return NSColor.controlBackgroundColor;
+    }
+
     if( self.selected ) {
         if( m_PanelActive )
             return nc::CurrentTheme().FilePanelsGalleryFocusedActiveItemBackgroundColor();
@@ -130,8 +164,16 @@ using namespace nc::panel::gallery;
     if( !m_Item )
         return;
 
+    const auto explorer = self.galleryView.explorerAppearance;
+    if( explorer && self.selected ) {
+        self.carrier.filenameColor = NSColor.labelColor;
+        return;
+    }
+    if( explorer )
+        self.carrier.filenameColor = NSColor.labelColor;
+
     const auto &rules = nc::CurrentTheme().FilePanelsItemsColoringRules();
-    const bool focus = self.selected && m_PanelActive;
+    const bool focus = !explorer && self.selected && m_PanelActive;
     for( const auto &i : rules )
         if( i.filter.Filter(m_Item, m_VD) ) {
             self.carrier.filenameColor = focus ? i.focused : i.regular;

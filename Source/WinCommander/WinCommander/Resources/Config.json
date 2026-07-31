@@ -396,6 +396,73 @@
                                 "title": "Custom Layout X",
                                 "disabled": null
                            }
+            ],
+
+            /**
+             * Explorer-only layouts. Slot N2 is the default, matching PanelViewLayoutsStorage.
+             * These presets are intentionally isolated from the Commander layout editor.
+             */
+            "explorer_layouts_v1": [
+                            {
+                                "title": "Small Icons",
+                                "brief": {
+                                    "mode": 2,
+                                    "dynamic_width_min": 140,
+                                    "dynamic_width_max": 220,
+                                    "icon_scale": 1
+                                }
+                            },
+                            {
+                                "title": "Details",
+                                "list": {
+                                    "columns": [
+                                                {
+                                                    "kind": 1,
+                                                    "width": 360,
+                                                    "min_width": 220
+                                                },
+                                                {
+                                                    "kind": 5,
+                                                    "width": 170,
+                                                    "min_width": 140
+                                                },
+                                                {
+                                                    "kind": 7,
+                                                    "width": 160,
+                                                    "min_width": 110
+                                                },
+                                                {
+                                                    "kind": 2,
+                                                    "width": 100,
+                                                    "min_width": 80
+                                                }
+                                    ],
+                                    "icon_scale": 1
+                                }
+                            },
+                            {
+                                "title": "Medium Icons",
+                                "brief": {
+                                    "mode": 0,
+                                    "fixed_mode_width": 220,
+                                    "icon_scale": 2
+                                }
+                            },
+                            {
+                                "title": "Large Icons",
+                                "brief": {
+                                    "mode": 0,
+                                    "fixed_mode_width": 260,
+                                    "icon_scale": 3
+                                }
+                            },
+                            {
+                                "title": "Content",
+                                "gallery": {
+                                    "icon_scale": 1,
+                                    "text_lines": 2
+                                }
+                            }
             ]
         }
     },

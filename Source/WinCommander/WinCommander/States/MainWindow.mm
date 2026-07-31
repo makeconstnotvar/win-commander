@@ -5,6 +5,7 @@
 #include <Utility/ActionsShortcutsManager.h>
 #include <WinCommander/Bootstrap/AppDelegate.h> // TODO: bad, remove me!
 #include "MainWindowController.h"
+#include "Explorer/NCExplorerState.h"
 #include <Utility/ObjCpp.h>
 
 static const auto g_Identifier = @"MainWindow";
@@ -128,6 +129,14 @@ static const auto g_CloseWindowTitle = NSLocalizedString(@"Close Window", "Menu 
 {
     using AS = nc::utility::ActionShortcut;
     using ASM = nc::utility::ActionsShortcutsManager;
+
+    // Explorer owns a small set of mode-specific key equivalents. Give it precedence over the
+    // configurable Commander menu shortcuts (Command-L is System Overview there).
+    if( NCMainWindowController *const controller = nc::objc_cast<NCMainWindowController>(self.windowController) ) {
+        NCExplorerState *const explorer = nc::objc_cast<NCExplorerState>(controller.topmostState);
+        if( explorer && [explorer handleModeSpecificKeyEquivalent:_event] )
+            return true;
+    }
 
     // Build a shortcut out of the keyboard event and check if it's not empty
     if( const AS event_shortcut = AS(AS::EventData(_event)) ) {

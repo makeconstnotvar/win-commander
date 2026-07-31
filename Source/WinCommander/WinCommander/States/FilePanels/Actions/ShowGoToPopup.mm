@@ -92,44 +92,17 @@ static GoToPopupListActionMediator *g_CurrentMediator = nil;
 
 - (void)performGoTo:(const std::any &)_context sender:(id)sender
 {
-    if( auto favorite_ptr = std::any_cast<std::shared_ptr<const FavoriteLocationsStorage::Location>>(&_context) )
-        [self handlePersistentLocation:(*favorite_ptr)->hosts_stack];
-    else if( auto favorite = std::any_cast<FavoriteLocationsStorage::Location>(&_context) )
-        [self handlePersistentLocation:favorite->hosts_stack];
-    else if( auto plain_path = std::any_cast<std::string>(&_context) ) {
-        auto request = std::make_shared<DirectoryChangeRequest>();
-        request->RequestedDirectory = *plain_path;
-        request->VFS = nc::bootstrap::NativeVFSHostInstance().SharedPtr();
-        request->PerformAsynchronous = true;
-        request->InitiatedByUser = true;
-        [m_Panel GoToDirWithContext:request];
-    }
-    else if( std::any_cast<NetworkConnectionsManager::Connection>(&_context) )
-        nc::panel::actions::OpenExistingNetworkConnection(*m_NetMgr).Perform(m_Panel, sender);
-    else if( auto vfs_path = std::any_cast<nc::vfs::VFSPath>(&_context) ) {
-        auto request = std::make_shared<DirectoryChangeRequest>();
-        request->RequestedDirectory = vfs_path->Path();
-        request->VFS = vfs_path->Host();
-        request->PerformAsynchronous = true;
-        request->InitiatedByUser = true;
-        [m_Panel GoToDirWithContext:request];
-    }
-    else if( auto promise = std::any_cast<std::pair<nc::core::VFSInstancePromise, std::string>>(&_context) )
-        [self handleVFSPromiseInstance:promise->first path:promise->second];
-    else if( auto listing_promise = std::any_cast<nc::panel::ListingPromise>(&_context) )
-        nc::panel::ListingPromiseLoader::Load(*listing_promise, m_Panel);
-    else if( auto tag = std::any_cast<nc::utility::Tags::Tag>(&_context) )
-        [self handleTag:*tag];
-    else
-        fmt::print(
-            stderr, "GoToPopupListActionMediator performGoTo: unknown context type '{}'.\n", _context.type().name());
+    static_cast<void>(sender);
+    nc::panel::actions::NavigateToLocation(m_Panel, *m_NetMgr, _context);
 }
 
-- (void)handlePersistentLocation:(const PersistentLocation &)_location
+static void NavigateToPersistentLocation(PanelController *_panel,
+                                         NetworkConnectionsManager &_net_mgr,
+                                         const PersistentLocation &_location)
 {
     using nc::panel::actions::AsyncPersistentLocationRestorer;
-    auto restorer = AsyncPersistentLocationRestorer(m_Panel, m_Panel.vfsInstanceManager, *m_NetMgr);
-    auto handler = [path = _location.path, panel = m_Panel](VFSHostPtr _host) {
+    auto restorer = AsyncPersistentLocationRestorer(_panel, _panel.vfsInstanceManager, _net_mgr);
+    auto handler = [path = _location.path, panel = _panel](VFSHostPtr _host) {
         dispatch_to_main_queue([=] {
             auto request = std::make_shared<DirectoryChangeRequest>();
             request->RequestedDirectory = path;
@@ -142,11 +115,13 @@ static GoToPopupListActionMediator *g_CurrentMediator = nil;
     restorer.Restore(_location, std::move(handler), nullptr);
 }
 
-- (void)handleVFSPromiseInstance:(const nc::core::VFSInstancePromise &)_promise path:(const std::string &)_path
+static void NavigateToVFSPromise(PanelController *_panel,
+                                 const nc::core::VFSInstancePromise &_promise,
+                                 const std::string &_path)
 {
     using nc::panel::actions::AsyncVFSPromiseRestorer;
-    auto restorer = AsyncVFSPromiseRestorer(m_Panel, m_Panel.vfsInstanceManager);
-    auto handler = [path = _path, panel = m_Panel](VFSHostPtr _host) {
+    auto restorer = AsyncVFSPromiseRestorer(_panel, _panel.vfsInstanceManager);
+    auto handler = [path = _path, panel = _panel](VFSHostPtr _host) {
         dispatch_to_main_queue([=] {
             auto request = std::make_shared<DirectoryChangeRequest>();
             request->RequestedDirectory = path;
@@ -159,10 +134,10 @@ static GoToPopupListActionMediator *g_CurrentMediator = nil;
     restorer.Restore(_promise, std::move(handler), nullptr);
 }
 
-- (void)handleTag:(const nc::utility::Tags::Tag &)_tag
+static void NavigateToTag(PanelController *_panel, const nc::utility::Tags::Tag &_tag)
 {
-    // The Spotlight query is done in a background in the panel's loading queue
-    auto task = [tag = _tag, fetch_flags = m_Panel.vfsFetchingFlags, panel = m_Panel](
+    // The Spotlight query is done in a background in the panel's loading queue.
+    auto task = [tag = _tag, fetch_flags = _panel.vfsFetchingFlags, panel = _panel](
                     const std::function<bool()> &_is_cancelled) {
         auto items = nc::utility::Tags::GatherAllItemsWithTag(tag.Label());
         std::vector<VFSListingPtr> listings(items.size());
@@ -190,7 +165,7 @@ static GoToPopupListActionMediator *g_CurrentMediator = nil;
         if( auto combined_listing = VFSListing::Build(std::move(listing_input)) )
             dispatch_to_main_queue([=] { [panel loadListing:combined_listing]; });
     };
-    [m_Panel commitCancelableLoadingTask:std::move(task)];
+    [_panel commitCancelableLoadingTask:std::move(task)];
 }
 
 - (void)commandPopoverDidClose:(NCCommandPopover *_Nonnull)_popover
@@ -206,6 +181,45 @@ static GoToPopupListActionMediator *g_CurrentMediator = nil;
 @end
 
 namespace nc::panel::actions {
+
+void NavigateToLocation(PanelController *_panel, NetworkConnectionsManager &_net_mgr, const std::any &_context)
+{
+    if( auto favorite_ptr = std::any_cast<std::shared_ptr<const FavoriteLocationsStorage::Location>>(&_context) )
+        NavigateToPersistentLocation(_panel, _net_mgr, (*favorite_ptr)->hosts_stack);
+    else if( auto favorite = std::any_cast<FavoriteLocationsStorage::Location>(&_context) )
+        NavigateToPersistentLocation(_panel, _net_mgr, favorite->hosts_stack);
+    else if( auto persistent = std::any_cast<PersistentLocation>(&_context) )
+        NavigateToPersistentLocation(_panel, _net_mgr, *persistent);
+    else if( auto plain_path = std::any_cast<std::string>(&_context) ) {
+        auto request = std::make_shared<DirectoryChangeRequest>();
+        request->RequestedDirectory = *plain_path;
+        request->VFS = nc::bootstrap::NativeVFSHostInstance().SharedPtr();
+        request->PerformAsynchronous = true;
+        request->InitiatedByUser = true;
+        [_panel GoToDirWithContext:request];
+    }
+    else if( auto connection = std::any_cast<NetworkConnectionsManager::Connection>(&_context) ) {
+        NSMenuItem *const carrier = [[NSMenuItem alloc] init];
+        carrier.representedObject = [[AnyHolder alloc] initWithAny:std::any{*connection}];
+        OpenExistingNetworkConnection(_net_mgr).Perform(_panel, carrier);
+    }
+    else if( auto vfs_path = std::any_cast<nc::vfs::VFSPath>(&_context) ) {
+        auto request = std::make_shared<DirectoryChangeRequest>();
+        request->RequestedDirectory = vfs_path->Path();
+        request->VFS = vfs_path->Host();
+        request->PerformAsynchronous = true;
+        request->InitiatedByUser = true;
+        [_panel GoToDirWithContext:request];
+    }
+    else if( auto promise = std::any_cast<std::pair<nc::core::VFSInstancePromise, std::string>>(&_context) )
+        NavigateToVFSPromise(_panel, promise->first, promise->second);
+    else if( auto listing_promise = std::any_cast<nc::panel::ListingPromise>(&_context) )
+        nc::panel::ListingPromiseLoader::Load(*listing_promise, _panel);
+    else if( auto tag = std::any_cast<nc::utility::Tags::Tag>(&_context) )
+        NavigateToTag(_panel, *tag);
+    else
+        fmt::print(stderr, "NavigateToLocation: unknown context type '{}'.\n", _context.type().name());
+}
 
 static NSString *ShrinkMenuItemTitle(NSString *_title);
 
