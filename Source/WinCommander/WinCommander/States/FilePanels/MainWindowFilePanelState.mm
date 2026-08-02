@@ -10,6 +10,7 @@
 #include <Config/RapidJSON.h>
 #include <WinCommander/Core/Alert.h>
 #include <WinCommander/Core/ActionsShortcutsManager.h>
+#include <WinCommander/Core/Operations/OperationSubmissionGate.h>
 #include <WinCommander/Core/SandboxManager.h>
 #include <WinCommander/Core/Theming/Theme.h>
 #include <WinCommander/Core/Theming/ThemesManager.h>
@@ -93,6 +94,7 @@ static NSString *TitleForData(const data::Model *_data);
         m_ControllerStateJSONDecoder = &_controller_json_decoder;
         m_ClosedPanelsHistory = nullptr;
         m_OperationsPool = _pool.shared_from_this();
+        m_OperationSubmissionGate = std::make_shared<nc::core::OperationSubmissionGate>();
         m_OverlappedTerminal = std::make_unique<MainWindowFilePanelState_OverlappedTerminalSupport>();
         m_ShowTabs = GlobalConfig().GetBool(g_ConfigGeneralShowTabs);
         m_QLPanelAdaptor = _ql_panel_adaptor;
@@ -764,12 +766,14 @@ static void AskAboutStoppingRunningOperations(NSWindow *_window, std::function<v
 - (bool)windowStateShouldClose:(NCMainWindowController *) [[maybe_unused]] _sender
 {
     const auto ops_pool_nonempty = !self.operationsPool.Empty();
+    const auto operation_submission_pending = self.operationSubmissionGate.HasPending();
     const auto overlapped_term_busy = self.isAnythingRunningInOverlappedTerminal;
-    if( ops_pool_nonempty || overlapped_term_busy ) {
+    if( ops_pool_nonempty || operation_submission_pending || overlapped_term_busy ) {
         auto ops_stop_callback = [=](NSModalResponse result) {
             if( result != NSAlertFirstButtonReturn )
                 return;
             dispatch_to_main_queue([=] {
+                self.operationSubmissionGate.CancelAndWait();
                 self.operationsPool.StopAndWaitForShutdown();
                 // reroute request again to trigger consequent checks
                 [self.window performClose:nil];
@@ -976,6 +980,11 @@ static void AskAboutStoppingRunningOperations(NSWindow *_window, std::function<v
 - (nc::ops::Pool &)operationsPool
 {
     return *m_OperationsPool;
+}
+
+- (nc::core::OperationSubmissionGate &)operationSubmissionGate
+{
+    return *m_OperationSubmissionGate;
 }
 
 - (NCMainWindowController *)mainWindowController

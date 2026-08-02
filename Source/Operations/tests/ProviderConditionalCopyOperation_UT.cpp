@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "../source/ProviderConditionalCopyOperation.h"
 #include "../source/ProviderConditionalCopyOperationTesting.h"
+#include "../source/Statistics.h"
 #include "../../VFS/source/ProviderCapabilitiesTesting.h"
 
 #include <VFS/Host.h>
@@ -35,14 +36,12 @@ static_assert(!std::is_copy_constructible_v<CopyOperationExecutionProduct>);
 static_assert(!std::is_copy_assignable_v<CopyOperationExecutionProduct>);
 static_assert(std::is_move_constructible_v<CopyOperationExecutionProduct>);
 static_assert(std::is_move_assignable_v<CopyOperationExecutionProduct>);
-static_assert(!std::is_constructible_v<
-              CopyOperationExecutionProduct,
-              std::shared_ptr<Operation>,
-              CopyOperationExecutionProduct::TerminalItemResultAccessor>);
+static_assert(!std::is_constructible_v<CopyOperationExecutionProduct,
+                                       std::shared_ptr<Operation>,
+                                       CopyOperationExecutionProduct::TerminalItemResultAccessor>);
 
-constexpr ProviderConditionalCopyJournalContext g_ProviderConditionalCopyOperationUTContext{
-    .item_index = 3,
-    .exact_source_bytes = 4096};
+constexpr ProviderConditionalCopyJournalContext g_ProviderConditionalCopyOperationUTContext{.item_index = 3,
+                                                                                            .exact_source_bytes = 4096};
 
 class ProviderConditionalCopyOperationUTHost final : public vfs::Host
 {
@@ -56,9 +55,43 @@ struct ProviderConditionalCopyOperationUTProbe final {
     std::atomic_int cancel_checks{0};
 };
 
-vfs::ProviderConditionalCopyReviewedClaims ProviderConditionalCopyOperationUTClaims(
-    const std::shared_ptr<vfs::Host> &_source,
-    const std::shared_ptr<vfs::Host> &_destination)
+struct ProviderConditionalCopyOperationUTReportProbe final {
+    void Capture(ItemStateReport _report)
+    {
+        ++calls;
+        host = &_report.host;
+        path = _report.path;
+        status = _report.status;
+    }
+
+    int calls{0};
+    vfs::Host *host{nullptr};
+    std::string path;
+    ItemStatus status{ItemStatus::Skipped};
+};
+
+std::shared_ptr<vfs::Host> ProviderConditionalCopyOperationUTSourceHost()
+{
+    return std::make_shared<ProviderConditionalCopyOperationUTHost>("provider-copy-operation-source");
+}
+
+std::shared_ptr<vfs::Host> ProviderConditionalCopyOperationUTDestinationHost()
+{
+    return std::make_shared<ProviderConditionalCopyOperationUTHost>("provider-copy-operation-destination");
+}
+
+ProviderConditionalCopyOperationPresentation ProviderConditionalCopyOperationUTPresentation()
+{
+    return {
+        .source_host = ProviderConditionalCopyOperationUTSourceHost(),
+        .source_path = "/source.txt",
+        .destination_path = "/destination/source.txt",
+    };
+}
+
+vfs::ProviderConditionalCopyReviewedClaims
+ProviderConditionalCopyOperationUTClaims(const std::shared_ptr<vfs::Host> &_source,
+                                         const std::shared_ptr<vfs::Host> &_destination)
 {
     return vfs::ProviderConditionalCopyReviewedClaims{
         .plan_id = "provider-conditional-copy-operation-test",
@@ -85,14 +118,13 @@ vfs::ProviderConditionalCopyReviewedClaims ProviderConditionalCopyOperationUTCla
         .destination = {.absolute_path = "/destination/source.txt"}};
 }
 
-std::unique_ptr<vfs::ProviderConditionalCopyTransaction>
-ProviderConditionalCopyOperationUTTransaction(
+std::unique_ptr<vfs::ProviderConditionalCopyTransaction> ProviderConditionalCopyOperationUTTransactionForPresentation(
+    const ProviderConditionalCopyOperationPresentation &_presentation,
     vfs::ProviderConditionalCopyTransaction::CommitHandler _commit,
     vfs::ProviderConditionalCopyTransaction::AbortHandler _abort)
 {
-    auto source = std::make_shared<ProviderConditionalCopyOperationUTHost>("provider-copy-operation-source");
-    auto destination =
-        std::make_shared<ProviderConditionalCopyOperationUTHost>("provider-copy-operation-destination");
+    auto source = _presentation.source_host;
+    auto destination = ProviderConditionalCopyOperationUTDestinationHost();
     auto transaction = vfs::ProviderConditionalCopyTransactionTestAccess::Mint(
         *destination,
         vfs::ProviderConditionalCopyTransactionTestAccess::MakeAuthority(
@@ -104,12 +136,30 @@ ProviderConditionalCopyOperationUTTransaction(
     return std::move(*transaction);
 }
 
+std::unique_ptr<vfs::ProviderConditionalCopyTransaction>
+ProviderConditionalCopyOperationUTTransaction(vfs::ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                              vfs::ProviderConditionalCopyTransaction::AbortHandler _abort)
+{
+    const auto presentation = ProviderConditionalCopyOperationUTPresentation();
+    return ProviderConditionalCopyOperationUTTransactionForPresentation(
+        presentation, std::move(_commit), std::move(_abort));
+}
+
 CommitResult ProviderConditionalCopyOperationUTSuccess() noexcept
 {
     return {.publication = ProviderPublication::Published,
             .failure = CommitFailure::None,
             .system_error = 0,
             .filesystem_sync_status = ProviderSync::Confirmed,
+            .filesystem_sync_system_error = 0};
+}
+
+CommitResult ProviderConditionalCopyOperationUTFailure() noexcept
+{
+    return {.publication = ProviderPublication::NotPublished,
+            .failure = CommitFailure::ProviderFailure,
+            .system_error = EIO,
+            .filesystem_sync_status = ProviderSync::NotAttempted,
             .filesystem_sync_system_error = 0};
 }
 
@@ -141,6 +191,21 @@ OperationJournalItemResult ProviderConditionalCopyOperationUTCancelledItem()
             .filesystem_sync_status = OperationJournalFilesystemSyncStatus::NotAttempted,
             .filesystem_sync_system_error = 0,
             .recovery_action = OperationJournalRecoveryAction::None};
+}
+
+OperationJournalItemResult ProviderConditionalCopyOperationUTFailureItem()
+{
+    return {.item_index = g_ProviderConditionalCopyOperationUTContext.item_index,
+            .status = OperationJournalItemStatus::Failed,
+            .error = OperationJournalItemError::Unknown,
+            .system_error = EIO,
+            .prior_error = OperationJournalItemError::None,
+            .prior_system_error = 0,
+            .bytes = 0,
+            .destination_publication = OperationJournalPublicationState::NotPublished,
+            .filesystem_sync_status = OperationJournalFilesystemSyncStatus::NotAttempted,
+            .filesystem_sync_system_error = 0,
+            .recovery_action = OperationJournalRecoveryAction::Retry};
 }
 
 OperationJournalItemResult ProviderConditionalCopyOperationUTUnknownItem()
@@ -204,7 +269,9 @@ TEST_CASE(PREFIX "commits once and publishes exact success before worker complet
           "[provider-conditional-copy][provider-conditional-copy-operation]")
 {
     auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
-    auto transaction = ProviderConditionalCopyOperationUTTransaction(
+    auto presentation = ProviderConditionalCopyOperationUTPresentation();
+    auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
+        presentation,
         [probe] {
             ++probe->commit_calls;
             return ProviderConditionalCopyOperationUTSuccess();
@@ -214,29 +281,79 @@ TEST_CASE(PREFIX "commits once and publishes exact success before worker complet
             return ProviderPublication::NotPublished;
         });
     auto created = ProviderConditionalCopyOperationTesting::Create(
-        std::move(transaction), g_ProviderConditionalCopyOperationUTContext);
+        std::move(transaction), g_ProviderConditionalCopyOperationUTContext, presentation);
     REQUIRE(created);
     auto product = std::move(*created);
+    auto report = ProviderConditionalCopyOperationUTReportProbe{};
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+    operation->SetItemStatusCallback([&report](ItemStateReport _report) { report.Capture(_report); });
 
     ProviderConditionalCopyOperationUTCheckPending(ProviderConditionalCopyOperationUTTerminal(product));
-    ProviderConditionalCopyOperationUTOperation(product)->Start();
-    REQUIRE(ProviderConditionalCopyOperationUTOperation(product)->Wait(5s));
+    CHECK(operation->Title() == "Copying /source.txt \u2192 /destination/source.txt");
+    CHECK(operation->Statistics().PreferredSource() == Statistics::SourceType::Items);
+    CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 1);
+    CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 0);
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
 
-    CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Completed);
-    ProviderConditionalCopyOperationUTCheckTerminal(
-        ProviderConditionalCopyOperationUTTerminal(product), ProviderConditionalCopyOperationUTSuccessItem());
+    CHECK(operation->State() == OperationState::Completed);
+    ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                    ProviderConditionalCopyOperationUTSuccessItem());
+    CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 1);
+    CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 1);
+    CHECK(report.calls == 1);
+    CHECK(report.host == presentation.source_host.get());
+    CHECK(report.path == "/source.txt");
+    CHECK(report.status == ItemStatus::Processed);
     CHECK(probe->commit_calls == 1);
     CHECK(probe->abort_calls == 0);
+}
+
+TEST_CASE(PREFIX "publishes one skipped source report and closes item statistics on failure",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
+    auto presentation = ProviderConditionalCopyOperationUTPresentation();
+    auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
+        presentation,
+        [probe] {
+            ++probe->commit_calls;
+            return ProviderConditionalCopyOperationUTFailure();
+        },
+        [probe] {
+            ++probe->abort_calls;
+            return ProviderPublication::NotPublished;
+        });
+    auto created = ProviderConditionalCopyOperationTesting::Create(
+        std::move(transaction), g_ProviderConditionalCopyOperationUTContext, presentation);
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto report = ProviderConditionalCopyOperationUTReportProbe{};
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+    operation->SetItemStatusCallback([&report](ItemStateReport _report) { report.Capture(_report); });
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+
+    CHECK(operation->State() == OperationState::Completed);
+    ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                    ProviderConditionalCopyOperationUTFailureItem());
+    CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 0);
+    CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 0);
+    CHECK(report.calls == 1);
+    CHECK(report.host == presentation.source_host.get());
+    CHECK(report.path == "/source.txt");
+    CHECK(report.status == ItemStatus::Skipped);
+    CHECK(probe->commit_calls == 1);
+    CHECK(probe->abort_calls == 1);
 }
 
 TEST_CASE(PREFIX "cold stop owns cancellation and leaves an exact cached terminal",
           "[provider-conditional-copy][provider-conditional-copy-operation]")
 {
-    for( const auto abort_publication : {ProviderPublication::NotPublished,
-                                         ProviderPublication::Unknown} ) {
-        DYNAMIC_SECTION((abort_publication == ProviderPublication::NotPublished
-                             ? "confirmed not-published abort"
-                             : "uncertain abort"))
+    for( const auto abort_publication : {ProviderPublication::NotPublished, ProviderPublication::Unknown} ) {
+        DYNAMIC_SECTION((abort_publication == ProviderPublication::NotPublished ? "confirmed not-published abort"
+                                                                                : "uncertain abort"))
         {
             auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
             auto transaction = ProviderConditionalCopyOperationUTTransaction(
@@ -248,23 +365,23 @@ TEST_CASE(PREFIX "cold stop owns cancellation and leaves an exact cached termina
                     ++probe->abort_calls;
                     return abort_publication;
                 });
-            auto created = ProviderConditionalCopyOperationTesting::Create(
-                std::move(transaction),
-                g_ProviderConditionalCopyOperationUTContext,
-                [probe] {
-                    ++probe->cancel_checks;
-                    return false;
-                });
+            auto created =
+                ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                                g_ProviderConditionalCopyOperationUTContext,
+                                                                ProviderConditionalCopyOperationUTPresentation(),
+                                                                [probe] {
+                                                                    ++probe->cancel_checks;
+                                                                    return false;
+                                                                });
             REQUIRE(created);
             auto product = std::move(*created);
 
             ProviderConditionalCopyOperationUTOperation(product)->Stop();
             CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Stopped);
-            ProviderConditionalCopyOperationUTCheckTerminal(
-                ProviderConditionalCopyOperationUTTerminal(product),
-                abort_publication == ProviderPublication::NotPublished
-                    ? ProviderConditionalCopyOperationUTCancelledItem()
-                    : ProviderConditionalCopyOperationUTUnknownItem());
+            ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                            abort_publication == ProviderPublication::NotPublished
+                                                                ? ProviderConditionalCopyOperationUTCancelledItem()
+                                                                : ProviderConditionalCopyOperationUTUnknownItem());
             ProviderConditionalCopyOperationUTOperation(product)->Start();
             REQUIRE(ProviderConditionalCopyOperationUTOperation(product)->Wait(5s));
             CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Stopped);
@@ -278,11 +395,9 @@ TEST_CASE(PREFIX "cold stop owns cancellation and leaves an exact cached termina
 TEST_CASE(PREFIX "worker launch failure terminalizes provider authority before Start rethrows",
           "[provider-conditional-copy][provider-conditional-copy-operation][job-launch]")
 {
-    for( const auto abort_publication : {ProviderPublication::NotPublished,
-                                         ProviderPublication::Unknown} ) {
-        DYNAMIC_SECTION((abort_publication == ProviderPublication::NotPublished
-                             ? "confirmed not-published abort"
-                             : "uncertain abort"))
+    for( const auto abort_publication : {ProviderPublication::NotPublished, ProviderPublication::Unknown} ) {
+        DYNAMIC_SECTION((abort_publication == ProviderPublication::NotPublished ? "confirmed not-published abort"
+                                                                                : "uncertain abort"))
         {
             auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
             auto transaction = ProviderConditionalCopyOperationUTTransaction(
@@ -297,6 +412,7 @@ TEST_CASE(PREFIX "worker launch failure terminalizes provider authority before S
             auto created = ProviderConditionalCopyOperationTesting::Create(
                 std::move(transaction),
                 g_ProviderConditionalCopyOperationUTContext,
+                ProviderConditionalCopyOperationUTPresentation(),
                 [probe] {
                     ++probe->cancel_checks;
                     return false;
@@ -306,18 +422,15 @@ TEST_CASE(PREFIX "worker launch failure terminalizes provider authority before S
                 }});
             REQUIRE(created);
             auto product = std::move(*created);
-            ProviderConditionalCopyOperationUTCheckPending(
-                ProviderConditionalCopyOperationUTTerminal(product));
+            ProviderConditionalCopyOperationUTCheckPending(ProviderConditionalCopyOperationUTTerminal(product));
 
-            REQUIRE_THROWS_AS(
-                ProviderConditionalCopyOperationUTOperation(product)->Start(), std::runtime_error);
+            REQUIRE_THROWS_AS(ProviderConditionalCopyOperationUTOperation(product)->Start(), std::runtime_error);
 
             CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Stopped);
-            ProviderConditionalCopyOperationUTCheckTerminal(
-                ProviderConditionalCopyOperationUTTerminal(product),
-                abort_publication == ProviderPublication::NotPublished
-                    ? ProviderConditionalCopyOperationUTCancelledItem()
-                    : ProviderConditionalCopyOperationUTUnknownItem());
+            ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                            abort_publication == ProviderPublication::NotPublished
+                                                                ? ProviderConditionalCopyOperationUTCancelledItem()
+                                                                : ProviderConditionalCopyOperationUTUnknownItem());
             CHECK(probe->commit_calls == 0);
             CHECK(probe->abort_calls == 1);
             CHECK(probe->cancel_checks == 0);
@@ -353,6 +466,7 @@ TEST_CASE(PREFIX "linearizes stop and worker commit with either gate winner",
         auto created = ProviderConditionalCopyOperationTesting::Create(
             std::move(transaction),
             g_ProviderConditionalCopyOperationUTContext,
+            ProviderConditionalCopyOperationUTPresentation(),
             {},
             ProviderConditionalCopyOperationTestHooks{.before_commit_gate = [&] {
                 auto lock = std::unique_lock{mutex};
@@ -377,9 +491,8 @@ TEST_CASE(PREFIX "linearizes stop and worker commit with either gate winner",
         REQUIRE(ProviderConditionalCopyOperationUTOperation(product)->Wait(5s));
 
         CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Stopped);
-        ProviderConditionalCopyOperationUTCheckTerminal(
-            ProviderConditionalCopyOperationUTTerminal(product),
-            ProviderConditionalCopyOperationUTCancelledItem());
+        ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                        ProviderConditionalCopyOperationUTCancelledItem());
         CHECK(probe->commit_calls == 0);
         CHECK(probe->abort_calls == 1);
     }
@@ -404,8 +517,10 @@ TEST_CASE(PREFIX "linearizes stop and worker commit with either gate winner",
                 ++probe->abort_calls;
                 return ProviderPublication::NotPublished;
             });
-        auto created = ProviderConditionalCopyOperationTesting::Create(
-            std::move(transaction), g_ProviderConditionalCopyOperationUTContext);
+        auto created =
+            ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                            g_ProviderConditionalCopyOperationUTContext,
+                                                            ProviderConditionalCopyOperationUTPresentation());
         REQUIRE(created);
         auto product = std::move(*created);
         ProviderConditionalCopyOperationUTOperation(product)->Start();
@@ -424,8 +539,8 @@ TEST_CASE(PREFIX "linearizes stop and worker commit with either gate winner",
         REQUIRE(ProviderConditionalCopyOperationUTOperation(product)->Wait(5s));
 
         CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Completed);
-        ProviderConditionalCopyOperationUTCheckTerminal(
-            ProviderConditionalCopyOperationUTTerminal(product), ProviderConditionalCopyOperationUTSuccessItem());
+        ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                        ProviderConditionalCopyOperationUTSuccessItem());
         CHECK(probe->commit_calls == 1);
         CHECK(probe->abort_calls == 0);
     }
@@ -451,7 +566,9 @@ TEST_CASE(PREFIX "retains and sanitizes the normal cancel checker until worker c
         {
             auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
             auto cancel_requested = std::make_shared<std::atomic_bool>(false);
-            auto transaction = ProviderConditionalCopyOperationUTTransaction(
+            auto presentation = ProviderConditionalCopyOperationUTPresentation();
+            auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
+                presentation,
                 [probe] {
                     ++probe->commit_calls;
                     return ProviderConditionalCopyOperationUTSuccess();
@@ -466,29 +583,36 @@ TEST_CASE(PREFIX "retains and sanitizes the normal cancel checker until worker c
                     throw 1;
                 return cancel_requested->load();
             };
-            auto created = ProviderConditionalCopyOperationTesting::Create(
-                std::move(transaction),
-                g_ProviderConditionalCopyOperationUTContext,
-                std::move(cancel_checker));
+            auto created = ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                                           g_ProviderConditionalCopyOperationUTContext,
+                                                                           presentation,
+                                                                           std::move(cancel_checker));
             REQUIRE(created);
             auto product = std::move(*created);
+            auto report = ProviderConditionalCopyOperationUTReportProbe{};
+            auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+            operation->SetItemStatusCallback([&report](ItemStateReport _report) { report.Capture(_report); });
 
             cancel_requested->store(true);
-            ProviderConditionalCopyOperationUTOperation(product)->Start();
-            REQUIRE(ProviderConditionalCopyOperationUTOperation(product)->Wait(5s));
+            operation->Start();
+            REQUIRE(operation->Wait(5s));
 
             if( test.abort_publication == ProviderPublication::NotPublished ) {
-                CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Stopped);
-                ProviderConditionalCopyOperationUTCheckTerminal(
-                    ProviderConditionalCopyOperationUTTerminal(product),
-                    ProviderConditionalCopyOperationUTCancelledItem());
+                CHECK(operation->State() == OperationState::Stopped);
+                ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                                ProviderConditionalCopyOperationUTCancelledItem());
             }
             else {
-                CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Completed);
-                ProviderConditionalCopyOperationUTCheckTerminal(
-                    ProviderConditionalCopyOperationUTTerminal(product),
-                    ProviderConditionalCopyOperationUTUnknownItem());
+                CHECK(operation->State() == OperationState::Completed);
+                ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
+                                                                ProviderConditionalCopyOperationUTUnknownItem());
             }
+            CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 0);
+            CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 0);
+            CHECK(report.calls == 1);
+            CHECK(report.host == presentation.source_host.get());
+            CHECK(report.path == "/source.txt");
+            CHECK(report.status == ItemStatus::Skipped);
             CHECK(probe->commit_calls == 0);
             CHECK(probe->abort_calls == 1);
             CHECK(probe->cancel_checks == 1);
@@ -509,8 +633,9 @@ TEST_CASE(PREFIX "accessor owns terminal state without retaining the Operation",
             ++probe->abort_calls;
             return ProviderPublication::NotPublished;
         });
-    auto created = ProviderConditionalCopyOperationTesting::Create(
-        std::move(transaction), g_ProviderConditionalCopyOperationUTContext);
+    auto created = ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                                   g_ProviderConditionalCopyOperationUTContext,
+                                                                   ProviderConditionalCopyOperationUTPresentation());
     REQUIRE(created);
     auto product = std::move(*created);
     auto accessor = ProviderConditionalCopyOperationUTTerminal(product);
@@ -543,12 +668,13 @@ TEST_CASE(PREFIX "dropping a cold product aborts provider authority exactly once
                 ++probe->abort_calls;
                 return ProviderPublication::NotPublished;
             });
-        auto created = ProviderConditionalCopyOperationTesting::Create(
-            std::move(transaction), g_ProviderConditionalCopyOperationUTContext);
+        auto created =
+            ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                            g_ProviderConditionalCopyOperationUTContext,
+                                                            ProviderConditionalCopyOperationUTPresentation());
         REQUIRE(created);
         auto product = std::move(*created);
-        ProviderConditionalCopyOperationUTCheckPending(
-            ProviderConditionalCopyOperationUTTerminal(product));
+        ProviderConditionalCopyOperationUTCheckPending(ProviderConditionalCopyOperationUTTerminal(product));
     }
 
     CHECK(probe->commit_calls == 0);
@@ -569,8 +695,9 @@ TEST_CASE(PREFIX "maps a pre-consumed aborted transaction as submitted-path inco
             return ProviderPublication::NotPublished;
         });
     REQUIRE(transaction->Abort().failure == CommitFailure::Aborted);
-    auto created = ProviderConditionalCopyOperationTesting::Create(
-        std::move(transaction), g_ProviderConditionalCopyOperationUTContext);
+    auto created = ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                                   g_ProviderConditionalCopyOperationUTContext,
+                                                                   ProviderConditionalCopyOperationUTPresentation());
     REQUIRE(created);
     auto product = std::move(*created);
 
@@ -597,8 +724,9 @@ TEST_CASE(PREFIX "keeps destruction behind the completion callback lifetime",
             ++probe->abort_calls;
             return ProviderPublication::NotPublished;
         });
-    auto created = ProviderConditionalCopyOperationTesting::Create(
-        std::move(transaction), g_ProviderConditionalCopyOperationUTContext);
+    auto created = ProviderConditionalCopyOperationTesting::Create(std::move(transaction),
+                                                                   g_ProviderConditionalCopyOperationUTContext,
+                                                                   ProviderConditionalCopyOperationUTPresentation());
     REQUIRE(created);
     auto product = std::move(*created);
     auto accessor = ProviderConditionalCopyOperationUTTerminal(product);
@@ -630,8 +758,7 @@ TEST_CASE(PREFIX "keeps destruction behind the completion callback lifetime",
     condition.notify_all();
 
     REQUIRE(ProviderConditionalCopyOperationUTWaitUntil([&] { return weak_operation.expired(); }));
-    ProviderConditionalCopyOperationUTCheckTerminal(
-        accessor, ProviderConditionalCopyOperationUTSuccessItem());
+    ProviderConditionalCopyOperationUTCheckTerminal(accessor, ProviderConditionalCopyOperationUTSuccessItem());
     CHECK(probe->commit_calls == 1);
     CHECK(probe->abort_calls == 0);
     CHECK(ticket);

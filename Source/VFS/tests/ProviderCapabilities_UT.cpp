@@ -29,45 +29,48 @@ public:
 };
 
 static ProviderConditionalCopyReviewedClaims ConditionalCopyClaims(const std::shared_ptr<Host> &_source,
-                                                                    const std::shared_ptr<Host> &_destination)
+                                                                   const std::shared_ptr<Host> &_destination)
 {
     return ProviderConditionalCopyReviewedClaims{
         .plan_id = "provider-conditional-copy-test",
         .source_binding = ProviderConditionalCopyBinding{.provider_id = "source", .host = _source},
         .destination_binding = ProviderConditionalCopyBinding{.provider_id = "destination", .host = _destination},
-        .source = ProviderConditionalCopyExistingExpectation{
-            .absolute_path = "/source.txt",
-            .kind = ProviderConditionalCopyExpectedKind::RegularFile,
-            .device = 1,
-            .inode = 2,
-            .birth_time = {.seconds = 3, .nanoseconds = 4},
-            .mode = 0100640,
-            .byte_size = 5,
-            .modification_time = {.seconds = 6, .nanoseconds = 7},
-            .status_change_time = {.seconds = 8, .nanoseconds = 9},
-        },
-        .destination_parent = ProviderConditionalCopyExistingExpectation{
-            .absolute_path = "/destination",
-            .kind = ProviderConditionalCopyExpectedKind::Directory,
-            .device = 10,
-            .inode = 11,
-            .birth_time = {.seconds = 12, .nanoseconds = 13},
-            .mode = 0040750,
-            .byte_size = 14,
-            .modification_time = {.seconds = 15, .nanoseconds = 16},
-            .status_change_time = {.seconds = 17, .nanoseconds = 18},
-        },
-        .destination = ProviderConditionalCopyMissingExpectation{
-            .absolute_path = "/destination/source.txt",
-        },
+        .source =
+            ProviderConditionalCopyExistingExpectation{
+                .absolute_path = "/source.txt",
+                .kind = ProviderConditionalCopyExpectedKind::RegularFile,
+                .device = 1,
+                .inode = 2,
+                .birth_time = {.seconds = 3, .nanoseconds = 4},
+                .mode = 0100640,
+                .byte_size = 5,
+                .modification_time = {.seconds = 6, .nanoseconds = 7},
+                .status_change_time = {.seconds = 8, .nanoseconds = 9},
+            },
+        .destination_parent =
+            ProviderConditionalCopyExistingExpectation{
+                .absolute_path = "/destination",
+                .kind = ProviderConditionalCopyExpectedKind::Directory,
+                .device = 10,
+                .inode = 11,
+                .birth_time = {.seconds = 12, .nanoseconds = 13},
+                .mode = 0040750,
+                .byte_size = 14,
+                .modification_time = {.seconds = 15, .nanoseconds = 16},
+                .status_change_time = {.seconds = 17, .nanoseconds = 18},
+            },
+        .destination =
+            ProviderConditionalCopyMissingExpectation{
+                .absolute_path = "/destination/source.txt",
+            },
     };
 }
 
-static std::unique_ptr<ProviderConditionalCopyTransaction> ConditionalCopyTransaction(
-    ProviderConditionalCopyReviewedClaims _claims,
-    ProviderConditionalCopyCommitResult _result,
-    int &_commit_calls,
-    int &_abort_calls)
+static std::unique_ptr<ProviderConditionalCopyTransaction>
+ConditionalCopyTransaction(ProviderConditionalCopyReviewedClaims _claims,
+                           ProviderConditionalCopyCommitResult _result,
+                           int &_commit_calls,
+                           int &_abort_calls)
 {
     auto destination = _claims.destination_binding.host;
     auto transaction = ProviderConditionalCopyTransactionTestAccess::Mint(
@@ -109,8 +112,8 @@ static ProviderConditionalCopyCommitResult ConditionalCopyPublishedResult() noex
 }
 
 static_assert(!std::is_default_constructible_v<ProviderConditionalCopyReviewedAuthority>);
-static_assert(!std::is_constructible_v<ProviderConditionalCopyReviewedAuthority,
-                                      ProviderConditionalCopyReviewedClaims>);
+static_assert(
+    !std::is_constructible_v<ProviderConditionalCopyReviewedAuthority, ProviderConditionalCopyReviewedClaims>);
 static_assert(!std::is_copy_constructible_v<ProviderConditionalCopyReviewedAuthority>);
 static_assert(!std::is_copy_assignable_v<ProviderConditionalCopyReviewedAuthority>);
 static_assert(std::is_move_constructible_v<ProviderConditionalCopyReviewedAuthority>);
@@ -145,6 +148,8 @@ TEST_CASE(PREFIX "uses conservative defaults for the dummy host")
     CHECK(capabilities.is_case_sensitive);
     CHECK_FALSE(Host::DummyHost()->CaseSensitivityAtPath("/"));
     CHECK_FALSE(Host::DummyHost()->SemanticNamespaceIdentity());
+    CHECK(Host::DummyHost()->ConditionalCopyPathSupport("/source", "/destination") ==
+          ProviderConditionalCopyPathSupport::Unsupported);
 }
 
 TEST_CASE(PREFIX "keeps conditional Copy authority provider-minted and base hosts unsupported")
@@ -153,14 +158,12 @@ TEST_CASE(PREFIX "keeps conditional Copy authority provider-minted and base host
     auto destination = std::make_shared<ConditionalCopyTestHost>("conditional-destination");
 
     const auto unsupported = destination->BeginConditionalCopyTransaction(
-        ProviderConditionalCopyTransactionTestAccess::MakeAuthority(
-            ConditionalCopyClaims(source, destination)));
+        ProviderConditionalCopyTransactionTestAccess::MakeAuthority(ConditionalCopyClaims(source, destination)));
     REQUIRE_FALSE(unsupported);
     CHECK(unsupported.error() == ProviderConditionalCopyTransactionBeginError::Unsupported);
 
     const auto cancelled = destination->BeginConditionalCopyTransaction(
-        ProviderConditionalCopyTransactionTestAccess::MakeAuthority(
-            ConditionalCopyClaims(source, destination)),
+        ProviderConditionalCopyTransactionTestAccess::MakeAuthority(ConditionalCopyClaims(source, destination)),
         [] { return true; });
     REQUIRE_FALSE(cancelled);
     CHECK(cancelled.error() == ProviderConditionalCopyTransactionBeginError::Cancelled);
@@ -168,8 +171,7 @@ TEST_CASE(PREFIX "keeps conditional Copy authority provider-minted and base host
     auto wrong_provider = std::make_shared<ConditionalCopyTestHost>("wrong-provider");
     const auto invalid = ProviderConditionalCopyTransactionTestAccess::Mint(
         *wrong_provider,
-        ProviderConditionalCopyTransactionTestAccess::MakeAuthority(
-            ConditionalCopyClaims(source, destination)),
+        ProviderConditionalCopyTransactionTestAccess::MakeAuthority(ConditionalCopyClaims(source, destination)),
         [] { return ConditionalCopyPublishedResult(); },
         [] { return ProviderConditionalCopyPublicationState::NotPublished; });
     REQUIRE_FALSE(invalid);
@@ -177,8 +179,7 @@ TEST_CASE(PREFIX "keeps conditional Copy authority provider-minted and base host
 
     const auto unsealed = ProviderConditionalCopyTransactionTestAccess::Mint(
         *destination,
-        ProviderConditionalCopyTransactionTestAccess::MakeUnsealedAuthority(
-            ConditionalCopyClaims(source, destination)),
+        ProviderConditionalCopyTransactionTestAccess::MakeUnsealedAuthority(ConditionalCopyClaims(source, destination)),
         [] { return ConditionalCopyPublishedResult(); },
         [] { return ProviderConditionalCopyPublicationState::NotPublished; });
     REQUIRE_FALSE(unsealed);
@@ -316,17 +317,17 @@ TEST_CASE(PREFIX "consumes conditional Copy transactions exactly once and fails 
     {
         int commits = 0;
         int aborts = 0;
-        auto transaction = ConditionalCopyTransaction(
-            claims,
-            {.publication = ProviderConditionalCopyPublicationState::NotPublished,
-             .failure = ProviderConditionalCopyCommitFailure::SourceStale,
-             .system_error = ESTALE},
-            commits,
-            aborts);
+        auto transaction =
+            ConditionalCopyTransaction(claims,
+                                       {.publication = ProviderConditionalCopyPublicationState::NotPublished,
+                                        .failure = ProviderConditionalCopyCommitFailure::SourceStale,
+                                        .system_error = ESTALE},
+                                       commits,
+                                       aborts);
         CHECK((transaction->Commit() ==
-              ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
-                                                  ProviderConditionalCopyCommitFailure::SourceStale,
-                                                  ESTALE}));
+               ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                   ProviderConditionalCopyCommitFailure::SourceStale,
+                                                   ESTALE}));
         CHECK(commits == 1);
         CHECK(aborts == 1);
     }
@@ -335,13 +336,12 @@ TEST_CASE(PREFIX "consumes conditional Copy transactions exactly once and fails 
     {
         int commits = 0;
         int aborts = 0;
-        auto transaction = ConditionalCopyTransaction(
-            claims,
-            {.publication = ProviderConditionalCopyPublicationState::Unknown,
-             .failure = ProviderConditionalCopyCommitFailure::ProviderFailure,
-             .system_error = EIO},
-            commits,
-            aborts);
+        auto transaction = ConditionalCopyTransaction(claims,
+                                                      {.publication = ProviderConditionalCopyPublicationState::Unknown,
+                                                       .failure = ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                       .system_error = EIO},
+                                                      commits,
+                                                      aborts);
         CHECK(transaction->Commit() == ConditionalCopyUnknownResult());
         CHECK(transaction->Abort() == ConditionalCopyUnknownResult());
         CHECK(commits == 1);
@@ -352,24 +352,22 @@ TEST_CASE(PREFIX "consumes conditional Copy transactions exactly once and fails 
     {
         int commits = 0;
         int aborts = 0;
-        auto transaction = ConditionalCopyTransaction(
-            claims, ConditionalCopyPublishedResult(), commits, aborts);
+        auto transaction = ConditionalCopyTransaction(claims, ConditionalCopyPublishedResult(), commits, aborts);
         CHECK((transaction->Abort() ==
-              ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
-                                                  ProviderConditionalCopyCommitFailure::Aborted}));
+               ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                   ProviderConditionalCopyCommitFailure::Aborted}));
         CHECK((transaction->Commit() ==
-              ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
-                                                  ProviderConditionalCopyCommitFailure::Aborted}));
+               ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                   ProviderConditionalCopyCommitFailure::Aborted}));
         CHECK(commits == 0);
         CHECK(aborts == 1);
 
         commits = 0;
         aborts = 0;
-        transaction = ConditionalCopyTransaction(
-            claims, ConditionalCopyPublishedResult(), commits, aborts);
+        transaction = ConditionalCopyTransaction(claims, ConditionalCopyPublishedResult(), commits, aborts);
         CHECK((transaction->Commit([] { return true; }) ==
-              ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
-                                                  ProviderConditionalCopyCommitFailure::Cancelled}));
+               ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                   ProviderConditionalCopyCommitFailure::Cancelled}));
         CHECK(commits == 0);
         CHECK(aborts == 1);
     }
@@ -379,8 +377,7 @@ TEST_CASE(PREFIX "consumes conditional Copy transactions exactly once and fails 
         int commits = 0;
         int aborts = 0;
         {
-            auto transaction = ConditionalCopyTransaction(
-                claims, ConditionalCopyPublishedResult(), commits, aborts);
+            auto transaction = ConditionalCopyTransaction(claims, ConditionalCopyPublishedResult(), commits, aborts);
             CHECK(transaction->IsPending());
         }
         CHECK(commits == 0);
@@ -467,7 +464,9 @@ TEST_CASE(PREFIX "preserves every valid conditional Copy result and sync evidenc
     };
 
     for( const auto &expected : valid_results ) {
-        CAPTURE(expected.failure, expected.system_error, expected.filesystem_sync_status,
+        CAPTURE(expected.failure,
+                expected.system_error,
+                expected.filesystem_sync_status,
                 expected.filesystem_sync_system_error);
         int commits = 0;
         int aborts = 0;
@@ -478,8 +477,7 @@ TEST_CASE(PREFIX "preserves every valid conditional Copy result and sync evidenc
         CHECK(transaction->Abort() == expected);
         CHECK_FALSE(transaction->IsPending());
         CHECK(commits == 1);
-        CHECK(aborts ==
-              (expected.publication == ProviderConditionalCopyPublicationState::NotPublished ? 1 : 0));
+        CHECK(aborts == (expected.publication == ProviderConditionalCopyPublicationState::NotPublished ? 1 : 0));
     }
 }
 
@@ -704,8 +702,11 @@ TEST_CASE(PREFIX "degrades inconsistent conditional Copy results to one cached U
     };
 
     for( const auto &inconsistent : inconsistent_results ) {
-        CAPTURE(inconsistent.publication, inconsistent.failure, inconsistent.system_error,
-                inconsistent.filesystem_sync_status, inconsistent.filesystem_sync_system_error);
+        CAPTURE(inconsistent.publication,
+                inconsistent.failure,
+                inconsistent.system_error,
+                inconsistent.filesystem_sync_status,
+                inconsistent.filesystem_sync_system_error);
         int commits = 0;
         int aborts = 0;
         auto transaction = ConditionalCopyTransaction(claims, inconsistent, commits, aborts);
@@ -774,15 +775,14 @@ TEST_CASE(PREFIX "reports concurrent and moved-from transaction state conservati
     {
         int commits = 0;
         int aborts = 0;
-        auto transaction = ConditionalCopyTransaction(
-            claims, ConditionalCopyPublishedResult(), commits, aborts);
+        auto transaction = ConditionalCopyTransaction(claims, ConditionalCopyPublishedResult(), commits, aborts);
         ProviderConditionalCopyTransaction moved{std::move(*transaction)};
 
         CHECK(transaction->Commit() == ConditionalCopyUnknownResult());
         CHECK(transaction->Abort() == ConditionalCopyUnknownResult());
-        CHECK((moved.Abort() ==
-              ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
-                                                  ProviderConditionalCopyCommitFailure::Aborted}));
+        CHECK(
+            (moved.Abort() == ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                                  ProviderConditionalCopyCommitFailure::Aborted}));
         CHECK(commits == 0);
         CHECK(aborts == 1);
     }
@@ -808,18 +808,16 @@ TEST_CASE(PREFIX "requires provider confirmation before reporting an aborted tra
 
     SECTION("explicit abort throws")
     {
-        auto transaction = mint(
-            [] { return ConditionalCopyPublishedResult(); },
-            []() -> ProviderConditionalCopyPublicationState { throw 1; });
+        auto transaction = mint([] { return ConditionalCopyPublishedResult(); },
+                                []() -> ProviderConditionalCopyPublicationState { throw 1; });
         CHECK(transaction->Abort() == unknown);
         CHECK(transaction->Abort() == unknown);
     }
 
     SECTION("cancellation abort reports Published")
     {
-        auto transaction = mint(
-            [] { return ConditionalCopyPublishedResult(); },
-            [] { return ProviderConditionalCopyPublicationState::Published; });
+        auto transaction = mint([] { return ConditionalCopyPublishedResult(); },
+                                [] { return ProviderConditionalCopyPublicationState::Published; });
         CHECK(transaction->Commit([] { return true; }) == unknown);
         CHECK(transaction->Commit() == unknown);
     }
@@ -850,26 +848,17 @@ TEST_CASE(PREFIX "classifies POSIX and SFTP errors for planning")
 
     using nc::vfs::sftp::ErrorDomain;
     using nc::vfs::sftp::Errors;
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_no_such_file}) ==
-          HostErrorKind::Missing);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_no_such_path}) ==
-          HostErrorKind::Missing);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_no_such_file}) == HostErrorKind::Missing);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_no_such_path}) == HostErrorKind::Missing);
     CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_permission_denied}) ==
           HostErrorKind::PermissionDenied);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_op_unsupported}) ==
-          HostErrorKind::Unsupported);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_connection_lost}) ==
-          HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_send}) ==
-          HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_recv}) ==
-          HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_disconnect}) ==
-          HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::timeout}) ==
-          HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_timeout}) ==
-          HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_op_unsupported}) == HostErrorKind::Unsupported);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_connection_lost}) == HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_send}) == HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_recv}) == HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_disconnect}) == HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::timeout}) == HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_timeout}) == HostErrorKind::Unavailable);
     CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_failure}) == HostErrorKind::Other);
 }
 
@@ -950,8 +939,7 @@ TEST_CASE(PREFIX "resolves native provider capabilities")
 {
     const TestDir test_dir;
     Host &host = *TestEnv().vfs_native;
-    const ProviderCapabilities capabilities =
-        ProviderCapabilitiesResolver::Resolve(host, test_dir.directory.native());
+    const ProviderCapabilities capabilities = ProviderCapabilitiesResolver::Resolve(host, test_dir.directory.native());
 
     CHECK(capabilities.can_read);
     CHECK(capabilities.can_write);

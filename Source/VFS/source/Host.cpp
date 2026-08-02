@@ -625,10 +625,8 @@ HostErrorKind Host::ClassifyError(const Error &_error) const noexcept
     }
 }
 
-std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
-              ProviderConditionalCopyTransactionBeginError>
-Host::BeginConditionalCopyTransaction(
-    [[maybe_unused]] ProviderConditionalCopyReviewedAuthority _authority,
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
+Host::BeginConditionalCopyTransaction([[maybe_unused]] ProviderConditionalCopyReviewedAuthority _authority,
                                       const VFSCancelChecker &_cancel_checker)
 {
     try {
@@ -640,8 +638,14 @@ Host::BeginConditionalCopyTransaction(
     return std::unexpected(ProviderConditionalCopyTransactionBeginError::Unsupported);
 }
 
-std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
-              ProviderConditionalCopyTransactionBeginError>
+ProviderConditionalCopyPathSupport
+Host::ConditionalCopyPathSupport([[maybe_unused]] std::string_view _source_path,
+                                 [[maybe_unused]] std::string_view _destination_parent_path) const noexcept
+{
+    return ProviderConditionalCopyPathSupport::Unsupported;
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
 Host::MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                      ProviderConditionalCopyTransaction::CommitHandler _commit,
                                      ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept

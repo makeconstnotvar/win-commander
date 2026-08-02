@@ -153,9 +153,9 @@ file.paste command
 -> announce completion and recovery actions
 ```
 
-The engine adapter owns composition of `OperationJournal`, `CopyOperationRunReceiptCustodian`, the production `CopyOperationOrchestrator`, `Operation`, `Job`, and `Pool`. The provider result mapper, conditional transaction, typed execution product, private reviewed factory, journal/Pool orchestration, read-only reconciliation, and exact reconciled Pool release are implemented for one create-only regular Native file on the same internal writable APFS volume.
+The engine adapter owns composition of `OperationJournal`, `CopyOperationRunReceiptCustodian`, the production `CopyOperationOrchestrator`, `Operation`, `Job`, and `Pool`. The provider result mapper, conditional transaction, typed execution product, private reviewed factory, restricted cold hooks, owning exact durable outcome, preallocated Pool terminal transition, `ReleaseWithoutCompletion`, journal/Pool orchestration, read-only reconciliation, and exact reconciled Pool release are implemented for one create-only regular Native file on the same internal writable APFS volume.
 
-Application adoption still needs an app-owned typed review step, a cold pre-enqueue configurator for progress/completion/refresh callbacks, and a durable terminal presenter. That presenter must use journal publication, sync, recovery, reconcile, and Pool-release evidence because generic `Operation::Completed` also represents non-cancellation provider failures. The narrow first consumer candidate is `CopyAs::Perform`; clipboard Paste remains later because it adds clipboard freshness, batches, destination changes, cut-token semantics, and broader provider/volume scope. Views consume state and commands only.
+Bounded `CopyAs::Perform` now supplies an app-owned exact review step, lifecycle/item-status hooks, owning durable-terminal UI dispatch and process-owned retry/reconciliation. It uses journal publication, sync, recovery, reconcile and Pool-release evidence because generic `Operation::Completed` also represents non-cancellation provider failures. Clipboard Paste remains later because it adds clipboard freshness, batches, destination changes, cut-token semantics and broader provider/volume scope. Views consume state and commands only.
 
 ## Error states
 

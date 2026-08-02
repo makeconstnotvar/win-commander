@@ -1,6 +1,6 @@
 # Feature: structural `OperationPlan` foundation
 
-> Status: structural intent, Copy preflight/review, durable codec/journal, anchored Native Copy capsule, and typed outcome mapping implemented; production consumer adoption remains open
+> Status: structural intent, Copy preflight/review, durable codec/journal, anchored Native Copy capsule, typed outcome mapping and bounded `CopyAs` consumer implemented
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` section 14.1
 > Execution tracker: M3 in `Docs/Development-Plan.md`, R5 in `Docs/refactor_plan.md`
 
@@ -63,7 +63,7 @@ The structural value ends after construction and validation. The separate [`Oper
 
 `ReviewedOperationFactory` consumes a private-sealed reviewed authority and obtains the bounded Native clone-only transaction. Its private execution-product path is the production construction authority used by `CopyOperationOrchestrator`; its public compatibility `Create` surface still resolves the cold product and fails closed so callers cannot bypass journal admission and run-receipt custody.
 
-The Native clone-only provider transaction includes a strict internal-writable-APFS predicate, exact supported metadata seals/parity, post-clone verification, ordered destination/parent/full-filesystem durability, and typed post-publication failure evidence. The lossless provider mapper, transaction-owning execution product, exact journal finalization, `Pool` finalization barrier, production orchestrator, read-only reconciliation, and exact reconciled Pool release are implemented and unit-tested. The application mutation consumer, dedicated physical-volume fixtures, and cross-volume provider-owned staging remain open. Existing command, Paste, drag/drop, and committed Rename paths retain their current execution routes.
+The Native clone-only provider transaction includes a strict internal-writable-APFS predicate, exact supported metadata seals/parity, post-clone verification, ordered destination/parent/full-filesystem durability, and typed post-publication failure evidence. The lossless provider mapper, transaction-owning execution product, exact journal finalization, restricted cold hooks, owning durable-outcome delivery, preallocated `Pool` finalization barrier, `ReleaseWithoutCompletion`, production orchestrator, read-only reconciliation, exact reconciled Pool release and bounded `CopyAs` app review/presentation are implemented and unit-tested. Dedicated physical-volume fixtures, cross-volume provider-owned staging and broader mutation adoption remain open.
 
 ## Verified coverage
 
@@ -81,9 +81,9 @@ Current Debug evidence for the operation pipeline:
 - earlier staged `NativeCreateCopy` snapshot: 19 / 924;
 - `OperationJournal`: 27 / 592;
 - Job lifecycle: 10 / 608;
-- `Pool`: 15 / 190;
-- `CopyOperationOrchestrator`: 13 / 558, including production construction at 3 / 138;
-- full Debug, Release ASAN, and Release UBSAN `OperationsUT`: 165 / 4,468 in each configuration.
+- `Pool`: 17 / 219;
+- `CopyOperationOrchestrator`: 15 / 758, including production construction at 3 / 138;
+- full Debug, Release ASAN, and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
 
 The current-tree M0 run from 2026-08-01 passed the unsigned Debug application and all 10 seeded aggregate binaries: 897 cases / 132,011 assertions in the recorded run. Docker-backed seeded ASAN integration passed 163 / 89,392; hosted CI remains open.
 
@@ -98,4 +98,4 @@ The implemented copy-first pure [`OperationPlanner`](copy_preflight_planner_foun
 
 The production [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foundation.md) adapter creates a bound preflight that retains the exact immutable provider bindings used for its evidence. [`ReviewedVFSOperationPreflight`](reviewed_copy_factory_foundation.md) records explicit approval and issues one private-sealed provider authority. `OperationJournal` issues exact admission/run receipts, and the production `CopyOperationOrchestrator` privately consumes the reviewed factory's transaction-owning execution product while preserving durable queue, terminal, reconcile, and Pool-release ordering.
 
-The next vertical slice is application adoption: compose typed review, configure the cold operation before enqueue, and present exact durable terminal/recovery evidence before wiring one bounded `CopyAs::Perform` consumer. Cross-volume staging and non-Copy preflight remain later sequences.
+The next vertical slice is live application-boundary proof for the bounded `CopyAs::Perform` consumer, followed by physical-volume evidence. Cross-volume staging and non-Copy preflight remain later sequences.

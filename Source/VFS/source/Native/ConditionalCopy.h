@@ -44,6 +44,9 @@ struct ConditionalCopyVolumeDecision final {
 [[nodiscard]] ConditionalCopyVolumeDecision
 EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
 
+[[nodiscard]] bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
+                                               const nc::utility::NativeFileSystemInfo &_destination) noexcept;
+
 struct ConditionalCopyTimestamp final {
     int64_t seconds{0};
     int64_t nanoseconds{0};
@@ -81,9 +84,8 @@ enum class ConditionalCopyMetadataPolicyError : uint8_t {
 ValidateConditionalCopyMetadataPolicy(const ConditionalCopyMetadataSnapshot &_source,
                                       const ConditionalCopyMetadataSnapshot &_destination_parent) noexcept;
 
-[[nodiscard]] bool ConditionalCopyMetadataMatchesClone(
-    const ConditionalCopyMetadataSnapshot &_source,
-    const ConditionalCopyMetadataSnapshot &_destination) noexcept;
+[[nodiscard]] bool ConditionalCopyMetadataMatchesClone(const ConditionalCopyMetadataSnapshot &_source,
+                                                       const ConditionalCopyMetadataSnapshot &_destination) noexcept;
 
 class ConditionalCopyIO
 {
@@ -103,8 +105,7 @@ public:
     virtual int FullFSync(int _fd) noexcept;
     virtual int Close(int _fd) noexcept;
 
-    [[nodiscard]] virtual std::expected<ConditionalCopyMetadataSnapshot, int>
-    CaptureMetadata(int _fd) noexcept;
+    [[nodiscard]] virtual std::expected<ConditionalCopyMetadataSnapshot, int> CaptureMetadata(int _fd) noexcept;
 };
 
 } // namespace nc::vfs::native

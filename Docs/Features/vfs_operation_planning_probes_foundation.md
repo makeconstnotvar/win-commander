@@ -89,7 +89,7 @@ The combined planner and VFS adapter enforce the current Copy subset:
 
 `ReviewedOperationFactory` is fail closed at its public compatibility boundary. Native consumes exact source, destination-parent and absent-destination claims into a same-host/internal-writable-APFS clone-only transaction with supported metadata parity and ordered durability barriers. The private friend path maps the provider result, creates the transaction-owning execution product, and supplies it to the production orchestrator; direct public construction still resolves the cold transaction without publication and returns an error.
 
-`OperationPlanCodec` and `OperationJournal` provide schema-v1 structural intent persistence, durable admission/run receipts, atomic item-plus-terminal finalization, tri-state publication evidence and restart classification. The Native transaction and execution product perform anchored verification, cancellation/commit linearization and exact typed outcomes. `CopyOperationOrchestrator` owns the production journal/`Pool` composition, including read-only reconciliation and exact reconciled Pool release. The application review/presentation adapter and mutation consumer remain open.
+`OperationPlanCodec` and `OperationJournal` provide schema-v1 structural intent persistence, durable admission/run receipts, atomic item-plus-terminal finalization, tri-state publication evidence and restart classification. The Native transaction and execution product perform anchored verification, cancellation/commit linearization and exact typed outcomes. `CopyOperationOrchestrator` owns the production journal/`Pool` composition, including restricted cold hooks, owning durable-outcome delivery, preallocated Pool finalization, `ReleaseWithoutCompletion`, read-only reconciliation and exact reconciled Pool release. Bounded `CopyAs` supplies the first application review/presentation adapter and mutation consumer.
 
 ## Verified coverage
 
@@ -105,9 +105,9 @@ Current Debug evidence:
 - earlier staged `NativeCreateCopy_UT` snapshot: 19 / 924;
 - `OperationJournal_UT`: 27 / 592;
 - Job lifecycle: 10 / 608;
-- `Pool_UT`: 15 / 190;
-- `CopyOperationOrchestrator_UT`: 13 / 558, including production construction at 3 / 138;
-- full Debug, Release ASAN, and Release UBSAN `OperationsUT`: 165 / 4,468 in each configuration.
+- `Pool_UT`: 17 / 219;
+- `CopyOperationOrchestrator_UT`: 15 / 758, including production construction at 3 / 138;
+- full Debug, Release ASAN, and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
 
 Coverage includes binding lifetime and semantic alias rejection, authoritative case identity, POSIX/SFTP classification seams, item/name/access/space/cancellation evidence, missing checker behavior, native recursive estimation, non-reentrant stat, partial directory-read failure, vanished entries, symlinks on both sides, special files, unsupported policies, and directory replacement.
 
@@ -117,11 +117,8 @@ The current-tree M0 run from 2026-08-01 passed the unsigned Debug application an
 
 The next M3 slices must:
 
-1. compose the exact bound preflight into app-owned typed review;
-2. configure callbacks while the execution product remains cold, before enqueue can start it;
-3. present exact durable terminal, publication, sync, retry, reconcile, and Pool-release evidence;
-4. wire one bounded `CopyAs::Perform` consumer with zero-enqueue proof for Blocked, stale, rebound, unpersisted, cancelled, batch, and unsupported-provider inputs;
-5. add provider-owned bounded staging for cross-volume scope;
-6. execute dedicated physical internal/external-volume fixtures.
+1. prove live zero-enqueue and exact UI dispatch for Blocked, stale, rebound, unpersisted and cancelled reviewed `CopyAs` intent;
+2. add provider-owned bounded staging for cross-volume scope;
+3. execute dedicated physical internal/external-volume fixtures.
 
 Operation Center presentation, non-Copy preflight, and broader remote/archive execution identity remain later increments.

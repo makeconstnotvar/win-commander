@@ -15,15 +15,14 @@ struct ProviderConditionalCopyOperationTestHooks final {
 class ProviderConditionalCopyOperationTesting final
 {
 public:
-    [[nodiscard]] static std::expected<CopyOperationExecutionProduct,
-                                       ProviderConditionalCopyOperationConstructionError>
+    [[nodiscard]] static std::expected<CopyOperationExecutionProduct, ProviderConditionalCopyOperationConstructionError>
     Create(std::unique_ptr<vfs::ProviderConditionalCopyTransaction> _transaction,
            ProviderConditionalCopyJournalContext _journal_context,
+           ProviderConditionalCopyOperationPresentation _presentation,
            vfs::ProviderConditionalCopyTransaction::CancelChecker _cancel_checker = {},
            ProviderConditionalCopyOperationTestHooks _hooks = {}) noexcept;
 
-    [[nodiscard]] static std::shared_ptr<Operation> &
-    Operation(CopyOperationExecutionProduct &_product) noexcept;
+    [[nodiscard]] static std::shared_ptr<Operation> &Operation(CopyOperationExecutionProduct &_product) noexcept;
     [[nodiscard]] static CopyOperationExecutionProduct::TerminalItemResultAccessor &
     TerminalItemResult(CopyOperationExecutionProduct &_product) noexcept;
 };

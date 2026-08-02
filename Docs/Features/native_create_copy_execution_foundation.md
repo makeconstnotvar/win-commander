@@ -27,20 +27,20 @@ The common `Job`/`Operation`/`Pool` lifecycle retains the owning operation throu
 
 The isolated capsule remains a characterization and fault-injection foundation with a declared `FileSystemSyncOnly` promise and a named staging artifact. The production Native transaction is the authoritative same-volume path: it consumes unforgeable reviewed authority, applies the internal-writable-APFS capability policy, owns exact metadata seals, publishes only through `fclonefileat(..., CLONE_ACL)`, verifies the destination, and orders `fsync(destination) → fsync(parent) → F_FULLFSYNC(destination)`.
 
-The provider commit result is now losslessly mapped into journal evidence, owned by a typed operation product, constructed through the private reviewed factory, and submitted by the production `CopyOperationOrchestrator`. Application adoption still requires typed review composition, cold pre-enqueue callback configuration, and exact durable terminal presentation. Cross-volume Copy still needs provider-owned bounded staging and descriptor-bound artifact recovery. Replacement, directories, symlinks, batches and remote providers remain separate later slices.
+The provider commit result is now losslessly mapped into journal evidence, owned by a typed operation product, constructed through the private reviewed factory, and submitted by the production `CopyOperationOrchestrator`. Restricted cold hooks, owning exact durable-terminal delivery, preallocated Pool finalization and `ReleaseWithoutCompletion` are implemented. Application adoption still requires typed review composition and an app durable-outcome presenter/coordinator. Cross-volume Copy still needs provider-owned bounded staging and descriptor-bound artifact recovery. Replacement, directories, symlinks, batches and remote providers remain separate later slices.
 
 ## Verified coverage
 
 - Native create-copy: 19 Debug cases / 924 assertions.
 - This 19 / 924 staged-capsule total is an earlier focused snapshot retained for that characterization boundary.
 - Provider conditional result mapper: 4 / 237; execution product: 9 / 188.
-- Reviewed factory: 8 / 225; orchestrator: 13 / 558, including production construction at 3 / 138.
+- Reviewed factory: 8 / 225; orchestrator: 15 / 758, including production construction at 3 / 138.
 - Job lifecycle and worker-launch hardening: 10 / 608; journal: 27 / 592.
-- Pool lifecycle/finalization: 15 / 190.
-- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 165 / 4,468 in each configuration, with sanitizer runtime and symbols confirmed.
+- Pool lifecycle/finalization: 17 / 219.
+- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
 - Current M0: unsigned Debug app plus 10 aggregate binaries, 897 cases / 132,011 assertions in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 cases / 89,392 assertions across Term, Operations, VFS and VFSIcon.
 
 ## Next slice
 
-Add typed application review, a cold pre-enqueue configurator, and durable terminal/recovery presentation before wiring the bounded `CopyAs::Perform` consumer. Cross-volume support remains a separate provider-owned bounded-staging slice.
+Prove the live boundary and physical-volume behavior of the bounded reviewed `CopyAs::Perform` consumer. Cross-volume support remains a separate provider-owned bounded-staging slice.

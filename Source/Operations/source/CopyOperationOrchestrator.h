@@ -12,7 +12,9 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace nc::ops {
 
@@ -69,10 +71,10 @@ enum class CopyOperationDurableTerminalConfirmation : uint8_t {
 
 /**
  * Exact durable outcome delivered after journal finalization or read-only reopen reconciliation.
- * `plan_id` is valid only for the duration of the callback.
+ * The value owns all data required for safe dispatch to another executor.
  */
 struct CopyOperationDurableTerminalOutcome final {
-    std::string_view plan_id;
+    std::string plan_id;
     OperationJournalState state;
     std::optional<OperationJournalItemResult> item_result;
     CopyOperationDurableTerminalConfirmation confirmation;
@@ -80,10 +82,26 @@ struct CopyOperationDurableTerminalOutcome final {
     bool operator==(const CopyOperationDurableTerminalOutcome &) const = default;
 };
 
+struct CopyOperationColdObservation final {
+    uint64_t notification_mask;
+    std::function<void()> callback;
+};
+
 struct CopyOperationSubmissionHooks final {
-    /** Runs once on the cold operation before the Running transition and Pool admission. */
-    std::function<void(Operation &)> configure_operation;
-    /** Runs at most once after exact durable terminal confirmation; exceptions are contained. */
+    /**
+     * Transport lifecycle observers installed before Running and Pool admission.
+     * Completion/finish observations are rejected; durable_terminal_observer is the terminal authority.
+     */
+    std::vector<CopyOperationColdObservation> cold_operation_observations;
+    /** Installed on the cold operation before execution; invoked by its background Job thread. */
+    ItemStateReportCallback item_status_observer;
+    /**
+     * Once Submit advances into run-receipt custody, runs at most once after exact durable terminal
+     * confirmation and before Pool removal/success reporting. Earlier synchronous Submit failures are
+     * reported only by Submit's typed error.
+     * Delivery is synchronous on the submitting, Pool-finalizer, or recovery caller thread; UI consumers
+     * dispatch the owning outcome to their executor. Observer exceptions are contained.
+     */
     std::function<void(const CopyOperationDurableTerminalOutcome &)> durable_terminal_observer;
 };
 
@@ -124,8 +142,7 @@ public:
     [[nodiscard]] CopyOperationRunReceiptCustodyResult Retry(std::string_view _plan_id) noexcept;
     [[nodiscard]] CopyOperationRunReceiptReconciliationResult
     Reconcile(std::string_view _plan_id, const OperationJournal &_reopened_journal) noexcept;
-    [[nodiscard]] CopyOperationRunReceiptPoolReleaseStatus
-    ReleaseReconciled(std::string_view _plan_id) noexcept;
+    [[nodiscard]] CopyOperationRunReceiptPoolReleaseStatus ReleaseReconciled(std::string_view _plan_id) noexcept;
     [[nodiscard]] size_t PendingCount() const noexcept;
 
 private:
@@ -161,17 +178,13 @@ private:
                                     const std::shared_ptr<Pool> &_pool,
                                     const std::shared_ptr<Operation> &_operation) noexcept;
     void CommitEnqueue(Reservation &_reservation) noexcept;
-    [[nodiscard]] CopyOperationRunReceiptCustodyResult
-    RejectEnqueue(Reservation &_reservation,
-                  OperationJournalItemResult _result,
-                  OperationJournalState _terminal_state) noexcept;
-    [[nodiscard]] static PoolTerminalFinalizationDecision
-    FinalizePoolSlot(const std::shared_ptr<Slot> &_slot) noexcept;
-    static void DeliverTerminalOutcome(
-        const std::shared_ptr<Slot> &_slot,
-        CopyOperationDurableTerminalConfirmation _confirmation) noexcept;
-    [[nodiscard]] static PoolTerminalFinalizationDecision
-    ReleaseDecision(const std::shared_ptr<Slot> &_slot) noexcept;
+    [[nodiscard]] CopyOperationRunReceiptCustodyResult RejectEnqueue(Reservation &_reservation,
+                                                                     OperationJournalItemResult _result,
+                                                                     OperationJournalState _terminal_state) noexcept;
+    [[nodiscard]] static PoolTerminalFinalizationDecision FinalizePoolSlot(const std::shared_ptr<Slot> &_slot) noexcept;
+    static void DeliverTerminalOutcome(const std::shared_ptr<Slot> &_slot,
+                                       CopyOperationDurableTerminalConfirmation _confirmation) noexcept;
+    [[nodiscard]] static PoolTerminalFinalizationDecision ReleaseDecision(const std::shared_ptr<Slot> &_slot) noexcept;
     [[nodiscard]] static CopyOperationRunReceiptCustodyResult
     FinalizeCustodiedSlot(const std::shared_ptr<Slot> &_slot) noexcept;
 
@@ -230,13 +243,12 @@ public:
            CopyOperationSubmissionHooks _hooks = {});
 
 private:
-    using ExecutionFactory = std::function<
-        std::expected<CopyOperationExecutionProduct, CopyOperationExecutionFactoryError>(
-            ReviewedVFSOperationPreflight,
-            CancelChecker)>;
-    using ConditionalCommitTransactionResolver = std::function<
-        std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
-                      nc::vfs::ProviderConditionalCopyTransactionBeginError>(
+    using ExecutionFactory =
+        std::function<std::expected<CopyOperationExecutionProduct,
+                                    CopyOperationExecutionFactoryError>(ReviewedVFSOperationPreflight, CancelChecker)>;
+    using ConditionalCommitTransactionResolver =
+        std::function<std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                                    nc::vfs::ProviderConditionalCopyTransactionBeginError>(
             nc::vfs::ProviderConditionalCopyReviewedAuthority,
             const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)>;
 

@@ -25,22 +25,16 @@ void Pool::Enqueue(std::shared_ptr<Operation> _operation)
     (void)TryEnqueue(std::move(_operation));
 }
 
-PoolEnqueueResult Pool::TryEnqueue(std::shared_ptr<Operation> _operation,
-                                   TerminalFinalizer _terminal_finalizer)
+PoolEnqueueResult Pool::TryEnqueue(std::shared_ptr<Operation> _operation, TerminalFinalizer _terminal_finalizer)
 {
     if( !_operation )
         return PoolEnqueueResult::NotCold;
-
-    const auto weak_this = std::weak_ptr<Pool>{shared_from_this()};
-    const auto weak_operation = std::weak_ptr<Operation>{_operation};
 
     {
         const auto guard = std::lock_guard{m_Lock};
         if( m_ShuttingDown )
             return PoolEnqueueResult::ShuttingDown;
-        const auto is_same_operation = [&](const auto &_candidate) {
-            return _candidate.get() == _operation.get();
-        };
+        const auto is_same_operation = [&](const auto &_candidate) { return _candidate.get() == _operation.get(); };
         const bool active_duplicate = std::ranges::any_of(m_RunningOperations, is_same_operation) ||
                                       std::ranges::any_of(m_PendingOperations, is_same_operation);
         const bool finalizing_duplicate = std::ranges::any_of(m_FinalizingOperations, [&](const auto &_candidate) {
@@ -51,49 +45,56 @@ PoolEnqueueResult Pool::TryEnqueue(std::shared_ptr<Operation> _operation,
         if( _operation->State() != OperationState::Cold )
             return PoolEnqueueResult::NotCold;
 
-        _operation->ObserveUnticketed(Operation::NotifyAboutFinish, [weak_this, weak_operation] {
-            const auto pool = weak_this.lock();
-            const auto op = weak_operation.lock();
-            if( pool && op )
-                pool->OperationDidFinish(op);
-        });
-        _operation->ObserveUnticketed(Operation::NotifyAboutStart, [weak_this, weak_operation] {
-            const auto pool = weak_this.lock();
-            const auto op = weak_operation.lock();
-            if( pool && op )
-                pool->OperationDidStart(op);
-        });
-        _operation->SetDialogCallback([weak_this](NSWindow *_dlg, std::function<void(NSModalResponse)> _cb) {
-            if( const auto pool = weak_this.lock() )
-                return pool->ShowDialog(_dlg, _cb);
-            return false;
-        });
-        m_TerminalFinalizers.emplace_back(_operation.get(), std::move(_terminal_finalizer));
+        auto prepared_finalizer = std::make_shared<FinalizingOperation>();
+        prepared_finalizer->operation = _operation;
+        prepared_finalizer->finalizer = std::move(_terminal_finalizer);
+        const auto weak_this = std::weak_ptr<Pool>{shared_from_this()};
+        const auto weak_operation = std::weak_ptr<Operation>{_operation};
+
+        m_FinalizingOperations.reserve(m_FinalizingOperations.size() + m_TerminalFinalizers.size() + 1);
+        m_TerminalFinalizers.reserve(m_TerminalFinalizers.size() + 1);
+        m_PendingOperations.push_back(_operation);
         try {
-            m_PendingOperations.push_back(_operation);
-        }
-        catch( ... ) {
-            m_TerminalFinalizers.pop_back();
+            prepared_finalizer->finish_observation =
+                _operation->Observe(Operation::NotifyAboutFinish, [weak_this, weak_operation] {
+                    const auto pool = weak_this.lock();
+                    const auto op = weak_operation.lock();
+                    if( pool && op )
+                        pool->OperationDidFinish(op);
+                });
+            prepared_finalizer->start_observation =
+                _operation->Observe(Operation::NotifyAboutStart, [weak_this, weak_operation] {
+                    const auto pool = weak_this.lock();
+                    const auto op = weak_operation.lock();
+                    if( pool && op )
+                        pool->OperationDidStart(op);
+                });
+            m_TerminalFinalizers.emplace_back(prepared_finalizer);
+            _operation->SetDialogCallback([weak_this](NSWindow *_dlg, std::function<void(NSModalResponse)> _cb) {
+                if( const auto pool = weak_this.lock() )
+                    return pool->ShowDialog(_dlg, _cb);
+                return false;
+            });
+        } catch( ... ) {
+            if( !m_TerminalFinalizers.empty() && m_TerminalFinalizers.back() == prepared_finalizer )
+                m_TerminalFinalizers.pop_back();
+            m_PendingOperations.pop_back();
             throw;
         }
     }
 
     try {
         FireObservers(NotifyAboutAddition);
-    }
-    catch( const std::exception &e ) {
+    } catch( const std::exception &e ) {
         std::cerr << "Error: Pool addition observer has thrown an exception after admission: " << e.what() << ".\n";
-    }
-    catch( ... ) {
+    } catch( ... ) {
         std::cerr << "Error: Pool addition observer has thrown an unknown exception after admission.\n";
     }
     try {
         StartPendingOperations();
-    }
-    catch( const std::exception &e ) {
+    } catch( const std::exception &e ) {
         std::cerr << "Error: Pool could not start admitted work: " << e.what() << ".\n";
-    }
-    catch( ... ) {
+    } catch( ... ) {
         std::cerr << "Error: Pool could not start admitted work due to an unknown exception.\n";
     }
     return PoolEnqueueResult::Accepted;
@@ -108,9 +109,8 @@ void Pool::OperationDidFinish([[maybe_unused]] const std::shared_ptr<Operation> 
     std::shared_ptr<FinalizingOperation> finalizing;
     {
         const auto guard = std::lock_guard{m_Lock};
-        const auto already_finalizing = std::ranges::find_if(m_FinalizingOperations, [&](const auto &_candidate) {
-            return _candidate->operation == _operation;
-        });
+        const auto already_finalizing = std::ranges::find_if(
+            m_FinalizingOperations, [&](const auto &_candidate) { return _candidate->operation == _operation; });
         if( already_finalizing != m_FinalizingOperations.end() )
             return;
 
@@ -119,18 +119,15 @@ void Pool::OperationDidFinish([[maybe_unused]] const std::shared_ptr<Operation> 
         if( !was_running && !was_pending )
             return;
 
-        const auto registered = std::ranges::find_if(m_TerminalFinalizers, [&](const auto &_candidate) {
-            return _candidate.first == _operation.get();
-        });
-        finalizing = std::make_shared<FinalizingOperation>();
+        const auto registered = std::ranges::find_if(
+            m_TerminalFinalizers, [&](const auto &_candidate) { return _candidate->operation == _operation; });
+        if( registered == m_TerminalFinalizers.end() )
+            return;
+        finalizing = *registered;
         m_FinalizingOperations.emplace_back(finalizing);
-        finalizing->operation = _operation;
-        if( registered != m_TerminalFinalizers.end() )
-            finalizing->finalizer = std::move(registered->second);
         std::erase(m_RunningOperations, _operation);
         std::erase(m_PendingOperations, _operation);
-        if( registered != m_TerminalFinalizers.end() )
-            m_TerminalFinalizers.erase(registered);
+        m_TerminalFinalizers.erase(registered);
     }
 
     const auto finalization = RetryFinalization(_operation);
@@ -147,9 +144,8 @@ PoolRetryFinalizationResult Pool::RetryFinalization(const std::shared_ptr<Operat
     std::shared_ptr<FinalizingOperation> finalizing;
     {
         const auto guard = std::lock_guard{m_Lock};
-        const auto found = std::ranges::find_if(m_FinalizingOperations, [&](const auto &_candidate) {
-            return _candidate->operation == _operation;
-        });
+        const auto found = std::ranges::find_if(
+            m_FinalizingOperations, [&](const auto &_candidate) { return _candidate->operation == _operation; });
         if( found == m_FinalizingOperations.end() )
             return PoolRetryFinalizationResult::NotFinalizing;
         finalizing = *found;
@@ -162,10 +158,18 @@ PoolRetryFinalizationResult Pool::RetryFinalization(const std::shared_ptr<Operat
     if( finalizing->finalizer ) {
         try {
             decision = finalizing->finalizer(finalizing->operation);
-        }
-        catch( ... ) {
+        } catch( ... ) {
             decision = PoolTerminalFinalizationDecision::Retain;
         }
+    }
+    switch( decision ) {
+        case PoolTerminalFinalizationDecision::Release:
+        case PoolTerminalFinalizationDecision::ReleaseWithoutCompletion:
+        case PoolTerminalFinalizationDecision::Retain:
+            break;
+        default:
+            decision = PoolTerminalFinalizationDecision::Retain;
+            break;
     }
     if( decision == PoolTerminalFinalizationDecision::Retain ) {
         const auto guard = std::lock_guard{m_Lock};
@@ -183,34 +187,28 @@ PoolRetryFinalizationResult Pool::RetryFinalization(const std::shared_ptr<Operat
             return PoolRetryFinalizationResult::NotFinalizing;
         m_FinalizingOperations.erase(found);
     }
-    OperationFinalizationDidRelease(
-        _operation, decision == PoolTerminalFinalizationDecision::Release);
+    OperationFinalizationDidRelease(_operation, decision == PoolTerminalFinalizationDecision::Release);
     return PoolRetryFinalizationResult::Released;
 }
 
-void Pool::OperationFinalizationDidRelease(const std::shared_ptr<Operation> &_operation,
-                                           bool _report_completion)
+void Pool::OperationFinalizationDidRelease(const std::shared_ptr<Operation> &_operation, bool _report_completion)
 {
     std::exception_ptr first_error;
     try {
         FireObservers(NotifyAboutRemoval);
-    }
-    catch( ... ) {
+    } catch( ... ) {
         first_error = std::current_exception();
     }
     try {
         StartPendingOperations();
-    }
-    catch( ... ) {
+    } catch( ... ) {
         if( !first_error )
             first_error = std::current_exception();
     }
     try {
-        if( _report_completion && _operation->State() == OperationState::Completed &&
-            m_OperationCompletionCallback )
+        if( _report_completion && _operation->State() == OperationState::Completed && m_OperationCompletionCallback )
             m_OperationCompletionCallback(_operation);
-    }
-    catch( ... ) {
+    } catch( ... ) {
         if( !first_error )
             first_error = std::current_exception();
     }
@@ -237,13 +235,11 @@ void Pool::StartPendingOperations()
                 bool should_be_queued = true;
                 try {
                     should_be_queued = m_ShouldBeQueuedCallback(*operation);
-                }
-                catch( const std::exception &e ) {
+                } catch( const std::exception &e ) {
                     decision_failed = true;
                     std::cerr << "Error: Pool enqueue policy has thrown an exception; keeping the operation queued: "
                               << e.what() << ".\n";
-                }
-                catch( ... ) {
+                } catch( ... ) {
                     decision_failed = true;
                     std::cerr << "Error: Pool enqueue policy has thrown an unknown exception; keeping the operation "
                                  "queued.\n";
@@ -289,8 +285,7 @@ void Pool::StartPendingOperations()
                     continue;
             }
             op->Start();
-        }
-        catch( ... ) {
+        } catch( ... ) {
             if( !first_error )
                 first_error = std::current_exception();
         }
@@ -324,8 +319,7 @@ int Pool::FinalizingOperationsCount() const
 int Pool::OperationsCount() const
 {
     const auto guard = std::lock_guard{m_Lock};
-    return static_cast<int>(m_RunningOperations.size() + m_PendingOperations.size() +
-                            m_FinalizingOperations.size());
+    return static_cast<int>(m_RunningOperations.size() + m_PendingOperations.size() + m_FinalizingOperations.size());
 }
 
 std::vector<std::shared_ptr<Operation>> Pool::Operations() const

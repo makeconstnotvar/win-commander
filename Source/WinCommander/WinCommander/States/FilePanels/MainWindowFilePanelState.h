@@ -16,6 +16,10 @@ namespace nc::ops {
 class Pool;
 }
 
+namespace nc::core {
+class OperationSubmissionGate;
+}
+
 namespace nc::panel {
 class FavoriteLocationsStorage;
 class ClosedPanelsHistory;
@@ -64,6 +68,7 @@ struct MainWindowFilePanelState_OverlappedTerminalSupport;
 
     std::vector<nc::config::Token> m_ConfigTickets;
     std::shared_ptr<nc::ops::Pool> m_OperationsPool;
+    std::shared_ptr<nc::core::OperationSubmissionGate> m_OperationSubmissionGate;
     std::shared_ptr<nc::panel::ClosedPanelsHistory> m_ClosedPanelsHistory;
     std::shared_ptr<nc::panel::FavoriteLocationsStorage> m_FavoriteLocationsStorage;
     nc::panel::ControllerStateJSONDecoder *m_ControllerStateJSONDecoder;
@@ -75,6 +80,7 @@ struct MainWindowFilePanelState_OverlappedTerminalSupport;
 @property(nonatomic, readonly) NCMainWindowController *mainWindowController;
 @property(nonatomic, readonly) FilePanelMainSplitView *splitView;
 @property(nonatomic, readonly) nc::ops::Pool &operationsPool;
+@property(nonatomic, readonly) nc::core::OperationSubmissionGate &operationSubmissionGate;
 @property(nonatomic, readonly) bool isPanelActive;
 @property(nonatomic, readonly) bool goToForcesPanelActivation;
 @property(nonatomic, readwrite) std::shared_ptr<nc::panel::ClosedPanelsHistory> closedPanelsHistory;

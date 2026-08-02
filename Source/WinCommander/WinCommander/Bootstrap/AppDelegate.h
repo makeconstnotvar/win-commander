@@ -29,12 +29,15 @@ class UTIDB;
 
 namespace core {
 class CommandRegistry;
+class CopyOperationRecoveryCoordinator;
 class VFSInstanceManager;
 class ServicesHandler;
 } // namespace core
 
 namespace ops {
 class AggregateProgressTracker;
+class CopyOperationRunReceiptCustodian;
+class OperationJournal;
 class PoolEnqueueFilter;
 } // namespace ops
 
@@ -147,6 +150,17 @@ class NativeHost;
 @property(nonatomic, readonly) nc::utility::FSEventsFileUpdate &fsEventsFileUpdate;
 
 @property(nonatomic, readonly) nc::ops::PoolEnqueueFilter &poolEnqueueFilter;
+
+/** Current process-owned Copy journal. Empty when durable runtime initialization or reopen failed. */
+@property(nonatomic, readonly) std::shared_ptr<nc::ops::OperationJournal> operationJournal;
+
+/** Process-owned Copy run-receipt custody. Empty when durable runtime initialization failed. */
+@property(nonatomic, readonly) std::shared_ptr<nc::ops::CopyOperationRunReceiptCustodian>
+    copyOperationRunReceiptCustodian;
+
+/** Query and explicit bounded recovery boundary for Copy journal history and retained receipts. */
+@property(nonatomic, readonly)
+    const std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> &copyOperationRecoveryCoordinator;
 
 @property(nonatomic, readonly) nc::panel::TagsStorage &tagsStorage;
 

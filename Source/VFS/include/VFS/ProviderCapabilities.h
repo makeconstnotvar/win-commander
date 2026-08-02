@@ -56,6 +56,13 @@ enum class ProviderConditionalCopyExpectedKind : uint8_t {
     Directory
 };
 
+/** Preliminary, read-only provider eligibility for an exact source and destination parent. */
+enum class ProviderConditionalCopyPathSupport : uint8_t {
+    Supported,
+    Unsupported,
+    Unavailable
+};
+
 struct ProviderConditionalCopyBinding final {
     std::string provider_id;
     std::shared_ptr<Host> host;
@@ -114,7 +121,7 @@ public:
 
 private:
     ProviderConditionalCopyReviewedAuthority(ProviderConditionalCopyReviewedClaims _claims,
-                                               std::shared_ptr<const void> _review_seal) noexcept
+                                             std::shared_ptr<const void> _review_seal) noexcept
         : m_Claims{std::move(_claims)}, m_ReviewSeal{std::move(_review_seal)}
     {
     }
@@ -192,8 +199,7 @@ public:
     ~ProviderConditionalCopyTransaction();
 
     [[nodiscard]] bool IsPending() const noexcept;
-    [[nodiscard]] ProviderConditionalCopyCommitResult
-    Commit(const CancelChecker &_cancel_checker = {}) noexcept;
+    [[nodiscard]] ProviderConditionalCopyCommitResult Commit(const CancelChecker &_cancel_checker = {}) noexcept;
     [[nodiscard]] ProviderConditionalCopyCommitResult Abort() noexcept;
 
 private:

@@ -35,9 +35,8 @@ static ProviderConditionalCopyTimestamp Timestamp(const timespec &_timestamp) no
     };
 }
 
-static ProviderConditionalCopyExistingExpectation Expectation(
-    const std::string &_path,
-    ProviderConditionalCopyExpectedKind _kind)
+static ProviderConditionalCopyExistingExpectation Expectation(const std::string &_path,
+                                                              ProviderConditionalCopyExpectedKind _kind)
 {
     struct stat value;
     REQUIRE(stat(_path.c_str(), &value) == 0);
@@ -54,11 +53,10 @@ static ProviderConditionalCopyExistingExpectation Expectation(
     };
 }
 
-static ProviderConditionalCopyReviewedClaims Claims(
-    const std::shared_ptr<NativeHost> &_host,
-    const std::string &_source,
-    const std::string &_destination_parent,
-    const std::string &_destination)
+static ProviderConditionalCopyReviewedClaims Claims(const std::shared_ptr<NativeHost> &_host,
+                                                    const std::string &_source,
+                                                    const std::string &_destination_parent,
+                                                    const std::string &_destination)
 {
     const ProviderConditionalCopyBinding binding{
         .provider_id = "native",
@@ -69,8 +67,7 @@ static ProviderConditionalCopyReviewedClaims Claims(
         .source_binding = binding,
         .destination_binding = binding,
         .source = Expectation(_source, ProviderConditionalCopyExpectedKind::RegularFile),
-        .destination_parent =
-            Expectation(_destination_parent, ProviderConditionalCopyExpectedKind::Directory),
+        .destination_parent = Expectation(_destination_parent, ProviderConditionalCopyExpectedKind::Directory),
         .destination = ProviderConditionalCopyMissingExpectation{.absolute_path = _destination},
     };
 }
@@ -108,7 +105,7 @@ static native::ConditionalCopyMetadataSnapshot CaptureMetadata(const std::string
 
 static void SetReadACLForCurrentUser(const std::string &_path)
 {
-    uuid_t account_uuid {};
+    uuid_t account_uuid{};
     REQUIRE(mbr_uid_to_uuid(geteuid(), account_uuid) == 0);
     acl_t acl = acl_init(1);
     REQUIRE(acl != nullptr);
@@ -156,7 +153,9 @@ class GateNativeFSManager final : public nc::utility::NativeFSManager
 public:
     enum class Mode {
         CloneDisabled,
-        DifferentVolumes
+        DifferentVolumes,
+        Supported,
+        MissingPathVolume
     };
 
     explicit GateNativeFSManager(Mode _mode) : m_Mode{_mode}
@@ -167,7 +166,7 @@ public:
         first->fs_type_name = "apfs";
         first->mount_flags.local = true;
         first->mount_flags.internal = true;
-        first->interfaces.clone = _mode == Mode::DifferentVolumes;
+        first->interfaces.clone = _mode != Mode::CloneDisabled;
         first->interfaces.attr_list = true;
         first->interfaces.extended_attr = true;
         first->interfaces.extended_security = true;
@@ -198,6 +197,10 @@ public:
 
     [[nodiscard]] Info VolumeFromPath([[maybe_unused]] std::string_view _path) const noexcept override
     {
+        if( m_Mode == Mode::MissingPathVolume )
+            return {};
+        if( m_Mode == Mode::DifferentVolumes && ++m_VolumeFromPathCalls % 2 == 0 )
+            return m_Second;
         return m_First;
     }
 
@@ -214,8 +217,7 @@ public:
     void UpdateSpaceInformation([[maybe_unused]] const Info &_volume) override {}
     void EjectVolumeContainingPath([[maybe_unused]] const std::string &_path) override {}
 
-    [[nodiscard]] bool IsVolumeContainingPathEjectable(
-        [[maybe_unused]] const std::string &_path) override
+    [[nodiscard]] bool IsVolumeContainingPathEjectable([[maybe_unused]] const std::string &_path) override
     {
         return false;
     }
@@ -227,6 +229,7 @@ private:
     Info m_First;
     Info m_Second;
     mutable size_t m_VolumeFromFDCalls{0};
+    mutable size_t m_VolumeFromPathCalls{0};
 };
 
 class FaultConditionalCopyIO final : public native::ConditionalCopyIO
@@ -311,7 +314,8 @@ public:
                 errno = EIO;
                 return -1;
             }
-        } else if( _fd == destination_parent_fd ) {
+        }
+        else if( _fd == destination_parent_fd ) {
             ++parent_fsync_calls;
             Record(Step::ParentFSync);
             if( fault == Fault::ParentFSync || fault == Fault::DestinationMetadataAndParentFSync ) {
@@ -337,8 +341,7 @@ public:
         return ConditionalCopyIO::FullFSync(_fd);
     }
 
-    std::expected<native::ConditionalCopyMetadataSnapshot, int>
-    CaptureMetadata(int _fd) noexcept override
+    std::expected<native::ConditionalCopyMetadataSnapshot, int> CaptureMetadata(int _fd) noexcept override
     {
         auto metadata = ConditionalCopyIO::CaptureMetadata(_fd);
         if( metadata && clone_published &&
@@ -380,8 +383,7 @@ static ProviderConditionalCopyCommitResult PublishedSuccess() noexcept
 
 static ProviderConditionalCopyCommitResult PublishedMetadataFailure(
     int _metadata_error,
-    ProviderConditionalCopyFilesystemSyncStatus _sync_status =
-        ProviderConditionalCopyFilesystemSyncStatus::Confirmed,
+    ProviderConditionalCopyFilesystemSyncStatus _sync_status = ProviderConditionalCopyFilesystemSyncStatus::Confirmed,
     int _sync_error = 0) noexcept
 {
     return ProviderConditionalCopyCommitResult{
@@ -411,12 +413,7 @@ TEST_CASE(PREFIX "publishes an exclusive clone only at Commit")
     REQUIRE(chmod(paths.source.c_str(), 0640) == 0);
     constexpr char xattr_name[] = "com.magnumbytes.NimbleCommander.conditional-copy-test";
     constexpr char xattr_value[] = "reviewed metadata";
-    REQUIRE(setxattr(paths.source.c_str(),
-                     xattr_name,
-                     xattr_value,
-                     sizeof(xattr_value) - 1,
-                     0,
-                     0) == 0);
+    REQUIRE(setxattr(paths.source.c_str(), xattr_name, xattr_value, sizeof(xattr_value) - 1, 0, 0) == 0);
     SetReadACLForCurrentUser(paths.source);
     REQUIRE(chflags(paths.source.c_str(), UF_HIDDEN) == 0);
     RequireCloneCapable(paths.destination_parent);
@@ -513,10 +510,8 @@ TEST_CASE(PREFIX "reports exact destination-exists evidence from exclusive clone
     Write(paths.source, "source");
     RequireCloneCapable(paths.destination_parent);
 
-    auto io = std::make_shared<FaultConditionalCopyIO>(
-        FaultConditionalCopyIO::Fault::CloneDestinationExists);
-    auto host = std::make_shared<NativeHost>(
-        *TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
+    auto io = std::make_shared<FaultConditionalCopyIO>(FaultConditionalCopyIO::Fault::CloneDestinationExists);
+    auto host = std::make_shared<NativeHost>(*TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
     auto transaction = host->BeginConditionalCopyTransaction(
         Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
     REQUIRE(transaction);
@@ -542,10 +537,7 @@ TEST_CASE(PREFIX "rejects symlink resolution while anchoring reviewed descriptor
         const auto source_symlink = paths.source_parent + "/source-link.txt";
         std::filesystem::create_symlink(paths.source, source_symlink);
         const auto transaction = TestEnv().vfs_native->BeginConditionalCopyTransaction(
-            Authority(Claims(TestEnv().vfs_native,
-                             source_symlink,
-                             paths.destination_parent,
-                             paths.destination)));
+            Authority(Claims(TestEnv().vfs_native, source_symlink, paths.destination_parent, paths.destination)));
         REQUIRE_FALSE(transaction);
         CHECK(transaction.error() == ProviderConditionalCopyTransactionBeginError::SourceStale);
     }
@@ -557,10 +549,7 @@ TEST_CASE(PREFIX "rejects symlink resolution while anchoring reviewed descriptor
         std::filesystem::create_directory_symlink(paths.destination_parent, destination_parent_symlink);
         const auto linked_destination = destination_parent_symlink + "/destination.txt";
         const auto transaction = TestEnv().vfs_native->BeginConditionalCopyTransaction(
-            Authority(Claims(TestEnv().vfs_native,
-                             paths.source,
-                             destination_parent_symlink,
-                             linked_destination)));
+            Authority(Claims(TestEnv().vfs_native, paths.source, destination_parent_symlink, linked_destination)));
         REQUIRE_FALSE(transaction);
         CHECK(transaction.error() == ProviderConditionalCopyTransactionBeginError::DestinationParentStale);
     }
@@ -616,6 +605,38 @@ TEST_CASE(PREFIX "requires same-volume clone capability from NativeFSManager")
     CHECK_FALSE(std::filesystem::exists(paths.destination));
 }
 
+TEST_CASE(PREFIX "probes path-specific conditional Copy support conservatively")
+{
+    const ConditionalCopyPaths paths;
+    auto mode = GateNativeFSManager::Mode::Supported;
+    auto expected = ProviderConditionalCopyPathSupport::Supported;
+
+    SECTION("supported internal APFS volume")
+    {
+    }
+    SECTION("clone capability is absent")
+    {
+        mode = GateNativeFSManager::Mode::CloneDisabled;
+        expected = ProviderConditionalCopyPathSupport::Unsupported;
+    }
+    SECTION("paths resolve to different volumes")
+    {
+        mode = GateNativeFSManager::Mode::DifferentVolumes;
+        expected = ProviderConditionalCopyPathSupport::Unsupported;
+    }
+    SECTION("path volume cannot be resolved")
+    {
+        mode = GateNativeFSManager::Mode::MissingPathVolume;
+        expected = ProviderConditionalCopyPathSupport::Unavailable;
+    }
+
+    GateNativeFSManager native_fs_manager{mode};
+    const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+    CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) == expected);
+    CHECK(host->ConditionalCopyPathSupport("relative-source", paths.destination_parent) ==
+          ProviderConditionalCopyPathSupport::Unavailable);
+}
+
 TEST_CASE(PREFIX "classifies the internal APFS durability policy explicitly")
 {
     auto volume = std::make_shared<nc::utility::NativeFileSystemInfo>();
@@ -629,7 +650,9 @@ TEST_CASE(PREFIX "classifies the internal APFS durability policy explicitly")
 
     auto expected = native::ConditionalCopyVolumeDisposition::Supported;
     auto expected_media = native::ConditionalCopyVolumeMedia::Internal;
-    SECTION("supported internal APFS") {}
+    SECTION("supported internal APFS")
+    {
+    }
     SECTION("different filesystem")
     {
         volume->fs_type_name = "hfs";
@@ -682,7 +705,9 @@ TEST_CASE(PREFIX "fails closed for clonefile metadata transformations outside th
     destination_parent.gid = 20;
 
     std::optional<native::ConditionalCopyMetadataPolicyError> expected;
-    SECTION("supported source") {}
+    SECTION("supported source")
+    {
+    }
     SECTION("ownership would be normalized")
     {
         ++source.uid;
@@ -708,7 +733,8 @@ TEST_CASE(PREFIX "fails closed for clonefile metadata transformations outside th
     if( expected ) {
         REQUIRE_FALSE(result);
         CHECK(result.error() == *expected);
-    } else {
+    }
+    else {
         CHECK(result.has_value());
     }
 }
@@ -721,18 +747,22 @@ TEST_CASE(PREFIX "reports known publication when metadata verification fails")
 
     auto fault = FaultConditionalCopyIO::Fault::DestinationMetadata;
     auto expected = PublishedMetadataFailure(ESTALE);
-    SECTION("source changes during clone") { fault = FaultConditionalCopyIO::Fault::PostCloneSourceMetadata; }
-    SECTION("destination metadata differs") { fault = FaultConditionalCopyIO::Fault::DestinationMetadata; }
+    SECTION("source changes during clone")
+    {
+        fault = FaultConditionalCopyIO::Fault::PostCloneSourceMetadata;
+    }
+    SECTION("destination metadata differs")
+    {
+        fault = FaultConditionalCopyIO::Fault::DestinationMetadata;
+    }
     SECTION("metadata and parent durability both fail")
     {
         fault = FaultConditionalCopyIO::Fault::DestinationMetadataAndParentFSync;
-        expected = PublishedMetadataFailure(
-            ESTALE, ProviderConditionalCopyFilesystemSyncStatus::Failed, ENOSPC);
+        expected = PublishedMetadataFailure(ESTALE, ProviderConditionalCopyFilesystemSyncStatus::Failed, ENOSPC);
     }
 
     auto io = std::make_shared<FaultConditionalCopyIO>(fault);
-    auto host = std::make_shared<NativeHost>(
-        *TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
+    auto host = std::make_shared<NativeHost>(*TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
     auto transaction = host->BeginConditionalCopyTransaction(
         Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
     REQUIRE(transaction);
@@ -769,8 +799,7 @@ TEST_CASE(PREFIX "preserves published evidence for every durability barrier fail
     }
 
     auto io = std::make_shared<FaultConditionalCopyIO>(fault);
-    auto host = std::make_shared<NativeHost>(
-        *TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
+    auto host = std::make_shared<NativeHost>(*TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
     auto transaction = host->BeginConditionalCopyTransaction(
         Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
     REQUIRE(transaction);
@@ -793,10 +822,8 @@ TEST_CASE(PREFIX "retries an interrupted full filesystem sync")
     Write(paths.source, "payload");
     RequireCloneCapable(paths.destination_parent);
 
-    auto io = std::make_shared<FaultConditionalCopyIO>(
-        FaultConditionalCopyIO::Fault::FullFSyncInterruptedOnce);
-    auto host = std::make_shared<NativeHost>(
-        *TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
+    auto io = std::make_shared<FaultConditionalCopyIO>(FaultConditionalCopyIO::Fault::FullFSyncInterruptedOnce);
+    auto host = std::make_shared<NativeHost>(*TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
     auto transaction = host->BeginConditionalCopyTransaction(
         Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
     REQUIRE(transaction);
@@ -818,7 +845,9 @@ TEST_CASE(PREFIX "probes ambiguous clone errors before classifying publication")
         .system_error = EIO,
     };
     bool destination_exists = false;
-    SECTION("absence is proven") {}
+    SECTION("absence is proven")
+    {
+    }
     SECTION("publication cannot be disproved")
     {
         fault = FaultConditionalCopyIO::Fault::CloneErrorWithPublication;
@@ -832,8 +861,7 @@ TEST_CASE(PREFIX "probes ambiguous clone errors before classifying publication")
     }
 
     auto io = std::make_shared<FaultConditionalCopyIO>(fault);
-    auto host = std::make_shared<NativeHost>(
-        *TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
+    auto host = std::make_shared<NativeHost>(*TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
     auto transaction = host->BeginConditionalCopyTransaction(
         Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
     REQUIRE(transaction);

@@ -1,6 +1,6 @@
 # Feature: durable operation journal foundation
 
-> Status: schema-v1 journal, exact run authority, atomic terminal evidence, production Copy orchestration, and reconciled Pool release implemented; application mutation consumer remains open
+> Status: schema-v1 journal, exact run authority, atomic terminal evidence, production Copy orchestration, bounded `CopyAs` consumer and reconciled Pool release implemented
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` sections 14 and 31
 > Execution tracker: M3 in `Docs/Development-Plan.md`
 
@@ -35,7 +35,7 @@ Schema v1 stores ordered typed evidence without collapsing ambiguity:
 
 ## Current composition boundary
 
-`CopyOperationOrchestrator` is the production consumer of journal admission/run receipts and the `Pool` finalization barrier. Its public constructor privately joins `ReviewedOperationFactory` to the transaction-backed execution product. It durably terminates all pre-running failures, records one item and terminal state atomically, retains `Finalizing` residency on persistence failure and reuses immutable typed evidence on retry. Injected factories remain test-only.
+`CopyOperationOrchestrator` is the production consumer of journal admission/run receipts and the `Pool` finalization barrier. Its public constructor privately joins `ReviewedOperationFactory` to the transaction-backed execution product. It durably terminates all pre-running failures, records one item and terminal state atomically, retains `Finalizing` residency on persistence failure and reuses immutable typed evidence on retry. Restricted hooks are installed while cold, and an owning exact durable outcome is delivered at most once after finalization or reconciliation. Pool terminal-transition authority is preallocated before start; durable non-success releases through `ReleaseWithoutCompletion`. Injected factories remain test-only.
 
 `CopyOperationRunReceiptCustodian` closes the post-Running ownership gap. Before the transition it reserves a bounded slot for the exact immutable plan, journal storage identity and terminal accessor. After `TransitionToRunning` the slot is armed without allocation. Pre-enqueue cancellation or rejection persists one immutable result; a pre-rename fault retains the exact receipt for `Retry(plan_id)`, which can only call `Finalize`. Accepted enqueue keeps the same slot Pool-owned, so runtime retry cannot race a live operation.
 
@@ -48,9 +48,9 @@ Temporary artifacts remain manual evidence until provider-owned bounded staging 
 ## Verified coverage
 
 - Journal: 27 Debug cases / 592 assertions.
-- Copy orchestrator: 13 / 558, including production private-factory construction at 3 / 138, pre-running rejection, shutdown cancellation, typed-outcome retention, exact retry, both post-rename reconciliation outcomes, wrong-storage rejection, exact reconciled Pool release, concurrent release gating and synchronous completion before enqueue returns.
-- Pool: 15 / 190.
+- Copy orchestrator: 15 / 758, including production private-factory construction at 3 / 138, restricted hook validation/installation, exact durable-outcome delivery, pre-running rejection, shutdown cancellation, typed-outcome retention, exact retry, both post-rename reconciliation outcomes, wrong-storage rejection, exact reconciled Pool release, concurrent release gating and synchronous completion before enqueue returns.
+- Pool: 17 / 219, including preallocated terminal transition, `ReleaseWithoutCompletion`, next-start/removal semantics and fail-closed unknown finalizer decisions.
 - Provider result mapper: 4 / 237; transaction-backed execution product: 9 / 188; reviewed factory: 8 / 225; Job lifecycle: 10 / 608.
-- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 165 / 4,468 in each configuration.
+- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
 - Current M0: 897 / 132,011 in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 / 89,392.

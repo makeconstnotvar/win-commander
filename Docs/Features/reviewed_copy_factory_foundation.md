@@ -1,6 +1,6 @@
 # Feature: reviewed Copy factory and conditional transaction foundation
 
-> Status: reviewed evidence reaches a private production execution product and journal/Pool orchestrator; application consumer remains open
+> Status: reviewed evidence reaches a private production execution product, journal/Pool orchestrator and bounded `CopyAs` consumer
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` sections 5, 7.2, 13.6, 14, 15, and 32
 > Execution tracker: M3 in `Docs/Development-Plan.md`
 
@@ -17,7 +17,7 @@ This slice keeps accepted planning, explicit review, journal admission, provider
 5. `ReviewedOperationFactory` validates one Native-to-Native, create-only regular-file Copy and consumes the reviewed preflight into a private-constructible `ProviderConditionalCopyReviewedAuthority`.
 6. The authority retains the moved reviewed preflight as a private seal and exposes immutable exact claims. `BeginConditionalCopyTransaction` consumes it once; a provider may then mint a move-only, single-use `ProviderConditionalCopyTransaction`.
 7. `ProviderConditionalCopyOperationFactory` consumes the transaction into a move-only cold operation plus exact terminal journal-result accessor.
-8. The production `CopyOperationOrchestrator` privately invokes that reviewed-factory path after durable admission, then orders Running, enqueue, terminal finalization, reconciliation, and Pool release; no application entry point uses it yet.
+8. The production `CopyOperationOrchestrator` privately invokes that reviewed-factory path after durable admission, installs restricted lifecycle/item-status hooks while the product is cold, then orders Running, enqueue, exact durable-outcome delivery, terminal finalization, reconciliation, and Pool release; no application entry point uses it yet.
 
 ## Provider transaction contract
 
@@ -33,29 +33,29 @@ The transaction moves through `Pending → Committing → Consumed`. Provider co
 
 The reviewed source version is the admission and immediate pre-publication freshness condition. The retained descriptor supplies object identity; the clone syscall supplies a coherent copy-on-write snapshot and atomic destination creation. Post-publication metadata or sync failure remains `Published` with independent typed evidence. Other volumes and scopes return `Unsupported` and continue through the established operation path.
 
-## Remaining application boundary
+## Application boundary
 
-- Build the app-owned typed review step that issues the exact reviewed preflight consumed by the orchestrator.
-- Add a cold pre-enqueue configurator so application callbacks are attached before `Pool` may start the operation.
-- Present completion from exact durable terminal, publication, sync, recovery, `Reconcile`, and `ReleaseReconciled` evidence instead of generic `Operation::Completed`.
-- Wire one bounded `CopyAs::Perform` consumer and retain zero-enqueue proof for blocked, stale, cancelled, unsupported, or unpersisted intent.
+- Bounded `CopyAs::Perform` builds the exact preflight, shows its summary and issues reviewed authority only after explicit approval.
+- The app composes cold-operation hooks through process recovery and dispatches owning durable outcomes to the UI executor.
+- Completion presentation uses exact durable terminal, publication, sync, recovery, `Reconcile`, and `ReleaseReconciled` evidence.
+- Focused policy/gate and recovery tests pass; live zero-enqueue and UI-dispatch proof remains required.
 - Add provider-owned private/bounded staging for cross-volume data and metadata, with commit as the sole publish step.
 - Execute dedicated physical internal/external-volume and power-loss evidence in the required environments.
 
-Until the application contracts exist, public Copy mutation remains on established paths. Once an action selects the reviewed lifecycle, later failure must remain in its typed journal/recovery path and cannot fall back to a second legacy mutation attempt.
+Known unsupported scopes retain the established Copy path. Once an action selects the reviewed lifecycle, later failure remains in its typed journal/recovery path and cannot fall back to a second legacy mutation attempt.
 
 ## Verified coverage
 
 - `OperationPlan`: 8 / 113; planner: 13 / 228; VFS probes: 5 / 178; codec: 12 / 151.
 - Reviewed factory: 8 / 225; VFS planning probes: 5 / 178.
-- Provider capabilities: 16 / 548; Native conditional Copy: 15 / 312; combined Debug selection: 31 / 860; current full Debug `VFSUT`: 94 / 43,531.
-- Earlier staged Native create-copy snapshot: 19 / 924; provider result mapper: 4 / 237; execution product: 9 / 188; journal: 27 / 592; Pool: 15 / 190; orchestrator: 13 / 558, including production construction at 3 / 138.
+- Provider capabilities: 16 / 549; Native conditional Copy: 16 / 328; combined Debug selection: 32 / 877; latest full Debug `VFSUT` run: 95 / 43,566.
+- Earlier staged Native create-copy snapshot: 19 / 924; provider result mapper: 4 / 237; execution product: 9 / 188; journal: 27 / 592; Pool: 17 / 219; orchestrator: 15 / 758, including production construction at 3 / 138.
 - Job lifecycle and worker-launch hardening: 10 / 608.
-- Explicitly instrumented Release ASAN and UBSAN `VFSUT` both pass ProviderCapabilities at 16 / 548 and Native conditional Copy at 15 / 312.
-- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 165 / 4,468 in each configuration.
+- Previously recorded explicitly instrumented Release ASAN and UBSAN `VFSUT` snapshots pass ProviderCapabilities at 16 / 548 and Native conditional Copy at 15 / 312.
+- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with both sanitizer runtimes confirmed and no diagnostics.
 - Current M0: unsigned Debug app and 10 aggregate binaries, 897 / 132,011 in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 / 89,392; fixture cleanup completed.
 
 ## Next slice
 
-Implement typed application review, cold pre-enqueue callback configuration, and exact durable terminal presentation, then connect the bounded `CopyAs::Perform` consumer. Cross-volume staging and dedicated physical-volume fixtures follow as separate slices.
+Add live application-boundary and physical-volume evidence for the bounded `CopyAs::Perform` consumer. Cross-volume staging follows as a separate provider-owned slice.

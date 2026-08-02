@@ -30,9 +30,11 @@ public:
     bool IsCaseSensitiveAtPath(std::string_view _directory) const override;
     std::optional<bool> CaseSensitivityAtPath(std::string_view _directory) const override;
     std::optional<std::string> SemanticNamespaceIdentity() const override;
+    [[nodiscard]] ProviderConditionalCopyPathSupport
+    ConditionalCopyPathSupport(std::string_view _source_path,
+                               std::string_view _destination_parent_path) const noexcept override;
 
-    std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
-                  ProviderConditionalCopyTransactionBeginError>
+    std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
     BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                     const VFSCancelChecker &_cancel_checker = {}) override;
 

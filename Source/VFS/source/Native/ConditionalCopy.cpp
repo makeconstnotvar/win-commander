@@ -24,11 +24,10 @@ ConditionalCopyTimestamp ConditionalCopyTimestampFrom(const timespec &_value) no
 
 bool ConditionalCopyStatSealMatches(const struct stat &_before, const struct stat &_after) noexcept
 {
-    return _before.st_dev == _after.st_dev && _before.st_ino == _after.st_ino &&
-           _before.st_uid == _after.st_uid && _before.st_gid == _after.st_gid &&
-           _before.st_mode == _after.st_mode && _before.st_flags == _after.st_flags &&
-           _before.st_nlink == _after.st_nlink && _before.st_size == _after.st_size &&
-           _before.st_atimespec.tv_sec == _after.st_atimespec.tv_sec &&
+    return _before.st_dev == _after.st_dev && _before.st_ino == _after.st_ino && _before.st_uid == _after.st_uid &&
+           _before.st_gid == _after.st_gid && _before.st_mode == _after.st_mode &&
+           _before.st_flags == _after.st_flags && _before.st_nlink == _after.st_nlink &&
+           _before.st_size == _after.st_size && _before.st_atimespec.tv_sec == _after.st_atimespec.tv_sec &&
            _before.st_atimespec.tv_nsec == _after.st_atimespec.tv_nsec &&
            _before.st_mtimespec.tv_sec == _after.st_mtimespec.tv_sec &&
            _before.st_mtimespec.tv_nsec == _after.st_mtimespec.tv_nsec &&
@@ -101,16 +100,14 @@ ConditionalCopyReadExtendedAttributes(int _fd) noexcept
             total_value_bytes += static_cast<size_t>(value_size);
             std::vector<std::byte> value(static_cast<size_t>(value_size));
             if( value_size != 0 ) {
-                const ssize_t read_value =
-                    fgetxattr(_fd, name.c_str(), value.data(), value.size(), 0, 0);
+                const ssize_t read_value = fgetxattr(_fd, name.c_str(), value.data(), value.size(), 0, 0);
                 if( read_value != value_size )
                     return std::unexpected(errno == 0 ? EAGAIN : errno);
             }
             attributes.emplace_back(std::move(name), std::move(value));
         }
-        std::ranges::sort(attributes, {}, [](const auto &_attribute) -> const std::string & {
-            return _attribute.first;
-        });
+        std::ranges::sort(
+            attributes, {}, [](const auto &_attribute) -> const std::string & { return _attribute.first; });
         return attributes;
     } catch( ... ) {
         return std::unexpected(ENOMEM);
@@ -119,11 +116,10 @@ ConditionalCopyReadExtendedAttributes(int _fd) noexcept
 
 } // namespace
 
-ConditionalCopyVolumeDecision
-EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
+ConditionalCopyVolumeDecision EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
 {
-    const auto media = _volume.mount_flags.internal ? ConditionalCopyVolumeMedia::Internal
-                                                     : ConditionalCopyVolumeMedia::External;
+    const auto media =
+        _volume.mount_flags.internal ? ConditionalCopyVolumeMedia::Internal : ConditionalCopyVolumeMedia::External;
     if( _volume.fs_type_name != "apfs" )
         return {.disposition = ConditionalCopyVolumeDisposition::UnsupportedFilesystem, .media = media};
     if( !_volume.mount_flags.local )
@@ -138,11 +134,18 @@ EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) 
         return {.disposition = ConditionalCopyVolumeDisposition::UnknownPermissions, .media = media};
     if( !_volume.interfaces.clone )
         return {.disposition = ConditionalCopyVolumeDisposition::CloneUnavailable, .media = media};
-    if( !_volume.interfaces.attr_list || !_volume.interfaces.extended_attr ||
-        !_volume.interfaces.extended_security ) {
+    if( !_volume.interfaces.attr_list || !_volume.interfaces.extended_attr || !_volume.interfaces.extended_security ) {
         return {.disposition = ConditionalCopyVolumeDisposition::MetadataUnavailable, .media = media};
     }
     return {.disposition = ConditionalCopyVolumeDisposition::Supported, .media = media};
+}
+
+bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
+                                 const nc::utility::NativeFileSystemInfo &_destination) noexcept
+{
+    return _source.mounted_at_path == _destination.mounted_at_path &&
+           _source.basic.fs_id.val[0] == _destination.basic.fs_id.val[0] &&
+           _source.basic.fs_id.val[1] == _destination.basic.fs_id.val[1];
 }
 
 std::expected<void, ConditionalCopyMetadataPolicyError>
@@ -164,10 +167,10 @@ bool ConditionalCopyMetadataMatchesClone(const ConditionalCopyMetadataSnapshot &
                                          const ConditionalCopyMetadataSnapshot &_destination) noexcept
 {
     return (_destination.mode & S_IFMT) == S_IFREG && _destination.device == _source.device &&
-           _destination.inode != _source.inode && _destination.uid == _source.uid &&
-           _destination.gid == _source.gid && (_destination.mode & 07777) == (_source.mode & 07777) &&
-           _destination.flags == _source.flags && _destination.link_count == 1 &&
-           _destination.size == _source.size && _destination.access_time == _source.access_time &&
+           _destination.inode != _source.inode && _destination.uid == _source.uid && _destination.gid == _source.gid &&
+           (_destination.mode & 07777) == (_source.mode & 07777) && _destination.flags == _source.flags &&
+           _destination.link_count == 1 && _destination.size == _source.size &&
+           _destination.access_time == _source.access_time &&
            _destination.modification_time == _source.modification_time &&
            _destination.birth_time == _source.birth_time && _destination.acl == _source.acl &&
            _destination.extended_attributes == _source.extended_attributes;
@@ -195,10 +198,7 @@ int ConditionalCopyIO::FStatAt(int _directory_fd, const char *_name, struct stat
     return fstatat(_directory_fd, _name, _stat, _flags);
 }
 
-int ConditionalCopyIO::Clone(int _source_fd,
-                             int _destination_parent_fd,
-                             const char *_name,
-                             uint32_t _flags) noexcept
+int ConditionalCopyIO::Clone(int _source_fd, int _destination_parent_fd, const char *_name, uint32_t _flags) noexcept
 {
     return fclonefileat(_source_fd, _destination_parent_fd, _name, _flags);
 }
@@ -218,11 +218,10 @@ int ConditionalCopyIO::Close(int _fd) noexcept
     return close(_fd);
 }
 
-std::expected<ConditionalCopyMetadataSnapshot, int>
-ConditionalCopyIO::CaptureMetadata(int _fd) noexcept
+std::expected<ConditionalCopyMetadataSnapshot, int> ConditionalCopyIO::CaptureMetadata(int _fd) noexcept
 {
     try {
-        struct stat value {};
+        struct stat value{};
         if( FStat(_fd, &value) != 0 )
             return std::unexpected(errno == 0 ? EIO : errno);
         auto acl = ConditionalCopyReadACL(_fd);
@@ -231,7 +230,7 @@ ConditionalCopyIO::CaptureMetadata(int _fd) noexcept
         auto extended_attributes = ConditionalCopyReadExtendedAttributes(_fd);
         if( !extended_attributes )
             return std::unexpected(extended_attributes.error());
-        struct stat seal {};
+        struct stat seal{};
         if( FStat(_fd, &seal) != 0 )
             return std::unexpected(errno == 0 ? EIO : errno);
         if( !ConditionalCopyStatSealMatches(value, seal) )

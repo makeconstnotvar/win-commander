@@ -278,11 +278,11 @@ ReviewedFactoryConditionalCopyTimestamp(OperationPlanningTimestampEvidence _time
     };
 }
 
-nc::vfs::ProviderConditionalCopyExistingExpectation ReviewedFactoryConditionalCopyExpectation(
-    const OperationPlanningPath &_path,
-    nc::vfs::ProviderConditionalCopyExpectedKind _kind,
-    const OperationPlanningNativeObjectIdentityEvidence &_identity,
-    const OperationPlanningNativeObjectVersionEvidence &_version)
+nc::vfs::ProviderConditionalCopyExistingExpectation
+ReviewedFactoryConditionalCopyExpectation(const OperationPlanningPath &_path,
+                                          nc::vfs::ProviderConditionalCopyExpectedKind _kind,
+                                          const OperationPlanningNativeObjectIdentityEvidence &_identity,
+                                          const OperationPlanningNativeObjectVersionEvidence &_version)
 {
     return nc::vfs::ProviderConditionalCopyExistingExpectation{
         .absolute_path = _path.absolute_path,
@@ -311,48 +311,42 @@ ReviewedOperationFactory::BlockExecutionProduct(
     try {
         const auto terminal = terminal_item_result();
         if( !terminal && terminal.error() == CopyOperationTerminalResultError::Inconsistent ) {
-            return std::unexpected(ReviewedFactoryFailure(
-                ReviewedOperationFactoryErrorCode::ConditionalCommitIntegrationUnavailable));
+            return std::unexpected(
+                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitIntegrationUnavailable));
         }
+    } catch( ... ) {
     }
-    catch( ... ) {
-    }
-    return std::unexpected(ReviewedFactoryFailure(
-        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+    return std::unexpected(
+        ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
 }
 
 std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
 ReviewedOperationFactory::Create(ReviewedVFSOperationPreflight _preflight, CancelChecker _cancel_checker) noexcept
 {
-    return BlockExecutionProduct(
-        CreateExecutionProduct(std::move(_preflight), std::move(_cancel_checker)));
+    return BlockExecutionProduct(CreateExecutionProduct(std::move(_preflight), std::move(_cancel_checker)));
 }
 
 std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
-ReviewedOperationFactory::CreateWithDependencies(ReviewedVFSOperationPreflight _preflight,
-                                                 CancelChecker _cancel_checker,
-                                                 DirectAccessChecker _direct_access_checker,
-                                                 SourceOpenAt _source_open_at,
-                                                 ConditionalCommitTransactionResolver
-                                                     _conditional_commit_transaction_resolver) noexcept
+ReviewedOperationFactory::CreateWithDependencies(
+    ReviewedVFSOperationPreflight _preflight,
+    CancelChecker _cancel_checker,
+    DirectAccessChecker _direct_access_checker,
+    SourceOpenAt _source_open_at,
+    ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver) noexcept
 {
-    return BlockExecutionProduct(CreateExecutionProductWithDependencies(
-        std::move(_preflight),
-        std::move(_cancel_checker),
-        std::move(_direct_access_checker),
-        std::move(_source_open_at),
-        std::move(_conditional_commit_transaction_resolver)));
+    return BlockExecutionProduct(
+        CreateExecutionProductWithDependencies(std::move(_preflight),
+                                               std::move(_cancel_checker),
+                                               std::move(_direct_access_checker),
+                                               std::move(_source_open_at),
+                                               std::move(_conditional_commit_transaction_resolver)));
 }
 
 std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
 ReviewedOperationFactory::CreateExecutionProduct(ReviewedVFSOperationPreflight _preflight,
                                                  CancelChecker _cancel_checker) noexcept
 {
-    return CreateExecutionProductWithDependencies(std::move(_preflight),
-                                                  std::move(_cancel_checker),
-                                                  {},
-                                                  {},
-                                                  {});
+    return CreateExecutionProductWithDependencies(std::move(_preflight), std::move(_cancel_checker), {}, {}, {});
 }
 
 std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
@@ -536,9 +530,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             return cancelled();
         int opened_source_fd;
         while( true ) {
-            opened_source_fd = open_source(held_source_parent.Get(),
-                                           source_parts->second.c_str(),
-                                           O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+            opened_source_fd = open_source(
+                held_source_parent.Get(), source_parts->second.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
             if( opened_source_fd >= 0 || errno != EINTR )
                 break;
             if( is_cancelled() )
@@ -622,63 +615,63 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
 
         nc::vfs::ProviderConditionalCopyReviewedClaims reviewed_claims{
             .plan_id = std::string{plan.Id().Value()},
-            .source_binding = nc::vfs::ProviderConditionalCopyBinding{
-                .provider_id = item.source.provider_id,
-                .host = source_host,
-            },
-            .destination_binding = nc::vfs::ProviderConditionalCopyBinding{
-                .provider_id = item.destination.provider_id,
-                .host = destination_host,
-            },
-            .source = ReviewedFactoryConditionalCopyExpectation(
-                item.source,
-                nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile,
-                *source_snapshot->evidence.native_identity,
-                *source_snapshot->evidence.native_version),
-            .destination_parent = ReviewedFactoryConditionalCopyExpectation(
-                destination_parent,
-                nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
-                *destination_parent_snapshot->evidence.native_identity,
-                *destination_parent_snapshot->evidence.native_version),
-            .destination = nc::vfs::ProviderConditionalCopyMissingExpectation{
-                .absolute_path = item.destination.absolute_path,
-            },
+            .source_binding =
+                nc::vfs::ProviderConditionalCopyBinding{
+                    .provider_id = item.source.provider_id,
+                    .host = source_host,
+                },
+            .destination_binding =
+                nc::vfs::ProviderConditionalCopyBinding{
+                    .provider_id = item.destination.provider_id,
+                    .host = destination_host,
+                },
+            .source =
+                ReviewedFactoryConditionalCopyExpectation(item.source,
+                                                          nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile,
+                                                          *source_snapshot->evidence.native_identity,
+                                                          *source_snapshot->evidence.native_version),
+            .destination_parent =
+                ReviewedFactoryConditionalCopyExpectation(destination_parent,
+                                                          nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
+                                                          *destination_parent_snapshot->evidence.native_identity,
+                                                          *destination_parent_snapshot->evidence.native_version),
+            .destination =
+                nc::vfs::ProviderConditionalCopyMissingExpectation{
+                    .absolute_path = item.destination.absolute_path,
+                },
         };
         const OperationPlanningPath source_error_path = item.source;
         const OperationPlanningPath destination_error_path = item.destination;
         const uint64_t exact_source_bytes = source_snapshot->evidence.native_version->byte_size;
-        auto reviewed_authority = std::move(_preflight).ConsumeConditionalCopyAuthority(
-            std::move(reviewed_claims));
+        auto reviewed_authority = std::move(_preflight).ConsumeConditionalCopyAuthority(std::move(reviewed_claims));
         if( !reviewed_authority ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
+            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
         }
 
         std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
                       nc::vfs::ProviderConditionalCopyTransactionBeginError>
             transaction = std::unexpected(nc::vfs::ProviderConditionalCopyTransactionBeginError::ProviderFailure);
         try {
-            transaction = _conditional_commit_transaction_resolver
-                              ? _conditional_commit_transaction_resolver(std::move(*reviewed_authority), is_cancelled)
-                              : destination_host->BeginConditionalCopyTransaction(
-                                    std::move(*reviewed_authority), is_cancelled);
+            transaction =
+                _conditional_commit_transaction_resolver
+                    ? _conditional_commit_transaction_resolver(std::move(*reviewed_authority), is_cancelled)
+                    : destination_host->BeginConditionalCopyTransaction(std::move(*reviewed_authority), is_cancelled);
         } catch( ... ) {
-            return std::unexpected(ReviewedFactoryFailure(
-                ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            return std::unexpected(
+                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
         }
 
         if( !transaction ) {
             switch( transaction.error() ) {
                 case nc::vfs::ProviderConditionalCopyTransactionBeginError::SourceStale:
-                    return std::unexpected(ReviewedFactoryFailure(
-                        ReviewedOperationFactoryErrorCode::StaleSource, source_error_path));
+                    return std::unexpected(
+                        ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, source_error_path));
                 case nc::vfs::ProviderConditionalCopyTransactionBeginError::DestinationParentStale:
-                    return std::unexpected(ReviewedFactoryFailure(
-                        ReviewedOperationFactoryErrorCode::StaleDestination, destination_parent));
+                    return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination,
+                                                                  destination_parent));
                 case nc::vfs::ProviderConditionalCopyTransactionBeginError::DestinationExists:
-                    return std::unexpected(ReviewedFactoryFailure(
-                        ReviewedOperationFactoryErrorCode::StaleDestination,
-                        destination_error_path));
+                    return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination,
+                                                                  destination_error_path));
                 case nc::vfs::ProviderConditionalCopyTransactionBeginError::Cancelled:
                     return cancelled();
                 case nc::vfs::ProviderConditionalCopyTransactionBeginError::Unsupported:
@@ -690,20 +683,24 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             }
         }
         if( !*transaction ) {
-            return std::unexpected(ReviewedFactoryFailure(
-                ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            return std::unexpected(
+                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
         }
 
-        auto product = ProviderConditionalCopyOperationFactory::Create(
-            std::move(*transaction),
-            ProviderConditionalCopyJournalContext{
-                .item_index = 0,
-                .exact_source_bytes = exact_source_bytes,
-            },
-            std::move(is_cancelled));
+        auto product =
+            ProviderConditionalCopyOperationFactory::Create(std::move(*transaction),
+                                                            ProviderConditionalCopyJournalContext{
+                                                                .item_index = 0,
+                                                                .exact_source_bytes = exact_source_bytes,
+                                                            },
+                                                            ProviderConditionalCopyOperationPresentation{
+                                                                .source_host = source_host,
+                                                                .source_path = item.source.absolute_path,
+                                                                .destination_path = item.destination.absolute_path,
+                                                            },
+                                                            std::move(is_cancelled));
         if( !product )
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed));
+            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed));
         return std::move(*product);
     } catch( ... ) {
         return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed));

@@ -17,6 +17,9 @@
 		D4C04D0231A2C0DE00000001 /* CommandRegistry_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */; };
 		F1C0A00131A2C0DE00000001 /* FileCopyCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */; };
 		F1C0A00231A2C0DE00000001 /* FileCopyCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */; };
+		C0A5200131E2000000000001 /* ReviewedCopyAsPolicy_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */; };
+		D7C1000131E3000000000001 /* CopyOperationRecoveryCoordinator.mm in Sources */ = {isa = PBXBuildFile; fileRef = D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */; };
+		D7C1000231E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */; };
 		C17C000131B8000000000001 /* FileCutCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C17C000131B8000000000012 /* FileCutCommand.cpp */; };
 		C17C000131B8000000000002 /* FileCutCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C17C000131B8000000000013 /* FileCutCommand_UT.cpp */; };
 		A7E9000131B9000000000001 /* FileRenameCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A7E9000131B9000000000012 /* FileRenameCommand.cpp */; };
@@ -923,6 +926,12 @@
 		F1C0A01131A2C0DE00000001 /* FileCopyCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileCopyCommand.h; path = WinCommander/Core/Commands/FileCopyCommand.h; sourceTree = SOURCE_ROOT; };
 		F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCopyCommand.cpp; path = WinCommander/Core/Commands/FileCopyCommand.cpp; sourceTree = SOURCE_ROOT; };
 		F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCopyCommand_UT.cpp; path = WinCommander/Tests/FileCopyCommand_UT.cpp; sourceTree = "<group>"; };
+		C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ReviewedCopyAsPolicy_UT.mm; path = WinCommander/Tests/ReviewedCopyAsPolicy_UT.mm; sourceTree = "<group>"; };
+		D7C1001131E3000000000001 /* CopyOperationRecoveryCoordinator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyOperationRecoveryCoordinator.h; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h; sourceTree = SOURCE_ROOT; };
+		D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CopyOperationRecoveryCoordinator.mm; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.mm; sourceTree = SOURCE_ROOT; };
+		D7C1001331E3000000000001 /* CopyOperationRecoveryCoordinatorTesting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyOperationRecoveryCoordinatorTesting.h; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinatorTesting.h; sourceTree = SOURCE_ROOT; };
+		D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CopyOperationRecoveryCoordinator_UT.mm; path = WinCommander/Tests/CopyOperationRecoveryCoordinator_UT.mm; sourceTree = "<group>"; };
+		D7C1001531E3000000000001 /* OperationSubmissionGate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationSubmissionGate.h; path = WinCommander/Core/Operations/OperationSubmissionGate.h; sourceTree = SOURCE_ROOT; };
 		C17C000131B8000000000011 /* FileCutCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileCutCommand.h; path = WinCommander/Core/Commands/FileCutCommand.h; sourceTree = SOURCE_ROOT; };
 		C17C000131B8000000000012 /* FileCutCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCutCommand.cpp; path = WinCommander/Core/Commands/FileCutCommand.cpp; sourceTree = SOURCE_ROOT; };
 		C17C000131B8000000000013 /* FileCutCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCutCommand_UT.cpp; path = WinCommander/Tests/FileCutCommand_UT.cpp; sourceTree = "<group>"; };
@@ -1928,6 +1937,8 @@
 				CF371DA92D18472E0034EB3F /* ActionsShortcutsManager_UT.cpp */,
 				D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */,
 				F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */,
+				C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */,
+				D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */,
 				C17C000131B8000000000013 /* FileCutCommand_UT.cpp */,
 				A7E9000131B9000000000013 /* FileRenameCommand_UT.cpp */,
 				F10E000131D5000000000013 /* FileOpenCommand_UT.cpp */,
@@ -2261,6 +2272,7 @@
 			children = (
 				D4C04D2031A2C0DE00000001 /* Commands */,
 				E220E02031A2C0DE00000001 /* Errors */,
+				D7C1002031E3000000000001 /* Operations */,
 				FDE3E28A7F15994A517A24AA /* Pane */,
 				9A10A00131B0000000000020 /* VisualState */,
 				B6AC000131C0000000000011 /* VFSOperationPlanningAccessChecker.h */,
@@ -2294,6 +2306,17 @@
 				CF50925B201C3025004D9CF5 /* VFSInstancePromise.h */,
 			);
 			name = Core;
+			sourceTree = "<group>";
+		};
+		D7C1002031E3000000000001 /* Operations */ = {
+			isa = PBXGroup;
+			children = (
+				D7C1001131E3000000000001 /* CopyOperationRecoveryCoordinator.h */,
+				D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */,
+				D7C1001331E3000000000001 /* CopyOperationRecoveryCoordinatorTesting.h */,
+				D7C1001531E3000000000001 /* OperationSubmissionGate.h */,
+			);
+			name = Operations;
 			sourceTree = "<group>";
 		};
 		CFB3E4771844AC3000D375E2 /* Terminal */ = {
@@ -3276,6 +3299,7 @@
 				E31D000131B4000000000001 /* PaneLifecycleReducer.cpp in Sources */,
 				95901CBF265F41D88A280D49 /* LegacyShortcutBindingAdapter.cpp in Sources */,
 				B6AC000131C0000000000001 /* VFSOperationPlanningAccessChecker.mm in Sources */,
+				D7C1000131E3000000000001 /* CopyOperationRecoveryCoordinator.mm in Sources */,
 				CF0A47F82BDD9E8000833160 /* AppDelegate+ViewerCreation.mm in Sources */,
 				CF0A47032BDD864D00833160 /* Dock.mm in Sources */,
 				CF0A487A2BDDA51600833160 /* GoToFolderSheetController.mm in Sources */,
@@ -3496,6 +3520,8 @@
 				E220E00231A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp in Sources */,
 				D4C04D0231A2C0DE00000001 /* CommandRegistry_UT.cpp in Sources */,
 				F1C0A00231A2C0DE00000001 /* FileCopyCommand_UT.cpp in Sources */,
+				C0A5200131E2000000000001 /* ReviewedCopyAsPolicy_UT.mm in Sources */,
+				D7C1000231E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm in Sources */,
 				C17C000131B8000000000002 /* FileCutCommand_UT.cpp in Sources */,
 				A7E9000131B9000000000002 /* FileRenameCommand_UT.cpp in Sources */,
 				F10E000131D5000000000002 /* FileOpenCommand_UT.cpp in Sources */,

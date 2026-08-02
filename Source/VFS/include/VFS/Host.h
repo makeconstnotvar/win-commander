@@ -201,6 +201,14 @@ public:
     virtual HostErrorKind ClassifyError(const Error &_error) const noexcept;
 
     /**
+     * Performs a read-only preliminary eligibility check for conditional Copy. Unsupported is a
+     * definitive provider/policy answer; Unavailable means eligibility could not be established.
+     * Exact reviewed claims are still revalidated by BeginConditionalCopyTransaction().
+     */
+    [[nodiscard]] virtual ProviderConditionalCopyPathSupport
+    ConditionalCopyPathSupport(std::string_view _source_path, std::string_view _destination_parent_path) const noexcept;
+
+    /**
      * Consumes reviewed Copy authority and begins a provider-owned conditional publication transaction.
      * The default implementation returns Unsupported. Native supports one create-only regular file on the
      * exact same clone-capable volume and retains anchored source/destination-parent descriptors until terminal use.

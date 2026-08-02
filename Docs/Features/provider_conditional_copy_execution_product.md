@@ -1,6 +1,6 @@
 # Feature: provider conditional Copy execution product
 
-> Status: provider result mapper, transaction-owning operation product, private reviewed-factory construction and production orchestrator composition implemented; application consumer remains open
+> Status: provider result mapper, transaction-owning operation product, private reviewed-factory construction, production orchestrator composition, restricted submission hooks and bounded `CopyAs` consumer implemented
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` sections 14, 15, 31, and 32
 > Execution tracker: M3 in `Docs/Development-Plan.md`
 
@@ -37,17 +37,21 @@ Worker-launch failure is converted into the same stopped/cancelled terminal path
 
 The private `ReviewedOperationFactory::CreateExecutionProduct` path validates the reviewed plan, consumes its private-sealed authority, begins the exact Native transaction, and creates this product. The production `CopyOperationOrchestrator` constructor uses that friend path; injected execution factories remain test-only. The public compatibility `ReviewedOperationFactory::Create` still drops the product, resolves the cold transaction, and fails closed, so callers cannot bypass journal admission and queue custody.
 
-The orchestrator admits the plan before construction, reserves the exact run-receipt slot before Running, arms it before enqueue, and transfers the same slot to the `Pool` finalizer only after accepted enqueue. Provider evidence is sampled once and durably finalized before `Pool` release.
+The orchestrator admits the plan before construction, configures the valid submission hooks while the operation is cold, reserves the exact run-receipt slot before Running, arms it before enqueue, and transfers the same slot to the `Pool` finalizer only after accepted enqueue. Provider evidence is sampled once and durably finalized before `Pool` release.
+
+The hook contract exposes Start, Pause, Resume, Stop and TitleChange lifecycle observations plus the operation's item-status callback. Generic Completion and Finish observations are rejected. Terminal presentation instead receives an owning exact durable outcome after journal finalization or exact reopen reconciliation. Delivery is synchronous on the active Submit, Pool-finalizer, retry or recovery caller, so UI consumers dispatch the owning value to their executor.
+
+Accepted Pool admission preallocates the terminal-finalization wrapper and transfer capacity. Successful durable completion follows the normal Pool completion route. Failed, cancelled and reconciled `Interrupted` outcomes use `ReleaseWithoutCompletion`, which removes terminal work and starts eligible pending work without publishing a generic success callback. Slot locking and observer consumption make durable delivery at-most-once across retry, reconcile and concurrent release.
 
 ## Application integration boundary
 
-No application mutation entry point submits this product yet. The narrow first candidate is `CopyAs::Perform` in `States/FilePanels/Actions/CopyFile.mm` for one regular Native item copied create-only within the same source directory. That route matches the implemented single-item, same-`NativeHost`, internal writable APFS scope and avoids clipboard, batch, cut-token, and cross-provider semantics.
+`CopyAs::Perform` in `States/FilePanels/Actions/CopyFile.mm` submits this product for one regular Native item copied create-only within the same source directory when path eligibility is explicitly `Supported`. That route matches the implemented single-item, same-`NativeHost`, internal writable APFS scope.
 
 The application boundary still requires three explicit contracts:
 
 1. an app-owned typed review step that produces the exact `ReviewedVFSOperationPreflight` accepted by the orchestrator;
-2. a cold pre-enqueue configurator so progress, completion, refresh, and cancellation callbacks are installed before `Pool` can start the operation;
-3. an exact durable terminal presenter driven by journal result, publication, sync, and recovery evidence, including post-rename `Reconcile` and `ReleaseReconciled` outcomes.
+2. a presenter/coordinator that maps application lifecycle and item-status handling into the implemented restricted hooks, dispatches owning durable outcomes to the UI executor, and drives post-rename `Reconcile`/`ReleaseReconciled` recovery;
+3. one bounded `CopyAs::Perform` consumer that enters this lifecycle only after exact user review succeeds.
 
 Process-lifetime composition should own the active journal and `CopyOperationRunReceiptCustodian`; a window-scoped coordinator should own `Pool`, user cancellation, and presentation. A submission may construct a short-lived orchestrator from those owners. Legacy fallback is valid only before the new reviewed lifecycle is selected; no failure after preflight, admission, construction, Running, or enqueue may re-enter the legacy mutation path.
 
@@ -57,20 +61,24 @@ Process-lifetime composition should own the active journal and `CopyOperationRun
 - Execution product and provider operation: 9 / 188.
 - Reviewed factory: 8 / 225.
 - Job lifecycle and worker-launch hardening: 10 / 608.
-- Copy orchestrator: 13 / 558, including the production factory path at 3 / 138.
+- Copy orchestrator: 15 / 758, including the production factory path at 3 / 138.
+- Pool: 17 / 219.
 - Journal: 27 / 592.
-- Full `OperationsUT`: 165 cases / 4,468 assertions in Debug, Release ASAN, and Release UBSAN.
+- Full Debug `OperationsUT`: 170 cases / 4,748 assertions.
+
+Explicitly instrumented Release ASAN and UBSAN `OperationsUT` each pass 170 / 4,748 with confirmed runtime linkage and no diagnostics.
 
 Earlier Native staged-capsule, Pool, VFS, M0, and seeded integration snapshots remain recorded in their owning feature and plan documents.
 
 ## Remaining work
 
-Wire the bounded `CopyAs` application slice only after the typed review, cold configurator, and durable terminal presenter contracts exist. Cross-volume Copy still requires provider-owned bounded staging; batches, replacement, directories, symlinks, remote providers, clipboard Paste, and physical-volume/power-loss release evidence remain separate gates.
+Prove the live application boundary and physical-volume behavior for the bounded `CopyAs` consumer. Cross-volume Copy still requires provider-owned bounded staging; batches, replacement, directories, symlinks, remote providers and clipboard Paste remain separate gates.
 
 ## Related documents
 
 - [`reviewed_copy_factory_foundation.md`](reviewed_copy_factory_foundation.md)
 - [`copy_operation_orchestrator_foundation.md`](copy_operation_orchestrator_foundation.md)
+- [`copy_operation_submission_hooks.md`](copy_operation_submission_hooks.md)
 - [`operation_journal_foundation.md`](operation_journal_foundation.md)
 - [`native_create_copy_execution_foundation.md`](native_create_copy_execution_foundation.md)
 - [`ADR 0001`](../ADR/0001-native-conditional-copy-publication.md)

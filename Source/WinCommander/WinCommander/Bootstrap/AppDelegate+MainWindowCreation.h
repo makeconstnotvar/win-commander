@@ -6,8 +6,9 @@
 @class PanelController;
 
 namespace nc::panel {
+class DirectoryAccessProvider;
 class FileOpener;
-}
+} // namespace nc::panel
 
 // this category is private to NCAppDelegate
 @interface NCAppDelegate (MainWindowCreation)
@@ -24,5 +25,8 @@ class FileOpener;
 
 /** Shared opener used by production file.open composition and Open With surfaces. */
 - (nc::panel::FileOpener &)fileOpener;
+
+/** Shared access gate used by window-scoped operation planning. */
+- (nc::panel::DirectoryAccessProvider &)directoryAccessProvider;
 
 @end

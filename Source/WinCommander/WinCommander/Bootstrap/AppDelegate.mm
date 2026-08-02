@@ -49,6 +49,8 @@
 #include <WinCommander/Core/Commands/NavigationHistoryCommand.h>
 #include <WinCommander/Core/Commands/PaneNavigationCommand.h>
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
+#include <WinCommander/Core/Operations/OperationSubmissionGate.h>
+#include <WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h>
 #include <WinCommander/Core/SandboxManager.h>
 #include <WinCommander/Core/Dock.h>
 #include <WinCommander/Core/ServicesHandler.h>
@@ -81,6 +83,8 @@
 #include <Operations/Pool.h>
 #include <Operations/PoolEnqueueFilter.h>
 #include <Operations/AggregateProgressTracker.h>
+#include <Operations/CopyOperationOrchestrator.h>
+#include <Operations/OperationJournal.h>
 
 #include <Config/ConfigImpl.h>
 #include <Config/ObjCBridge.h>
@@ -104,6 +108,7 @@
 #include <Panel/ExternalTools.h>
 #include <Panel/TagsStorage.h>
 
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -211,6 +216,8 @@ static NCAppDelegate *g_Me = nil;
 
 @property(nonatomic) IBOutlet NSMenu *recentlyClosedMenu;
 
+- (void)setupCopyOperationRuntime;
+
 @end
 
 @interface NCViewerWindowDelegateBridge : NSObject <NCViewerWindowDelegate>
@@ -236,6 +243,7 @@ static NCAppDelegate *g_Me = nil;
     std::shared_ptr<nc::vfs::NativeHost> m_NativeHost;
     std::unique_ptr<nc::utility::FSEventsFileUpdateImpl> m_FSEventsFileUpdate;
     nc::ops::PoolEnqueueFilter m_PoolEnqueueFilter;
+    std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> m_CopyOperationRecoveryCoordinator;
     std::unique_ptr<ConfigWiring> m_ConfigWiring;
     std::unique_ptr<nc::SystemThemeDetector> m_SystemThemeDetector;
     std::unique_ptr<nc::ThemesManager> m_ThemesManager;
@@ -293,31 +301,31 @@ static NCAppDelegate *g_Me = nil;
             });
         [[maybe_unused]] const auto file_cut_result = m_CommandRegistry->Register(file_cut_registration);
         assert(file_cut_result == nc::core::CommandRegistry::RegisterResult::Registered);
-        const auto file_rename_registration = nc::core::MakeFileRenameCommand(
-            [](void *_native_target, const nc::vfs::ListingItem &_item) {
-                if( _native_target == nullptr )
-                    return false;
+        const auto file_rename_registration = nc::core::MakeFileRenameCommand([](void *_native_target,
+                                                                                 const nc::vfs::ListingItem &_item) {
+            if( _native_target == nullptr )
+                return false;
 
-                PanelController *const panel = (__bridge PanelController *)_native_target;
-                PanelView *const view = panel.view;
-                if( view == nil )
-                    return false;
+            PanelController *const panel = (__bridge PanelController *)_native_target;
+            PanelView *const view = panel.view;
+            if( view == nil )
+                return false;
 
-                const int sort_position = panel.data.SortPositionOfEntry(_item);
-                if( sort_position < 0 || !panel.data.IsValidSortPosition(sort_position) )
-                    return false;
+            const int sort_position = panel.data.SortPositionOfEntry(_item);
+            if( sort_position < 0 || !panel.data.IsValidSortPosition(sort_position) )
+                return false;
 
-                view.curpos = sort_position;
-                const VFSListingItem focused_item = view.item;
-                if( !focused_item || focused_item.Listing() != _item.Listing() || focused_item.Index() != _item.Index() )
-                    return false;
+            view.curpos = sort_position;
+            const VFSListingItem focused_item = view.item;
+            if( !focused_item || focused_item.Listing() != _item.Listing() || focused_item.Index() != _item.Index() )
+                return false;
 
-                return [view startFieldEditorRenaming];
-            });
+            return [view startFieldEditorRenaming];
+        });
         [[maybe_unused]] const auto file_rename_result = m_CommandRegistry->Register(file_rename_registration);
         assert(file_rename_result == nc::core::CommandRegistry::RegisterResult::Registered);
-        const auto view_toggle_hidden_files_registration = nc::core::MakeViewToggleHiddenFilesCommand(
-            [](void *_native_target, const bool _shows_hidden_files) {
+        const auto view_toggle_hidden_files_registration =
+            nc::core::MakeViewToggleHiddenFilesCommand([](void *_native_target, const bool _shows_hidden_files) {
                 if( _native_target == nullptr )
                     return false;
 
@@ -354,10 +362,8 @@ static NCAppDelegate *g_Me = nil;
                 }
                 return false;
             };
-        const auto navigation_back_registration =
-            nc::core::MakeNavigationBackCommand(navigation_history_executor);
-        [[maybe_unused]] const auto navigation_back_result =
-            m_CommandRegistry->Register(navigation_back_registration);
+        const auto navigation_back_registration = nc::core::MakeNavigationBackCommand(navigation_history_executor);
+        [[maybe_unused]] const auto navigation_back_result = m_CommandRegistry->Register(navigation_back_registration);
         assert(navigation_back_result == nc::core::CommandRegistry::RegisterResult::Registered);
         const auto navigation_forward_registration =
             nc::core::MakeNavigationForwardCommand(navigation_history_executor);
@@ -370,16 +376,14 @@ static NCAppDelegate *g_Me = nil;
             PanelController *const panel = (__bridge PanelController *)_native_target;
             return nc::panel::actions::SubmitExplicitGoToEnclosingFolder(panel);
         });
-        [[maybe_unused]] const auto navigation_up_result =
-            m_CommandRegistry->Register(navigation_up_registration);
+        [[maybe_unused]] const auto navigation_up_result = m_CommandRegistry->Register(navigation_up_registration);
         assert(navigation_up_result == nc::core::CommandRegistry::RegisterResult::Registered);
-        const auto navigation_refresh_registration =
-            nc::core::MakeNavigationRefreshCommand([](void *_native_target) {
-                if( _native_target == nullptr )
-                    return false;
-                PanelController *const panel = (__bridge PanelController *)_native_target;
-                return [panel submitUserRefresh];
-            });
+        const auto navigation_refresh_registration = nc::core::MakeNavigationRefreshCommand([](void *_native_target) {
+            if( _native_target == nullptr )
+                return false;
+            PanelController *const panel = (__bridge PanelController *)_native_target;
+            return [panel submitUserRefresh];
+        });
         [[maybe_unused]] const auto navigation_refresh_result =
             m_CommandRegistry->Register(navigation_refresh_registration);
         assert(navigation_refresh_result == nc::core::CommandRegistry::RegisterResult::Registered);
@@ -582,6 +586,7 @@ static NCAppDelegate *g_Me = nil;
     m_StateDirectory = m_SupportDirectory / g_StateDirPostfix;
     if( !std::filesystem::exists(m_StateDirectory) )
         std::filesystem::create_directories(m_StateDirectory);
+    [self setupCopyOperationRuntime];
 
     const auto bundle = NSBundle.mainBundle;
     const auto config_defaults_path = [bundle pathForResource:@"Config" ofType:@"json"].fileSystemRepresentationSafe;
@@ -625,6 +630,33 @@ static NCAppDelegate *g_Me = nil;
         g_State->Commit();
         g_NetworkConnectionsConfig->Commit();
     });
+}
+
+- (void)setupCopyOperationRuntime
+{
+    assert(!m_CopyOperationRecoveryCoordinator);
+
+    try {
+        auto opened = nc::ops::OperationJournal::Open(m_StateDirectory.native());
+        if( !opened ) {
+            std::cerr << "Failed to open the Copy operation journal: " << magic_enum::enum_name(opened.error().code)
+                      << ", system error " << opened.error().system_error << ".\n";
+            return;
+        }
+
+        auto journal = std::make_shared<nc::ops::OperationJournal>(std::move(*opened));
+        auto custodian = std::make_shared<nc::ops::CopyOperationRunReceiptCustodian>();
+        auto coordinator = std::make_shared<nc::core::CopyOperationRecoveryCoordinator>(
+            std::move(journal), std::move(custodian), m_StateDirectory.native());
+        for( const auto &entry : coordinator->StartupInterruptedHistory() )
+            std::cerr << "Copy operation journal contains an Interrupted startup entry for plan "
+                      << entry.plan.Id().Value() << ".\n";
+        m_CopyOperationRecoveryCoordinator = std::move(coordinator);
+    } catch( const std::exception &error ) {
+        std::cerr << "Failed to initialize the Copy operation runtime: " << error.what() << ".\n";
+    } catch( ... ) {
+        std::cerr << "Failed to initialize the Copy operation runtime due to an unknown error.\n";
+    }
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *) [[maybe_unused]] _app
@@ -673,7 +705,8 @@ static NCAppDelegate *g_Me = nil;
     bool has_running_ops = false;
     auto controllers = self.mainWindowControllers;
     for( const auto &wincont : controllers )
-        if( !wincont.operationsPool.Empty() || (wincont.terminalState && wincont.terminalState.isAnythingRunning) ) {
+        if( !wincont.operationsPool.Empty() || wincont.filePanelsState.operationSubmissionGate.HasPending() ||
+            (wincont.terminalState && wincont.terminalState.isAnythingRunning) ) {
             has_running_ops = true;
             break;
         }
@@ -683,6 +716,7 @@ static NCAppDelegate *g_Me = nil;
             return NSTerminateCancel;
 
         for( const auto &wincont : controllers ) {
+            wincont.filePanelsState.operationSubmissionGate.CancelAndWait();
             wincont.operationsPool.StopAndWaitForShutdown();
             [wincont.terminalState terminate];
         }
@@ -1056,6 +1090,25 @@ static void DoTemporaryFileStoragePurge()
 - (nc::ops::PoolEnqueueFilter &)poolEnqueueFilter
 {
     return m_PoolEnqueueFilter;
+}
+
+- (std::shared_ptr<nc::ops::OperationJournal>)operationJournal
+{
+    if( !m_CopyOperationRecoveryCoordinator )
+        return {};
+    return m_CopyOperationRecoveryCoordinator->CurrentJournal();
+}
+
+- (std::shared_ptr<nc::ops::CopyOperationRunReceiptCustodian>)copyOperationRunReceiptCustodian
+{
+    if( !m_CopyOperationRecoveryCoordinator )
+        return {};
+    return m_CopyOperationRecoveryCoordinator->CurrentRunReceiptCustodian();
+}
+
+- (const std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> &)copyOperationRecoveryCoordinator
+{
+    return m_CopyOperationRecoveryCoordinator;
 }
 
 - (IBAction)onMainMenuShowLogs:(id)_sender

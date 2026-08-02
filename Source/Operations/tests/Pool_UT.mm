@@ -579,18 +579,18 @@ TEST_CASE(PREFIX "Finalizes terminal operations before removal")
     });
 
     REQUIRE(pool->TryEnqueue(operation, [weak_pool, evidence](const std::shared_ptr<Operation> &_operation) {
-                const auto pool = weak_pool.lock();
-                if( !pool )
-                    return PoolTerminalFinalizationDecision::Retain;
-                const auto finalizing_operations = pool->FinalizingOperations();
-                const auto guard = std::lock_guard{evidence->lock};
-                evidence->events.emplace_back("finalizer");
-                evidence->finalizing_count = pool->FinalizingOperationsCount();
-                evidence->running_count = pool->RunningOperationsCount();
-                evidence->operations_count = pool->OperationsCount();
-                evidence->finalizing_operation_visible = finalizing_operations == VecOp{_operation};
-                return PoolTerminalFinalizationDecision::Release;
-            }) == PoolEnqueueResult::Accepted);
+        const auto pool = weak_pool.lock();
+        if( !pool )
+            return PoolTerminalFinalizationDecision::Retain;
+        const auto finalizing_operations = pool->FinalizingOperations();
+        const auto guard = std::lock_guard{evidence->lock};
+        evidence->events.emplace_back("finalizer");
+        evidence->finalizing_count = pool->FinalizingOperationsCount();
+        evidence->running_count = pool->RunningOperationsCount();
+        evidence->operations_count = pool->OperationsCount();
+        evidence->finalizing_operation_visible = finalizing_operations == VecOp{_operation};
+        return PoolTerminalFinalizationDecision::Release;
+    }) == PoolEnqueueResult::Accepted);
     operation->job.done = true;
 
     REQUIRE(check_until_or_die(
@@ -641,11 +641,11 @@ TEST_CASE(PREFIX "Release without completion removes terminal work and starts th
     pool->SetOperationCompletionCallback([&](const std::shared_ptr<Operation> &) { ++completion_callbacks; });
 
     REQUIRE(pool->TryEnqueue(first, [](const std::shared_ptr<Operation> &) {
-                return PoolTerminalFinalizationDecision::ReleaseWithoutCompletion;
-            }) == PoolEnqueueResult::Accepted);
+        return PoolTerminalFinalizationDecision::ReleaseWithoutCompletion;
+    }) == PoolEnqueueResult::Accepted);
     REQUIRE(pool->TryEnqueue(next, [](const std::shared_ptr<Operation> &) {
-                return PoolTerminalFinalizationDecision::Release;
-            }) == PoolEnqueueResult::Accepted);
+        return PoolTerminalFinalizationDecision::Release;
+    }) == PoolEnqueueResult::Accepted);
     REQUIRE(first->State() == OperationState::Running);
     REQUIRE(next->State() == OperationState::Cold);
 
@@ -656,7 +656,7 @@ TEST_CASE(PREFIX "Release without completion removes terminal work and starts th
     CHECK(pool->Operations() == VecOp{next});
     CHECK(pool->RunningOperations() == VecOp{next});
     CHECK(next->State() == OperationState::Running);
-    CHECK(next->job.perform_count == 1);
+    CHECK(check_until_or_die([&] { return next->job.perform_count == 1; }, 1s));
     CHECK(next_starts == 1);
     CHECK(removals == 1);
     CHECK(completion_callbacks == 0);
@@ -668,6 +668,47 @@ TEST_CASE(PREFIX "Release without completion removes terminal work and starts th
     CHECK(pool->Empty());
     CHECK(removals == 2);
     CHECK(completion_callbacks == 1);
+}
+
+TEST_CASE(PREFIX "Retains terminal work when its finalizer returns an invalid decision")
+{
+    struct ControlledJob : public Job {
+        void Perform() override
+        {
+            while( !done )
+                std::this_thread::yield();
+            SetCompleted();
+        }
+        std::atomic_bool done{false};
+    };
+    struct ControlledOperation : public Operation {
+        ~ControlledOperation() override { Wait(); }
+        Job *GetJob() noexcept override { return &job; }
+        ControlledJob job;
+    };
+
+    auto pool = Pool::Make();
+    auto operation = std::make_shared<ControlledOperation>();
+    std::atomic_int removals{0};
+    std::atomic_int completion_callbacks{0};
+    pool->ObserveUnticketed(Pool::NotifyAboutRemoval, [&] { ++removals; });
+    pool->SetOperationCompletionCallback([&](const std::shared_ptr<Operation> &) { ++completion_callbacks; });
+
+    REQUIRE(pool->TryEnqueue(operation, [](const std::shared_ptr<Operation> &) {
+        return static_cast<PoolTerminalFinalizationDecision>(0xff);
+    }) == PoolEnqueueResult::Accepted);
+    operation->job.done = true;
+    REQUIRE(operation->Wait(1s));
+
+    CHECK(operation->State() == OperationState::Completed);
+    CHECK(pool->FinalizingOperations() == VecOp{operation});
+    CHECK(pool->RunningOperations().empty());
+    CHECK(pool->Operations() == VecOp{operation});
+    CHECK(pool->FinalizingOperationsCount() == 1);
+    CHECK(pool->OperationsCount() == 1);
+    CHECK_FALSE(pool->Empty());
+    CHECK(removals == 0);
+    CHECK(completion_callbacks == 0);
 }
 
 TEST_CASE(PREFIX "Retains failed finalization for exactly one successful retry")
@@ -701,16 +742,16 @@ TEST_CASE(PREFIX "Retains failed finalization for exactly one successful retry")
     pool->ObserveUnticketed(Pool::NotifyAboutRemoval, [&] { ++removals; });
 
     REQUIRE(pool->TryEnqueue(operation, [finalizer_state](const std::shared_ptr<Operation> &) {
-                auto guard = std::unique_lock{finalizer_state->lock};
-                ++finalizer_state->attempts;
-                if( finalizer_state->attempts == 1 ) {
-                    finalizer_state->first_entered = true;
-                    finalizer_state->cv.notify_all();
-                    finalizer_state->cv.wait(guard, [&] { return finalizer_state->release_first_attempt; });
-                    throw std::runtime_error{"intentional durable finalizer failure"};
-                }
-                return PoolTerminalFinalizationDecision::Release;
-            }) == PoolEnqueueResult::Accepted);
+        auto guard = std::unique_lock{finalizer_state->lock};
+        ++finalizer_state->attempts;
+        if( finalizer_state->attempts == 1 ) {
+            finalizer_state->first_entered = true;
+            finalizer_state->cv.notify_all();
+            finalizer_state->cv.wait(guard, [&] { return finalizer_state->release_first_attempt; });
+            throw std::runtime_error{"intentional durable finalizer failure"};
+        }
+        return PoolTerminalFinalizationDecision::Release;
+    }) == PoolEnqueueResult::Accepted);
     operation->job.done = true;
 
     {
