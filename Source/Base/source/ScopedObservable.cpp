@@ -1,6 +1,7 @@
 // Copyright (C) 2017-2024 Michael Kazakov. Subject to GNU General Public License version 3.
 #include <Base/algo.h>
 #include <Base/ScopedObservable.h>
+#include <exception>
 
 namespace nc::base {
 
@@ -121,10 +122,22 @@ void ScopedObservableBase::FireObservers(const uint64_t _mask) const
         observers = m_Observers;
     }
 
-    if( observers )
-        for( auto &o : *observers )
-            if( o->mask & _mask )
+    std::exception_ptr first_error;
+    if( observers ) {
+        for( auto &o : *observers ) {
+            if( !(o->mask & _mask) )
+                continue;
+            try {
                 o->callback();
+            }
+            catch( ... ) {
+                if( !first_error )
+                    first_error = std::current_exception();
+            }
+        }
+    }
+    if( first_error )
+        std::rethrow_exception(first_error);
 }
 
 void ScopedObservableBase::StopObservation(const uint64_t _ticket)

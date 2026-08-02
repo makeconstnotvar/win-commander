@@ -14,6 +14,8 @@ class ArchiveRawHost final : public Host
 public:
     static const char *const UniqueTag;
 
+    static constexpr uint64_t DeclaredFeatures = HostFeatures::Read;
+
     ArchiveRawHost(std::string_view _path, const VFSHostPtr &_parent, VFSCancelChecker _cancel_checker = {});
     ArchiveRawHost(const VFSHostPtr &_parent, const VFSConfiguration &_config, VFSCancelChecker _cancel_checker = {});
 

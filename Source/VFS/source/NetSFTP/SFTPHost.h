@@ -16,10 +16,18 @@ namespace nc::vfs {
 class SFTPHost final : public Host
 {
 public:
+    static constexpr uint64_t DeclaredFeatures =
+        HostFeatures::Read | HostFeatures::CreateFile | HostFeatures::CreateDirectory | HostFeatures::Rename |
+        HostFeatures::Unlink | HostFeatures::RemoveDirectory | HostFeatures::ReadSymlink |
+        HostFeatures::SetPermissions | HostFeatures::SetOwnership | HostFeatures::SetTimes |
+        HostFeatures::CreateSymlink;
+
     // vfs identity
     static const char *UniqueTag;
 
     VFSConfiguration Configuration() const override;
+    HostErrorKind ClassifyError(const Error &_error) const noexcept override;
+    static HostErrorKind ClassifySFTPError(const Error &_error) noexcept;
 
     static VFSMeta Meta();
 

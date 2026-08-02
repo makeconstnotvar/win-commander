@@ -3,6 +3,7 @@
 #include "TestEnv.h"
 #include "Tests.h"
 #include <VFS/Native.h>
+#include <VFS/ProviderCapabilities.h>
 #include <VFS/VFSEasyOps.h>
 #include <functional>
 #include <memory>
@@ -48,6 +49,28 @@ TEST_CASE(PREFIX "can connect to localhost")
     VFSHostPtr host;
     REQUIRE_NOTHROW(host = spawnLocalHost());
     CHECK(host->FetchDirectoryListing("/", 0));
+}
+
+TEST_CASE(PREFIX "provider capabilities")
+{
+    const auto host = spawnLocalHost();
+    const auto capabilities = ProviderCapabilitiesResolver::Resolve(*host, "/");
+
+    CHECK(capabilities.can_read);
+    CHECK(capabilities.can_write);
+    CHECK(capabilities.can_create_file);
+    CHECK(capabilities.can_create_folder);
+    CHECK(capabilities.can_rename);
+    CHECK(capabilities.can_delete_permanently);
+    CHECK_FALSE(capabilities.can_trash);
+    CHECK_FALSE(capabilities.can_watch_changes);
+    CHECK_FALSE(capabilities.can_generate_thumbnails);
+    CHECK_FALSE(capabilities.can_resolve_symlink);
+    CHECK_FALSE(capabilities.can_set_permissions);
+    CHECK_FALSE(capabilities.can_set_owner_group);
+    CHECK_FALSE(capabilities.can_set_times);
+    CHECK_FALSE(capabilities.is_native);
+    CHECK_FALSE(capabilities.is_immutable);
 }
 
 TEST_CASE(PREFIX "invalid credentials")

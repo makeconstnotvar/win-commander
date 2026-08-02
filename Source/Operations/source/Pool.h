@@ -4,8 +4,29 @@
 #include "Operation.h"
 #include <Cocoa/Cocoa.h>
 #include <deque>
+#include <mutex>
 
 namespace nc::ops {
+
+enum class PoolEnqueueResult : uint8_t {
+    Accepted,
+    ShuttingDown,
+    NotCold,
+    Duplicate
+};
+
+enum class PoolTerminalFinalizationDecision : uint8_t {
+    Release,
+    ReleaseWithoutCompletion,
+    Retain
+};
+
+enum class PoolRetryFinalizationResult : uint8_t {
+    Released,
+    Retained,
+    NotFinalizing,
+    InProgress
+};
 
 class Pool : public std::enable_shared_from_this<Pool>, private base::ScopedObservableBase
 {
@@ -21,6 +42,12 @@ public:
 
     // Operations and requests
     void Enqueue(std::shared_ptr<Operation> _operation);
+    using TerminalFinalizer =
+        std::function<PoolTerminalFinalizationDecision(const std::shared_ptr<Operation> &_operation)>;
+    [[nodiscard]] PoolEnqueueResult
+    TryEnqueue(std::shared_ptr<Operation> _operation, TerminalFinalizer _terminal_finalizer = {});
+    [[nodiscard]] PoolRetryFinalizationResult
+    RetryFinalization(const std::shared_ptr<Operation> &_operation);
     void StopAndWaitForShutdown();
 
     // Notifications
@@ -35,8 +62,10 @@ public:
     bool Empty() const;
     int OperationsCount() const;
     int RunningOperationsCount() const;
+    int FinalizingOperationsCount() const;
     std::vector<std::shared_ptr<Operation>> Operations() const;
     std::vector<std::shared_ptr<Operation>> RunningOperations() const;
+    std::vector<std::shared_ptr<Operation>> FinalizingOperations() const;
 
     // Concurrency settings
     int Concurrency();
@@ -52,12 +81,24 @@ public:
 private:
     void OperationDidStart(const std::shared_ptr<Operation> &_operation);
     void OperationDidFinish(const std::shared_ptr<Operation> &_operation);
+    void OperationFinalizationDidRelease(const std::shared_ptr<Operation> &_operation,
+                                         bool _report_completion);
     bool ShowDialog(NSWindow *_dialog, std::function<void(NSModalResponse)> _callback);
     void StartPendingOperations();
 
+    struct FinalizingOperation final {
+        std::shared_ptr<Operation> operation;
+        TerminalFinalizer finalizer;
+        bool in_progress{false};
+    };
+
     std::vector<std::shared_ptr<Operation>> m_RunningOperations;
     std::deque<std::shared_ptr<Operation>> m_PendingOperations;
+    std::vector<std::shared_ptr<FinalizingOperation>> m_FinalizingOperations;
+    std::vector<std::pair<const Operation *, TerminalFinalizer>> m_TerminalFinalizers;
     mutable std::mutex m_Lock;
+    std::recursive_mutex m_StartGate;
+    bool m_ShuttingDown = false; // guarded by m_Lock
     std::atomic_int m_Concurrency{5};
 
     std::function<bool(const Operation &_operation)> m_ShouldBeQueuedCallback;

@@ -1,6 +1,975 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "commands.disabled.generic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This command is currently unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эта команда сейчас недоступна"
+          }
+        }
+      }
+    },
+    "commands.file.copy.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy the selected items to the clipboard"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Скопировать выбранные объекты в буфер обмена"
+          }
+        }
+      }
+    },
+    "commands.file.copy.disabled.nativeItemsRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy to the system clipboard is available for local items"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Копирование в системный буфер доступно для локальных объектов"
+          }
+        }
+      }
+    },
+    "commands.file.copy.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select at least one item to copy"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите хотя бы один объект для копирования"
+          }
+        }
+      }
+    },
+    "commands.file.copy.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Копировать"
+          }
+        }
+      }
+    },
+    "commands.file.cut.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stage the selected local items to be moved"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подготовить выбранные локальные объекты к перемещению"
+          }
+        }
+      }
+    },
+    "commands.file.cut.disabled.nativeItemsRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cut to the system clipboard is available for local items"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вырезание в системный буфер доступно для локальных объектов"
+          }
+        }
+      }
+    },
+    "commands.file.cut.disabled.parentEntryUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The parent folder entry cannot be cut"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переход к родительской папке нельзя вырезать"
+          }
+        }
+      }
+    },
+    "commands.file.cut.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select at least one local item to cut"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите хотя бы один локальный объект для вырезания"
+          }
+        }
+      }
+    },
+    "commands.file.cut.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cut"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вырезать"
+          }
+        }
+      }
+    },
+    "commands.file.open.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the selected items with their default applications"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть выбранные объекты в приложениях по умолчанию"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.parentEntryUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an item to open"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите объект для открытия"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.providerReadUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reading is unavailable for this location"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чтение недоступно для этого расположения"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.providerUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The item provider is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Источник объекта недоступен"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.regularFilesRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose regular files for batch opening"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите обычные файлы для группового открытия"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.remoteItemTypeUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "External opening from this provider is available for regular files"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Внешнее открытие из этого источника доступно для обычных файлов"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.sameProviderRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose items from one location"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите объекты из одного расположения"
+          }
+        }
+      }
+    },
+    "commands.file.open.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select at least one item to open"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите хотя бы один объект для открытия"
+          }
+        }
+      }
+    },
+    "commands.file.open.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть"
+          }
+        }
+      }
+    },
+    "commands.file.rename.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename the focused item in place"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переименовать объект в панели"
+          }
+        }
+      }
+    },
+    "commands.file.rename.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.file.rename.disabled.parentEntryUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus a file or folder to rename"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите файл или папку для переименования"
+          }
+        }
+      }
+    },
+    "commands.file.rename.disabled.providerUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The item provider is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Источник объекта недоступен"
+          }
+        }
+      }
+    },
+    "commands.file.rename.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renaming is unavailable for this location"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переименование недоступно для этого расположения"
+          }
+        }
+      }
+    },
+    "commands.file.rename.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus an item to rename"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите объект для переименования"
+          }
+        }
+      }
+    },
+    "commands.file.rename.disabled.singleItemRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose one item to rename"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите один объект для переименования"
+          }
+        }
+      }
+    },
+    "commands.file.rename.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Переименовать"
+          }
+        }
+      }
+    },
+    "commands.navigation.back.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to the previous location in this pane"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перейти к предыдущему расположению в этой панели"
+          }
+        }
+      }
+    },
+    "commands.navigation.back.disabled.historyBoundary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There is no previous location"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Предыдущее расположение отсутствует"
+          }
+        }
+      }
+    },
+    "commands.navigation.back.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.navigation.back.disabled.stateUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navigation history is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "История переходов недоступна"
+          }
+        }
+      }
+    },
+    "commands.navigation.back.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Назад"
+          }
+        }
+      }
+    },
+    "commands.navigation.forward.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to the next location in this pane"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перейти к следующему расположению в этой панели"
+          }
+        }
+      }
+    },
+    "commands.navigation.forward.disabled.historyBoundary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There is no next location"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Следующее расположение отсутствует"
+          }
+        }
+      }
+    },
+    "commands.navigation.forward.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.navigation.forward.disabled.stateUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navigation history is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "История переходов недоступна"
+          }
+        }
+      }
+    },
+    "commands.navigation.forward.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forward"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вперёд"
+          }
+        }
+      }
+    },
+    "commands.navigation.refresh.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reload the current pane contents"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перезагрузить содержимое текущей панели"
+          }
+        }
+      }
+    },
+    "commands.navigation.refresh.disabled.busy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait for the current pane operation to finish"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дождитесь завершения текущей операции панели"
+          }
+        }
+      }
+    },
+    "commands.navigation.refresh.disabled.noCommittedContent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There is no loaded content to refresh"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет загруженного содержимого для обновления"
+          }
+        }
+      }
+    },
+    "commands.navigation.refresh.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.navigation.refresh.disabled.stateUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The pane refresh state is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Состояние обновления панели недоступно"
+          }
+        }
+      }
+    },
+    "commands.navigation.refresh.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обновить"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Go to the enclosing folder in this pane"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перейти в родительскую папку в этой панели"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.disabled.atTop" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This location has no enclosing folder"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У этого расположения нет родительской папки"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.disabled.busy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait for the current pane operation to finish"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Дождитесь завершения текущей операции панели"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.disabled.hierarchyUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The current location has no navigable hierarchy"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Для текущего расположения недоступна навигация по иерархии"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.disabled.stateUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The pane hierarchy state is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Состояние иерархии панели недоступно"
+          }
+        }
+      }
+    },
+    "commands.navigation.up.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Up"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вверх"
+          }
+        }
+      }
+    },
+    "commands.view.toggleHiddenFiles.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show or hide hidden files in the active pane"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показать или скрыть скрытые файлы в активной панели"
+          }
+        }
+      }
+    },
+    "commands.view.toggleHiddenFiles.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The file pane is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Панель файлов недоступна"
+          }
+        }
+      }
+    },
+    "commands.view.toggleHiddenFiles.disabled.stateUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The hidden-files view state is unavailable"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Состояние показа скрытых файлов недоступно"
+          }
+        }
+      }
+    },
+    "commands.view.toggleHiddenFiles.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Hidden Files"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показывать скрытые файлы"
+          }
+        }
+      }
+    },
+    "visualState.folder.empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder is empty."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Папка пуста."
+          }
+        }
+      }
+    },
+    "visualState.folder.loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузка…"
+          }
+        }
+      }
+    },
     "__BYTECOUNTFORMATTER_BYTE_POSTFIX" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2102,6 +3071,222 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Новый"
+          }
+        }
+      }
+    },
+    "errors.authentication" : {
+      "comment" : "Generic user-facing message for an authentication failure",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authentication is required or the supplied credentials were rejected."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Требуется аутентификация или указанные учётные данные отклонены."
+          }
+        }
+      }
+    },
+    "errors.conflict" : {
+      "comment" : "Generic user-facing message for a file-manager conflict",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The action conflicts with an existing item or non-empty location."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Действие конфликтует с существующим объектом или непустым расположением."
+          }
+        }
+      }
+    },
+    "errors.fileBusy" : {
+      "comment" : "Generic user-facing message for a busy file or resource",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The item or resource is currently in use."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Объект или ресурс сейчас используется."
+          }
+        }
+      }
+    },
+    "errors.insufficientSpace" : {
+      "comment" : "Generic user-facing message for exhausted storage space or quota",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There is not enough available storage space or quota."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Недостаточно свободного места или доступной квоты."
+          }
+        }
+      }
+    },
+    "errors.network" : {
+      "comment" : "Generic user-facing message for an unavailable or disconnected network",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The network location is unavailable or disconnected."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сетевое расположение недоступно или соединение разорвано."
+          }
+        }
+      }
+    },
+    "errors.operationCancelled" : {
+      "comment" : "Generic user-facing message for a cancelled file-manager operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The operation was cancelled."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Операция отменена."
+          }
+        }
+      }
+    },
+    "errors.pathNotFound" : {
+      "comment" : "Generic user-facing message for a missing file or location",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The item or location could not be found."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось найти объект или расположение."
+          }
+        }
+      }
+    },
+    "errors.permission" : {
+      "comment" : "Generic user-facing message for a permission failure",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You don’t have permission to complete this action."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Недостаточно прав для выполнения этого действия."
+          }
+        }
+      }
+    },
+    "errors.providerUnsupported" : {
+      "comment" : "Generic user-facing message for an action unsupported by a provider",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This location does not support the requested action."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это расположение не поддерживает запрошенное действие."
+          }
+        }
+      }
+    },
+    "errors.readOnly" : {
+      "comment" : "Generic user-facing message for a read-only location",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The destination is read-only."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Расположение доступно только для чтения."
+          }
+        }
+      }
+    },
+    "errors.timeout" : {
+      "comment" : "Generic user-facing message for a timed-out file-manager operation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The operation timed out."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Превышено время ожидания операции."
+          }
+        }
+      }
+    },
+    "errors.unknown" : {
+      "comment" : "Generic user-facing message for an unclassified file-manager error",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The operation could not be completed."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось завершить операцию."
           }
         }
       }

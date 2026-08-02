@@ -4,6 +4,7 @@
 #include "NCExplorerSidebarView.h"
 #include "NCExplorerCommandBarView.h"
 #include "../FilePanels/PanelController.h"
+#include "../FilePanels/PanelControllerPaneStoreAdapter.h"
 #include "../FilePanels/PanelView.h"
 #include "../FilePanels/PanelViewHeader.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
@@ -189,6 +190,8 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
     NCExplorerSidebarView *m_Sidebar;
     NCExplorerCommandBarView *m_CommandBar;
     NCExplorerQuickSearchOverlayView *m_QuickSearchOverlay;
+    std::unique_ptr<nc::panel::PanelControllerPaneStoreAdapter> m_PaneStoreBridge;
+    nc::core::PaneStoreAdapter::ObservationTicket m_PaneStoreObservation;
 }
 
 @synthesize panelController = m_Panel;
@@ -203,6 +206,20 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
 
         m_ToolbarDelegate = [[NCExplorerToolbarDelegate alloc] initWithPanelController:m_Panel];
         [self buildLayout];
+
+        m_PaneStoreBridge = std::make_unique<nc::panel::PanelControllerPaneStoreAdapter>(m_Panel);
+        __weak NCExplorerState *weak_self = self;
+        m_PaneStoreObservation =
+            m_PaneStoreBridge->Store().Observe([weak_self](const nc::core::PaneSnapshot &_snapshot) {
+                NCExplorerState *const strong_self = weak_self;
+                if( strong_self ) {
+                    [strong_self->m_ToolbarDelegate applyPaneSnapshot:_snapshot];
+                    [strong_self->m_CommandBar applyPaneSnapshot:_snapshot];
+                }
+            });
+        const nc::core::PaneSnapshot snapshot = m_PaneStoreBridge->Store().Snapshot();
+        [m_ToolbarDelegate applyPaneSnapshot:snapshot];
+        [m_CommandBar applyPaneSnapshot:snapshot];
 
         m_Panel.view.headerBarVisible = false;
         m_Panel.view.busyIndicatorOverride = m_ToolbarDelegate.busyIndicator;
@@ -358,7 +375,6 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
 
 - (void)PanelPathChanged:(PanelController *) [[maybe_unused]] _panel
 {
-    [m_ToolbarDelegate panelPathChanged];
     [m_Sidebar panelPathChanged];
 }
 

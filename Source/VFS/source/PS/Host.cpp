@@ -218,6 +218,7 @@ public:
 
 PSHost::PSHost() : Host("", std::shared_ptr<Host>(nullptr), UniqueTag), m_UpdateQ("PSHost")
 {
+    AddFeatures(DeclaredFeatures);
     CommitProcs(GetProcs());
 }
 

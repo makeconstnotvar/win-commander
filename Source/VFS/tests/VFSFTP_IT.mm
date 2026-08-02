@@ -4,6 +4,7 @@
 #include <VFS/VFS.h>
 #include <VFS/NetFTP.h>
 #include <VFS/Native.h>
+#include <VFS/ProviderCapabilities.h>
 #include <Base/UUID.h>
 #include <set>
 #include <thread>
@@ -22,6 +23,28 @@ TEST_CASE(PREFIX "just connect")
     REQUIRE_NOTHROW(std::make_shared<FTPHost>(g_FtpAddress, g_FtpUser, g_FtpPassword, "/", g_FtpPort));
     REQUIRE_THROWS(std::make_shared<FTPHost>(g_FtpAddress, "wronguser", g_FtpPassword, "/", g_FtpPort));
     REQUIRE_THROWS(std::make_shared<FTPHost>(g_FtpAddress, g_FtpUser, "wronguserpasswd", "/", g_FtpPort));
+}
+
+TEST_CASE(PREFIX "provider capabilities")
+{
+    const auto host = std::make_shared<FTPHost>(g_FtpAddress, g_FtpUser, g_FtpPassword, "/", g_FtpPort);
+    const auto capabilities = ProviderCapabilitiesResolver::Resolve(*host, "/");
+
+    CHECK(capabilities.can_read);
+    CHECK(capabilities.can_write);
+    CHECK(capabilities.can_create_file);
+    CHECK(capabilities.can_create_folder);
+    CHECK(capabilities.can_rename);
+    CHECK(capabilities.can_delete_permanently);
+    CHECK_FALSE(capabilities.can_trash);
+    CHECK_FALSE(capabilities.can_watch_changes);
+    CHECK_FALSE(capabilities.can_generate_thumbnails);
+    CHECK_FALSE(capabilities.can_resolve_symlink);
+    CHECK_FALSE(capabilities.can_set_permissions);
+    CHECK_FALSE(capabilities.can_set_owner_group);
+    CHECK_FALSE(capabilities.can_set_times);
+    CHECK_FALSE(capabilities.is_native);
+    CHECK_FALSE(capabilities.is_immutable);
 }
 
 TEST_CASE(PREFIX "upload and compare")

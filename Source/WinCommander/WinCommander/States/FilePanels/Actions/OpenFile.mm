@@ -11,10 +11,6 @@
 
 namespace nc::panel::actions {
 
-static void PerformOpeningFilesWithDefaultHandler(const std::vector<VFSListingItem> &_items,
-                                                  PanelController *_target,
-                                                  FileOpener &_file_opener);
-
 static bool CommonPredicate(PanelController *_target)
 {
     auto i = _target.view.item;
@@ -89,12 +85,16 @@ bool OpenFilesWithDefaultHandler::Predicate(PanelController *_target) const
 
 bool OpenFilesWithDefaultHandler::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
 {
+    UpdateOpenWithDefaultHandlerMenuItemTitle(_target, _item);
+    return Predicate(_target);
+}
+
+void UpdateOpenWithDefaultHandlerMenuItemTitle(PanelController *_target, NSMenuItem *_item)
+{
     if( auto vfs_item = _target.view.item ) {
         _item.title = [NSString
             stringWithFormat:NSLocalizedString(@"Open \u201c%@\u201d", "Open an item"), vfs_item.DisplayNameNS()];
     }
-
-    return Predicate(_target);
 }
 
 void OpenFilesWithDefaultHandler::Perform(PanelController *_target, id /*_sender*/) const
@@ -105,53 +105,34 @@ void OpenFilesWithDefaultHandler::Perform(PanelController *_target, id /*_sender
     }
 
     auto entries = _target.selectedEntriesOrFocusedEntryWithDotDot;
-    PerformOpeningFilesWithDefaultHandler(entries, _target, m_FileOpener);
+    [[maybe_unused]] const bool submitted = SubmitOpenItemsWithDefaultHandler(entries, _target, m_FileOpener);
 }
 
-static void PerformOpeningFilesWithDefaultHandler(const std::vector<VFSListingItem> &_items,
-                                                  PanelController *_target,
-                                                  FileOpener &_file_opener)
+bool SubmitOpenItemsWithDefaultHandler(const std::span<const VFSListingItem> _items,
+                                       PanelController *_target,
+                                       FileOpener &_file_opener)
 {
-    if( _items.empty() )
-        return;
+    if( _target == nil || _items.empty() )
+        return false;
 
     if( _items.size() > 1 ) {
         const auto same_host =
             std::ranges::all_of(_items, [&](const auto &i) { return i.Host() == _items.front().Host(); });
-        if( same_host ) {
-            std::vector<std::string> items;
-            items.reserve(_items.size());
-            for( auto &i : _items )
-                items.emplace_back(i.Path());
-            _file_opener.Open(items, _items.front().Host(), _target);
-        }
+        if( !same_host )
+            return false;
+
+        std::vector<std::string> items;
+        items.reserve(_items.size());
+        for( const auto &i : _items )
+            items.emplace_back(i.Path());
+        _file_opener.Open(items, _items.front().Host(), _target);
     }
     else /* if( _items.size() == 1 ) */ {
-        auto &item = _items.front();
+        const auto &item = _items.front();
         const std::string path = item.IsDotDot() ? item.Directory() : item.Path();
         _file_opener.Open(path, item.Host(), _target);
     }
-}
-
-context::OpenFileWithDefaultHandler::OpenFileWithDefaultHandler(const std::vector<VFSListingItem> &_items,
-                                                                FileOpener &_file_opener)
-    : m_Items(_items), m_FileOpener(_file_opener)
-{
-}
-
-bool context::OpenFileWithDefaultHandler::Predicate([[maybe_unused]] PanelController *_target) const
-{
-    const auto has_reg_files = std::ranges::any_of(m_Items, [](auto &_i) { return _i.IsReg(); });
-    if( has_reg_files )
-        return true;
-
-    const auto all_are_native = std::ranges::all_of(m_Items, [](auto &_i) { return _i.Host()->IsNativeFS(); });
-    return all_are_native;
-}
-
-void context::OpenFileWithDefaultHandler::Perform(PanelController *_target, id /*_sender*/) const
-{
-    PerformOpeningFilesWithDefaultHandler(m_Items, _target, m_FileOpener);
+    return true;
 }
 
 } // namespace nc::panel::actions

@@ -7,34 +7,13 @@
 
 namespace nc::panel::actions {
 
-struct CopyToPasteboard : PanelAction {
-    [[nodiscard]] bool Predicate(PanelController *_target) const override;
-    [[nodiscard]] bool ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const override;
-    void Perform(PanelController *_target, id _sender) const override;
-
-protected:
-    static void PerformWithItems(const std::vector<VFSListingItem> &_items,
-                                 PasteboardFileOperation _operation = PasteboardFileOperation::Copy);
-};
-
-struct CutToPasteboard final : CopyToPasteboard {
-    [[nodiscard]] bool Predicate(PanelController *_target) const override;
-    [[nodiscard]] bool ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const override;
-    void Perform(PanelController *_target, id _sender) const override;
-};
-
-namespace context {
-
-struct CopyToPasteboard final : panel::actions::CopyToPasteboard {
-    CopyToPasteboard(const std::vector<VFSListingItem> &_items);
-    [[nodiscard]] bool Predicate(PanelController *_target) const override;
-    [[nodiscard]] bool ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const override;
-    void Perform(PanelController *_target, id _sender) const override;
-
-private:
-    const std::vector<VFSListingItem> &m_Items;
-};
-
-} // namespace context
+void UpdateCopyToPasteboardMenuItemTitle(PanelController *_target, NSMenuItem *_item, NSBundle *_bundle = nil);
+void UpdateCopyToPasteboardMenuItemTitle(std::span<const VFSListingItem> _items,
+                                         NSMenuItem *_item,
+                                         NSBundle *_bundle = nil);
+void UpdateCutToPasteboardMenuItemTitle(PanelController *_target, NSMenuItem *_item, NSBundle *_bundle = nil);
+void UpdateCutToPasteboardMenuItemTitle(std::span<const VFSListingItem> _items,
+                                        NSMenuItem *_item,
+                                        NSBundle *_bundle = nil);
 
 } // namespace nc::panel::actions

@@ -26,7 +26,10 @@ Linkage::Linkage(const std::string &_link_path,
     SetTitle(Caption(_type).UTF8String);
 }
 
-Linkage::~Linkage() = default;
+Linkage::~Linkage()
+{
+    Wait();
+}
 
 Job *Linkage::GetJob() noexcept
 {

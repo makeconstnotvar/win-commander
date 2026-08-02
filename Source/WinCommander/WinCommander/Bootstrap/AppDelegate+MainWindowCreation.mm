@@ -41,6 +41,7 @@
 #include <Base/debug.h>
 #include <WinCommander/Core/SandboxManager.h>
 #include "AppDelegate+ViewerCreation.h"
+#include <atomic>
 #include <ranges>
 
 static const auto g_ConfigRestoreLastWindowState = "filePanel.general.restoreLastWindowState";
@@ -52,6 +53,12 @@ enum class CreationContext : uint8_t {
     ManualRestoration,
     SystemRestoration
 };
+
+nc::core::PaneId NextPaneId() noexcept
+{
+    static std::atomic_uint64_t next_value{1};
+    return nc::core::PaneId{next_value.fetch_add(1, std::memory_order_relaxed)};
+}
 
 class DirectoryAccessProviderImpl : public nc::panel::DirectoryAccessProvider
 {
@@ -192,7 +199,9 @@ static std::vector<std::string> CommaSeparatedStrings(const nc::config::Config &
                                     explorerPresentation:(bool)_explorer
 {
     auto panel = [[PanelController alloc] initWithView:[self allocatePanelViewWithExplorerPresentation:_explorer]
+                                                paneId:NextPaneId()
                                                layouts:std::move(_layouts)
+                                                config:GlobalConfig()
                                     vfsInstanceManager:self.vfsInstanceManager
                                directoryAccessProvider:self.directoryAccessProvider
                                    contextMenuProvider:[self makePanelContextMenuProvider]
@@ -201,7 +210,8 @@ static std::vector<std::string> CommaSeparatedStrings(const nc::config::Config &
     auto actions_dispatcher =
         [[NCPanelControllerActionsDispatcher alloc] initWithController:panel
                                                             actionsMap:self.panelActionsMap
-                                               actionsShortcutsManager:self.actionsShortcutsManager];
+                                               actionsShortcutsManager:self.actionsShortcutsManager
+                                                       commandRegistry:self.commandRegistry];
     [panel setNextAttachedResponder:actions_dispatcher];
     [panel.view addKeystrokeSink:actions_dispatcher];
     panel.view.actionsDispatcher = actions_dispatcher;

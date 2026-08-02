@@ -42,6 +42,13 @@
 #include <RoutedIO/Log.h>
 
 #include <WinCommander/Core/ActionsShortcutsManager.h>
+#include <WinCommander/Core/Commands/FileCopyCommand.h>
+#include <WinCommander/Core/Commands/FileCutCommand.h>
+#include <WinCommander/Core/Commands/FileOpenCommand.h>
+#include <WinCommander/Core/Commands/FileRenameCommand.h>
+#include <WinCommander/Core/Commands/NavigationHistoryCommand.h>
+#include <WinCommander/Core/Commands/PaneNavigationCommand.h>
+#include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
 #include <WinCommander/Core/SandboxManager.h>
 #include <WinCommander/Core/Dock.h>
 #include <WinCommander/Core/ServicesHandler.h>
@@ -51,12 +58,19 @@
 #include <WinCommander/Core/Theming/ThemesManager.h>
 #include <WinCommander/Core/Theming/Theme.h>
 #include <WinCommander/Core/VFSInstanceManagerImpl.h>
+#include <WinCommander/Bootstrap/NCEditMenuPresentationDelegate.h>
 #include <WinCommander/States/Terminal/ShellState.h>
 #include <WinCommander/States/MainWindow.h>
 #include <WinCommander/States/MainWindowController.h>
 #include <WinCommander/States/FilePanels/MainWindowFilePanelState.h>
 #include <WinCommander/States/FilePanels/ExternalEditorInfo.h>
+#include <WinCommander/States/FilePanels/PanelController.h>
+#include <WinCommander/States/FilePanels/PanelView.h>
 #include <WinCommander/States/FilePanels/PanelViewLayoutSupport.h>
+#include <WinCommander/States/FilePanels/Actions/NavigateHistory.h>
+#include <WinCommander/States/FilePanels/Actions/GoToFolder.h>
+#include <WinCommander/States/FilePanels/Actions/OpenFile.h>
+#include <WinCommander/States/FilePanels/Helpers/Pasteboard.h>
 #include <WinCommander/States/FilePanels/FavoritesImpl.h>
 #include <WinCommander/States/FilePanels/FavoritesWindowController.h>
 #include <WinCommander/States/FilePanels/FavoritesMenuDelegate.h>
@@ -225,6 +239,7 @@ static NCAppDelegate *g_Me = nil;
     std::unique_ptr<ConfigWiring> m_ConfigWiring;
     std::unique_ptr<nc::SystemThemeDetector> m_SystemThemeDetector;
     std::unique_ptr<nc::ThemesManager> m_ThemesManager;
+    std::unique_ptr<nc::core::CommandRegistry> m_CommandRegistry;
     NCSpdLogWindowController *m_LogWindowController;
 }
 
@@ -249,6 +264,125 @@ static NCAppDelegate *g_Me = nil;
         m_SupportDirectory = nc::AppDelegate::SupportDirectory();
         [self setupConfigs];
         m_SystemThemeDetector = std::make_unique<nc::SystemThemeDetector>();
+        m_CommandRegistry = std::make_unique<nc::core::CommandRegistry>();
+        auto *const file_opener = &self.fileOpener;
+        const auto file_open_registration = nc::core::MakeFileOpenCommand(
+            [file_opener](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                if( _native_target == nullptr )
+                    return false;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return nc::panel::actions::SubmitOpenItemsWithDefaultHandler(_items, panel, *file_opener);
+            });
+        [[maybe_unused]] const auto file_open_result = m_CommandRegistry->Register(file_open_registration);
+        assert(file_open_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_copy_registration =
+            nc::core::MakeFileCopyCommand([](const std::span<const nc::vfs::ListingItem> _items) {
+                const std::vector<VFSListingItem> items{_items.begin(), _items.end()};
+                if( !nc::panel::PasteboardSupport::WriteFilesnamesPBoard(items, NSPasteboard.generalPasteboard) )
+                    NSBeep();
+            });
+        [[maybe_unused]] const auto file_copy_result = m_CommandRegistry->Register(file_copy_registration);
+        assert(file_copy_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_cut_registration = nc::core::MakeFileCutCommand(
+            [](const std::span<const nc::vfs::ListingItem> _items, const nc::core::FileCutIntent _intent) {
+                if( _intent != nc::core::FileCutIntent::Move )
+                    return false;
+                const std::vector<VFSListingItem> items{_items.begin(), _items.end()};
+                return nc::panel::PasteboardSupport::WriteFilesnamesPBoard(
+                    items, NSPasteboard.generalPasteboard, nc::panel::PasteboardFileOperation::Move);
+            });
+        [[maybe_unused]] const auto file_cut_result = m_CommandRegistry->Register(file_cut_registration);
+        assert(file_cut_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_rename_registration = nc::core::MakeFileRenameCommand(
+            [](void *_native_target, const nc::vfs::ListingItem &_item) {
+                if( _native_target == nullptr )
+                    return false;
+
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                PanelView *const view = panel.view;
+                if( view == nil )
+                    return false;
+
+                const int sort_position = panel.data.SortPositionOfEntry(_item);
+                if( sort_position < 0 || !panel.data.IsValidSortPosition(sort_position) )
+                    return false;
+
+                view.curpos = sort_position;
+                const VFSListingItem focused_item = view.item;
+                if( !focused_item || focused_item.Listing() != _item.Listing() || focused_item.Index() != _item.Index() )
+                    return false;
+
+                return [view startFieldEditorRenaming];
+            });
+        [[maybe_unused]] const auto file_rename_result = m_CommandRegistry->Register(file_rename_registration);
+        assert(file_rename_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto view_toggle_hidden_files_registration = nc::core::MakeViewToggleHiddenFilesCommand(
+            [](void *_native_target, const bool _shows_hidden_files) {
+                if( _native_target == nullptr )
+                    return false;
+
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                auto filtering = panel.data.HardFiltering();
+                filtering.show_hidden = _shows_hidden_files;
+                [panel changeHardFilteringTo:filtering];
+                return panel.data.HardFiltering().show_hidden == _shows_hidden_files;
+            });
+        [[maybe_unused]] const auto view_toggle_hidden_files_result =
+            m_CommandRegistry->Register(view_toggle_hidden_files_registration);
+        assert(view_toggle_hidden_files_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const nc::core::NavigationHistoryExecutor navigation_history_executor =
+            [](void *_native_target, const nc::core::NavigationHistoryDirection _direction) {
+                if( _native_target == nullptr )
+                    return false;
+
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                switch( _direction ) {
+                    case nc::core::NavigationHistoryDirection::Back: {
+                        const nc::panel::actions::GoBack action;
+                        if( !action.Predicate(panel) )
+                            return false;
+                        action.Perform(panel, nil);
+                        return true;
+                    }
+                    case nc::core::NavigationHistoryDirection::Forward: {
+                        const nc::panel::actions::GoForward action;
+                        if( !action.Predicate(panel) )
+                            return false;
+                        action.Perform(panel, nil);
+                        return true;
+                    }
+                }
+                return false;
+            };
+        const auto navigation_back_registration =
+            nc::core::MakeNavigationBackCommand(navigation_history_executor);
+        [[maybe_unused]] const auto navigation_back_result =
+            m_CommandRegistry->Register(navigation_back_registration);
+        assert(navigation_back_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto navigation_forward_registration =
+            nc::core::MakeNavigationForwardCommand(navigation_history_executor);
+        [[maybe_unused]] const auto navigation_forward_result =
+            m_CommandRegistry->Register(navigation_forward_registration);
+        assert(navigation_forward_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto navigation_up_registration = nc::core::MakeNavigationUpCommand([](void *_native_target) {
+            if( _native_target == nullptr )
+                return false;
+            PanelController *const panel = (__bridge PanelController *)_native_target;
+            return nc::panel::actions::SubmitExplicitGoToEnclosingFolder(panel);
+        });
+        [[maybe_unused]] const auto navigation_up_result =
+            m_CommandRegistry->Register(navigation_up_registration);
+        assert(navigation_up_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto navigation_refresh_registration =
+            nc::core::MakeNavigationRefreshCommand([](void *_native_target) {
+                if( _native_target == nullptr )
+                    return false;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return [panel submitUserRefresh];
+            });
+        [[maybe_unused]] const auto navigation_refresh_result =
+            m_CommandRegistry->Register(navigation_refresh_registration);
+        assert(navigation_refresh_result == nc::core::CommandRegistry::RegisterResult::Registered);
     }
     return self;
 }
@@ -310,6 +444,19 @@ static NCAppDelegate *g_Me = nil;
 
     // Layout titles are resolved by ToggleLayout validation against the active panel's storage.
     // Commander and Explorer intentionally use separate layout sets.
+
+    NSMenuItem *const copy_item = item_for_action("menu.edit.copy");
+    NSMenuItem *cut_item = nil;
+    for( NSMenuItem *const item in copy_item.menu.itemArray ) {
+        if( item.action == @selector(cut:) ) {
+            cut_item = item;
+            break;
+        }
+    }
+    static const auto edit_menu_presentation_delegate =
+        [[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item copyMenuItem:copy_item];
+    if( edit_menu_presentation_delegate != nil )
+        copy_item.menu.delegate = edit_menu_presentation_delegate;
 
     auto manage_fav_item = item_for_action("menu.go.favorites.manage");
     static auto favorites_delegate =
@@ -963,6 +1110,12 @@ static void DoTemporaryFileStoragePurge()
     [[clang::no_destroy]] static nc::core::ActionsShortcutsManager manager(
         g_ActionsTags, g_DefaultActionShortcuts, GlobalConfig());
     return manager;
+}
+
+- (nc::core::CommandRegistry &)commandRegistry
+{
+    assert(m_CommandRegistry);
+    return *m_CommandRegistry;
 }
 
 @end

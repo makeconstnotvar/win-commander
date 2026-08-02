@@ -9,6 +9,8 @@ void AsyncDialogResponse::Abort() noexcept
 {
     {
         const auto guard = std::lock_guard{lock};
+        if( response )
+            return;
         response = NSModalResponseAbort;
     }
     blocker.notify_all();
@@ -18,6 +20,8 @@ void AsyncDialogResponse::Commit(long _response) noexcept
 {
     {
         const auto guard = std::lock_guard{lock};
+        if( response )
+            return;
         response = _response;
     }
     blocker.notify_all();
@@ -25,11 +29,14 @@ void AsyncDialogResponse::Commit(long _response) noexcept
 
 void AsyncDialogResponse::Wait() noexcept
 {
-    const auto pred = [this] { return static_cast<bool>(response); };
-    if( pred() )
-        return;
     std::unique_lock<std::mutex> lck{lock};
-    blocker.wait(lck, pred);
+    blocker.wait(lck, [this] { return static_cast<bool>(response); });
+}
+
+bool AsyncDialogResponse::IsResolved() const noexcept
+{
+    const auto guard = std::lock_guard{lock};
+    return response.has_value();
 }
 
 void AsyncDialogResponse::SetApplyToAll(bool _v)

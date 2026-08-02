@@ -130,6 +130,7 @@ XAttrHost::XAttrHost(const VFSHostPtr &_parent, const VFSConfiguration &_config)
     }
 
     m_FD = fd;
+    AddFeatures(DeclaredFeatures);
 }
 
 XAttrHost::~XAttrHost()

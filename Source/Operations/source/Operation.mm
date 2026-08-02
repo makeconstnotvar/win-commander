@@ -9,6 +9,7 @@
 #include "GenericErrorDialog.h"
 #include "Statistics.h"
 #include "Internal.h"
+#include <exception>
 #include <iostream>
 #include <Base/dispatch_cpp.h>
 
@@ -66,9 +67,9 @@ void Operation::Start()
 
         j->SetFinishCallback([this] { JobFinished(); });
         j->SetPauseCallback([this] { JobPaused(); });
-        j->SetResumeCallback([this] { JobPaused(); });
+        j->SetResumeCallback([this] { JobResumed(); });
 
-        j->Run();
+        j->Run(weak_from_this().lock());
 
         FireObservers(NotifyAboutStart);
     }
@@ -90,9 +91,20 @@ void Operation::Stop()
 {
     if( auto j = GetJob() ) {
         const auto is_running = j->IsRunning();
-        j->Stop();
-        if( !is_running )
-            JobFinished();
+        const auto stopped = j->Stop();
+        if( stopped )
+            AbortUIWaiting();
+        if( stopped && !is_running ) {
+            try {
+                JobFinished();
+            }
+            catch( const std::exception &e ) {
+                std::cerr << "Error: cold operation finish callback has thrown an exception: " << e.what() << ".\n";
+            }
+            catch( ... ) {
+                std::cerr << "Error: cold operation finish callback has thrown an unknown exception.\n";
+            }
+        }
     }
 }
 
@@ -103,35 +115,35 @@ void Operation::Wait() const
 
 bool Operation::Wait(std::chrono::nanoseconds _wait_for_time) const
 {
-    const auto pred = [this] {
-        const auto s = State();
-        return s != OperationState::Running && s != OperationState::Paused;
-    };
-    if( pred() )
-        return true;
-
-    [[clang::no_destroy]] static std::mutex m; // wtf is this???
-    std::unique_lock<std::mutex> lock{m};
-    if( _wait_for_time == std::chrono::nanoseconds::max() ) {
-        m_FinishCV.wait(lock, pred);
-        return true;
-    }
-    else {
-        return m_FinishCV.wait_for(lock, _wait_for_time, pred);
-    }
+    if( const auto job = GetJob() )
+        return job->Wait(_wait_for_time);
+    return true;
 }
 
 void Operation::JobFinished()
 {
-    OnJobFinished();
+    std::exception_ptr first_error;
+    try {
+        OnJobFinished();
+    }
+    catch( ... ) {
+        first_error = std::current_exception();
+    }
 
-    const auto state = State();
-    if( state == OperationState::Completed )
-        FireObservers(NotifyAboutCompletion);
-    if( state == OperationState::Stopped )
-        FireObservers(NotifyAboutStop);
+    try {
+        const auto state = State();
+        if( state == OperationState::Completed )
+            FireObservers(NotifyAboutCompletion);
+        if( state == OperationState::Stopped )
+            FireObservers(NotifyAboutStop);
+    }
+    catch( ... ) {
+        if( !first_error )
+            first_error = std::current_exception();
+    }
 
-    m_FinishCV.notify_all();
+    if( first_error )
+        std::rethrow_exception(first_error);
 }
 
 void Operation::JobPaused()
@@ -180,10 +192,35 @@ bool Operation::IsInteractive() const noexcept
     return m_DialogCallback != nullptr;
 }
 
+void Operation::DispatchDialog(std::shared_ptr<AsyncDialogResponse> _response,
+                               std::function<void()> _show_dialog)
+{
+    if( !_response || !_show_dialog )
+        return;
+
+    auto operation = weak_from_this().lock();
+    if( !operation ) {
+        _response->Abort();
+        return;
+    }
+
+    auto dispatch = [operation = std::move(operation),
+                     response = std::move(_response),
+                     show_dialog = std::move(_show_dialog)] {
+        (void)operation;
+        if( !response->IsResolved() )
+            show_dialog();
+    };
+    if( dispatch_is_main_queue() )
+        dispatch();
+    else
+        dispatch_to_main_queue(std::move(dispatch));
+}
+
 void Operation::Show(NSWindow *_dialog, std::shared_ptr<AsyncDialogResponse> _response)
 {
     dispatch_assert_main_queue();
-    if( !_dialog || !_response )
+    if( !_dialog || !_response || _response->IsResolved() )
         return;
 
     {
@@ -241,7 +278,7 @@ void Operation::ShowGenericDialog(GenericDialog _dialog_type,
                                   std::shared_ptr<AsyncDialogResponse> _ctx)
 {
     if( !dispatch_is_main_queue() ) {
-        dispatch_to_main_queue([=, this] { ShowGenericDialog(_dialog_type, _message, _err, _path, _ctx); });
+        DispatchDialog(_ctx, [=, this] { ShowGenericDialog(_dialog_type, _message, _err, _path, _ctx); });
         return;
     }
 
@@ -266,6 +303,9 @@ void Operation::WaitForDialogResponse(std::shared_ptr<AsyncDialogResponse> _resp
         const auto guard = std::lock_guard{m_PendingResponseLock};
         m_PendingResponse = _response;
     }
+
+    if( const auto job = GetJob(); job && job->IsStopped() )
+        _response->Abort();
 
     _response->Wait();
     assert(_response->response);
@@ -298,7 +338,7 @@ void Operation::ReportHaltReason(NSString *_message,
     if( !IsInteractive() )
         return;
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this] {
+    DispatchDialog(ctx, [=, this] {
         const auto sheet = [[NCOpsHaltReasonDialog alloc] init];
         sheet.message = _message;
         sheet.path = [NSString stringWithUTF8String:_path.c_str()];

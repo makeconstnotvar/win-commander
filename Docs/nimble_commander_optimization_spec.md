@@ -1,9 +1,9 @@
 # ТЗ: точечная оптимизация Nimble Commander
 
-Статус: готово к исполнению.
+Статус: отдельный технический backlog. Очередность и включение задач в работу определяет [Development Plan](Development-Plan.md).
 Формат: документ предназначен для исполнения ИИ-агентом, а не для чтения человеком — каждая задача самодостаточна, содержит точную локацию в коде, требуемое изменение и критерии приёмки. Комментариев "для контекста" в прозе намеренно минимум.
 Источник: технический аудит кодовой базы от 2026-07-06 (10 модулей, 26 сторонних библиотек, независимая перепроверка каждой находки вторым агентом по исходникам).
-Корень репозитория: `/Users/a.kotlyachkov/Documents/GitHub/nimble-commander`.
+Корень репозитория: `/Users/alexkot/Documents/GitHub/win-commander`.
 
 ## 0. Правила выполнения
 
@@ -43,7 +43,7 @@
 ### 1.3 Гипотезы, проверенные и отклонённые (не открывать заново)
 
 - `Source/Utility/source/CharInfo.cpp:38` (`BuildPossibleCompositionEvidenceTable`) — выглядит как O(65536²)-цикл по CoreFoundation, но это оффлайн-генератор статической таблицы, не вызывается в рантайме. Не трогать как проблему производительности; допустима только пометка/перенос в `tools/`, если это будет отдельно запрошено.
-- `Source/NimbleCommander/NimbleCommander/Core/SandboxManager.mm` (`HasAccessToFolder_Unlocked`) и `Source/NimbleCommander/NimbleCommander/Core/VFSInstanceManagerImpl.cpp` (`InfoFromVFSPtr_Unlocked` и аналоги) — O(n)-сканы, но по коллекциям в единицы-десятки элементов (закладки песочницы, смонтированные VFS-инстансы), никогда не по количеству файлов. Не являются проблемой производительности.
+- `Source/WinCommander/WinCommander/Core/SandboxManager.mm` (`HasAccessToFolder_Unlocked`) и `Source/WinCommander/WinCommander/Core/VFSInstanceManagerImpl.cpp` (`InfoFromVFSPtr_Unlocked` и аналоги) — O(n)-сканы, но по коллекциям в единицы-десятки элементов (закладки песочницы, смонтированные VFS-инстансы), никогда не по количеству файлов. Не являются проблемой производительности.
 - Гипотеза об O(n²) в `Source/Viewer/source/HexModeProcessing.cpp` (`HexModeSplitter::Split`) — отдельно проверена и отклонена: внешний цикл двигается по строкам (константный шаг), внутренний ограничен количеством байт на строку; суммарная работа линейна от размера окна. Не является проблемой.
 
 ## 2. P0 — потенциальные баги (обязательно первыми)
@@ -158,10 +158,10 @@
 
 ### OPT-011: блокировка главного потока до 10 секунд при запуске внешнего инструмента
 
-- **Файлы:** `Source/Panel/source/ExternalTools.mm` (`StartDetachedUI()`, ~строки 856–877: `ctx->cv.wait_for(lk, std::chrono::seconds{10}, ...)` после асинхронного вызова `NSWorkspace openApplicationAtURL/openURLs`); вызывающий код — `Source/NimbleCommander/NimbleCommander/States/FilePanels/Actions/ExecuteExternalTool.mm:89` (`dispatch_assert_main_queue()`) → `:102` (`StartDetached()`).
+- **Файлы:** `Source/Panel/source/ExternalTools.mm` (`StartDetachedUI()`, ~строки 856–877: `ctx->cv.wait_for(lk, std::chrono::seconds{10}, ...)` после асинхронного вызова `NSWorkspace openApplicationAtURL/openURLs`); вызывающий код — `Source/WinCommander/WinCommander/States/FilePanels/Actions/ExecuteExternalTool.mm:89` (`dispatch_assert_main_queue()`) → `:102` (`StartDetached()`).
 - **Требуемое изменение:** доставлять результат запуска (pid/ошибка) асинхронным коллбэком в главную очередь вместо блокирующего ожидания на condition variable внутри функции, вызываемой напрямую из главного потока.
 - **Ограничения:** сохранить текущий контракт возврата ошибки/pid для существующих вызывающих; если какой-то вызывающий код требует синхронного результата — обновить именно его на приём асинхронного колбэка, а не оставлять блокировку внутри `StartDetachedUI`.
-- **Verification:** `xcodebuild -project Source/Panel/Panel.xcodeproj -scheme PanelUT -configuration Debug test` и `-project Source/NimbleCommander/NimbleCommander.xcodeproj -scheme NimbleCommanderUT -configuration Debug test`; ручная проверка через `Scripts/build_unsigned_and_run.sh` — запуск на заведомо медленный/несуществующий бандл не блокирует приложение.
+- **Verification:** `xcodebuild -project Source/Panel/Panel.xcodeproj -scheme PanelUT -configuration Debug test` и `-project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test`; ручная проверка через `Scripts/build_unsigned_and_run.sh` — запуск на заведомо медленный/несуществующий бандл не блокирует приложение.
 
 ### OPT-012: медленная конвертация UTF-8→UTF-16 в терминале
 
@@ -179,10 +179,10 @@
 
 ### OPT-014: последовательный листинг перетаскиваемых файлов в главном потоке (drag-and-drop из Finder)
 
-- **Файл:** `Source/NimbleCommander/NimbleCommander/States/FilePanels/DragReceiver.mm`, `FetchListingItems()` (~строка 488), вызывается из `PerformWithURLsSource` (~строки 330–331). Авторские комментарии в этом же файле: "rather moronic approach of fetching multiple single-item listings" и "currently fetching listings synchronously in main thread, which is BAAAD".
+- **Файл:** `Source/WinCommander/WinCommander/States/FilePanels/DragReceiver.mm`, `FetchListingItems()` (~строка 488), вызывается из `PerformWithURLsSource` (~строки 330–331). Авторские комментарии в этом же файле: "rather moronic approach of fetching multiple single-item listings" и "currently fetching listings synchronously in main thread, which is BAAAD".
 - **Требуемое изменение:** сгруппировать входящие `NSURL` по родительской директории, выполнить один bulk-листинг (`FetchDirectoryListing`/`FetchFlexibleListingItems`, см. также OPT-007) на директорию вместо листинга каждого файла по отдельности; перенести выполнение на фоновую очередь с асинхронным коллбэком по готовности — по аналогии с уже существующим асинхронным паттерном для операций Copying/Linkage в этом же файле.
 - **Ограничения:** итоговый список перетащенных элементов для данного выбора должен остаться идентичным текущему поведению.
-- **Verification:** `xcodebuild -project Source/NimbleCommander/NimbleCommander.xcodeproj -scheme NimbleCommanderUT -configuration Debug test` и `-scheme IntegrationTests`; ручная проверка через `Scripts/build_unsigned_and_run.sh` — перетаскивание 50+ файлов из Finder не вызывает видимого подвисания UI.
+- **Verification:** `xcodebuild -project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test` и `-scheme IntegrationTests`; ручная проверка через `Scripts/build_unsigned_and_run.sh` — перетаскивание 50+ файлов из Finder не вызывает видимого подвисания UI.
 
 ## 5. P3 — низкий приоритет (выполнять по возможности, можно пропускать по одной с указанием причины в итоговом отчёте)
 
@@ -200,16 +200,16 @@
 - **OPT-024** — `Source/Utility/source/NativeFSManagerImpl.mm:52`: конструктор синхронно обходит все смонтированные тома (несколько блокирующих syscalls на том), вызывается из главного потока при старте приложения (`-[NCAppDelegate init]`). Вынести построение в фон, публиковать результат асинхронно — по аналогии с уже существующим асинхронным паттерном `OnDidMount` в этом же классе.
 - **OPT-025** — `Source/RoutedIO/source/RoutedIOInterfaces.cpp:196`: создание файла с "починкой владельца" — до 3 последовательных IPC round-trip'ов (`stat` → `open` → `chown`) вместо одного. Хелпер должен сообщать о факте создания нового инода прямо в ответе на `open`, и выполнять `chown` атомарно на своей стороне при создании.
 - **OPT-026** — `Source/Config/include/Config/ConfigImpl.h:100`: один спинлок (`m_DocumentLock`) охраняет весь JSON-документ конфигурации для всех операций `Get`/`Set`/`Has`. На момент аудита не является горячим путём — действие не обязательно, но при появлении contention — шардировать блокировку по секциям или заменить на `std::shared_mutex` (все пути `Get*` — только на чтение).
-- **OPT-027** — `Source/NimbleCommander/NimbleCommander/Core/Theming/ThemesManager.mm:282`: `SetThemeValue`/`DiscardThemeChanges`/`ImportThemeData`/`AddTheme` синхронно сериализуют всю тему в JSON (авторский TODO "move to background thread"). Не критично (модальное UI-действие), но при выполнении — перенести запись на фоновую очередь.
-- **OPT-028** — `Source/NimbleCommander/NimbleCommander/States/FilePanels/ContextMenu.mm:236`: построение подменю тегов — O(N·M) (теги × выбранные файлы), авторский TODO "that's O(N*M) complexity". Один проход по выбранным элементам строит map тег→счётчик, затем построение пунктов меню за O(N).
-- **OPT-029 (баг корректности, не производительности — не понижать приоритет молча):** `Source/NimbleCommander/NimbleCommander/States/FilePanels/FindFilesSheetController.mm:502`: ошибка `stat()` при поиске файлов молча проглатывается через `.value_or(VFSStat{})` (авторский TODO "why is the status ignored?"), в результате элемент с ошибкой stat отображается как валидный нулевого размера с датой эпохи. Пробросить ошибку и визуально пометить/пропустить такой элемент вместо подстановки нулевого `VFSStat`.
+- **OPT-027** — `Source/WinCommander/WinCommander/Core/Theming/ThemesManager.mm:282`: `SetThemeValue`/`DiscardThemeChanges`/`ImportThemeData`/`AddTheme` синхронно сериализуют всю тему в JSON (авторский TODO "move to background thread"). Не критично (модальное UI-действие), но при выполнении — перенести запись на фоновую очередь.
+- **OPT-028** — `Source/WinCommander/WinCommander/States/FilePanels/ContextMenu.mm:236`: построение подменю тегов — O(N·M) (теги × выбранные файлы), авторский TODO "that's O(N*M) complexity". Один проход по выбранным элементам строит map тег→счётчик, затем построение пунктов меню за O(N).
+- **OPT-029 (баг корректности, не производительности — не понижать приоритет молча):** `Source/WinCommander/WinCommander/States/FilePanels/FindFilesSheetController.mm:502`: ошибка `stat()` при поиске файлов молча проглатывается через `.value_or(VFSStat{})` (авторский TODO "why is the status ignored?"), в результате элемент с ошибкой stat отображается как валидный нулевого размера с датой эпохи. Пробросить ошибку и визуально пометить/пропустить такой элемент вместо подстановки нулевого `VFSStat`.
 - **OPT-030** — `Source/Viewer/source/DataBackend.cpp:9` и `Source/Viewer/source/TextModeView.mm:934–943` (`BuildWorkingSetForBackendState`): при каждом сдвиге окна файла заново выделяются и копируются буферы декодирования вместо переиспользования существующих. Переиспользовать/изменять размер существующих буферов вместо пересоздания `DataBackend`/`TextModeWorkingSet` с нуля на каждый сдвиг окна.
 
 ## 6. Задачи по библиотекам
 
 ### LIB-001: заменить `abseil` на собственный small-vector
 
-- **Использование:** ровно 2 файла — `Source/Utility/include/Utility/ActionsShortcutsManager.h`, `Source/NimbleCommander/NimbleCommander/Core/ActionsShortcutsManager.h` — оба используют только `absl::InlinedVector<T, 4>`.
+- **Использование:** ровно 2 файла — `Source/Utility/include/Utility/ActionsShortcutsManager.h`, `Source/WinCommander/WinCommander/Core/ActionsShortcutsManager.h` — оба используют только `absl::InlinedVector<T, 4>`.
 - **Требуемое изменение:** реализовать собственный header-only `small_vector<T, N>` (инлайн-ёмкость N, переход на кучу при превышении) с семантикой, покрывающей текущее использование (конструирование, copy/move, итерация, `push_back`, размер). Заменить оба использования `absl::InlinedVector<T,4>` на новый тип. Убрать зависимость `3rd_Party/abseil` из bootstrap/линковки, если после замены в кодовой базе не осталось других использований (`grep -rn "absl::" Source/` должен вернуть пусто).
 - **Verification:**
   - [ ] Unit-тест на новый `small_vector`: переход инлайн→куча, копирование, перемещение, инвалидация итераторов при `erase`/`resize` (задокументировать поведение явно, тестами).
@@ -227,7 +227,7 @@
 
 ### LIB-003: переписать `LetsMove` (перенос .app в /Applications) нативно
 
-- **Использование:** 1 точка вызова — `Source/NimbleCommander/NimbleCommander/Bootstrap/PFMoveToApplicationsShim.mm` (или аналогичный файл-шим), вызывающая `::PFMoveToApplicationsFolderIfNecessary()` под флагом `__NC_VERSION_NONMAS__` (не для App Store сборки).
+- **Использование:** 1 точка вызова — `Source/WinCommander/WinCommander/Bootstrap/PFMoveToApplicationsShim.mm` (или аналогичный файл-шим), вызывающая `::PFMoveToApplicationsFolderIfNecessary()` под флагом `__NC_VERSION_NONMAS__` (не для App Store сборки).
 - **Требуемое изменение:** реализовать эквивалентное поведение самостоятельно, без стороннего `3rd_Party/LetsMove`: определить, находится ли бандл приложения уже в `/Applications` (или в поддиректории пользовательских Applications), и если нет — предложить пользователю переместить его туда, обработать сценарии отсутствия прав (запрос авторизации), карантин Gatekeeper при перемещении, и перезапуск приложения из нового расположения. Сохранить текущее поведение шима: под `__NC_VERSION_NONMAS__` вызывается, для MAS-сборки — no-op.
 - **Ограничения:** учесть флаги/quarantine-атрибуты и повторный запуск приложения — это единственная часть задачи, требующая аккуратности, несмотря на маленький объём кода.
 - **Verification:**
@@ -236,11 +236,11 @@
 
 ### LIB-004: переписать `GTMHotKeyTextField` на современный AppKit
 
-- **Использование:** 1 файл — `Source/NimbleCommander/NimbleCommander/Preferences/PreferencesWindowHotkeysTab.mm` — использует `GTMHotKeyTextField`/`GTMHotKeyTextFieldCell` для поля захвата комбинации клавиш в настройках горячих клавиш.
+- **Использование:** 1 файл — `Source/WinCommander/WinCommander/Preferences/PreferencesWindowHotkeysTab.mm` — использует `GTMHotKeyTextField`/`GTMHotKeyTextFieldCell` для поля захвата комбинации клавиш в настройках горячих клавиш.
 - **Требуемое изменение:** реализовать собственный `NSTextField`/`NSTextFieldCell`-наследник (или `NSView`-виджет) с эквивалентным поведением: захват одной комбинации клавиши + модификаторов из `NSEvent`, отображение в формате, аналогичном системному редактору сочетаний клавиш macOS, чтение/запись объекта, эквивалентного `GTMHotKey` (комбинация клавиши + модификаторы). Заменить использование в `PreferencesWindowHotkeysTab.mm`. Убрать `3rd_Party/GTMHotKeyTextField` из проекта после замены.
 - **Verification:**
   - [ ] Unit-тест (если для UI-виджетов в проекте есть прецедент тестирования) или, при отсутствии — ручная проверка через `Scripts/build_unsigned_and_run.sh`: вкладка "Hotkeys" в настройках корректно захватывает и отображает комбинации клавиш, включая модификаторы (Cmd/Shift/Option/Control) и специальные клавиши.
-  - [ ] `xcodebuild -project Source/NimbleCommander/NimbleCommander.xcodeproj -scheme NimbleCommanderUT -configuration Debug test` — зелёный (регресс по остальным настройкам).
+  - [ ] `xcodebuild -project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test` — зелёный (регресс по остальным настройкам).
 
 ### LIB-005: закрепить версию `rapidjson` вместо плавающего `master`
 
@@ -253,10 +253,10 @@
 ### LIB-006: обновить устаревшую версию `frozen`
 
 - **Проблема:** `frozen` — версия 1.2.0 (2024-06), самая старая по дате среди всех зависимостей в `3rd_Party/` (более 2 лет относительно даты аудита).
-- **Требуемое изменение:** обновить `3rd_Party/frozen/bootstrap.sh` до актуального релиза библиотеки на момент выполнения задачи. Функциональность/API, используемые в коде (`frozen::map`, `frozen::unordered_map` — используются в `Source/VFS/source/NetFTP/Errors.cpp`, `NetSFTP/Errors.cpp`, `Source/RoutedIO/source/PrivilegedIOHelper.cpp`, `Source/Viewer/source/Highlighting/LexerSettings.cpp`, `Source/NimbleCommander/NimbleCommander/Core/Theming/ThemesManager.mm`, `Source/Utility/source/Tags.cpp`), не менять — только версия зависимости.
+- **Требуемое изменение:** обновить `3rd_Party/frozen/bootstrap.sh` до актуального релиза библиотеки на момент выполнения задачи. Функциональность/API, используемые в коде (`frozen::map`, `frozen::unordered_map` — используются в `Source/VFS/source/NetFTP/Errors.cpp`, `NetSFTP/Errors.cpp`, `Source/RoutedIO/source/PrivilegedIOHelper.cpp`, `Source/Viewer/source/Highlighting/LexerSettings.cpp`, `Source/WinCommander/WinCommander/Core/Theming/ThemesManager.mm`, `Source/Utility/source/Tags.cpp`), не менять — только версия зависимости.
 - **Verification:**
   - [ ] Полная сборка проходит без изменений в местах использования `frozen::map`/`frozen::unordered_map`.
-  - [ ] Соответствующие unit-тесты модулей VFS, RoutedIO, Viewer, NimbleCommander, Utility — зелёные (`VFSUT`, `UtilityUT`, `ViewerUT`, `NimbleCommanderUT`).
+  - [ ] Соответствующие unit-тесты модулей VFS, RoutedIO, Viewer, WinCommander, Utility — зелёные (`VFSUT`, `UtilityUT`, `ViewerUT`, `WinCommanderUT`).
 
 ## 7. Формат отчёта по завершении
 

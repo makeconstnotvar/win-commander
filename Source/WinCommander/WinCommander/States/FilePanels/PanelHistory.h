@@ -3,7 +3,10 @@
 
 #include <VFS/VFS_fwd.h>
 #include "ListingPromise.h"
+#include <cstdint>
 #include <deque>
+#include <functional>
+#include <optional>
 
 namespace nc::core {
 class VFSInstanceManager;
@@ -18,6 +21,21 @@ class History
 {
 public:
     using Path = ListingPromise;
+    using EntryId = uint64_t;
+
+    struct NavigationAvailability {
+        bool can_go_back = false;
+        bool can_go_forward = false;
+
+        constexpr bool operator==(const NavigationAvailability &) const noexcept = default;
+    };
+
+    struct NavigationState {
+        NavigationAvailability availability;
+        std::optional<EntryId> current_entry_id;
+
+        constexpr bool operator==(const NavigationState &) const noexcept = default;
+    };
 
     [[nodiscard]] bool IsRecording() const noexcept;
     [[nodiscard]] unsigned Length() const noexcept;
@@ -31,6 +49,12 @@ public:
     void MoveForth();
 
     [[nodiscard]] bool CanMoveBack() const noexcept;
+
+    [[nodiscard]] NavigationAvailability GetNavigationAvailability() const noexcept;
+    [[nodiscard]] NavigationState GetNavigationState() const noexcept;
+
+    /** Replaces the synchronous advisory callback without emitting an initial notification. */
+    void SetNavigationStateChangeCallback(std::function<void()> _callback);
 
     /**
      * Will throw if CanMoveBack() == false.
@@ -66,13 +90,23 @@ public:
     void SetVFSInstanceManager(core::VFSInstanceManager &_mgr);
 
 private:
-    std::deque<Path> m_History;
+    struct Entry {
+        EntryId id;
+        Path path;
+    };
+
+    [[nodiscard]] EntryId MintEntryId();
+    void NotifyNavigationStateChanged(const NavigationState &_before) noexcept;
+
+    std::deque<Entry> m_History;
     // lesser the index - farther the history entry
     // most recent entry is at .size()-1
     unsigned m_PlayingPosition = 0; // have meaningful value only when m_IsRecording==false
     bool m_IsRecording = true;
     std::string m_LastNativeDirectory;
     core::VFSInstanceManager *m_VFSMgr = nullptr;
+    std::function<void()> m_NavigationStateChangeCallback;
+    EntryId m_NextEntryId = 1;
     static constexpr size_t m_HistoryLength = 128;
 };
 

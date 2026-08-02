@@ -5,9 +5,10 @@
 #include "Actions/CopyToPasteboard.h"
 #include "Actions/Delete.h"
 #include "Actions/Duplicate.h"
-#include "Actions/OpenFile.h"
 #include "NCPanelOpenWithMenuDelegate.h"
 #include "PanelController.h"
+#include "PanelControllerActionsDispatcher.h"
+#include "PanelView.h"
 #include <Panel/TagsStorage.h>
 #include <Panel/UI/TagsPresentation.h>
 #include <Utility/ObjCpp.h>
@@ -22,6 +23,7 @@
 #include <WinCommander/Bootstrap/AppDelegate.h>
 
 #include <WinCommander/Core/AnyHolder.h>
+#include <WinCommander/States/CommandPresentationAdapter.h>
 
 using namespace nc::panel;
 
@@ -34,14 +36,12 @@ using namespace nc::panel;
     PanelController *m_Panel;
     NSMutableArray *m_ShareItemsURLs;
     NCPanelOpenWithMenuDelegate *m_OpenWithDelegate;
-    std::unique_ptr<actions::PanelAction> m_CopyAction;
     std::unique_ptr<actions::PanelAction> m_CopyPathnameAction;
     std::unique_ptr<actions::PanelAction> m_MoveToTrashAction;
     std::unique_ptr<actions::PanelAction> m_DeletePermanentlyAction;
     std::unique_ptr<actions::PanelAction> m_DuplicateAction;
     std::unique_ptr<actions::PanelAction> m_CompressHereAction;
     std::unique_ptr<actions::PanelAction> m_CompressToOppositeAction;
-    std::unique_ptr<actions::PanelAction> m_OpenFileAction;
 }
 
 - (instancetype)initWithItems:(std::vector<VFSListingItem>)_items
@@ -60,14 +60,12 @@ using namespace nc::panel;
         self.minimumWidth = 230; // hardcoding is bad!
         auto &global_config = NCAppDelegate.me.globalConfig;
 
-        m_CopyAction = std::make_unique<actions::context::CopyToPasteboard>(m_Items);
         m_CopyPathnameAction = std::make_unique<actions::context::CopyPathname>(m_Items);
         m_MoveToTrashAction = std::make_unique<actions::context::MoveToTrash>(m_Items);
         m_DeletePermanentlyAction = std::make_unique<actions::context::DeletePermanently>(m_Items);
         m_DuplicateAction = std::make_unique<actions::context::Duplicate>(global_config, m_Items);
         m_CompressHereAction = std::make_unique<actions::context::CompressHere>(global_config, m_Items);
         m_CompressToOppositeAction = std::make_unique<actions::context::CompressToOpposite>(global_config, m_Items);
-        m_OpenFileAction = std::make_unique<actions::context::OpenFileWithDefaultHandler>(m_Items, _file_opener);
         m_OpenWithDelegate = [[NCPanelOpenWithMenuDelegate alloc] initWithFileOpener:_file_opener utiDB:_uti_db];
         [m_OpenWithDelegate setContextSource:m_Items];
         m_OpenWithDelegate.target = m_Panel;
@@ -125,6 +123,15 @@ using namespace nc::panel;
         always_openwith.keyEquivalent = @"";
         always_openwith.keyEquivalentModifierMask = NSEventModifierFlagOption;
         [self addItem:always_openwith];
+
+        if( m_Items.size() == 1 ) {
+            NSMenuItem *const rename_item = [NSMenuItem new];
+            rename_item.title = NSLocalizedString(@"commands.file.rename.title", "Rename command title");
+            rename_item.target = self;
+            rename_item.action = @selector(OnRename:);
+            rename_item.keyEquivalent = @"";
+            [self addItem:rename_item];
+        }
 
         [self addItem:NSMenuItem.separatorItem];
     }
@@ -254,9 +261,14 @@ using namespace nc::panel;
     }
 
     //////////////////////////////////////////////////////////////////////
-    // Copy element for native FS. simply copies selected items' paths
+    // Cut and Copy elements for native FS.
     {
         NSMenuItem *item = [NSMenuItem new];
+        item.target = self;
+        item.action = @selector(OnCut:);
+        [self addItem:item];
+
+        item = [NSMenuItem new];
         item.target = self;
         item.action = @selector(OnCopyPaths:);
         [self addItem:item];
@@ -275,8 +287,26 @@ using namespace nc::panel;
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item
 {
-    if( item.action == @selector(OnCopyPaths:) )
-        return m_CopyAction->ValidateMenuItem(m_Panel, item);
+    if( item.action == @selector(OnCut:) ) {
+        actions::UpdateCutToPasteboardMenuItemTitle(m_Items, item);
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileCutCommandStateForItems:m_Items
+                                 source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnCopyPaths:) ) {
+        actions::UpdateCopyToPasteboardMenuItemTitle(m_Items, item);
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileCopyCommandStateForItems:m_Items
+                                  source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnRename:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileRenameCommandStateForItems:m_Items
+                                     source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
     if( item.action == @selector(OnCopyPathname:) )
         return m_CopyPathnameAction->ValidateMenuItem(m_Panel, item);
     if( item.action == @selector(OnMoveToTrash:) )
@@ -289,15 +319,21 @@ using namespace nc::panel;
         return m_CompressHereAction->ValidateMenuItem(m_Panel, item);
     if( item.action == @selector(OnCompressToOppositePanel:) )
         return m_CompressToOppositeAction->ValidateMenuItem(m_Panel, item);
-    if( item.action == @selector(OnRegularOpen:) )
-        return m_OpenFileAction->ValidateMenuItem(m_Panel, item);
+    if( item.action == @selector(OnRegularOpen:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileOpenCommandStateForItems:m_Items
+                                  source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
 
     return true;
 }
 
 - (void)OnRegularOpen:(id)sender
 {
-    m_OpenFileAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeFileOpenCommandWithItems:m_Items
+                                                             source:nc::core::CommandInvocationSource::ContextMenu
+                                                             sender:sender];
 }
 
 - (void)OnMoveToTrash:(id)sender
@@ -312,7 +348,23 @@ using namespace nc::panel;
 
 - (void)OnCopyPaths:(id)sender
 {
-    m_CopyAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeFileCopyCommandWithItems:m_Items
+                                                             source:nc::core::CommandInvocationSource::ContextMenu
+                                                             sender:sender];
+}
+
+- (void)OnCut:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeFileCutCommandWithItems:m_Items
+                                                            source:nc::core::CommandInvocationSource::ContextMenu
+                                                            sender:sender];
+}
+
+- (void)OnRename:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeFileRenameCommandWithItems:m_Items
+                                                               source:nc::core::CommandInvocationSource::ContextMenu
+                                                               sender:sender];
 }
 
 - (void)OnCopyPathname:(id)sender

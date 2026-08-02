@@ -87,7 +87,8 @@ void SerialQueue::FireDry() const
         cb = m_OnDry;
     }
     if( cb && *cb )
-        (*cb)();
+        dispatch_cpp_support::wrapped_call(
+            [](void *_context) { (*static_cast<std::function<void()> *>(_context))(); }, cb.get());
 }
 
 void SerialQueue::FireWet() const
@@ -98,7 +99,8 @@ void SerialQueue::FireWet() const
         cb = m_OnWet;
     }
     if( cb && *cb )
-        (*cb)();
+        dispatch_cpp_support::wrapped_call(
+            [](void *_context) { (*static_cast<std::function<void()> *>(_context))(); }, cb.get());
 }
 
 void SerialQueue::FireChanged() const
@@ -109,7 +111,8 @@ void SerialQueue::FireChanged() const
         cb = m_OnChange;
     }
     if( cb && *cb )
-        (*cb)();
+        dispatch_cpp_support::wrapped_call(
+            [](void *_context) { (*static_cast<std::function<void()> *>(_context))(); }, cb.get());
 }
 
 } // namespace nc::base

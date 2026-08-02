@@ -9,6 +9,7 @@
 #include <vector>
 #include <string_view>
 #include <span>
+#include <cstdint>
 
 namespace nc::panel::data {
 
@@ -136,6 +137,13 @@ public:
      * O(N) complexity.
      */
     [[nodiscard]] std::vector<VFSListingItem> SelectedEntriesSorted() const;
+
+    /**
+     * Returns a monotonic token for the exact SelectedEntriesSorted() projection.
+     * The token advances when selection membership, order, visibility, or current-listing item
+     * identity can change. Pure reads and soft-filter-only changes preserve it.
+     */
+    [[nodiscard]] uint64_t SelectionProjectionGeneration() const noexcept;
 
     /**
      * Will throw an invalid_argument on invalid _pos.
@@ -272,6 +280,7 @@ public:
     void __InvariantCheck() const;
 
 private:
+    void AdvanceSelectionProjectionGeneration() noexcept;
     void DoSortWithHardFiltering();
     void CustomFlagsSelectRaw(int _at_raw_pos, bool _is_selected);
     void ClearSelectedFlagsFromHiddenElements();
@@ -302,6 +311,7 @@ private:
     TextualFilter m_SoftFiltering;
     Statistics m_Stats;
     PanelType m_Type;
+    uint64_t m_SelectionProjectionGeneration = 0;
 };
 
 } // namespace nc::panel::data

@@ -5,6 +5,7 @@
 #include "VFSDeclarations.h"
 #include "VFSConfiguration.h"
 #include "VFSFactory.h"
+#include "ProviderCapabilities.h"
 #include "../../source/Listing.h"
 #include <optional>
 #include <string_view>
@@ -62,6 +63,25 @@ struct HostFeatures {
     static constexpr uint64_t SetOwnership = 1 << 4;
     static constexpr uint64_t SetTimes = 1 << 5;
     static constexpr uint64_t NonEmptyRmDir = 1 << 6;
+    static constexpr uint64_t Read = 1 << 7;
+    static constexpr uint64_t CreateFile = 1 << 8;
+    static constexpr uint64_t CreateDirectory = 1 << 9;
+    static constexpr uint64_t Rename = 1 << 10;
+    static constexpr uint64_t Unlink = 1 << 11;
+    static constexpr uint64_t RemoveDirectory = 1 << 12;
+    static constexpr uint64_t Trash = 1 << 13;
+    static constexpr uint64_t ReadSymlink = 1 << 14;
+    static constexpr uint64_t ObserveDirectoryChanges = 1 << 15;
+    static constexpr uint64_t CreateSymlink = 1 << 16;
+};
+
+enum class HostErrorKind : uint8_t {
+    Missing,
+    PermissionDenied,
+    Unsupported,
+    Cancelled,
+    Unavailable,
+    Other
 };
 
 class Host : public std::enable_shared_from_this<Host>
@@ -163,6 +183,32 @@ public:
      * In case of error will return "true" as a fallback value.
      */
     virtual bool IsCaseSensitiveAtPath(std::string_view _dir = "/") const;
+
+    /**
+     * Returns authoritative case-sensitivity evidence when the host can resolve it for _dir.
+     * Unlike IsCaseSensitiveAtPath(), failure is represented as std::nullopt instead of a fallback value.
+     */
+    virtual std::optional<bool> CaseSensitivityAtPath(std::string_view _dir = "/") const;
+
+    /**
+     * Returns an authoritative identity for the path namespace exposed by this host.
+     * Equal identities on hosts with the same Tag() mean that absolute paths share one namespace.
+     * A missing value means that aliasing between distinct instances cannot be ruled out.
+     */
+    virtual std::optional<std::string> SemanticNamespaceIdentity() const;
+
+    /** Classifies provider-specific errors without erasing their original domain and code. */
+    virtual HostErrorKind ClassifyError(const Error &_error) const noexcept;
+
+    /**
+     * Consumes reviewed Copy authority and begins a provider-owned conditional publication transaction.
+     * The default implementation returns Unsupported. Native supports one create-only regular file on the
+     * exact same clone-capable volume and retains anchored source/destination-parent descriptors until terminal use.
+     */
+    virtual std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                          ProviderConditionalCopyTransactionBeginError>
+    BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
+                                    const VFSCancelChecker &_cancel_checker = {});
 
     /**
      * VFS version of stat().
@@ -361,6 +407,12 @@ public:
 protected:
     void SetFeatures(uint64_t _features_bitset);
     void AddFeatures(uint64_t _features_bitset);
+
+    [[nodiscard]] std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                                ProviderConditionalCopyTransactionBeginError>
+    MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
+                                   ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                   ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept;
 
     virtual void StopDirChangeObserving(unsigned long _ticket);
 

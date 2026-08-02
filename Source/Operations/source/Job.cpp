@@ -18,46 +18,155 @@ void Job::Perform()
 {
 }
 
-void Job::Run()
+void Job::LaunchWorker(std::shared_ptr<void> _worker_keep_alive)
 {
-    if( m_IsRunning || m_IsStopped )
-        return;
-
-    m_IsRunning = true;
-    std::thread{[this] { Execute(); }}.detach();
+    std::thread{[this, worker_keep_alive = std::move(_worker_keep_alive)] {
+        Execute();
+        (void)worker_keep_alive;
+    }}.detach();
 }
 
-void Job::Execute()
+void Job::Run(std::shared_ptr<void> _worker_keep_alive)
 {
-    const auto thread_title = "com.wincommander." + boost::core::demangle(typeid(*this).name());
-    pthread_setname_np(thread_title.c_str());
-
-    const auto sleep_preventer = base::IdleSleepPreventer::GetPromise();
-    m_Stats.StartTiming();
-
-    try {
-        Perform();
-    } catch( const std::exception &e ) {
-        std::cerr << "Error: operation " << typeid(*this).name() << " has thrown an exeption: " << e.what() << "."
-                  << '\n';
-        Stop();
-    } catch( ... ) {
-        std::cerr << "Error: operation " << typeid(*this).name() << " has thrown an unknown exeption." << '\n';
-        Stop();
+    {
+        const auto guard = std::lock_guard{m_FinishMutex};
+        if( m_WasStarted || m_IsRunning || m_IsStopped )
+            return;
+        m_WasStarted = true;
+        m_ExecutionFinished = false;
+        m_IsRunning = true;
     }
 
+    try {
+        LaunchWorker(std::move(_worker_keep_alive));
+    }
+    catch( ... ) {
+        {
+            const auto guard = std::lock_guard{m_FinishMutex};
+            m_WorkerThreadId = std::this_thread::get_id();
+        }
+        const auto transition_guard = std::lock_guard{m_TransitionMutex};
+        bool was_paused = false;
+        {
+            const auto guard = std::lock_guard{m_StateMutex};
+            was_paused = m_IsPaused.exchange(false);
+            m_IsStopped = true;
+        }
+        if( was_paused ) {
+            m_PauseCV.notify_all();
+            NotifyResumed();
+        }
+        try {
+            OnStopped();
+        }
+        catch( ... ) {
+            std::cerr << "Error: operation " << typeid(*this).name()
+                      << " launch-failure stop callback has thrown." << '\n';
+        }
+        FinishExecution();
+        throw;
+    }
+}
+
+void Job::Execute() noexcept
+{
+    try {
+        {
+            const auto guard = std::lock_guard{m_FinishMutex};
+            m_WorkerThreadId = std::this_thread::get_id();
+        }
+
+        const auto thread_title = "com.wincommander." + boost::core::demangle(typeid(*this).name());
+        pthread_setname_np(thread_title.c_str());
+
+        const auto sleep_preventer = base::IdleSleepPreventer::GetPromise();
+        m_Stats.StartTiming();
+
+        try {
+            if( !IsStopped() )
+                Perform();
+        }
+        catch( const std::exception &e ) {
+            std::cerr << "Error: operation " << typeid(*this).name() << " has thrown an exception: " << e.what()
+                      << "." << '\n';
+            (void)Stop();
+        }
+        catch( ... ) {
+            std::cerr << "Error: operation " << typeid(*this).name() << " has thrown an unknown exception." << '\n';
+            (void)Stop();
+        }
+    } catch( const std::exception &e ) {
+        std::cerr << "Error: worker setup for operation " << typeid(*this).name()
+                  << " has thrown an exception: " << e.what() << "." << '\n';
+        (void)Stop();
+    } catch( ... ) {
+        std::cerr << "Error: worker setup for operation " << typeid(*this).name()
+                  << " has thrown an unknown exception." << '\n';
+        (void)Stop();
+    }
+
+    FinishExecution();
+}
+
+void Job::FinishExecution() noexcept
+{
     if( !IsStopped() )
         SetCompleted();
 
     m_IsRunning = false;
 
-    m_Stats.StopTiming();
+    try {
+        m_Stats.StopTiming();
+    }
+    catch( ... ) {
+        std::cerr << "Error: operation " << typeid(*this).name() << " failed to stop statistics timing." << '\n';
+    }
 
-    m_CallbackLock.lock();
-    const auto callback = m_OnFinish;
-    m_CallbackLock.unlock();
-    if( callback )
-        callback();
+    std::function<void()> callback;
+    {
+        const auto guard = std::lock_guard{m_CallbackLock};
+        callback = std::move(m_OnFinish);
+    }
+    if( callback ) {
+        try {
+            callback();
+        }
+        catch( const std::exception &e ) {
+            std::cerr << "Error: operation " << typeid(*this).name()
+                      << " finish callback has thrown an exception: " << e.what() << "." << '\n';
+        }
+        catch( ... ) {
+            std::cerr << "Error: operation " << typeid(*this).name()
+                      << " finish callback has thrown an unknown exception." << '\n';
+        }
+    }
+
+    {
+        const auto guard = std::lock_guard{m_FinishMutex};
+        m_ExecutionFinished = true;
+        m_WorkerThreadId = {};
+    }
+    m_FinishCV.notify_all();
+}
+
+void Job::Wait() const
+{
+    (void)Wait(std::chrono::nanoseconds::max());
+}
+
+bool Job::Wait(std::chrono::nanoseconds _wait_for_time) const
+{
+    std::unique_lock lock{m_FinishMutex};
+    if( !m_WasStarted )
+        return true;
+    if( !m_ExecutionFinished && m_WorkerThreadId == std::this_thread::get_id() )
+        return false;
+    const auto finished = [this] { return m_ExecutionFinished; };
+    if( _wait_for_time == std::chrono::nanoseconds::max() ) {
+        m_FinishCV.wait(lock, finished);
+        return true;
+    }
+    return m_FinishCV.wait_for(lock, _wait_for_time, finished);
 }
 
 bool Job::IsRunning() const noexcept
@@ -81,13 +190,35 @@ bool Job::IsStopped() const noexcept
     return m_IsStopped;
 }
 
-void Job::Stop()
+bool Job::Stop()
 {
-    if( m_IsStopped )
-        return;
-    m_IsStopped = true;
-    Resume();
-    OnStopped();
+    const auto transition_guard = std::lock_guard{m_TransitionMutex};
+    bool was_paused = false;
+    {
+        const auto guard = std::lock_guard{m_StateMutex};
+        if( m_IsStopped || m_IsCompleted || !OnStopRequested() )
+            return false;
+
+        m_IsStopped = true;
+        was_paused = m_IsPaused.exchange(false);
+    }
+
+    if( was_paused ) {
+        m_PauseCV.notify_all();
+        NotifyResumed();
+    }
+    try {
+        OnStopped();
+    }
+    catch( ... ) {
+        std::cerr << "Error: operation " << typeid(*this).name() << " stop callback has thrown." << '\n';
+    }
+    return true;
+}
+
+bool Job::OnStopRequested() noexcept
+{
+    return true;
 }
 
 void Job::OnStopped()
@@ -96,11 +227,20 @@ void Job::OnStopped()
 
 void Job::SetCompleted()
 {
-    if( m_IsCompleted )
-        return;
+    const auto transition_guard = std::lock_guard{m_TransitionMutex};
+    bool was_paused = false;
+    {
+        const auto guard = std::lock_guard{m_StateMutex};
+        if( m_IsCompleted || m_IsStopped )
+            return;
+        m_IsCompleted = true;
+        was_paused = m_IsPaused.exchange(false);
+    }
 
-    Resume();
-    m_IsCompleted = true;
+    if( was_paused ) {
+        m_PauseCV.notify_all();
+        NotifyResumed();
+    }
 }
 
 class Statistics &Job::Statistics()
@@ -115,29 +255,66 @@ const class Statistics &Job::Statistics() const
 
 void Job::Pause()
 {
-    if( m_IsPaused || m_IsCompleted || m_IsStopped )
-        return;
-    m_IsPaused = true;
+    const auto transition_guard = std::lock_guard{m_TransitionMutex};
+    {
+        const auto guard = std::lock_guard{m_StateMutex};
+        if( m_IsPaused || m_IsCompleted || m_IsStopped )
+            return;
+        m_IsPaused = true;
+    }
 
-    m_CallbackLock.lock();
-    const auto callback = m_OnPause;
-    m_CallbackLock.unlock();
-    if( callback )
-        callback();
+    std::function<void()> callback;
+    try {
+        const auto guard = std::lock_guard{m_CallbackLock};
+        callback = m_OnPause;
+    }
+    catch( ... ) {
+        std::cerr << "Error: operation " << typeid(*this).name() << " could not copy its pause callback." << '\n';
+        return;
+    }
+    if( callback ) {
+        try {
+            callback();
+        }
+        catch( ... ) {
+            std::cerr << "Error: operation " << typeid(*this).name() << " pause callback has thrown." << '\n';
+        }
+    }
 }
 
 void Job::Resume()
 {
-    if( !m_IsPaused )
-        return;
-    m_IsPaused = false;
+    const auto transition_guard = std::lock_guard{m_TransitionMutex};
+    {
+        const auto guard = std::lock_guard{m_StateMutex};
+        if( !m_IsPaused )
+            return;
+        m_IsPaused = false;
+    }
     m_PauseCV.notify_all();
 
-    m_CallbackLock.lock();
-    const auto callback = m_OnResume;
-    m_CallbackLock.unlock();
-    if( callback )
-        callback();
+    NotifyResumed();
+}
+
+void Job::NotifyResumed() noexcept
+{
+    std::function<void()> callback;
+    try {
+        const auto guard = std::lock_guard{m_CallbackLock};
+        callback = m_OnResume;
+    }
+    catch( ... ) {
+        std::cerr << "Error: operation " << typeid(*this).name() << " could not copy its resume callback." << '\n';
+        return;
+    }
+    if( callback ) {
+        try {
+            callback();
+        }
+        catch( ... ) {
+            std::cerr << "Error: operation " << typeid(*this).name() << " resume callback has thrown." << '\n';
+        }
+    }
 }
 
 bool Job::IsPaused() const noexcept
@@ -147,10 +324,9 @@ bool Job::IsPaused() const noexcept
 
 void Job::BlockIfPaused()
 {
-    if( m_IsPaused && !m_IsStopped ) {
-        [[clang::no_destroy]] static std::mutex mutex; // wtf is this???
-        std::unique_lock<std::mutex> lock{mutex};
-        const auto predicate = [this] { return !m_IsPaused; };
+    std::unique_lock lock{m_StateMutex};
+    if( m_IsPaused && !m_IsStopped && !m_IsCompleted ) {
+        const auto predicate = [this] { return !m_IsPaused || m_IsStopped || m_IsCompleted; };
 
         m_Stats.PauseTiming();
         m_PauseCV.wait(lock, predicate);
@@ -166,21 +342,27 @@ void Job::SetPauseCallback(std::function<void()> _callback)
 
 void Job::SetResumeCallback(std::function<void()> _callback)
 {
+    const auto guard = std::lock_guard{m_CallbackLock};
     m_OnResume = std::move(_callback);
 }
 
 void Job::SetItemStateReportCallback(ItemStateReportCallback _callback)
 {
     if( m_IsRunning )
-        throw std::logic_error("Job::SetResumeCallback should be only called before job start");
+        throw std::logic_error("Job::SetItemStateReportCallback should be called only before job start");
+    const auto guard = std::lock_guard{m_CallbackLock};
     m_OnItemStateReport = std::move(_callback);
 }
 
 void Job::TellItemReport(ItemStateReport _report)
 {
-    if( m_OnItemStateReport ) {
-        m_OnItemStateReport(_report);
+    ItemStateReportCallback callback;
+    {
+        const auto guard = std::lock_guard{m_CallbackLock};
+        callback = m_OnItemStateReport;
     }
+    if( callback )
+        callback(_report);
 }
 
 } // namespace nc::ops

@@ -4,6 +4,13 @@
 #include <Cocoa/Cocoa.h>
 
 @class PanelController;
+@class NCPanelControllerActionsDispatcher;
+
+#ifdef __cplusplus
+namespace nc::core {
+struct PaneSnapshot;
+}
+#endif
 
 /**
  * Minimal toolbar for NCExplorerState: Back/Forward/Up/Refresh (wired directly to the panel's own
@@ -13,14 +20,16 @@
 @interface NCExplorerToolbarDelegate : NSObject <NSToolbarDelegate>
 
 - (instancetype)initWithPanelController:(PanelController *)_panel;
+- (instancetype)initWithPanelController:(PanelController *)_panel
+                       actionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher;
 
 @property(nonatomic, readonly) NSToolbar *toolbar;
 @property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
 
-/**
- * Forwarded to the embedded breadcrumb control - call whenever the panel's directory changes.
- */
-- (void)panelPathChanged;
+#ifdef __cplusplus
+/** Forwards immutable pane state to the breadcrumb renderer. Must be called on the main queue. */
+- (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;
+#endif
 
 - (void)focusAddressField;
 

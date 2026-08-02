@@ -9,8 +9,22 @@
 
 namespace nc::panel::actions {
 
-Enter::Enter(const PanelAction &_open_files_action) : m_OpenFilesAction(_open_files_action), m_GoIntoFolder(false)
+Enter::Enter(FileOpener &_file_opener) : m_OpenFilesAction(_file_opener), m_GoIntoFolder(false)
 {
+}
+
+Enter::Route Enter::ResolveRoute(PanelController *_target)
+{
+    if( GoIntoFolder{false}.Predicate(_target) )
+        return Route::EnterFolder;
+    if( ExecuteInTerminal{}.Predicate(_target) )
+        return Route::ExecuteInTerminal;
+    return Route::OpenWithDefaultHandler;
+}
+
+bool Enter::UsesDefaultFileOpen(PanelController *_target)
+{
+    return ResolveRoute(_target) == Route::OpenWithDefaultHandler;
 }
 
 bool Enter::Predicate(PanelController *_target) const
@@ -20,30 +34,30 @@ bool Enter::Predicate(PanelController *_target) const
 
 bool Enter::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
 {
-    if( m_GoIntoFolder.Predicate(_target) ) {
-        return m_GoIntoFolder.ValidateMenuItem(_target, _item);
+    switch( ResolveRoute(_target) ) {
+        case Route::EnterFolder:
+            return m_GoIntoFolder.ValidateMenuItem(_target, _item);
+        case Route::ExecuteInTerminal:
+            return m_ExecuteInTerminal.ValidateMenuItem(_target, _item);
+        case Route::OpenWithDefaultHandler:
+            return m_OpenFilesAction.ValidateMenuItem(_target, _item);
     }
-
-    if( m_ExecuteInTerminal.Predicate(_target) ) {
-        return m_ExecuteInTerminal.ValidateMenuItem(_target, _item);
-    }
-
-    return m_OpenFilesAction.ValidateMenuItem(_target, _item);
+    return false;
 }
 
 void Enter::Perform(PanelController *_target, id _sender) const
 {
-    if( m_GoIntoFolder.Predicate(_target) ) {
-        m_GoIntoFolder.Perform(_target, _sender);
-        return;
+    switch( ResolveRoute(_target) ) {
+        case Route::EnterFolder:
+            m_GoIntoFolder.Perform(_target, _sender);
+            return;
+        case Route::ExecuteInTerminal:
+            m_ExecuteInTerminal.Perform(_target, _sender);
+            return;
+        case Route::OpenWithDefaultHandler:
+            m_OpenFilesAction.Perform(_target, _sender);
+            return;
     }
-
-    if( m_ExecuteInTerminal.Predicate(_target) ) {
-        m_ExecuteInTerminal.Perform(_target, _sender);
-        return;
-    }
-
-    m_OpenFilesAction.Perform(_target, _sender);
 }
 
 } // namespace nc::panel::actions

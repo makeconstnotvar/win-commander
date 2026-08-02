@@ -5,6 +5,7 @@
 #include "Hash_UT.cpp"
 #include "intrusive_ptr_UT.cpp"
 #include "LRUCache_Tests.cpp"
+#include "SerialQueue_UT.cpp"
 #include "spinlock_UT.cpp"
 #include "StringsBulk_UT.cpp"
 #include "UUID_UT.cpp"

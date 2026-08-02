@@ -31,6 +31,11 @@ Copying::~Copying()
     Wait();
 }
 
+void Copying::SetRuntimePreflightValidator(RuntimePreflightValidator _validator)
+{
+    m_Job->SetRuntimePreflightValidator(std::move(_validator));
+}
+
 void Copying::SetupCallbacks()
 {
     auto &j = *m_Job;
@@ -116,7 +121,7 @@ Copying::OnCopyDestExists(const struct stat &_src, const struct stat &_dst, cons
         return CB::CopyDestExistsResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this] { OnCopyDestExistsUI(_src, _dst, _path, ctx); });
+    DispatchDialog(ctx, [=, this] { OnCopyDestExistsUI(_src, _dst, _path, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip ) {
@@ -187,7 +192,7 @@ Copying::OnRenameDestExists(const struct stat &_src, const struct stat &_dst, co
         return CB::RenameDestExistsResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this] { OnRenameDestExistsUI(_src, _dst, _path, ctx); });
+    DispatchDialog(ctx, [=, this] { OnRenameDestExistsUI(_src, _dst, _path, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip ) {
@@ -554,8 +559,8 @@ Copying::OnLockedItemIssue(Error _error, const std::string &_path, VFSHost &_vfs
         return CB::LockedItemResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue(
-        [=, this, vfs = _vfs.shared_from_this()] { OnLockedItemIssueUI(_error, _path, vfs, _cause, ctx); });
+    DispatchDialog(
+        ctx, [=, this, vfs = _vfs.shared_from_this()] { OnLockedItemIssueUI(_error, _path, vfs, _cause, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip ) {

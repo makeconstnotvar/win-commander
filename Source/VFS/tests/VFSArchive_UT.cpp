@@ -80,6 +80,16 @@ TEST_CASE(PREFIX "Can unzip an archive with Chinese symbols")
         std::shared_ptr<ArchiveHost> host;
         REQUIRE_NOTHROW(host = std::make_shared<ArchiveHost>(path.c_str(), TestEnv().vfs_native));
 
+        const ProviderCapabilities capabilities = ProviderCapabilitiesResolver::Resolve(*host, "/");
+        CHECK(host->Features() == ArchiveHost::DeclaredFeatures);
+        CHECK(capabilities.can_read);
+        CHECK(capabilities.can_generate_thumbnails);
+        CHECK(capabilities.can_resolve_symlink);
+        CHECK_FALSE(capabilities.can_write);
+        CHECK_FALSE(capabilities.can_create_file);
+        CHECK_FALSE(capabilities.can_watch_changes);
+        CHECK(capabilities.is_immutable);
+
         CHECK(host->StatTotalFiles() == 1);
         CHECK(host->StatTotalDirs() == 0);
         CHECK(host->StatTotalRegs() == 1);

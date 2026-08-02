@@ -755,6 +755,139 @@ TEST_CASE(PREFIX "ReLoad a temporary listing")
     }
 }
 
+TEST_CASE(PREFIX "SelectionProjectionGeneration")
+{
+    SECTION("single and bulk selection advance exactly once per effective mutation")
+    {
+        Model model;
+        CHECK(model.SelectionProjectionGeneration() == 0);
+
+        const auto listing = ProduceDummyListing(std::vector<std::string>{"alpha", "beta", "gamma"});
+        model.Load(listing, Model::PanelType::Directory);
+        const auto loaded_generation = model.SelectionProjectionGeneration();
+        CHECK(loaded_generation == 1);
+
+        CHECK(model.SelectedEntriesSorted().empty());
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation);
+
+        model.CustomFlagsSelectSorted(-1, true);
+        model.CustomFlagsSelectSorted(0, false);
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation);
+
+        model.CustomFlagsSelectSorted(0, true);
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation + 1);
+        model.CustomFlagsSelectSorted(0, true);
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation + 1);
+
+        const std::vector<bool> select_all{true, true, true};
+        CHECK(model.CustomFlagsSelectSorted(select_all));
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation + 2);
+        CHECK_FALSE(model.CustomFlagsSelectSorted(select_all));
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation + 2);
+
+        const std::vector<bool> select_none{false, false, false};
+        CHECK(model.CustomFlagsSelectSorted(select_none));
+        CHECK(model.SelectionProjectionGeneration() == loaded_generation + 3);
+    }
+
+    SECTION("sort, hard filtering, and reload invalidate exact order, visibility, and identity")
+    {
+        Model model;
+        const auto initial_listing = ProduceDummyListing(std::vector<std::string>{"alpha", "beta", "gamma"});
+        model.Load(initial_listing, Model::PanelType::Directory);
+        model.CustomFlagsSelectSorted(std::vector<bool>{true, true, false});
+
+        const auto selected_generation = model.SelectionProjectionGeneration();
+        const auto unchanged_sort = model.SortMode();
+        model.SetSortMode(unchanged_sort);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation);
+
+        auto reversed_sort = unchanged_sort;
+        reversed_sort.sort = data::SortMode::SortByNameRev;
+        model.SetSortMode(reversed_sort);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 1);
+        const auto reversed_selection = model.SelectedEntriesSorted();
+        REQUIRE(reversed_selection.size() == 2);
+        CHECK(reversed_selection[0].Filename() == "beta");
+        CHECK(reversed_selection[1].Filename() == "alpha");
+
+        auto hard_filter = model.HardFiltering();
+        hard_filter.text.text = @"alpha";
+        model.SetHardFiltering(hard_filter);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 2);
+        model.SetHardFiltering(hard_filter);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 2);
+
+        const auto replacement_listing = ProduceDummyListing(std::vector<std::string>{"alpha", "delta"});
+        model.ReLoad(replacement_listing);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 3);
+        CHECK(model.ListingPtr() == replacement_listing);
+    }
+
+    SECTION("soft filtering and reads preserve the exact selected-items token")
+    {
+        Model model;
+        model.Load(ProduceDummyListing(std::vector<std::string>{"alpha", "beta"}), Model::PanelType::Directory);
+        model.CustomFlagsSelectSorted(0, true);
+        const auto selected_generation = model.SelectionProjectionGeneration();
+
+        data::TextualFilter soft_filter;
+        soft_filter.text = @"alpha";
+        model.SetSoftFiltering(soft_filter);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation);
+        CHECK(model.SelectedEntriesSorted().size() == 1);
+        CHECK(model.SelectionProjectionGeneration() == selected_generation);
+
+        CHECK(model.ClearTextFiltering());
+        CHECK(model.SelectionProjectionGeneration() == selected_generation);
+        CHECK_FALSE(model.ClearTextFiltering());
+        CHECK(model.SelectionProjectionGeneration() == selected_generation);
+
+        auto hard_filter = model.HardFiltering();
+        hard_filter.text.text = @"alpha";
+        model.SetHardFiltering(hard_filter);
+        const auto hard_filtered_generation = model.SelectionProjectionGeneration();
+        CHECK(model.ClearTextFiltering());
+        CHECK(model.SelectionProjectionGeneration() == hard_filtered_generation + 1);
+    }
+
+    SECTION("calculated-size rebuilds and model replacement invalidate once")
+    {
+        Model model;
+        const auto listing = ProduceDummyListing(
+            std::vector<std::tuple<std::string, bool>>{{"Alpha", true}, {"Bravo", true}});
+        model.Load(listing, Model::PanelType::Directory);
+        auto size_sort = model.SortMode();
+        size_sort.sort = data::SortMode::SortBySize;
+        model.SetSortMode(size_sort);
+        model.CustomFlagsSelectSorted(std::vector<bool>{true, true});
+
+        const auto selected_generation = model.SelectionProjectionGeneration();
+        CHECK(model.SetCalculatedSizeForDirectory("Alpha", "/", 10));
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 1);
+        CHECK(model.SetCalculatedSizeForDirectory("Alpha", "/", 10));
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 1);
+        CHECK_FALSE(model.SetCalculatedSizeForDirectory("Missing", "/", 20));
+        CHECK(model.SelectionProjectionGeneration() == selected_generation + 1);
+
+        Model replacement;
+        replacement.Load(ProduceDummyListing(std::vector<std::string>{"replacement"}), Model::PanelType::Directory);
+        const auto before_replacement = model.SelectionProjectionGeneration();
+        model = std::move(replacement);
+        CHECK(model.SelectionProjectionGeneration() == before_replacement + 1);
+        CHECK(model.Listing().Filename(0) == "replacement");
+
+        Model copy_source;
+        copy_source.Load(ProduceDummyListing(std::vector<std::string>{"copied"}), Model::PanelType::Directory);
+        copy_source.CustomFlagsSelectSorted(0, true);
+        const auto before_copy_assignment = model.SelectionProjectionGeneration();
+        model = copy_source;
+        CHECK(model.SelectionProjectionGeneration() == before_copy_assignment + 1);
+        REQUIRE(model.SelectedEntriesSorted().size() == 1);
+        CHECK(model.SelectedEntriesSorted()[0].Filename() == "copied");
+    }
+}
+
 } // namespace
 
 #undef PREFIX

@@ -5,6 +5,7 @@
 
 #include "VFSDeclarations.h"
 #include "Host.h"
+#include "ProviderCapabilities.h"
 #include "VFSFile.h"
 #include "VFSPath.h"
 #include "VFSEasyOps.h"

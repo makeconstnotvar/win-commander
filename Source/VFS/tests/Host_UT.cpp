@@ -69,6 +69,15 @@ TEST_CASE(PREFIX "FetchSingleItemListing")
 
 // TODO: CalculateDirectorySize
 
+TEST_CASE(PREFIX "validates portable filename length and characters")
+{
+    Host host{"/", nullptr, "dummy"};
+    CHECK(host.ValidateFilename(std::string(255, 'a')));
+    CHECK_FALSE(host.ValidateFilename(std::string(256, 'a')));
+    CHECK_FALSE(host.ValidateFilename(""));
+    CHECK_FALSE(host.ValidateFilename("forbidden:name"));
+}
+
 TEST_CASE(PREFIX "Unsupported methods")
 {
     auto host = std::make_shared<Host>("/", nullptr, "dummy");

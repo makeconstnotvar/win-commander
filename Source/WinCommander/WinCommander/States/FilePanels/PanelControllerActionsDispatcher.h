@@ -1,9 +1,13 @@
 // Copyright (C) 2018-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #pragma once
 
+#include <WinCommander/Core/Commands/CommandRegistry.h>
+#include <WinCommander/Core/Pane/PaneSnapshot.h>
+#include <WinCommander/Core/Pane/PaneNavigationAvailability.h>
 #include <Utility/MIMResponder.h>
 #include <Panel/PanelViewKeystrokeSink.h>
 #include <ankerl/unordered_dense.h>
+#include <optional>
 
 @class PanelController;
 
@@ -23,10 +27,80 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
 
 - (instancetype)initWithController:(PanelController *)_controller
                         actionsMap:(const nc::panel::PanelActionsMap &)_actions_map
-           actionsShortcutsManager:(const nc::utility::ActionsShortcutsManager &)_actions_shortcuts_manager;
+           actionsShortcutsManager:(const nc::utility::ActionsShortcutsManager &)_actions_shortcuts_manager
+                   commandRegistry:(nc::core::CommandRegistry &)_command_registry;
 
 - (bool)validateActionBySelector:(SEL)_selector;
 - (void)executeBySelectorIfValidOrBeep:(SEL)_selector withSender:(id)_sender;
+
+- (nc::core::CommandState)fileCopyCommandState;
+- (nc::core::CommandState)fileCopyCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileCopyCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileCopyCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileCopyCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                 source:(nc::core::CommandInvocationSource)_source
+                                 sender:(id)_sender;
+
+- (nc::core::CommandState)fileOpenCommandState;
+- (nc::core::CommandState)fileOpenCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileOpenCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileOpenCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileOpenCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                 source:(nc::core::CommandInvocationSource)_source
+                                 sender:(id)_sender;
+
+- (nc::core::CommandState)fileCutCommandState;
+- (nc::core::CommandState)fileCutCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileCutCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                               source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileCutCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileCutCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                source:(nc::core::CommandInvocationSource)_source
+                                sender:(id)_sender;
+
+- (nc::core::CommandState)fileRenameCommandState;
+- (nc::core::CommandState)fileRenameCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileRenameCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                  source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileRenameCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileRenameCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                   source:(nc::core::CommandInvocationSource)_source
+                                   sender:(id)_sender;
+
+- (nc::core::CommandState)viewToggleHiddenFilesCommandState;
+- (nc::core::CommandState)viewToggleHiddenFilesCommandStateFromSource:
+    (nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)viewToggleHiddenFilesCommandStateForVisibility:(std::optional<bool>)_shows_hidden_files
+                                                                  source:(nc::core::CommandInvocationSource)_source;
+- (void)executeViewToggleHiddenFilesCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)navigationBackCommandState;
+- (nc::core::CommandState)navigationBackCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)navigationBackCommandStateForAvailability:
+    (std::optional<nc::core::PaneHistoryAvailability>)_availability
+                                                               source:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)navigationForwardCommandState;
+- (nc::core::CommandState)navigationForwardCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)navigationForwardCommandStateForAvailability:
+    (std::optional<nc::core::PaneHistoryAvailability>)_availability
+                                                                  source:(nc::core::CommandInvocationSource)_source;
+- (void)executeNavigationBackCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeNavigationForwardCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)navigationUpCommandState;
+- (nc::core::CommandState)navigationUpCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)navigationUpCommandStateForAvailability:
+    (std::optional<nc::core::NavigationUpAvailability>)_availability
+                                                       source:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)navigationRefreshCommandState;
+- (nc::core::CommandState)navigationRefreshCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)navigationRefreshCommandStateForAvailability:
+    (std::optional<nc::core::NavigationRefreshAvailability>)_availability
+                                                            source:(nc::core::CommandInvocationSource)_source;
+- (void)executeNavigationUpCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeNavigationRefreshCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
 
 - (IBAction)OnBriefSystemOverviewCommand:(id)sender;
 - (IBAction)OnRefreshPanel:(id)sender;

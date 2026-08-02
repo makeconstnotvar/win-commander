@@ -1,0 +1,224 @@
+# Текущая архитектура Win Commander
+
+> Статус: M0 architecture baseline with active migration updates
+>
+> Базовый снимок legacy architecture: `ec7f9f4`, 2026-08-01; M1–M3 contract status актуализирован по текущему change set
+>
+> Целевая модель: [раздел 7 канонической спецификации](win_commander_ideal_file_manager_spec.md#7-архитектурная-модель-source-of-truth)
+>
+> Следующий документ: [план поэтапного рефакторинга](refactor_plan.md)
+
+## 1. Назначение и границы аудита
+
+Документ фиксирует фактическое владение состоянием и действующие API на пути Explorer/Commander → Panel → VFS/Operations. Это baseline для M0 и журнал migration через `CommandRegistry`, `PaneStore`, `ProviderCapabilities`, Visual State/Error и M3 foundations. Operations/VFS now includes private reviewed authority, bounded Native conditional publication, lossless provider-result mapping, a sealed transaction-backed Job, exact journal admission/run/finalize authority, bounded receipt retry/reconcile/release custody and a production-configured single-item Copy orchestrator. No application mutation consumer is connected; typed app review/configuration, cross-volume staging, physical-volume evidence and Operation Center presentation remain separate boundaries.
+
+Аудит охватывает исполняемый код `Source/WinCommander/WinCommander`, переиспользуемые модули `Source/{Base,Config,Operations,Panel,VFS}` и их тестовые seams. Поиск, соединения, permissions и settings включены в карту владельцев, поскольку они входят в authoritative systems раздела 7.
+
+## 2. Фактическая runtime-топология
+
+```text
+AppDelegate
+  ├─ builds action maps and shared services
+  └─ creates one Operations::Pool per window
+       ↓
+NCMainWindowController
+  ├─ permanent MainWindowFilePanelState (Commander)
+  ├─ optional NCExplorerState
+  └─ enqueueOperation(...) → Operations::Pool
+       ↓
+PanelController per pane/tab
+  ├─ immutable PaneId for the controller lifetime (injected by the common factory)
+  ├─ Panel::data::Model (listing, sort/filter, selection flags, statistics)
+  ├─ Panel::History (navigation history)
+  ├─ PanelView (cursor, presentation layout, focus, local UI state)
+  ├─ SerialQueue instances (load, reload, size calculation)
+  └─ VFSHost + VFSListing
+       ↓
+Operations::Operation → Job → VFSHost mutation APIs
+Operations::Pool → Operation observers → panel refresh / operation UI
+```
+
+`Core/Pane` содержит pure [`PaneLifecycleProducer`](../Source/WinCommander/WinCommander/Core/Pane/PaneLifecycleProducer.h), [`PanelControllerLifecycle`](../Source/WinCommander/WinCommander/Core/Pane/PanelControllerLifecycle.h) и [`PaneLifecycleReducer`](../Source/WinCommander/WinCommander/Core/Pane/PaneLifecycleReducer.h). `PanelController` владеет одним `PaneId` и coordinator для этой identity, а production Store bridge переиспользует тот же id. `GoToDirWithContext` и `refreshPanelDiscardingCaches` выдают request-scoped lifecycle outcomes через explicit worker ownership и post-model-commit success. Async navigation executes a detached fetch on the shared loading `SerialQueue`; worker/main callbacks hold only a weak controller box, intent invalidation cancels the token, and dealloc stops without waiting. Linearizable producer subscription возвращает active seed или retained-failure replay/checkpoint вместе с live observation; bridge fail-stops на reducer contract violation. Explorer breadcrumb рендерит Store-backed activity/error/AX state, а Explorer View/Sort popovers используют Store-backed hidden/sort/group/layout presentation state. Refresh использует один physical reload worker и один coalesced latest pending intent.
+
+Ключевые точки сборки находятся в [`AppDelegate+MainWindowCreation.mm`](../Source/WinCommander/WinCommander/Bootstrap/AppDelegate+MainWindowCreation.mm), переключение Commander/Explorer — в [`MainWindowController.mm`](../Source/WinCommander/WinCommander/States/MainWindowController.mm), однопанельный Explorer — в [`NCExplorerState.mm`](../Source/WinCommander/WinCommander/States/Explorer/NCExplorerState.mm).
+
+## 3. Карта authoritative systems
+
+| Целевая система | Фактический владелец и API | Текущая граница | Adapter seam и целевой сдвиг |
+|---|---|---|---|
+| `PaneStore` | `PanelController` владеет immutable-for-lifetime `PaneId`, `PanelControllerLifecycle`, `Panel::data::Model`, `Panel::History`, queues и generation; `PanelView` владеет cursor/focus/presentation. Common factory выдаёт identity при создании controller, а [`PanelControllerPaneStoreAdapter`](../Source/WinCommander/WinCommander/States/FilePanels/PanelControllerPaneStoreAdapter.h) инициализирует store тем же `PaneId`. См. также [`PanelData.h`](../Source/Panel/include/Panel/PanelData.h). | Production adapter проецирует committed empty/loaded model state, statistics, exact focus, immutable shared selected items, hidden filter, semantic sort/group, actual view mode, valid layout slot, Back/Forward availability и runtime current History entry ID. `Panel::History` emits one synchronous advisory notification when either availability or current identity changes. Model selection generation плюс listing identity ограничивают O(N) materialization; reducer проверяет selection payloads и O(1) presentation/history invariants. Lifecycle commit подавляет pre-restoration focus; deferred rebuild читает финальный committed state. Presentation/history-only changes advance `revision`, not `listing_generation`. Explorer matching-pane presentation drives breadcrumb, View/Sort markers and Back/Forward/Up/Refresh Registry state; Up/Refresh use a pure availability mapper over the matching snapshot, while execution rechecks the live controller. | Adapter расширяется intents и status/remaining command-context consumers; controller остаётся orchestration adapter до завершения миграции. Grouping/history persistence, live local/remote providers и permission/deferred Busy остаются integration evidence. |
+| `FileSystemProvider` | `VFSHost` предоставляет listing, stat, read/write primitives, observation, path traits, typed error classification и host identity; `ProviderCapabilitiesResolver` композирует explicit host features с writable/immutable/path traits. См. [`Host.h`](../Source/VFS/include/VFS/Host.h), [`ProviderCapabilities.h`](../Source/VFS/include/VFS/ProviderCapabilities.h). | Explicit declarations существуют для NativeHost, ArcLA, ArcLARaw, FTP, SFTP, WebDAV, XAttrHost и PSHost. NativeHost предоставляет authoritative case и semantic namespace identity; SFTP классифицирует ошибки своего domain; symlink read/create capability является явным planning evidence. Process termination сохраняется как provider-specific action. Multiple same-type hosts без authoritative namespace identity не связываются вместе. | `VFSHost` остаётся provider engine. Application composition добавляет permission policy, selection/source-destination context, evidence source и target-facing stable item identity. |
+| `OperationEngine` | `OperationPlan` and planner own validated intent/report; bound probes retain exact hosts; `ReviewedVFSOperationPreflight` is move-only reviewed authority. `ProviderConditionalCopyTransaction` owns exact expectation and serialized commit/abort. A sealed move-only execution product joins the lossless result mapper to the private reviewed factory. `OperationJournal` issues exact admission/run receipts; the custodian owns bounded retry/reconcile/release state. `CopyOperationOrchestrator` has a production journal/Pool/custodian constructor; injection is test-only. | Native admits only exact same-host internal/local/writable APFS, seals supported metadata, publishes exclusively by clone, verifies destination and orders durability. Post-publication errors preserve `Published`. The Job owns commit/stop/destruction including launch failure. Pool retains terminal operations until durable finalization; pre-rename failure retries exact `Finalize`, while rename uncertainty requires same-storage read-only `Reconcile` followed by `ReleaseReconciled` against exact Pool residency. The orchestrator proves zero-enqueue rejection and durable-before-removal but has no app caller. | Add typed app review and a pre-enqueue operation configuration/presentation seam, then connect one Copy consumer. Cross-volume staging, physical-volume evidence and `OperationCenterModel` remain separate. |
+| `SearchEngine` | `VFS::SearchForFiles` владеет одним background search lifecycle; `FindFilesSheetController` владеет query UI и result collection; Spotlight action формирует отдельный flow. См. [`SearchForFiles.h`](../Source/VFS/include/VFS/SearchForFiles.h), [`FindFilesSheetController.mm`](../Source/WinCommander/WinCommander/States/FilePanels/FindFilesSheetController.mm), [`FindFiles.mm`](../Source/WinCommander/WinCommander/States/FilePanels/Actions/FindFiles.mm), [`SpotlightSearch.mm`](../Source/WinCommander/WinCommander/States/FilePanels/Actions/SpotlightSearch.mm). | Search lifecycle распределён между engine instance, sheet и panelized temporary listing. Backend descriptor, scope и limitations представлены flow-specific данными. | Будущий `SearchStore` оборачивает `SearchForFiles` и Spotlight backend после стабилизации PaneStore/Error; текущие callbacks становятся входом domain events. |
+| `ConnectionManager` | `Panel::NetworkConnectionsManager` хранит connection descriptors, credentials access, host spawning и MRU; app implementation сохраняет config. См. [`NetworkConnectionsManager.h`](../Source/Panel/include/Panel/NetworkConnectionsManager.h), [`ConfigBackedNetworkConnectionsManager.mm`](../Source/WinCommander/WinCommander/Core/ConfigBackedNetworkConnectionsManager.mm). | Manager описывает сохранённые подключения и создание host. Runtime connection health, reconnect state и transfer retry остаются внутри конкретного flow/host. | Расширение строится отдельным runtime-state adapter по `connection UUID + host instance`; сохранённые descriptors и Keychain API остаются действующей основой. |
+| `PermissionManager` | `DirectoryAccessProvider` является seam панели; `DirectoryAccessProviderImpl` маршрутизирует native sandbox access в `SandboxManager`. См. [`PanelController.h`](../Source/WinCommander/WinCommander/States/FilePanels/PanelController.h), [`AppDelegate+MainWindowCreation.mm`](../Source/WinCommander/WinCommander/Bootstrap/AppDelegate+MainWindowCreation.mm), [`SandboxManager.h`](../Source/WinCommander/WinCommander/Core/SandboxManager.h). | Directory access проверяется перед listing. User-initiated request может синхронно открыть permission UI. Permission outcome передаётся как `nc::Error` с POSIX domain. | `PermissionState` и recovery action публикуются через PaneStore/Error adapter; существующий provider остаётся единственной точкой запроса directory access. |
+| `CommandRegistry` | `Core/Commands` содержит одиннадцать stable IDs, typed registry, `LegacyShortcutBindingAdapter` и девять app-owned production definitions: `file.copy`, `file.cut`, `file.rename`, `file.open`, `view.toggleHiddenFiles`, `navigation.back`, `navigation.forward`, `navigation.up` и `navigation.refresh`; `NCAppDelegate` владеет registry и injects его в panel dispatcher. См. [`CommandRegistry.h`](../Source/WinCommander/WinCommander/Core/Commands/CommandRegistry.h), [`FileOpenCommand.h`](../Source/WinCommander/WinCommander/Core/Commands/FileOpenCommand.h), [`NavigationHistoryCommand.h`](../Source/WinCommander/WinCommander/Core/Commands/NavigationHistoryCommand.h), [`PaneNavigationCommand.h`](../Source/WinCommander/WinCommander/Core/Commands/PaneNavigationCommand.h), [`LegacyShortcutBindingAdapter.h`](../Source/WinCommander/WinCommander/Core/Commands/LegacyShortcutBindingAdapter.h), [`PanelControllerActionsDispatcher.mm`](../Source/WinCommander/WinCommander/States/FilePanels/PanelControllerActionsDispatcher.mm) и [`CommandPresentationAdapter.h`](../Source/WinCommander/WinCommander/States/CommandPresentationAdapter.h). | Copy/Cut используют app-owned typed pasteboard handlers. Rename initiation проверяет exactly-one non-dotdot item and provider capability. `file.open` принимает one readable regular item или batch regular items от exact same readable provider instance; native directory/special-item handoff поддержан, dot-dot и remote directory/special-item contexts fail closed. `OnOpenNatively:`/main menu, ordinary-file Enter fallback, Shift-Return/explicit Shortcut и context-menu exact-item payload используют один handler и shared `FileOpener`; `Executed` означает submitted handoff. Enter маршрутизирует folder/archive navigation и terminal execution. Hidden-files shares checked state across menu/shortcut/Explorer. Back/Forward share live menu state and Store-backed toolbar state, then delegate execution to the established live-guarded History actions. Explicit Up accepts uniform child/provider-parent hierarchy and user Refresh submits a forced lifecycle request; both share matching-Store toolbar state and a live controller guard built on the same queue-ownership helper as admission. The secondary Up shortcut keeps its hierarchical menu bounce; Registry descriptor aliases preserve Shortcut source classification. Automatic soft refresh stays outside Registry. | Оставшиеся P0 ids получают тот же registry boundary, shared state presentation и typed pane/capability contexts. Duplicate `OnOpenNatively:` action-map ownership удалено; non-uniform dot-dot/Enter сохраняет legacy Back fallback, а dot-dot submits exactly one enclosing-folder request. History restore remains on legacy `ListingPromiseLoader` without lifecycle request/terminal evidence. Rename mutation остаётся на существующем Operations path до обязательного `OperationPlan`; selectors сохраняются как responder compatibility metadata/bridges. |
+| `VisualStateMapper` | `Core/VisualState` содержит pure pane/breadcrumb/status/command models and mapper over `PaneSnapshot`, `FileManagerError` and `CommandState`. Production UI также сохраняет local state из `PanelController`, `PanelView`, pasteboard и operation objects. См. [`VisualStateMapper.h`](../Source/WinCommander/WinCommander/Core/VisualState/VisualStateMapper.h), [`CommandPresentationAdapter.h`](../Source/WinCommander/WinCommander/States/CommandPresentationAdapter.h), [`PanelView.mm`](../Source/WinCommander/WinCommander/States/FilePanels/PanelView.mm), [`NCExplorerCommandBarView.mm`](../Source/WinCommander/WinCommander/States/Explorer/NCExplorerCommandBarView.mm), [`PoolViewController.mm`](../Source/Operations/source/PoolViewController.mm). | Pure mapper детерминированно различает unavailable/loading/refreshing/empty/error/permission and disabled command states and preserves `Off`/`On`/`Mixed`. `file.copy`, `file.cut`, initiation `file.rename`, `file.open`, `view.toggleHiddenFiles`, `navigation.back`, `navigation.forward`, `navigation.up` and `navigation.refresh` are production command render consumers; AppKit adapter maps state to menu/button controls. Explorer navigation toolbar consumes matching-Store Back/Forward/Up/Refresh state, and breadcrumb is the first production pane consumer. Item/operation render composition remains outside production mapping. | Typed operation/permission snapshots дополняют Store; remaining views становятся render adapters и сохраняют transient hover, animation, popover and field-editor state. |
+| `SettingsStore` | `Config::Config`/`ConfigImpl` предоставляют typed access и observation; `GlobalConfig()` и `StateConfig()` разделяют preferences и session state. `PanelController` принимает `Config &`, production factory передаёт `GlobalConfig()`, а `PanelViewLayoutsStorage` имеет injected-config overload для изолированного production-path теста. Panel content/options кодируются через `ControllerStateJSONEncoder/Decoder`. См. [`Config.h`](../Source/Config/include/Config/Config.h), [`ConfigImpl.h`](../Source/Config/include/Config/ConfigImpl.h), [`Bootstrap/Config.h`](../Source/WinCommander/WinCommander/Bootstrap/Config.h), [`PanelController.h`](../Source/WinCommander/WinCommander/States/FilePanels/PanelController.h), [`PanelViewLayoutSupport.h`](../Source/WinCommander/WinCommander/States/FilePanels/PanelViewLayoutSupport.h), [`PanelControllerPersistency.mm`](../Source/WinCommander/WinCommander/States/FilePanels/PanelControllerPersistency.mm). | Config paths и JSON encoders являются действующей persistence boundary. Panel path, sort and layout восстанавливаются; import/export profiles и единая typed settings schema относятся к следующим milestones. | Typed façade добавляется поверх `Config` по feature boundaries. PaneStore persistence использует существующие encoders до перехода на versioned pane snapshot. |
+
+## 4. Фактические event flows
+
+### 4.1. Explorer command
+
+```text
+file.copy, file.cut: command bar / menu+shortcut / context menu
+→ NCPanelControllerActionsDispatcher builds typed item context
+→ CommandRegistry::QueryState(command id) → CommandPresentationAdapter → shared localized UI state
+→ CommandRegistry::Execute(command id) → shared pasteboard writer exactly once
+
+file.rename: menu/persisted shortcut / Explorer command bar / context menu / direct editor mouse entry
+→ NCPanelControllerActionsDispatcher builds exactly-one item + borrowed pane target context
+→ CommandRegistry::QueryState(file.rename) → path-aware can_rename → shared localized UI state
+→ CommandRegistry::Execute(file.rename)
+→ synchronous item re-resolution + focus/listing/index validation
+→ PanelView::startFieldEditorRenaming() == true
+
+view.toggleHiddenFiles: View menu+shortcut / Explorer View popover
+→ NCPanelControllerActionsDispatcher snapshots pane target + HardFiltering.show_hidden
+→ CommandRegistry::QueryState(view.toggleHiddenFiles) → shared disabled/check presentation
+→ CommandRegistry::Execute(view.toggleHiddenFiles) → application setter exactly once
+→ PanelController::changeHardFilteringTo → persisted panel option
+
+file.open: main menu/OnOpenNatively: / ordinary-file Enter fallback / Shift-Return / context menu
+→ NCPanelControllerActionsDispatcher builds source-typed exact-item context
+→ CommandRegistry::QueryState(file.open) → exact item-kind/provider/readability policy
+→ CommandRegistry::Execute(file.open)
+→ shared FileOpener submitted handoff exactly once
+
+remaining actions: UI selector
+→ NCPanelControllerActionsDispatcher
+→ PanelAction::Predicate / Perform
+→ PanelController intent or concrete Operations::Operation
+→ NCMainWindowController::enqueueOperation / Operations::Pool when applicable
+```
+
+Девять production command definitions подтверждают app-owned Registry composition. Copy/Cut имеют один pasteboard execution path; `file.cut` writer возвращает фактический result, failure преобразуется в `FileCutWriteError`, а dispatcher логирует source/exception без item paths. [`file.rename`](Features/file_rename_command_registry_slice.md) объединяет initiation entry points и преобразует false editor start в `FileRenameInitiationError`. `file.open` объединяет canonical open surfaces в one typed context and availability policy: one readable regular file, same-provider readable regular batch, а также native directory/special-item handoff. Context menu передаёт exact captured items, Enter остаётся router для folder/archive navigation и terminal execution, а `Executed` фиксирует синхронную submission в shared `FileOpener`. Legacy duplicate `OnOpenNatively:` registration удалена; dot-dot path подаёт exactly one enclosing-folder request. [`view.toggleHiddenFiles`](Features/view_toggle_hidden_files_command_registry_slice.md) объединяет menu/shortcut/Explorer state и checked presentation. [`navigation.back`/`navigation.forward`](Features/navigation_history_command_registry_slice.md) объединяют live menu/shortcut state, Store-backed toolbar presentation and one live History port. [`navigation.up`/`navigation.refresh`](Features/pane_navigation_up_refresh_command_registry.md) объединяют matching-Store toolbar presentation с live controller guard: Up submits only uniform hierarchy navigation, Registry Refresh submits a forced user lifecycle request, and soft automatic refresh stays outside Registry. Фактический rename commit остаётся `PanelController::requestQuickRenamingOfItem` → `nc::ops::Copying(docopy = false)`, а History restore остаётся на legacy loader; эти execution boundaries ещё не закрывают соответствующие OperationPlan/lifecycle gates.
+
+### 4.2. Navigation and listing
+
+```text
+Breadcrumb/sidebar/action
+→ DirectoryChangeRequest
+→ PanelController::GoToDirWithContext
+→ PanelControllerLifecycle::SubmitNavigation
+→ DirectoryAccessProvider
+→ request-correlated worker / VFSHost::FetchDirectoryListing
+├─ success → transactional Panel::data::Model + generation commit → Committed
+│            → PanelView::dataUpdated / panelChangedWithFocusedFilename
+│            → PanelController::onPathChanged → history + hosting-state callbacks
+└─ error/cancel → Failed / Cancelled without model commit
+→ PanelControllerPaneStoreAdapter → PaneLifecycleReducer → observable PaneSnapshot
+→ VisualStateMapper → Explorer breadcrumb activity/error/AX projection
+```
+
+`Panel::data::Model` документирован как synchronous STA model; `PanelController` выполняет I/O через `SerialQueue` и commits UI/model changes на main queue. Navigation worker slot связывает queue work с request id, а controller-wide content-intent token блокирует поздние navigation, refresh, recovery и legacy loading commits. `PaneStore` сохраняет main-thread commit contract: `Committed` принимается только с exact post-model projection, а stale committed generations не публикуются.
+
+`DirectoryChangeRequest::LoadingResultCallback` остаётся feedback callback: success предшествует main-queue model commit, thread delivery зависит от execution mode, а переданное callback действие обязано повторно проверить request validity в точке применения. `DirectoryChangeResultSource` отличает admission от VFS fetch result; admission и accepted worker используют разные validity tokens, а deferred submission reports its eventual resolution exactly once. Authoritative navigation lifecycle идёт через controller-owned `PanelControllerLifecycle`, explicit worker correlation, post-commit terminal publication и production Store reducer. Atomic subscription plus active/retained-failure replay closes adapter attachment gaps.
+
+Refresh admission захватывает immutable source listing identity, controller/location generation, uniform/temporary type, host/path, fetch flags, error context и native recovery host. Uniform fetch использует `VFSHost::FetchDirectoryListing`, temporary fetch — `VFSListing::ProduceUpdatedTemporaryPanelListing`; I/O не зависит от lifetime controller. На main queue `Model::ReLoad` сначала выполняется над prepared model copy, после чего transactional commit проверяет exact active request, content-intent epoch, source listing/type/generation и для uniform listing host/path. Success сохраняет `dataGeneration`, публикует новую listing и только после terminal `Committed` обновляет view. Provider error и cancellation дают exact `Failed`/`Cancelled` без изменения committed model.
+
+Физическое coalescing refresh ограничено одним running worker и одним latest pending intent; pending не помещается в `SerialQueue`, поэтому длина reload queue остаётся 0/1. Новый refresh отменяет running и заменяет pending; navigation supersedes refresh, общий content intent отменяет оба refresh slots, ESC отменяет active request до delayed spinner. Exact request id + shared finished token и `SerialQueue::SetOnDry` защищают cleanup от ABA. При `ENOENT`, `ENOTDIR` или `ESTALE` refresh сначала публикует typed `Failed`, затем запускает обычный async navigation lifecycle к доступному ancestor или native home.
+
+Loading and reload `SerialQueue` executors хранятся в `shared_ptr` и захватываются detached workers, тогда как controller пересекает async main-callback boundary только через weak box. Content-intent invalidation cancels the navigation token; teardown stops queues and lifecycle publication without `Wait`, so a non-cooperative navigation or refresh provider cannot retain or block the controller. Queue-owned request/listing/provider resources освобождаются после фактического возврата worker. Panel persistency recovery/fallback callbacks also capture the controller weakly. Raw injected config/native dependencies остаются non-owning и требуют lifetime, указанного в `PanelController` header.
+
+Store удерживает navigation `Loading`, refresh `Refreshing`, `Failed` и typed `visible_error`; Explorer breadcrumb отображает mapped localized error/notice and AX state, сохраняет committed path/content, blocks address editing during loading and suppresses cancellation/informational outcomes as blocking errors. Refresh commit в той же controller generation продвигает Store `listing_generation`, когда меняется listing identity. Production E2E подтверждает model-before-terminal ordering, failure retention, supersession/cancellation, exact recovery sequence и same-generation listing advancement. Live local/remote provider и permission/deferred-Busy integration остаются acceptance scope.
+
+### 4.3. File mutation
+
+```text
+OperationPlan + immutable VFSOperationPlanningBindings
+→ VFSOperationPlanningProbes
+→ OperationPlanner
+→ VFSBoundOperationPreflight(result + exact same Bindings::Ptr)
+→ ReviewedVFSOperationPreflight
+├─ OperationPlanCodec
+├─ ProviderConditionalCopyTransaction(exact request → cached tri-state terminal publication)
+├─ ReviewedOperationFactory public compatibility path → abort + typed fail-closed result
+└─ CopyOperationOrchestrator(production journal/Pool/custodian constructor)
+   → OperationJournal::Admit → exact admission receipt
+   → private ReviewedOperationFactory → sealed transaction-backed execution product
+   → lossless provider-result mapper → exact terminal accessor
+   → CopyOperationRunReceiptCustodian::Reserve(exact plan/storage)
+   → OperationJournal::TransitionToRunning → exact run receipt → Custodian::Arm
+   → Pool::TryEnqueue + terminal finalizer
+   ├─ pre-enqueue failure → exact Finalize retry or same-storage Reconcile
+   └─ accepted enqueue → same slot becomes PoolOwned
+      → typed item result → atomic OperationJournal::Finalize → Pool Release
+      └─ reopened reconciliation → ReleaseReconciled(exact Pool probe/erase)
+```
+
+Planning не вызывает permission UI и не пишет в queue. Bound result prevents opaque provider rebinding. The private factory path consumes the exact review authority and returns a sealed runnable product only to the orchestrator; the public compatibility factory continues to abort and fail closed. App entry points do not call the orchestrator. Post-Running pre-enqueue persistence failure retains exact retry evidence; rename uncertainty drops live authority and requires reopening the same storage. `Reconcile` only confirms exact terminal evidence or startup `Interrupted`; Pool-owned reconciliation completes through `ReleaseReconciled`.
+
+```text
+PanelAction
+→ dialog/options or direct intent
+→ concrete Operation constructor
+→ per-window Pool::Enqueue
+→ Operation::Start / Job::Run
+→ Statistics + lifecycle notifications
+→ transient Pool UI and panel refresh observer
+→ Pool removes finished operation
+```
+
+Concrete examples: copy/move в [`CopyFile.mm`](../Source/WinCommander/WinCommander/States/FilePanels/Actions/CopyFile.mm), trash/delete в [`Delete.mm`](../Source/WinCommander/WinCommander/States/FilePanels/Actions/Delete.mm), rename commit в [`PanelController.mm`](../Source/WinCommander/WinCommander/States/FilePanels/PanelController.mm), drag/drop в [`DragReceiver.mm`](../Source/WinCommander/WinCommander/States/FilePanels/DragReceiver.mm). Эти paths сходятся на `Operations::Pool`, что позволяет добавить plan и history без второго execution engine.
+
+## 5. State ownership details
+
+| State | Фактическое хранение | Сигнал изменения | Архитектурное следствие |
+|---|---|---|---|
+| Path/listing/provider | `Panel::data::Model::m_Listing` inside `PanelController` | `dataGeneration`, `PanelPathChanged`, view callbacks | Pane snapshot должен включать provider identity, path, listing generation и load phase. |
+| Selection | `PanelData::ItemVolatileData` flags | `PanelView::volatileDataChanged` и context notification | Selection ids вычисляются по listing generation; filename-only identity подходит лишь как migration bridge. |
+| Focused item | `PanelView::m_CursorPos` | `NCPanelViewContextDidChangeNotification` | Focus и selection — разные поля store. |
+| Sort/filter | `Panel::data::Model` | controller updates view explicitly | Store intent вызывает controller API, затем публикует committed snapshot. |
+| View mode/layout | `PanelController::m_ViewLayoutIndex`, `PanelView` presentation | layout callbacks/config persistence | View preference входит в PaneStore, render objects остаются во view. |
+| Navigation history | `Panel::History` | Nonzero monotonic runtime EntryId identifies the current recording/playback entry; unified navigation state publishes availability or identity changes synchronously and exactly once | Store adapter publishes `canGoBack`/`canGoForward` plus current entry ID. Lifecycle-correlated History restore and persistence remain pending. |
+| Loading/refreshing | controller-owned navigation/refresh lifecycle; `PaneStore` phase; `SerialQueue` occupancy plus activity tickets | request-scoped lifecycle events; Store-backed Explorer activity/editor gating; spinner callbacks | Navigation и refresh identity/terminal outcomes принадлежат coordinator и exact worker slots, а reducer делает phase authoritative Store state. Queue occupancy и activity tickets остаются implementation signals. Reload queue отражает только running refresh worker; latest pending intent хранится отдельно. |
+| Operations | per-window `Operations::Pool` + per-operation `Operation`/`Statistics`; file-backed `OperationJournal` stores admitted/running/interrupted/terminal records, tri-state item results and exact receipts; the custodian stores bounded retry/reconcile/release slots | scoped notifications; journal snapshots; custodian Retry/Reconcile/ReleaseReconciled; Pool Finalizing residency and retry | Production-configured orchestrator links the private factory, transaction result, journal and Pool. An app consumer must supply typed review and install UI observers before Start; Operation Center later aggregates pools and durable records. |
+| Errors | `nc::Error`, exceptions, alerts, operation dialogs, local tooltip/beep | flow-specific callbacks | `FileManagerError` является enriched presentation/domain envelope над исходным `nc::Error`. |
+
+## 6. Capability and error baseline
+
+`VFSHost` раскрывает четыре типа planning evidence:
+
+1. declarative bits `HostFeatures` для users/groups/permissions/flags/ownership/times/non-empty directory removal;
+2. path-sensitive queries `IsWritableAtPath`, authoritative `CaseSensitivityAtPath`, change observation и thumbnail policy;
+3. optional `SemanticNamespaceIdentity` и typed `ClassifyError`, включая SFTP-domain specialization;
+4. operation semantics через virtual methods, чей default result — `nc::Error(POSIX, ENOTSUP)`.
+
+Текущий conservative `ProviderCapabilities` resolver композирует declared host features с writable, immutable, case-sensitivity и observation signals для NativeHost, archive, FTP, SFTP, WebDAV, XAttrHost и PSHost providers. `VFSOperationPlanningProbes` сохраняет `Unavailable` без догадок и требует authoritative namespace identity. Conditional Copy additionally binds canonical exact-child paths, exact host relations, kind/mode, inode/device/size and nanosecond timestamps into a move-only reviewed authority with a private consumed-preflight seal. Native Begin anchors the exact same host's source and destination-parent descriptors with no-follow/nonblocking policy, performs no namespace mutation and admits only a same-volume clone-capable target. Commit revalidates source, destination absence, parent and volume immediately before one exclusive `fclonefileat(..., CLONE_ACL)` call. The shared `Pending → Committing → Consumed` transaction caches terminal publication and returns conservative `Unknown` for ambiguous handler state.
+
+`nc::Error` уже является typed transport с domain/code, technical description и localized failure reason. App-layer `FileManagerError` добавляет taxonomy and recovery metadata. `OperationPlan::Create` возвращает structural validation errors, planner — typed blockers/warnings, conditional transaction — typed begin/commit failures, `NativeCreateCopy` — typed execution outcome, а journal валидирует status/error/tri-state-publication/recovery matrix. `Unknown` сохраняется только как неоднозначная publication evidence и требует inspection. Production error presentation, provider mappings, partial-failure UI и persistent diagnostics остаются следующими increments.
+
+## 7. Existing verification seams
+
+| Boundary | Текущие tests | Что фиксировать перед переносом ownership |
+|---|---|---|
+| Panel model, sort/filter/selection | [`Source/Panel/tests/PanelData_UT.mm`](../Source/Panel/tests/PanelData_UT.mm), [`PanelDataFilter_UT.mm`](../Source/Panel/tests/PanelDataFilter_UT.mm), [`QuickSearch_UT.mm`](../Source/Panel/tests/QuickSearch_UT.mm) | snapshot equality, selection/focus separation, generation after load/reload, sort/filter persistence. |
+| Provider and listing semantics | [`ProviderCapabilities_UT.cpp`](../Source/VFS/tests/ProviderCapabilities_UT.cpp) 16 / 548 and [`NativeConditionalCopyTransaction_UT.cpp`](../Source/VFS/tests/NativeConditionalCopyTransaction_UT.cpp) 15 / 312 in Debug/ASAN/UBSAN; combined Debug selection 31 / 860; current full Debug `VFSUT` 94 / 43,531; seeded Docker-backed ASAN VFS/VFSIcon integration 58 / 87,975 | dedicated physical internal/external-volume and power-loss fixtures, cross-volume staging, richer Unicode/path identity, live provider identity and disconnected cases. |
+| Operations plan/queue/lifecycle | Focused Debug: factory 8 / 225, probes 5 / 178, Native create-copy 19 / 924, Native mapper 2 / 382, provider mapper 4 / 237, product 9 / 188, Job 10 / 608, journal 27 / 592, orchestrator 13 / 558 and Pool 15 / 190. Full `OperationsUT` passes 165 / 4,468 in Debug and explicit Release ASAN/UBSAN with confirmed runtimes; Docker-backed Operations ASAN integration remains 87 / 862. | One app Copy consumer, typed review/pre-enqueue presentation, cross-volume staging/recovery, physical-volume/power-loss fixtures, lifecycle projection and partial-failure presentation. |
+| Shortcut/command identity | [`ActionsShortcutsManager_UT.cpp`](../Source/WinCommander/WinCommander/Tests/ActionsShortcutsManager_UT.cpp), [`LegacyShortcutBindingAdapter_UT.cpp`](../Source/WinCommander/WinCommander/Tests/LegacyShortcutBindingAdapter_UT.cpp), eleven stable IDs and nine production definitions. Back/Forward Registry passes 14 / 173 and dispatcher/toolbar 2 / 102; Up/Refresh total 32 / 549: core 22 / 281, production navigation 4 / 50, production Refresh 3 / 37, Registry surfaces 1 / 27 and Explorer model/toolbar 2 / 154. `file.open` passes 24 / 267: [`FileOpenCommand_UT.cpp`](../Source/WinCommander/WinCommander/Tests/FileOpenCommand_UT.cpp) plus Registry/shortcut coverage provide 23 / 201 (8 / 102 + 15 / 99), and production routing provides 1 / 66; the complete Registry fixture passes 3 / 122. [`ToggleHiddenFilesCommand_UT.cpp`](../Source/WinCommander/WinCommander/Tests/ToggleHiddenFilesCommand_UT.cpp) passes 7 / 70, [`FileCopyCommand_UT.cpp`](../Source/WinCommander/WinCommander/Tests/FileCopyCommand_UT.cpp) 6 / 58, [`FileCutCommand_UT.cpp`](../Source/WinCommander/WinCommander/Tests/FileCutCommand_UT.cpp) 8 / 73 and [`FileRenameCommand_UT.cpp`](../Source/WinCommander/WinCommander/Tests/FileRenameCommand_UT.cpp) 5 / 64. | remaining P0 mappings, history lifecycle/persistence, shortcut persistence migration and rename mutation planning. Explicit-Up non-cooperative teardown passes 1 / 12; broader production navigation/refresh prefixes pass 8 / 103 and 16 / 154. Hosted CI remains pending. |
+| Visual State mapping and command presentation | [`VisualStateMapper_UT.cpp`](../Source/WinCommander/WinCommander/Tests/VisualStateMapper_UT.cpp) and [`CommandPresentationAdapter_UT.mm`](../Source/WinCommander/WinCommander/Tests/CommandPresentationAdapter_UT.mm) preserve/map semantic checked state; combined prior command/registry/mapper/presentation Debug run passed 28 / 372, Back/Forward UI routing/presentation passed 2 / 102. `file.copy`, `file.cut`, `file.rename`, `file.open`, `view.toggleHiddenFiles`, `navigation.back`, `navigation.forward`, `navigation.up` and `navigation.refresh` use this boundary on applicable surfaces. Up/Refresh toolbar presentation accepts only matching Store state and exposes localized fail-closed reasons; `file.open` menu/context presentation is covered by the focused production 1 / 66 fixture. | remaining item/operation composition, P0 presentation, suggested actions, generic popover disabled/check model, live-provider/permission integration and manual VoiceOver evidence. |
+| Pane lifecycle producer/read model | Pure [`PaneLifecycleProducer_UT.mm`](../Source/WinCommander/WinCommander/Tests/PaneLifecycleProducer_UT.mm) final Debug 24 cases / 267 assertions covers stable IDs/sequences, linearizable active/retained-failure subscription, typed outcomes, FIFO, transactionality and lifetime. [`PanelControllerLifecycle_UT.mm`](../Source/WinCommander/WinCommander/Tests/PanelControllerLifecycle_UT.mm) final Debug 21 / 211 covers admission, deferred resolution, scheduling, post-model commit, phase-specific exceptions, stale suppression and shutdown. Current History/Store evidence: History 5 / 457, Store 18 / 220, reducer 19 / 335, production bridge 28 / 461; combined 70 / 1,473. Panel selection-generation passes 1 / 42; matching-pane presentation/toolbar baseline passes 2 / 266. Production navigation/refresh prefixes pass 8 / 103 and 16 / 154. Prior full current-tree `WinCommanderUT` snapshot remains 217 / 2,694 in Debug/ASAN/UBSAN. | Production navigation/refresh ownership, exact terminal publication, latest-wins coalescing, invalid-location recovery, same-generation listing advancement, breadcrumb, exact focus/selection/filter/sort/group/view/history availability/current identity, Up/Refresh availability and nonblocking teardown are implemented. Async workers use detached fetch plus weak main callbacks; controller and persistency recovery paths do not retain the pane across non-cooperative provider work. Shared selection payloads keep cursor-only projection O(1). Next: live provider/permission integration, remaining UI projection and persistence. |
+| Base async queue accounting | [`SerialQueue_UT.cpp`](../Source/Base/tests/SerialQueue_UT.cpp) covers callable construction failure, throwing task cleanup and throwing wet/dry/change observers. Local aggregate `BaseUT`: 78 cases / 70,566 assertions. | Preserve context-before-count admission and decrement-before-delete cleanup while lifecycle workers continue using `SerialQueue`. |
+| Error adaptation | [`FileManagerErrorAdapter_UT.cpp`](../Source/WinCommander/WinCommander/Tests/FileManagerErrorAdapter_UT.cpp) | provider/validation/operation mappings, localization resolution, redaction and persistent log linkage. |
+| Config/persistence | [`Source/Config/tests/ConfigImpl_UT.cpp`](../Source/Config/tests/ConfigImpl_UT.cpp) plus panel persistency source | typed settings façade, versioned pane snapshot round-trip and fallback. |
+
+Executable verification command:
+
+```bash
+Scripts/run_all_unit_tests.sh Debug
+```
+
+The aggregate scheme builds console test executables rather than XCTest bundles; the script discovers and runs every product. During iteration, run the affected `PanelUT`, `VFSUT`, `OperationsUT`, or `WinCommanderUT` executable from Xcode before the aggregate gate.
+
+Current M3 `OperationsUT` evidence passes 165 / 4,468 in Debug and explicit Release ASAN/UBSAN with confirmed runtimes and no diagnostics. Current full Debug `VFSUT` passes 94 / 43,531. Current-tree `Scripts/verify_m0.sh` passed all ten aggregate binaries at 897 / 132,011. Seeded Docker-backed ASAN integration passes 163 / 89,392. Hosted `M0 Verification` remains open.
+
+## 8. Architecture findings
+
+1. Зрелые execution boundaries уже существуют: `VFSHost`, `PanelData`, `PanelController`, `Operation`/`Job`/`Pool`, `Config` и action objects. Целевая архитектура достигается через явные contracts и adapters вокруг этих boundaries.
+2. Основной ownership debt сосредоточен между `PanelController`, `PanelView` и local UI flags. Pane snapshot и domain events дают единый read model без раннего переноса I/O и rendering.
+3. Command migration has nine production definitions from eleven stable IDs. Operations foundations now include the lossless mapper, sealed product, private factory path, production-configured orchestrator, exact receipt custody and Pool durable-finalization barrier. This is still not an app Copy consumer. The next mutation gate is typed review plus pre-enqueue UI configuration on one narrow entry point.
+4. Provider capabilities требуют нормализации, поскольку `HostFeatures`, writable queries и operation support выражают разные аспекты возможностей.
+5. Operation Center опирается на existing Pool and Journal, но требует отдельного durable result/history model. Pool теперь может удерживать terminal operation в `Finalizing` до durable `Release`; addition/removal observers остаются projection signals, а не persistence authority.
+6. Pane, Error and Visual State foundations устанавливают общие M1 boundaries между stores, commands and presentation. Controller-owned navigation/refresh lifecycle, latest-wins refresh execution, production Store reduction, recovery и breadcrumb error/AX renderer работают поверх общего `PaneId`; следующий lifecycle evidence layer — live-provider/permission integration.
+7. Explorer уже переиспользует Commander panel engine. Сохранение этого общего ядра минимизирует регрессионную площадь и позволяет переводить entry points по одному command id.

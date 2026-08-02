@@ -170,6 +170,8 @@ VFSMeta ArchiveHost::Meta()
 
 std::expected<void, Error> ArchiveHost::DoInit(const VFSCancelChecker &_cancel_checker)
 {
+    AddFeatures(DeclaredFeatures);
+
     using namespace arc;
     assert(I->m_Arc == nullptr);
     int res = 0;

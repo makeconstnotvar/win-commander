@@ -1,0 +1,33 @@
+name: M0 Verification
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m0-verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-build-and-unit-tests:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+      WINCOMMANDER_M0_BUILD_DIR: ${{ runner.temp }}/win-commander-m0
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Verify Xcode version
+        run: xcodebuild -version
+
+      - name: Build unsigned Debug app and run unit tests
+        run: Scripts/verify_m0.sh

@@ -59,6 +59,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		019FBA330000000000000001 /* ProviderCapabilities.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ProviderCapabilities.h; path = include/VFS/ProviderCapabilities.h; sourceTree = "<group>"; };
+		019FBA330000000000000002 /* ProviderCapabilities.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderCapabilities.cpp; path = source/ProviderCapabilities.cpp; sourceTree = "<group>"; };
+		019FBA330000000000000003 /* ProviderCapabilities_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderCapabilities_UT.cpp; path = tests/ProviderCapabilities_UT.cpp; sourceTree = SOURCE_ROOT; };
+		019FBA340000000000000001 /* NativeConditionalCopyTransaction_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = NativeConditionalCopyTransaction_UT.cpp; path = tests/NativeConditionalCopyTransaction_UT.cpp; sourceTree = SOURCE_ROOT; };
+		019FBA350000000000000001 /* ConditionalCopy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ConditionalCopy.h; path = source/Native/ConditionalCopy.h; sourceTree = "<group>"; };
+		019FBA350000000000000002 /* ConditionalCopy.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ConditionalCopy.cpp; path = source/Native/ConditionalCopy.cpp; sourceTree = "<group>"; };
 		CF18470A1E41C8A5008B7C9F /* VFSArchive_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSArchive_IT.mm; path = tests/VFSArchive_IT.mm; sourceTree = SOURCE_ROOT; };
 		CF18470B1E41C8A5008B7C9F /* VFSFTP_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSFTP_IT.mm; path = tests/VFSFTP_IT.mm; sourceTree = SOURCE_ROOT; };
 		CF18470C1E41C8A5008B7C9F /* VFSPS_IT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = VFSPS_IT.cpp; path = tests/VFSPS_IT.cpp; sourceTree = SOURCE_ROOT; };
@@ -279,6 +285,8 @@
 			children = (
 				CF35C5E52FBCF5A800370B89 /* data */,
 				CFF762C02EDE0D52002DD1EE /* _VFSUT.cpp */,
+				019FBA340000000000000001 /* NativeConditionalCopyTransaction_UT.cpp */,
+				019FBA330000000000000003 /* ProviderCapabilities_UT.cpp */,
 				CF3D24142D14B72B005C36F6 /* DisplayNamesCache_UT.mm */,
 				CF26DE3521E297AE003F0E93 /* EasyOps_UT.cpp */,
 				CF26DE0E21CFA2CC003F0E93 /* FileWindow_UT.cpp */,
@@ -381,6 +389,7 @@
 				CF69CFE01DA227E400992B84 /* ArcLA.h */,
 				CF26DE0821CFA2AE003F0E93 /* FileWindow.h */,
 				CF69CFF01DA227E400992B84 /* Host.h */,
+				019FBA330000000000000001 /* ProviderCapabilities.h */,
 				CF69CFE21DA227E400992B84 /* Native.h */,
 				CFE08AE023CA5447007E99B8 /* NativeSpecialDirectories.h */,
 				CF69CFE31DA227E400992B84 /* NetFTP.h */,
@@ -412,6 +421,7 @@
 			children = (
 				CFF7629F2EDCA7CC002DD1EE /* _VFS.cpp */,
 				CFF762A62EDCEDB0002DD1EE /* _VFS.mm */,
+				019FBA330000000000000002 /* ProviderCapabilities.cpp */,
 				CF69D0501DA2335700992B84 /* ArcLA */,
 				CF824F63279F563300C4F29C /* ArcLARaw */,
 				CF26DE0C21CFA2BF003F0E93 /* FileWindow.cpp */,
@@ -446,6 +456,8 @@
 		CF69D0221DA2304B00992B84 /* Native */ = {
 			isa = PBXGroup;
 			children = (
+				019FBA350000000000000001 /* ConditionalCopy.h */,
+				019FBA350000000000000002 /* ConditionalCopy.cpp */,
 				CFF762A22EDCB6EE002DD1EE /* OpenDirectory.h */,
 				CFF762A32EDCB6EE002DD1EE /* OpenDirectory.mm */,
 				CF69D0231DA2305A00992B84 /* DisplayNamesCache.h */,

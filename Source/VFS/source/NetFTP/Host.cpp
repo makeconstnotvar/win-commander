@@ -109,6 +109,8 @@ VFSConfiguration FTPHost::Configuration() const
 
 std::expected<void, Error> FTPHost::DoInit()
 {
+    AddFeatures(DeclaredFeatures);
+
     m_Cache->SetChangesCallback([this](const std::string &_at_dir) {
         InformDirectoryChanged(_at_dir.back() == '/' ? _at_dir : _at_dir + "/");
     });

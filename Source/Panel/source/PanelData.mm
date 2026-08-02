@@ -7,6 +7,7 @@
 #include <Base/DispatchGroup.h>
 #include <VFS/VFS.h>
 #include <algorithm>
+#include <exception>
 #include <magic_enum.hpp>
 #include <numeric>
 #include <pstld/pstld.h>
@@ -75,9 +76,36 @@ Model::Model(Model &&) noexcept = default;
 
 Model::~Model() = default;
 
-Model &Model::operator=(const Model &) = default;
+Model &Model::operator=(const Model &_rhs)
+{
+    if( this == &_rhs )
+        return *this;
 
-Model &Model::operator=(Model &&) noexcept = default;
+    Model copy(_rhs);
+    return *this = std::move(copy);
+}
+
+Model &Model::operator=(Model &&_rhs) noexcept
+{
+    if( this == &_rhs )
+        return *this;
+
+    m_Listing = std::move(_rhs.m_Listing);
+    m_VolatileData = std::move(_rhs.m_VolatileData);
+    m_EntriesByRawName = std::move(_rhs.m_EntriesByRawName);
+    m_EntriesByCustomSort = std::move(_rhs.m_EntriesByCustomSort);
+    m_ReverseToCustomSort = std::move(_rhs.m_ReverseToCustomSort);
+    m_EntriesBySoftFiltering = std::move(_rhs.m_EntriesBySoftFiltering);
+    m_CustomSortMode = _rhs.m_CustomSortMode;
+    m_HardFiltering = _rhs.m_HardFiltering;
+    m_SoftFiltering = _rhs.m_SoftFiltering;
+    m_Stats = _rhs.m_Stats;
+    m_Type = _rhs.m_Type;
+    // Assignment replaces this object's exact projection while retaining a destination-local,
+    // monotonic generation sequence.
+    AdvanceSelectionProjectionGeneration();
+    return *this;
+}
 
 bool Model::IsLoaded() const noexcept
 {
@@ -108,6 +136,8 @@ void Model::Load(const VFSListingPtr &_listing, PanelType _type)
 
     if( !_listing )
         throw std::logic_error("PanelData::Load: listing can't be nullptr");
+
+    AdvanceSelectionProjectionGeneration();
 
     Log::Info("Loading {} listing, {} entries, {}",
               magic_enum::enum_name(_type),
@@ -219,6 +249,7 @@ void Model::ReLoad(const VFSListingPtr &_listing)
         throw std::invalid_argument("PanelData::ReLoad: incompatible listing type!");
 
     // put a new data in a place
+    AdvanceSelectionProjectionGeneration();
     m_Listing = _listing;
     m_VolatileData = std::move(new_vd);
     m_EntriesByRawName = std::move(dirbyrawcname);
@@ -409,6 +440,7 @@ void Model::SetSortMode(struct SortMode _mode)
     if( m_CustomSortMode == _mode )
         return;
 
+    AdvanceSelectionProjectionGeneration();
     m_CustomSortMode = _mode;
     DoSortWithHardFiltering();
     BuildSoftFilteringIndeces();
@@ -543,6 +575,7 @@ void Model::CustomFlagsSelectRaw(int _at_raw_pos, bool _is_selected)
             m_Stats.selected_reg_amount--;
         }
     }
+    AdvanceSelectionProjectionGeneration();
     vd.toggle_selected(_is_selected);
 }
 
@@ -571,8 +604,10 @@ bool Model::CustomFlagsSelectSorted(const std::vector<bool> &_is_selected)
             }
         }
     }
-    if( changed )
+    if( changed ) {
+        AdvanceSelectionProjectionGeneration();
         UpdateStatictics();
+    }
     return changed;
 }
 
@@ -606,6 +641,18 @@ std::vector<VFSListingItem> Model::SelectedEntriesSorted() const
             list.emplace_back(m_Listing->Item(raw_index));
     }
     return list;
+}
+
+uint64_t Model::SelectionProjectionGeneration() const noexcept
+{
+    return m_SelectionProjectionGeneration;
+}
+
+void Model::AdvanceSelectionProjectionGeneration() noexcept
+{
+    if( m_SelectionProjectionGeneration == std::numeric_limits<uint64_t>::max() )
+        std::terminate();
+    ++m_SelectionProjectionGeneration;
 }
 
 bool Model::SetCalculatedSizeForDirectory(std::string_view _filename, std::string_view _directory, uint64_t _size)
@@ -712,6 +759,7 @@ size_t Model::SetCalculatedSizesForDirectories(std::span<const unsigned> _raw_it
 void Model::FinalizeSettingCalculatedSizes()
 {
     // double-check me
+    AdvanceSelectionProjectionGeneration();
     DoSortWithHardFiltering();
     ClearSelectedFlagsFromHiddenElements();
     BuildSoftFilteringIndeces();
@@ -740,6 +788,7 @@ bool Model::ClearTextFiltering()
     if( m_SoftFiltering.text == nil && m_HardFiltering.text.text == nil )
         return false;
 
+    const bool hard_filter_changed = m_HardFiltering.text.text != nil;
     m_SoftFiltering.text = nil;
     m_HardFiltering.text.text = nil;
 
@@ -751,6 +800,8 @@ bool Model::ClearTextFiltering()
     ClearSelectedFlagsFromHiddenElements(); // not sure if this is needed here
     BuildSoftFilteringIndeces();
     UpdateStatictics();
+    if( hard_filter_changed )
+        AdvanceSelectionProjectionGeneration();
     return true;
 }
 
@@ -759,6 +810,7 @@ void Model::SetHardFiltering(const HardFilter &_filter)
     if( m_HardFiltering == _filter )
         return;
 
+    AdvanceSelectionProjectionGeneration();
     m_HardFiltering = _filter;
 
     DoSortWithHardFiltering();

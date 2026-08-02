@@ -92,10 +92,15 @@ bool PasteboardSupport::WriteFilesnamesPBoard(const std::vector<VFSListingItem> 
         return false;
 
     auto filepaths = [[NSMutableArray alloc] initWithCapacity:_items.size()];
-    for( auto &i : _items )
-        if( i.Host() && i.Host()->IsNativeFS() )
-            if( auto path = [NSString stringWithUTF8StdString:i.Path()] )
-                [filepaths addObject:path];
+    for( const auto &item : _items ) {
+        if( !item.Host() || !item.Host()->IsNativeFS() )
+            return false;
+
+        auto path = [NSString stringWithUTF8StdString:item.Path()];
+        if( !path )
+            return false;
+        [filepaths addObject:path];
+    }
 
     if( filepaths.count == 0 )
         return false;

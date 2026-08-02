@@ -28,6 +28,7 @@ class UTIDB;
 } // namespace utility
 
 namespace core {
+class CommandRegistry;
 class VFSInstanceManager;
 class ServicesHandler;
 } // namespace core
@@ -154,5 +155,7 @@ class NativeHost;
 @property(nonatomic, readonly) nc::panel::PanelDataPersistency &panelDataPersistency;
 
 @property(nonatomic, readonly) nc::utility::ActionsShortcutsManager &actionsShortcutsManager;
+
+@property(nonatomic, readonly) nc::core::CommandRegistry &commandRegistry;
 
 @end

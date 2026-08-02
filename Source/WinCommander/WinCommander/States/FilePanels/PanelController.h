@@ -7,6 +7,9 @@
 #include <Panel/PanelViewKeystrokeSink.h>
 #include <Panel/QuickSearch.h>
 #include <VFS/VFS.h>
+#include <WinCommander/Core/Pane/PaneLifecycleProducer.h>
+#include <WinCommander/Core/Pane/PaneNavigationAvailability.h>
+#include <WinCommander/Core/Pane/PaneSnapshot.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include "../Explorer/NCPanelControllerHostingState.h"
@@ -24,6 +27,10 @@ namespace core {
 class VFSInstancePromise;
 class VFSInstanceManager;
 } // namespace core
+
+namespace config {
+class Config;
+}
 
 namespace utility {
 class NativeFSManager;
@@ -91,6 +98,18 @@ struct DelayedFocusing {
     std::function<void()> done;
 };
 
+/** Request-scoped boundary for legacy loading workers that commit outside pane lifecycle. */
+struct CancelableLoadingTaskContext {
+    std::function<bool()> is_cancelled;
+    /** Schedules a main-queue mutation only while this worker still owns the content intent token. */
+    std::function<void(std::function<void()>)> commit_on_main;
+};
+
+enum class DirectoryChangeResultSource {
+    Admission,
+    Fetch,
+};
+
 struct DirectoryChangeRequest {
     /* required */
     std::string RequestedDirectory;
@@ -104,15 +123,26 @@ struct DirectoryChangeRequest {
     bool InitiatedByUser = false;
 
     /**
-     * This will be called from a thread which is loading a vfs listing with the result - either nothing or an error.
-     * This thread may be main or background depending on PerformAsynchronous.
-     * Will be called on any error canceling process or with {} on successful loading.
+     * Called on the submitting thread for immediate admission rejection, or on the worker thread
+     * for a VFS fetch result. The source distinguishes controller admission failures from provider
+     * errors that happen to use the same native error code. The validity predicate must be checked
+     * again at the point where an asynchronously dispatched UI or recovery action is applied: a
+     * newer navigation can supersede this result after the callback starts.
+     *
+     * A successful fetch can still be cancelled before model commit; the validity predicate then
+     * becomes false. Accepted-request failures that occur before a fetch result exists are reported
+     * by the pane lifecycle boundary.
      */
-    std::function<void(const std::expected<void, Error> &)> LoadingResultCallback = nullptr;
+    std::function<void(const std::expected<void, Error> &,
+                       DirectoryChangeResultSource _source,
+                       const std::function<bool()> &_is_current)> LoadingResultCallback = nullptr;
 };
 
 using ContextMenuProvider =
     std::function<NCPanelContextMenu *(std::vector<VFSListingItem> _items, PanelController *_panel)>;
+
+using PaneLifecycleObserver = core::PaneLifecycleProducer::Observer;
+using PaneLifecycleSubscription = core::PaneLifecycleProducer::Subscription;
 
 } // namespace panel
 } // namespace nc
@@ -126,6 +156,7 @@ using ContextMenuProvider =
 @property(nonatomic, readonly) NCMainWindowController *mainWindowController;
 @property(nonatomic, readonly) PanelView *view;
 @property(nonatomic, readonly) const nc::panel::data::Model &data;
+@property(nonatomic, readonly) nc::core::PaneId paneId;
 
 // Monotonically increasing number representing the number of times this Panel's content was
 // changed. I.e. it means a complete change of location/type/etc instead of reloading/updating
@@ -146,19 +177,38 @@ using ContextMenuProvider =
 // Defaults to PanelViewHeader. Explorer replaces it with a floating presenter.
 @property(nonatomic, weak) id<NCPanelQuickSearchPresentation> quickSearchPresentation;
 
+/**
+ * The injected Config, VFS manager, access provider, native FS manager and native host are retained
+ * as non-owning references and must outlive this controller. The shared layouts object is retained,
+ * but any Config injected into that storage must also outlive both objects.
+ */
 - (instancetype)initWithView:(PanelView *)_panel_view
+                      paneId:(nc::core::PaneId)_pane_id
                      layouts:(std::shared_ptr<nc::panel::PanelViewLayoutsStorage>)_layouts
+                      config:(nc::config::Config &)_config
           vfsInstanceManager:(nc::core::VFSInstanceManager &)_vfs_mgr
      directoryAccessProvider:(nc::panel::DirectoryAccessProvider &)_directory_access_provider
          contextMenuProvider:(nc::panel::ContextMenuProvider)_context_menu_provider
              nativeFSManager:(nc::utility::NativeFSManager &)_native_fs_mgr
                   nativeHost:(nc::vfs::NativeHost &)_native_host;
 
+/**
+ * Subscribes to the controller-owned pane lifecycle without exposing its mutable coordinator.
+ * Registration and event delivery are main-queue operations. The returned seed and retained
+ * failure replay form one linearizable initialization boundary with the live observation.
+ * Throws std::logic_error when called on a controller without its designated lifecycle state.
+ */
+- (nc::panel::PaneLifecycleSubscription)subscribeToPaneLifecycle:
+    (nc::panel::PaneLifecycleObserver)_observer;
+
 - (void)refreshPanel;                 // reload panel contents
 - (void)forceRefreshPanel;            // user pressed cmd+r by default
+- (bool)submitUserRefresh;            // forced user refresh accepted or deferred by pane lifecycle
+- (std::optional<nc::core::PaneNavigationAvailability>)paneNavigationAvailability;
 - (void)markRestorableStateAsInvalid; // will actually call window controller's invalidateRestorableState
 
-- (void)commitCancelableLoadingTask:(std::function<void(const std::function<bool()> &_is_cancelled)>)_task;
+- (void)commitCancelableLoadingTask:
+    (std::function<void(const nc::panel::CancelableLoadingTaskContext &)>)_task;
 
 /**
  * Will copy view options and sorting options.
@@ -196,7 +246,7 @@ using ContextMenuProvider =
 - (std::expected<void, nc::Error>)GoToDirWithContext:(std::shared_ptr<nc::panel::DirectoryChangeRequest>)_context;
 
 /**
- * Loads existing listing into the panel. Save to call from any thread.
+ * Loads an existing listing into the panel. Must be called on the main queue.
  */
 - (void)loadListing:(const VFSListingPtr &)_listing;
 

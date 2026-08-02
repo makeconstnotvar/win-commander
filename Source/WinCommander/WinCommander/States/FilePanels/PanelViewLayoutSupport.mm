@@ -210,7 +210,13 @@ static PanelViewLayout L1()
     return ret;
 }
 
-PanelViewLayoutsStorage::PanelViewLayoutsStorage(const char *_config_path) : m_ConfigPath(_config_path)
+PanelViewLayoutsStorage::PanelViewLayoutsStorage(const char *_config_path)
+    : PanelViewLayoutsStorage(_config_path, GlobalConfig())
+{
+}
+
+PanelViewLayoutsStorage::PanelViewLayoutsStorage(const char *_config_path, nc::config::Config &_config)
+    : m_ConfigPath(_config_path), m_Config(&_config)
 {
     LoadLayoutsFromConfig();
 }
@@ -289,7 +295,7 @@ PanelViewLayoutsStorage::ObservationTicket PanelViewLayoutsStorage::ObserveChang
 
 void PanelViewLayoutsStorage::LoadLayoutsFromConfig()
 {
-    auto layouts = GlobalConfig().Get(m_ConfigPath);
+    auto layouts = m_Config->Get(m_ConfigPath);
     if( !layouts.IsArray() )
         return;
 
@@ -313,7 +319,7 @@ void PanelViewLayoutsStorage::WriteLayoutsToConfig() const
     config::Value json_layouts{rapidjson::kArrayType};
     for( auto &l : layouts )
         json_layouts.PushBack(SaveLayout(*l), config::g_CrtAllocator);
-    GlobalConfig().Set(m_ConfigPath, json_layouts);
+    m_Config->Set(m_ConfigPath, json_layouts);
 }
 
 void PanelViewLayoutsStorage::CommitChanges(bool _fire_observers)

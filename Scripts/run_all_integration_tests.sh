@@ -1,99 +1,140 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-set -e
-set -o pipefail
+set -euo pipefail
 
-if ! [ -x "$(command -v xcpretty)" ] ; then
-    echo 'xcpretty is not found, aborting. (https://github.com/xcpretty/xcpretty)'
-    exit -1
+command -v xcodebuild >/dev/null 2>&1 || {
+  echo "xcodebuild is required." >&2
+  exit 1
+}
+command -v docker >/dev/null 2>&1 || {
+  echo "docker is required: https://www.docker.com" >&2
+  exit 1
+}
+command -v nc >/dev/null 2>&1 || {
+  echo "nc is required to verify Docker fixture readiness." >&2
+  exit 1
+}
+docker info >/dev/null 2>&1 || {
+  echo "Docker daemon is not available." >&2
+  exit 1
+}
+
+export LC_CTYPE="${LC_CTYPE:-en_US.UTF-8}"
+export ASAN_OPTIONS="${ASAN_OPTIONS:-detect_container_overflow=0}"
+
+scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+repo_root="$(cd "$scripts_dir/.." >/dev/null 2>&1 && pwd)"
+fixtures_dir="$repo_root/Source/VFS/tests/data/docker"
+project="$repo_root/Source/WinCommander/WinCommander.xcodeproj"
+host_arch="$(uname -m)"
+test_seed="${WINCOMMANDER_TEST_SEED:-424242}"
+
+owns_build_dir=0
+if [[ -n "${WINCOMMANDER_INTEGRATION_TEST_BUILD_DIR:-}" ]]; then
+  build_dir="$WINCOMMANDER_INTEGRATION_TEST_BUILD_DIR"
+  mkdir -p "$build_dir"
+else
+  build_dir="$(mktemp -d "${TMPDIR:-/tmp}/wincommander-integration-tests.XXXXXX")"
+  owns_build_dir=1
 fi
 
-if ! [ -x "$(command -v docker)" ] ; then
-    echo 'docker is not found, aborting. (https://www.docker.com)'
-    exit -1
-fi
-
-# https://github.com/xcpretty/xcpretty/issues/48
-export LC_CTYPE=en_US.UTF-8
-
-# https://github.com/google/sanitizers/wiki/AddressSanitizerContainerOverflow#false-positives
-export ASAN_OPTIONS=detect_container_overflow=0
-
-# Determine the host architecture
-HOST_ARCH=$(uname -m)
-
-# get current directory
-SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-ROOT_DIR="${SCRIPTS_DIR}/.."
-
-# allocate a temp dir for build artifacts
-BUILD_DIR="${SCRIPTS_DIR}/run_all_integration_tests.tmp"
-mkdir -p "${BUILD_DIR}"
-
-LOG_FILE=${BUILD_DIR}/xcodebuild.log
-
-# start up the docker stuff
-echo "=== Starting docker dependencies ==="
-cd ${ROOT_DIR}/Source/VFS/tests/data/docker
-./start.sh
-
-# stop the docker stuff in a cleanup function
-function cleanup {
-  echo "=== Stopping docker dependencies ==="
-  ${ROOT_DIR}/Source/VFS/tests/data/docker/stop.sh
+cleanup() {
+  "$fixtures_dir/stop.sh"
+  if [[ "$owns_build_dir" -eq 1 && "${WINCOMMANDER_KEEP_BUILD_ARTIFACTS:-0}" != "1" ]]; then
+    rm -rf "$build_dir"
+  else
+    echo "Integration-test artifacts: $build_dir"
+  fi
 }
 trap cleanup EXIT
 
-# go to the scripts directory
-cd ${SCRIPTS_DIR}
+echo "Starting Docker integration fixtures"
+"$fixtures_dir/stop.sh"
+"$fixtures_dir/start.sh"
 
-# Build the xcodebuild execution command
-XC="xcodebuild \
-    -project ../Source/WinCommander/WinCommander.xcodeproj \
-    -scheme IntegrationTests \
-    -configuration Debug \
-    -destination "platform=macOS,arch=${HOST_ARCH}" \
-    SYMROOT=${BUILD_DIR} \
-    OBJROOT=${BUILD_DIR} \
-    -enableAddressSanitizer YES \
-    -parallelizeTargets"
+wait_for_port() {
+  local port="$1"
+  for _ in {1..100}; do
+    if nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "Docker fixture did not open port $port." >&2
+  return 1
+}
 
-# Extract the directories and the names of the built unit test binaries
-DIRS="$($XC -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR =' | sed -e 's/.*= *//')"
-NAMES="$($XC -showBuildSettings 2>/dev/null | grep ' FULL_PRODUCT_NAME =' | sed -e 's/.*= *//')"
+wait_for_port 9021
+wait_for_port 9022
+wait_for_port 9080
 
-# Fill dirs[]
-dirs=()
-while IFS= read -r d; do
-    dirs+=("$d")
-done <<< "$DIRS"
+xcode=(
+  xcodebuild
+  -project "$project"
+  -scheme IntegrationTests
+  -configuration Debug
+  -destination "platform=macOS,arch=$host_arch"
+  -derivedDataPath "$build_dir/DerivedData"
+  -parallelizeTargets
+  -enableAddressSanitizer YES
+  ONLY_ACTIVE_ARCH=YES
+  COMPILER_INDEX_STORE_ENABLE=NO
+  CODE_SIGNING_ALLOWED=NO
+)
 
-# Fill names[]
-names=()
-while IFS= read -r n; do
-    names+=("$n")
-done <<< "$NAMES"
-    
-# Sanity check: both arrays must have same length
-if [[ ${#dirs[@]} -ne ${#names[@]} ]]; then
-    echo "Mismatch: ${#dirs[@]} dirs vs ${#names[@]} names" >&2
-    exit 1
+settings_file="$build_dir/build-settings.txt"
+if ! "${xcode[@]}" -showBuildSettings >"$settings_file" 2>/dev/null; then
+  echo "Unable to read build settings for the IntegrationTests scheme." >&2
+  exit 1
 fi
 
-# Combine them to build full binary paths
+test_names=()
 binary_paths=()
-for ((i=0; i<${#names[@]}; i++)); do
-    binary_paths+=("${dirs[$i]}/${names[$i]}")
+while IFS=$'\t' read -r target products_dir product_name; do
+  [[ -n "$target" && -n "$products_dir" && -n "$product_name" ]] || continue
+  test_names+=("$target")
+  binary_paths+=("$products_dir/$product_name")
+done < <(
+  awk '
+    /^Build settings for action build and target / {
+      target = $NF
+      sub(/:$/, "", target)
+    }
+    / BUILT_PRODUCTS_DIR = / {
+      products_dir = $0
+      sub(/^.* = /, "", products_dir)
+    }
+    / FULL_PRODUCT_NAME = / {
+      product_name = $0
+      sub(/^.* = /, "", product_name)
+      print target "\t" products_dir "\t" product_name
+    }
+  ' "$settings_file"
+)
+
+if [[ "${#binary_paths[@]}" -eq 0 ]]; then
+  echo "No integration-test products were discovered from the IntegrationTests scheme." >&2
+  exit 1
+fi
+
+log_file="$build_dir/xcodebuild.log"
+echo "Building aggregate IntegrationTests (Debug ASAN, $host_arch)"
+if command -v xcpretty >/dev/null 2>&1; then
+  "${xcode[@]}" build 2>&1 | tee "$log_file" | xcpretty
+else
+  "${xcode[@]}" -quiet build 2>&1 | tee "$log_file"
+fi
+
+cd "$repo_root"
+for index in "${!binary_paths[@]}"; do
+  binary_path="${binary_paths[$index]}"
+  test_name="${test_names[$index]}"
+  if [[ ! -x "$binary_path" ]]; then
+    echo "Built integration-test product is not executable: $binary_path" >&2
+    exit 1
+  fi
+  echo "Running $test_name"
+  "$binary_path" --rng-seed "$test_seed"
 done
 
-# Now actually build the integration tests tests
-${XC} build | tee -a ${LOG_FILE} | xcpretty
-
-# Run the produced binaries
-for path in "${binary_paths[@]}"; do
-    echo Now Running ${path}
-    ${path}
-done
-
-# cleanup
-rm -rf ${BUILD_DIR}
+echo "All aggregate integration tests passed."

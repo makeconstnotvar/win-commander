@@ -28,6 +28,16 @@ static std::expected<int, Error> VFSCompareEntries(const std::filesystem::path &
                                                    const std::filesystem::path &_file2_full_path,
                                                    const VFSHostPtr &_file2_host);
 
+static std::set<std::string> XAttrNames(const std::shared_ptr<VFSFile> &_file)
+{
+    std::set<std::string> names;
+    _file->XAttrIterateNames([&](std::string_view _name) {
+        names.emplace(_name);
+        return true;
+    });
+    return names;
+}
+
 static std::vector<VFSListingItem>
 FetchItems(const std::string &_directory_path, const std::vector<std::string> &_filenames, VFSHost &_host);
 static bool touch(const std::filesystem::path &_path);
@@ -239,8 +249,12 @@ TEST_CASE(PREFIX "Compressing an item with xattrs")
 
         // write the extended attributes into the file
         for( const EA &ea : tc.eas ) {
-            setxattr(filepath.c_str(), ea.name.c_str(), ea.bytes.data(), ea.bytes.size(), 0, 0);
+            REQUIRE(setxattr(filepath.c_str(), ea.name.c_str(), ea.bytes.data(), ea.bytes.size(), 0, 0) == 0);
         }
+
+        const std::shared_ptr<VFSFile> source_file = native_host->CreateFile(filepath.native()).value();
+        REQUIRE(source_file->Open(VFSFlags::OF_Read));
+        const auto source_xattrs = XAttrNames(source_file);
 
         // compress
         Compression operation{
@@ -258,8 +272,9 @@ TEST_CASE(PREFIX "Compressing an item with xattrs")
         const std::shared_ptr<VFSFile> file = arc_host->CreateFile("/" + filepath.filename().native()).value();
         REQUIRE(file->Open(VFSFlags::OF_Read));
 
-        // check the number of compressed extended attributes is the same as in the original file
-        REQUIRE(file->XAttrCount() == tc.eas.size());
+        // System-managed attributes can be attached to freshly created files. The archive must preserve the
+        // exact source set in addition to retaining every explicitly arranged value below.
+        REQUIRE(XAttrNames(file) == source_xattrs);
 
         // check that each extracted extended attribute is equal to the original
         for( const EA &ea : tc.eas ) {
@@ -293,7 +308,7 @@ TEST_CASE(PREFIX "Compressing multiple items with xattrs")
     for( const auto &p : {file0, file1, file2, dir1, dir2} ) {
         // write a single xattr to each file - the filename as a string
         const std::string val = p.filename().native();
-        setxattr((tmp_dir.directory / p).c_str(), "attr", val.c_str(), val.length(), 0, 0);
+        REQUIRE(setxattr((tmp_dir.directory / p).c_str(), "attr", val.c_str(), val.length(), 0, 0) == 0);
     }
 
     // compress
@@ -316,8 +331,13 @@ TEST_CASE(PREFIX "Compressing multiple items with xattrs")
         const std::shared_ptr<VFSFile> file = arc_host->CreateFile(path.native()).value();
         REQUIRE(file->Open(p.native().ends_with(".txt") ? VFSFlags::OF_Read
                                                         : (VFSFlags::OF_Read | VFSFlags::OF_Directory)));
-        // read the xattr and check its value
-        REQUIRE(file->XAttrCount() == 1);
+        // Compare the complete source set because macOS can attach system-managed attributes to new items.
+        const std::shared_ptr<VFSFile> source_file = native_host->CreateFile((tmp_dir.directory / p).native()).value();
+        REQUIRE(source_file->Open(p.native().ends_with(".txt") ? VFSFlags::OF_Read
+                                                               : (VFSFlags::OF_Read | VFSFlags::OF_Directory)));
+        REQUIRE(XAttrNames(file) == XAttrNames(source_file));
+
+        // Read the arranged xattr and check its value.
         REQUIRE(file->XAttrGet("attr", nullptr, 0).value() > 0);
         std::string val(file->XAttrGet("attr", nullptr, 0).value(), '\0');
         REQUIRE(file->XAttrGet("attr", val.data(), val.size()).value() > 0);

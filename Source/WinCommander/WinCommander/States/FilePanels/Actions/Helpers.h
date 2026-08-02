@@ -15,7 +15,8 @@ namespace nc::panel::actions {
 /**
  * Provides a wrapper which allows to asynchronously retrieve a VFS from its promise.
  * This operation will be executed in a panel's background loading thread.
- * The callbacks will be called from the background thread too.
+ * The work runs on the panel loading queue; callbacks are committed on the main queue only while
+ * the request-scoped content intent is still current.
  */
 class AsyncVFSPromiseRestorer
 {

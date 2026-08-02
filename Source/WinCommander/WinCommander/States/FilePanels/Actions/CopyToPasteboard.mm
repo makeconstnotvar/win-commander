@@ -11,103 +11,75 @@
 
 namespace nc::panel::actions {
 
-bool CopyToPasteboard::Predicate(PanelController *_target) const
+namespace {
+
+NSString *const g_FileCopyTitleKey = @"commands.file.copy.title";
+NSString *const g_FileCopyTitleFallback = @"Copy";
+NSString *const g_FileCutTitleKey = @"commands.file.cut.title";
+NSString *const g_FileCutTitleFallback = @"Cut";
+
+NSString *LocalizedFileCopyTitle(NSBundle *_bundle)
 {
-    const auto &stats = _target.data.Stats();
-    if( stats.selected_entries_amount > 0 )
-        return true;
-    return _target.view.item;
+    NSBundle *const bundle = _bundle != nil ? _bundle : NSBundle.mainBundle;
+    NSString *const title = [bundle localizedStringForKey:g_FileCopyTitleKey value:g_FileCopyTitleFallback table:nil];
+    if( title.length == 0 || [title isEqualToString:g_FileCopyTitleKey] )
+        return g_FileCopyTitleFallback;
+    return title;
 }
 
-bool CopyToPasteboard::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
+NSString *LocalizedFileCutTitle(NSBundle *_bundle)
 {
-    const auto &stats = _target.data.Stats();
-    if( stats.selected_entries_amount > 0 ) {
-        _item.title = [NSString
-            stringWithFormat:NSLocalizedStringFromTable(@"Copy %d Items", @"FilePanelsContextMenu", "Copy many items"),
-                             stats.selected_entries_amount];
-    }
-    else {
-        if( auto item = _target.view.item ) {
-            _item.title =
-                [NSString stringWithFormat:NSLocalizedStringFromTable(
-                                               @"Copy \u201c%@\u201d", @"FilePanelsContextMenu", "Copy one item"),
-                                           item.DisplayNameNS()];
-        }
-        else
-            _item.title = @"";
-    }
-    return Predicate(_target);
+    NSBundle *const bundle = _bundle != nil ? _bundle : NSBundle.mainBundle;
+    NSString *const title = [bundle localizedStringForKey:g_FileCutTitleKey value:g_FileCutTitleFallback table:nil];
+    if( title.length == 0 || [title isEqualToString:g_FileCutTitleKey] )
+        return g_FileCutTitleFallback;
+    return title;
 }
 
-void CopyToPasteboard::PerformWithItems(const std::vector<VFSListingItem> &_items, PasteboardFileOperation _operation)
+} // namespace
+
+void UpdateCopyToPasteboardMenuItemTitle(PanelController *_target, NSMenuItem *_item, NSBundle *_bundle)
 {
-    if( !PasteboardSupport::WriteFilesnamesPBoard(_items, NSPasteboard.generalPasteboard, _operation) )
-        NSBeep();
+    const std::vector<VFSListingItem> items = _target.selectedEntriesOrFocusedEntryWithDotDot;
+    UpdateCopyToPasteboardMenuItemTitle(items, _item, _bundle);
 }
 
-void CopyToPasteboard::Perform(PanelController *_target, id /*_sender*/) const
+void UpdateCutToPasteboardMenuItemTitle(PanelController *_target, NSMenuItem *_item, NSBundle *_bundle)
 {
-    PerformWithItems(_target.selectedEntriesOrFocusedEntryWithDotDot);
+    const std::vector<VFSListingItem> items = _target.selectedEntriesOrFocusedEntry;
+    UpdateCutToPasteboardMenuItemTitle(items, _item, _bundle);
 }
 
-bool CutToPasteboard::Predicate(PanelController *_target) const
+void UpdateCopyToPasteboardMenuItemTitle(const std::span<const VFSListingItem> _items,
+                                         NSMenuItem *_item,
+                                         NSBundle *_bundle)
 {
-    const auto items = _target.selectedEntriesOrFocusedEntry;
-    return !items.empty() && std::ranges::all_of(items, [](const VFSListingItem &_item) {
-        return _item.Host() && _item.Host()->IsNativeFS();
-    });
-}
-
-bool CutToPasteboard::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
-{
-    const auto items = _target.selectedEntriesOrFocusedEntry;
-    if( items.size() > 1 ) {
-        _item.title = [NSString stringWithFormat:NSLocalizedString(@"Cut %lu Items", "Cut many items"),
-                                                  static_cast<unsigned long>(items.size())];
-    }
-    else if( items.size() == 1 ) {
-        _item.title = [NSString stringWithFormat:NSLocalizedString(@"Cut “%@”", "Cut one item"),
-                                                  items.front().DisplayNameNS()];
-    }
-    return Predicate(_target);
-}
-
-void CutToPasteboard::Perform(PanelController *_target, [[maybe_unused]] id _sender) const
-{
-    PerformWithItems(_target.selectedEntriesOrFocusedEntry, PasteboardFileOperation::Move);
-}
-
-context::CopyToPasteboard::CopyToPasteboard(const std::vector<VFSListingItem> &_items) : m_Items(_items)
-{
-    if( _items.empty() )
-        throw std::invalid_argument("CopyToPasteboard was made with empty items set");
-}
-
-bool context::CopyToPasteboard::Predicate([[maybe_unused]] PanelController *_target) const
-{
-    // currently there's a difference with previous predicate form context menu:
-    //        if( m_CommonHost && m_CommonHost->IsNativeFS() ) {
-    // such thing works only on native file systems
-    return !m_Items.empty();
-}
-
-bool context::CopyToPasteboard::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
-{
-    if( m_Items.size() > 1 )
+    if( _items.size() > 1 )
         _item.title = [NSString
             stringWithFormat:NSLocalizedStringFromTable(@"Copy %lu Items", @"FilePanelsContextMenu", "Copy many items"),
-                             m_Items.size()];
-    else
+                             _items.size()];
+    else if( _items.size() == 1 )
         _item.title = [NSString stringWithFormat:NSLocalizedStringFromTable(
                                                      @"Copy \u201c%@\u201d", @"FilePanelsContextMenu", "Copy one item"),
-                                                 m_Items.front().DisplayNameNS()];
-    return Predicate(_target);
+                                                 _items.front().DisplayNameNS()];
+    else
+        _item.title = LocalizedFileCopyTitle(_bundle);
 }
 
-void context::CopyToPasteboard::Perform([[maybe_unused]] PanelController *_target, id /*_sender*/) const
+void UpdateCutToPasteboardMenuItemTitle(const std::span<const VFSListingItem> _items,
+                                        NSMenuItem *_item,
+                                        NSBundle *_bundle)
 {
-    PerformWithItems(m_Items);
+    if( _items.size() > 1 )
+        _item.title = [NSString
+            stringWithFormat:NSLocalizedStringFromTable(@"Cut %lu Items", @"FilePanelsContextMenu", "Cut many items"),
+                             _items.size()];
+    else if( _items.size() == 1 )
+        _item.title = [NSString stringWithFormat:NSLocalizedStringFromTable(
+                                                     @"Cut \u201c%@\u201d", @"FilePanelsContextMenu", "Cut one item"),
+                                                 _items.front().DisplayNameNS()];
+    else
+        _item.title = LocalizedFileCutTitle(_bundle);
 }
 
 } // namespace nc::panel::actions

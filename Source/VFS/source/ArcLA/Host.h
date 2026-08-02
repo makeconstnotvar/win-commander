@@ -35,6 +35,8 @@ public:
     // The fixed tag identifying this VFS class
     static const char *const UniqueTag;
 
+    static constexpr uint64_t DeclaredFeatures = HostFeatures::Read | HostFeatures::ReadSymlink;
+
     // Type-erased configuration that contains data to restore this VFS
     VFSConfiguration Configuration() const override;
 

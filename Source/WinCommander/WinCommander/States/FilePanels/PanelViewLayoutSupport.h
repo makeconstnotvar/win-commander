@@ -12,6 +12,10 @@
 #include <variant>
 #include <Cocoa/Cocoa.h>
 
+namespace nc::config {
+class Config;
+}
+
 namespace nc::panel {
 
 struct PanelViewDisabledLayout {
@@ -62,6 +66,8 @@ class PanelViewLayoutsStorage : public base::ObservableBase
 {
 public:
     PanelViewLayoutsStorage(const char *_config_path);
+    /** The supplied Config is stored by non-owning pointer and must outlive this storage. */
+    PanelViewLayoutsStorage(const char *_config_path, nc::config::Config &_config);
 
     /**
      * Will return total layouts count, including disabled onces (PanelViewDisabledLayout).
@@ -112,6 +118,7 @@ private:
     mutable spinlock m_LayoutsLock;
     std::vector<std::shared_ptr<const PanelViewLayout>> m_Layouts;
     const char *m_ConfigPath;
+    nc::config::Config *m_Config;
 };
 
 } // namespace nc::panel

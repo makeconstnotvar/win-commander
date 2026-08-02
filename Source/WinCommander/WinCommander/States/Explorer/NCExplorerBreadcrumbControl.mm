@@ -1,21 +1,116 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "NCExplorerBreadcrumbControl.h"
 #include "../FilePanels/PanelController.h"
-#include "../FilePanels/PanelController+DataAccess.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
 #include "../FilePanels/PanelView.h"
+#include "../../Core/Errors/FileManagerErrorAdapter.h"
+#include "../../Core/Pane/PaneSnapshot.h"
+#include "../../Core/VisualState/VisualStateMapper.h"
+#include <Base/CommonPaths.h>
 #include <Base/dispatch_cpp.h>
-#include <Panel/PanelData.h>
 #include <Utility/PathManip.h>
 #include <VFS/VFS.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <optional>
 
 using namespace std::chrono_literals;
 
 using namespace nc;
+
+namespace {
+
+struct BreadcrumbPresentationState {
+    core::PaneLoadPhase load_phase = core::PaneLoadPhase::Empty;
+    bool address_editable = false;
+    bool is_uniform = false;
+    std::string path;
+    std::string display_title;
+    VFSHostPtr host;
+
+    bool operator==(const BreadcrumbPresentationState &) const noexcept = default;
+};
+
+bool IsAddressEditable(const BreadcrumbPresentationState &_state)
+{
+    return _state.address_editable;
+}
+
+bool HasAddressLocation(const BreadcrumbPresentationState &_state)
+{
+    return _state.is_uniform && _state.host != nullptr && _state.host != VFSHost::DummyHost() &&
+           !_state.path.empty();
+}
+
+bool HasSameAddressContext(const BreadcrumbPresentationState &_lhs, const BreadcrumbPresentationState &_rhs)
+{
+    return _lhs.is_uniform == _rhs.is_uniform && _lhs.path == _rhs.path && _lhs.host == _rhs.host;
+}
+
+bool HasSameBreadcrumbContent(const BreadcrumbPresentationState &_lhs, const BreadcrumbPresentationState &_rhs)
+{
+    return HasSameAddressContext(_lhs, _rhs) && _lhs.display_title == _rhs.display_title;
+}
+
+NSString *StringFromUTF8(const std::string &_value)
+{
+    return [[NSString alloc] initWithBytes:_value.data() length:_value.size() encoding:NSUTF8StringEncoding];
+}
+
+NSString *LocalizedVisualMessage(const core::VisualMessage &_message)
+{
+    NSString *const fallback = StringFromUTF8(_message.user_message_fallback) ?: @"";
+    NSString *const key = StringFromUTF8(_message.user_message_key);
+    if( key.length == 0 )
+        return fallback.length == 0 ? nil : fallback;
+
+    NSString *const value = [NSBundle.mainBundle localizedStringForKey:key value:fallback table:nil];
+    if( value.length == 0 || ([value isEqualToString:key] && fallback.length != 0) )
+        return fallback.length == 0 ? nil : fallback;
+    return value;
+}
+
+NSString *_Nullable NavigationRequestErrorText(const Error &_error,
+                                               const panel::DirectoryChangeResultSource _source,
+                                               const core::FileManagerErrorContext &_context)
+{
+    if( _source == panel::DirectoryChangeResultSource::Admission && _error.Domain() == Error::POSIX ) {
+        switch( _error.Code() ) {
+            case EBUSY:
+                return NSLocalizedString(@"Another folder request is already in progress.",
+                                         "Explorer navigation admission error");
+            case ENODEV:
+                return NSLocalizedString(@"Folder navigation is unavailable.",
+                                         "Explorer navigation admission error");
+            case EINVAL:
+                return NSLocalizedString(@"The folder path is invalid.",
+                                         "Explorer navigation admission error");
+        }
+    }
+
+    const core::FileManagerError mapped = core::FileManagerErrorAdapter::FromError(_error, _context);
+    if( mapped.category == core::FileManagerErrorCategory::OperationCancelledError ||
+        mapped.severity == core::FileManagerErrorSeverity::Info )
+        return nil;
+    const core::VisualMessage message{
+        .user_message_key = mapped.user_message_key,
+        .user_message_fallback = mapped.user_message,
+        .suggested_actions = mapped.suggested_actions,
+    };
+    return LocalizedVisualMessage(message) ?: @"The operation could not be completed.";
+}
+
+std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentationState &_state)
+{
+    const std::string_view home =
+        _state.host->IsNativeFS() ? std::string_view{base::CommonPaths::Home()} : std::string_view{"/"};
+    return utility::PathManip::Expand(_input, home, _state.path).string();
+}
+
+} // namespace
 
 @interface NCExplorerBreadcrumbTarget : NSObject
 
@@ -69,6 +164,7 @@ using namespace nc;
     NSStackView *m_PathStack;
     NSComboBox *m_PathEditor;
     NSTextField *m_FallbackLabel;
+    NSTextField *m_ErrorLabel;
     NSSearchField *m_FindField;
     NSProgressIndicator *m_BusyIndicator;
     NSMutableArray<NCExplorerBreadcrumbTarget *> *m_SegmentTargets;
@@ -77,6 +173,9 @@ using namespace nc;
     unsigned long m_PathGeneration;
     unsigned long m_CompletionGeneration;
     unsigned long m_NavigationGeneration;
+    NSString *m_RequestErrorMessage;
+    std::optional<unsigned long> m_LocationGeneration;
+    std::optional<BreadcrumbPresentationState> m_PresentationState;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
@@ -88,7 +187,6 @@ using namespace nc;
         self.accessibilityRole = NSAccessibilityGroupRole;
         self.accessibilityLabel = NSLocalizedString(@"Address bar", "Explorer accessibility label");
         [self buildLayout];
-        [self panelPathChanged];
     }
     return self;
 }
@@ -126,6 +224,14 @@ using namespace nc;
     m_FallbackLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
     m_FallbackLabel.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
 
+    m_ErrorLabel = [NSTextField labelWithString:@""];
+    m_ErrorLabel.hidden = true;
+    m_ErrorLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    m_ErrorLabel.maximumNumberOfLines = 1;
+    m_ErrorLabel.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
+    m_ErrorLabel.textColor = NSColor.systemRedColor;
+    m_ErrorLabel.accessibilityLabel = NSLocalizedString(@"Folder status", "Explorer accessibility label");
+
     m_FindField = [[NSSearchField alloc] initWithFrame:NSZeroRect];
     m_FindField.placeholderString = NSLocalizedString(@"Find Files", "Explorer toolbar");
     m_FindField.toolTip = NSLocalizedString(@"Open Find Files with this filename mask", "Explorer toolbar");
@@ -140,7 +246,8 @@ using namespace nc;
     m_BusyIndicator.displayedWhenStopped = false;
     m_BusyIndicator.indeterminate = true;
 
-    for( NSView *view in @[m_LocationButton, m_PathStack, m_PathEditor, m_FallbackLabel, m_FindField, m_BusyIndicator] ) {
+    for( NSView *view in
+         @[m_LocationButton, m_PathStack, m_PathEditor, m_FallbackLabel, m_ErrorLabel, m_FindField, m_BusyIndicator] ) {
         view.translatesAutoresizingMaskIntoConstraints = false;
         [self addSubview:view];
     }
@@ -149,6 +256,10 @@ using namespace nc;
                                  forOrientation:NSLayoutConstraintOrientationHorizontal];
     [m_FindField setContentCompressionResistancePriority:NSLayoutPriorityDefaultHigh
                                           forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [m_ErrorLabel setContentHuggingPriority:NSLayoutPriorityRequired
+                             forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [m_ErrorLabel setContentCompressionResistancePriority:NSLayoutPriorityDefaultHigh
+                                           forOrientation:NSLayoutConstraintOrientationHorizontal];
     [NSLayoutConstraint activateConstraints:@[
         [m_LocationButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:2.0],
         [m_LocationButton.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
@@ -156,15 +267,19 @@ using namespace nc;
 
         [m_PathStack.leadingAnchor constraintEqualToAnchor:m_LocationButton.trailingAnchor constant:2.0],
         [m_PathStack.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [m_PathStack.trailingAnchor constraintLessThanOrEqualToAnchor:m_BusyIndicator.leadingAnchor constant:-6.0],
+        [m_PathStack.trailingAnchor constraintLessThanOrEqualToAnchor:m_ErrorLabel.leadingAnchor constant:-6.0],
 
         [m_PathEditor.leadingAnchor constraintEqualToAnchor:m_LocationButton.trailingAnchor constant:2.0],
         [m_PathEditor.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [m_PathEditor.trailingAnchor constraintEqualToAnchor:m_BusyIndicator.leadingAnchor constant:-6.0],
+        [m_PathEditor.trailingAnchor constraintEqualToAnchor:m_ErrorLabel.leadingAnchor constant:-6.0],
 
         [m_FallbackLabel.leadingAnchor constraintEqualToAnchor:m_LocationButton.trailingAnchor constant:4.0],
         [m_FallbackLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [m_FallbackLabel.trailingAnchor constraintEqualToAnchor:m_BusyIndicator.leadingAnchor constant:-6.0],
+        [m_FallbackLabel.trailingAnchor constraintEqualToAnchor:m_ErrorLabel.leadingAnchor constant:-6.0],
+
+        [m_ErrorLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+        [m_ErrorLabel.trailingAnchor constraintEqualToAnchor:m_BusyIndicator.leadingAnchor constant:-4.0],
+        [m_ErrorLabel.widthAnchor constraintLessThanOrEqualToConstant:220.0],
 
         [m_BusyIndicator.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
         [m_BusyIndicator.widthAnchor constraintEqualToConstant:16.0],
@@ -182,25 +297,119 @@ using namespace nc;
     return m_BusyIndicator;
 }
 
-- (void)panelPathChanged
+- (NSTextField *)errorLabel
 {
-    ++m_PathGeneration;
-    ++m_NavigationGeneration;
-    [self leaveEditingMode];
+    return m_ErrorLabel;
+}
 
-    if( !m_Panel.isUniform ) {
+- (NSString *)requestErrorMessage
+{
+    return m_RequestErrorMessage;
+}
+
+- (void)applyVisibleErrorText:(NSString *)_error_text priority:(const core::VisualPriority)_priority
+{
+    const bool changed = m_ErrorLabel.hidden == (_error_text.length != 0) ||
+                         ![m_ErrorLabel.stringValue isEqualToString:_error_text ?: @""];
+    m_ErrorLabel.hidden = _error_text.length == 0;
+    m_ErrorLabel.stringValue = _error_text ?: @"";
+    m_ErrorLabel.toolTip = _error_text;
+    m_ErrorLabel.accessibilityValue = _error_text;
+    m_ErrorLabel.accessibilityHelp = _error_text;
+    self.accessibilityHelp = _error_text;
+    m_ErrorLabel.textColor = _priority >= core::VisualPriority::Blocking ? NSColor.systemRedColor
+                                                                         : NSColor.systemOrangeColor;
+    if( changed && _error_text.length != 0 )
+        NSAccessibilityPostNotification(m_ErrorLabel, NSAccessibilityValueChangedNotification);
+}
+
+- (void)applyPaneSnapshot:(const core::PaneSnapshot &)_snapshot
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+
+    const core::PaneState &state = _snapshot.state;
+    const bool location_generation_changed =
+        !m_LocationGeneration || *m_LocationGeneration != state.location_generation;
+    if( !state.visible_error &&
+        (state.load_phase == core::PaneLoadPhase::Loading ||
+         state.load_phase == core::PaneLoadPhase::Refreshing || location_generation_changed) ) {
+        m_RequestErrorMessage = nil;
+        m_PathEditor.textColor = NSColor.labelColor;
+        m_PathEditor.toolTip = nil;
+    }
+    const core::PaneVisualState visual = core::VisualStateMapper::MapPane(_snapshot);
+
+    const core::VisualMessage *visible_message = nullptr;
+    if( visual.status.kind == core::PaneStatusVisualKind::Error && visual.status.message )
+        visible_message = std::addressof(*visual.status.message);
+    else if( visual.nonblocking_notice )
+        visible_message = std::addressof(*visual.nonblocking_notice);
+    NSString *const snapshot_error_text = visible_message != nullptr ? LocalizedVisualMessage(*visible_message) : nil;
+    [self applyVisibleErrorText:snapshot_error_text ?: m_RequestErrorMessage priority:visual.priority];
+
+    if( visual.breadcrumb.shows_activity )
+        [m_BusyIndicator startAnimation:nil];
+    else
+        [m_BusyIndicator stopAnimation:nil];
+
+    BreadcrumbPresentationState presentation_state{
+        .load_phase = state.load_phase,
+        .address_editable = visual.breadcrumb.editable,
+        .is_uniform = state.is_uniform,
+        .path = state.path,
+        .display_title = state.display_title,
+        .host = state.host,
+    };
+    const bool address_context_changed =
+        !m_PresentationState || !HasSameAddressContext(*m_PresentationState, presentation_state);
+    const bool breadcrumb_content_changed =
+        !m_PresentationState || !HasSameBreadcrumbContent(*m_PresentationState, presentation_state);
+    const bool location_changed = location_generation_changed || address_context_changed;
+    if( location_changed ) {
+        m_LocationGeneration = state.location_generation;
+        ++m_PathGeneration;
+        ++m_NavigationGeneration;
+    }
+
+    const bool editor_visible = !m_PathEditor.hidden;
+    m_PresentationState = std::move(presentation_state);
+    m_LocationButton.enabled = m_PresentationState->address_editable;
+
+    if( editor_visible && (location_changed || !m_PresentationState->address_editable) )
+        [self leaveEditingMode];
+    else if( editor_visible )
+        return;
+
+    if( !breadcrumb_content_changed && !location_changed )
+        return;
+
+    NSString *const display_title = [NSString stringWithUTF8String:state.display_title.c_str()] ?: @"";
+
+    if( !state.is_uniform ) {
         m_PathStack.hidden = true;
         m_FallbackLabel.hidden = false;
-        const std::string &title = m_Panel.data.Listing().Title();
-        m_FallbackLabel.stringValue = title.empty()
+        m_FallbackLabel.stringValue = display_title.length == 0
                                           ? NSLocalizedString(@"Multiple Locations", "Explorer address fallback")
-                                          : [NSString stringWithUTF8String:title.c_str()];
+                                          : display_title;
+        self.accessibilityValue = m_FallbackLabel.stringValue;
+        NSAccessibilityPostNotification(self, NSAccessibilityValueChangedNotification);
+        return;
+    }
+
+    if( !HasAddressLocation(*m_PresentationState) ) {
+        m_PathStack.hidden = true;
+        m_FallbackLabel.hidden = false;
+        m_FallbackLabel.stringValue = display_title;
+        self.accessibilityValue = display_title;
+        NSAccessibilityPostNotification(self, NSAccessibilityValueChangedNotification);
         return;
     }
 
     m_FallbackLabel.hidden = true;
     m_PathStack.hidden = false;
-    [self rebuildSegmentsForPath:m_Panel.currentDirectoryPath host:m_Panel.vfs];
+    [self rebuildSegmentsForPath:state.path host:state.host];
+    self.accessibilityValue = [NSString stringWithUTF8String:state.path.c_str()] ?: @"";
+    NSAccessibilityPostNotification(self, NSAccessibilityValueChangedNotification);
 }
 
 - (void)rebuildSegmentsForPath:(const std::string &)_path host:(const VFSHostPtr &)_host
@@ -210,6 +419,9 @@ using namespace nc;
         [view removeFromSuperview];
     }
     m_SegmentTargets = [NSMutableArray new];
+
+    if( !_host )
+        return;
 
     NSString *root_title = @"/";
     if( _host->IsNativeFS() ) {
@@ -358,7 +570,7 @@ using namespace nc;
 
 - (void)focusAddressField
 {
-    if( !m_Panel.isUniform ) {
+    if( !m_PresentationState || !IsAddressEditable(*m_PresentationState) ) {
         NSBeep();
         return;
     }
@@ -372,13 +584,15 @@ using namespace nc;
     m_PathEditor.hidden = false;
     m_PathEditor.textColor = NSColor.labelColor;
     m_PathEditor.toolTip = nil;
-    m_PathEditor.stringValue = [NSString stringWithUTF8String:m_Panel.currentDirectoryPath.c_str()];
+    m_PathEditor.stringValue = [NSString stringWithUTF8String:m_PresentationState->path.c_str()];
     [self.window makeFirstResponder:m_PathEditor];
     [m_PathEditor selectText:nil];
 }
 
 - (void)leaveEditingMode
 {
+    NSResponder *const first_responder = self.window.firstResponder;
+    const bool editor_had_focus = first_responder == m_PathEditor || first_responder == m_PathEditor.currentEditor;
     ++m_CompletionGeneration;
     if( m_CompletionCancellation )
         m_CompletionCancellation->store(true);
@@ -386,6 +600,8 @@ using namespace nc;
     m_PathEditor.hidden = true;
     m_Completions = @[];
     [m_PathEditor reloadData];
+    if( editor_had_focus )
+        [self.window makeFirstResponder:m_Panel.view];
 }
 
 - (void)onEditPath:(id) [[maybe_unused]] _sender
@@ -395,33 +611,52 @@ using namespace nc;
 
 - (void)onPathEditorCommit:(id) [[maybe_unused]] _sender
 {
-    if( !m_Panel.isUniform )
+    if( !m_PresentationState || !IsAddressEditable(*m_PresentationState) )
         return;
-    const std::string expanded = [m_Panel expandPath:m_PathEditor.stringValue.fileSystemRepresentation];
+    const std::string expanded =
+        ExpandAddressPath(m_PathEditor.stringValue.fileSystemRepresentation, *m_PresentationState);
     if( expanded.empty() ) {
         NSBeep();
         return;
     }
-    [self navigateToPath:EnsureTrailingSlash(expanded) host:m_Panel.vfs];
+    [self navigateToPath:EnsureTrailingSlash(expanded) host:m_PresentationState->host];
 }
 
 - (void)navigateToPath:(const std::string &)_path host:(const VFSHostPtr &)_host
 {
     const unsigned long generation = ++m_NavigationGeneration;
+    m_RequestErrorMessage = nil;
+    m_PathEditor.textColor = NSColor.labelColor;
+    m_PathEditor.toolTip = nil;
+    [self applyVisibleErrorText:nil priority:core::VisualPriority::Normal];
     auto request = std::make_shared<panel::DirectoryChangeRequest>();
     request->RequestedDirectory = EnsureTrailingSlash(_path);
     request->VFS = _host;
     request->PerformAsynchronous = true;
     request->InitiatedByUser = true;
+    core::FileManagerErrorContext error_context;
+    error_context.affected_items.emplace_back(request->RequestedDirectory);
+    if( const char *const provider = _host ? _host->Tag() : nullptr; provider != nullptr )
+        error_context.provider_id = provider;
     __weak NCExplorerBreadcrumbControl *weak_self = self;
-    request->LoadingResultCallback = [weak_self, generation](const std::expected<void, Error> &_result) {
+    request->LoadingResultCallback = [weak_self, generation, error_context = std::move(error_context)](
+                                         const std::expected<void, Error> &_result,
+                                         const panel::DirectoryChangeResultSource _source,
+                                         const std::function<bool()> &_is_current) {
         if( _result )
             return;
-        dispatch_to_main_queue([weak_self, generation] {
+        NSString *const error_text = NavigationRequestErrorText(_result.error(), _source, error_context);
+        if( error_text.length == 0 )
+            return;
+        dispatch_or_run_in_main_queue([weak_self, generation, is_current = _is_current, error_text] {
+            if( !is_current() )
+                return;
             if( NCExplorerBreadcrumbControl *const strong_self = weak_self;
                 strong_self && strong_self->m_NavigationGeneration == generation ) {
+                strong_self->m_RequestErrorMessage = [error_text copy];
                 strong_self->m_PathEditor.textColor = NSColor.systemRedColor;
-                strong_self->m_PathEditor.toolTip = NSLocalizedString(@"The folder could not be opened", "Explorer address bar");
+                strong_self->m_PathEditor.toolTip = error_text;
+                [strong_self applyVisibleErrorText:error_text priority:core::VisualPriority::Blocking];
                 NSBeep();
             }
         });
@@ -431,7 +666,8 @@ using namespace nc;
 
 - (void)controlTextDidChange:(NSNotification *)_notification
 {
-    if( _notification.object != m_PathEditor || !m_Panel.isUniform )
+    if( _notification.object != m_PathEditor || !m_PresentationState || !m_PresentationState->is_uniform ||
+        !m_PresentationState->host )
         return;
 
     ++m_NavigationGeneration;
@@ -442,7 +678,8 @@ using namespace nc;
     m_CompletionCancellation = cancellation;
     m_Completions = @[];
     [m_PathEditor reloadData];
-    const std::string expanded = [m_Panel expandPath:m_PathEditor.stringValue.fileSystemRepresentation];
+    const BreadcrumbPresentationState context = *m_PresentationState;
+    const std::string expanded = ExpandAddressPath(m_PathEditor.stringValue.fileSystemRepresentation, context);
     if( expanded.empty() )
         return;
 
@@ -453,7 +690,7 @@ using namespace nc;
         prefix = slash == std::string::npos ? parent : parent.substr(slash + 1);
         parent = slash == std::string::npos ? "/" : parent.substr(0, slash + 1);
     }
-    const VFSHostPtr host = m_Panel.vfs;
+    const VFSHostPtr host = context.host;
     __weak NCExplorerBreadcrumbControl *weak_self = self;
     dispatch_to_main_queue_after(150ms, [weak_self, host, parent, prefix, generation, cancellation] {
         NCExplorerBreadcrumbControl *const strong_self = weak_self;
@@ -499,8 +736,9 @@ using namespace nc;
 {
     if( _control == m_PathEditor && _selector == @selector(cancelOperation:) ) {
         [self leaveEditingMode];
-        m_PathStack.hidden = !m_Panel.isUniform;
-        m_FallbackLabel.hidden = m_Panel.isUniform;
+        const bool show_path = m_PresentationState && IsAddressEditable(*m_PresentationState);
+        m_PathStack.hidden = !show_path;
+        m_FallbackLabel.hidden = show_path;
         [self.window makeFirstResponder:m_Panel.view];
         return true;
     }

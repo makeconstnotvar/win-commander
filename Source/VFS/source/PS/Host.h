@@ -10,6 +10,8 @@ namespace nc::vfs {
 class PSHost final : public Host
 {
 public:
+    static constexpr uint64_t DeclaredFeatures = HostFeatures::Read | HostFeatures::ObserveDirectoryChanges;
+
     PSHost();
     ~PSHost() override;
 

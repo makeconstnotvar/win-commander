@@ -6,7 +6,6 @@
 #include <atomic>
 #include "dispatch_cpp.h"
 #include "spinlock.h"
-#include "algo.h"
 
 namespace nc::base {
 
@@ -105,12 +104,17 @@ void SerialQueue::Run(T _f) const
         T f;
         const SerialQueue *q;
     };
+    auto context = std::unique_ptr<Ctx>{new Ctx{std::move(_f), this}};
     Increment();
-    dispatch_async_f(m_Queue, new Ctx{std::move(_f), this}, [](void *_p) {
-        const auto context = static_cast<Ctx *>(_p);
-        auto cleanup = at_scope_end([context] { delete context; });
-        context->f();
-        context->q->Decrement();
+    dispatch_async_f(m_Queue, context.release(), [](void *_p) {
+        dispatch_cpp_support::wrapped_call(
+            [](void *_p) { static_cast<Ctx *>(_p)->f(); },
+            [](void *_p) {
+                const auto context = static_cast<Ctx *>(_p);
+                context->q->Decrement();
+                delete context;
+            },
+            _p);
     });
 }
 

@@ -103,14 +103,12 @@ static void NavigateToPersistentLocation(PanelController *_panel,
     using nc::panel::actions::AsyncPersistentLocationRestorer;
     auto restorer = AsyncPersistentLocationRestorer(_panel, _panel.vfsInstanceManager, _net_mgr);
     auto handler = [path = _location.path, panel = _panel](VFSHostPtr _host) {
-        dispatch_to_main_queue([=] {
-            auto request = std::make_shared<DirectoryChangeRequest>();
-            request->RequestedDirectory = path;
-            request->VFS = _host;
-            request->PerformAsynchronous = true;
-            request->InitiatedByUser = true;
-            [panel GoToDirWithContext:request];
-        });
+        auto request = std::make_shared<DirectoryChangeRequest>();
+        request->RequestedDirectory = path;
+        request->VFS = _host;
+        request->PerformAsynchronous = true;
+        request->InitiatedByUser = true;
+        [panel GoToDirWithContext:request];
     };
     restorer.Restore(_location, std::move(handler), nullptr);
 }
@@ -122,14 +120,12 @@ static void NavigateToVFSPromise(PanelController *_panel,
     using nc::panel::actions::AsyncVFSPromiseRestorer;
     auto restorer = AsyncVFSPromiseRestorer(_panel, _panel.vfsInstanceManager);
     auto handler = [path = _path, panel = _panel](VFSHostPtr _host) {
-        dispatch_to_main_queue([=] {
-            auto request = std::make_shared<DirectoryChangeRequest>();
-            request->RequestedDirectory = path;
-            request->VFS = _host;
-            request->PerformAsynchronous = true;
-            request->InitiatedByUser = true;
-            [panel GoToDirWithContext:request];
-        });
+        auto request = std::make_shared<DirectoryChangeRequest>();
+        request->RequestedDirectory = path;
+        request->VFS = _host;
+        request->PerformAsynchronous = true;
+        request->InitiatedByUser = true;
+        [panel GoToDirWithContext:request];
     };
     restorer.Restore(_promise, std::move(handler), nullptr);
 }
@@ -138,7 +134,7 @@ static void NavigateToTag(PanelController *_panel, const nc::utility::Tags::Tag 
 {
     // The Spotlight query is done in a background in the panel's loading queue.
     auto task = [tag = _tag, fetch_flags = _panel.vfsFetchingFlags, panel = _panel](
-                    const std::function<bool()> &_is_cancelled) {
+                    const CancelableLoadingTaskContext &_context) {
         auto items = nc::utility::Tags::GatherAllItemsWithTag(tag.Label());
         std::vector<VFSListingPtr> listings(items.size());
         auto vfs = nc::bootstrap::NativeVFSHostInstance().SharedPtr(); // TODO: DI instead
@@ -149,11 +145,12 @@ static void NavigateToTag(PanelController *_panel, const nc::utility::Tags::Tag 
             items.end(),      //
             listings.begin(), //
             [&](const std::filesystem::path &_path) -> VFSListingPtr {
-                if( _is_cancelled && _is_cancelled() )
+                if( _context.is_cancelled && _context.is_cancelled() )
                     return nullptr;
-                return vfs->FetchSingleItemListing(_path.c_str(), fetch_flags, _is_cancelled).value_or(VFSListingPtr{});
+                return vfs->FetchSingleItemListing(_path.c_str(), fetch_flags, _context.is_cancelled)
+                    .value_or(VFSListingPtr{});
             });
-        if( _is_cancelled && _is_cancelled() )
+        if( _context.is_cancelled && _context.is_cancelled() )
             return;
 
         // There might be failures to fetch a listing - remove these null listings explicitly
@@ -163,7 +160,7 @@ static void NavigateToTag(PanelController *_panel, const nc::utility::Tags::Tag 
         auto listing_input = VFSListing::Compose(listings);
         listing_input.title = tag.Label();
         if( auto combined_listing = VFSListing::Build(std::move(listing_input)) )
-            dispatch_to_main_queue([=] { [panel loadListing:combined_listing]; });
+            _context.commit_on_main([=] { [panel loadListing:combined_listing]; });
     };
     [_panel commitCancelableLoadingTask:std::move(task)];
 }

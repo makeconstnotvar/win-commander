@@ -356,7 +356,7 @@ bool Host::IsNativeFS() const noexcept
 
 bool Host::ValidateFilename(std::string_view _filename) const
 {
-    constexpr size_t max_filename_len = 256;
+    constexpr size_t max_filename_len = 255;
     if( _filename.empty() || _filename.length() > max_filename_len )
         return false;
 
@@ -580,6 +580,74 @@ std::string Host::MakePathVerbose(std::string_view _path) const
 bool Host::IsCaseSensitiveAtPath([[maybe_unused]] std::string_view _dir) const
 {
     return true;
+}
+
+std::optional<bool> Host::CaseSensitivityAtPath([[maybe_unused]] std::string_view _dir) const
+{
+    return std::nullopt;
+}
+
+std::optional<std::string> Host::SemanticNamespaceIdentity() const
+{
+    return std::nullopt;
+}
+
+HostErrorKind Host::ClassifyError(const Error &_error) const noexcept
+{
+    if( _error.Domain() != Error::POSIX )
+        return HostErrorKind::Other;
+    switch( _error.Code() ) {
+        case ENOENT:
+        case ENOTDIR:
+            return HostErrorKind::Missing;
+        case EACCES:
+        case EPERM:
+            return HostErrorKind::PermissionDenied;
+        case ENOTSUP:
+#if EOPNOTSUPP != ENOTSUP
+        case EOPNOTSUPP:
+#endif
+        case ENOSYS:
+            return HostErrorKind::Unsupported;
+        case ECANCELED:
+            return HostErrorKind::Cancelled;
+        case ENETDOWN:
+        case ENETUNREACH:
+        case ECONNABORTED:
+        case ECONNRESET:
+        case ENOTCONN:
+        case ETIMEDOUT:
+        case EHOSTDOWN:
+        case EHOSTUNREACH:
+            return HostErrorKind::Unavailable;
+        default:
+            return HostErrorKind::Other;
+    }
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+              ProviderConditionalCopyTransactionBeginError>
+Host::BeginConditionalCopyTransaction(
+    [[maybe_unused]] ProviderConditionalCopyReviewedAuthority _authority,
+                                      const VFSCancelChecker &_cancel_checker)
+{
+    try {
+        if( _cancel_checker && _cancel_checker() )
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
+    } catch( ... ) {
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
+    }
+    return std::unexpected(ProviderConditionalCopyTransactionBeginError::Unsupported);
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+              ProviderConditionalCopyTransactionBeginError>
+Host::MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
+                                     ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                     ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept
+{
+    return ProviderConditionalCopyTransaction::Mint(
+        *this, std::move(_authority), std::move(_commit), std::move(_abort));
 }
 
 } // namespace nc::vfs

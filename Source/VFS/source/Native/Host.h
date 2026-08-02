@@ -10,10 +10,17 @@ class FSEventsFileUpdate;
 
 namespace nc::vfs {
 
+namespace native {
+class ConditionalCopyIO;
+}
+
 class NativeHost : public Host
 {
 public:
     NativeHost(nc::utility::NativeFSManager &_native_fs_man, nc::utility::FSEventsFileUpdate &_fsevents_file_update);
+    NativeHost(nc::utility::NativeFSManager &_native_fs_man,
+               nc::utility::FSEventsFileUpdate &_fsevents_file_update,
+               std::shared_ptr<native::ConditionalCopyIO> _conditional_copy_io);
 
     static const char *UniqueTag;
     VFSConfiguration Configuration() const override;
@@ -21,6 +28,13 @@ public:
 
     bool IsWritable() const override;
     bool IsCaseSensitiveAtPath(std::string_view _directory) const override;
+    std::optional<bool> CaseSensitivityAtPath(std::string_view _directory) const override;
+    std::optional<std::string> SemanticNamespaceIdentity() const override;
+
+    std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                  ProviderConditionalCopyTransactionBeginError>
+    BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
+                                    const VFSCancelChecker &_cancel_checker = {}) override;
 
     std::expected<VFSStatFS, Error> StatFS(std::string_view _path,
                                            const VFSCancelChecker &_cancel_checker = {}) override;
@@ -120,6 +134,7 @@ private:
 
     nc::utility::NativeFSManager &m_NativeFSManager;
     [[maybe_unused]] nc::utility::FSEventsFileUpdate &m_FSEventsFileUpdate;
+    std::shared_ptr<native::ConditionalCopyIO> m_ConditionalCopyIO;
 };
 
 } // namespace nc::vfs

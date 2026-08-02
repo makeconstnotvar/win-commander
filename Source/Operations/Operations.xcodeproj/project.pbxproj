@@ -73,6 +73,49 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A10000000000000000000001 /* OperationPlan.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationPlan.h; path = include/Operations/OperationPlan.h; sourceTree = "<group>"; };
+		A10000000000000000000002 /* OperationPlan.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationPlan.h; path = source/OperationPlan.h; sourceTree = "<group>"; };
+		A10000000000000000000003 /* OperationPlan.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationPlan.cpp; path = source/OperationPlan.cpp; sourceTree = "<group>"; };
+		A10000000000000000000004 /* OperationPlan_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = OperationPlan_UT.cpp; sourceTree = "<group>"; };
+		A10000000000000000000005 /* OperationPlanner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationPlanner.h; path = include/Operations/OperationPlanner.h; sourceTree = "<group>"; };
+		A10000000000000000000006 /* OperationPlanner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationPlanner.h; path = source/OperationPlanner.h; sourceTree = "<group>"; };
+		A10000000000000000000007 /* OperationPlanner.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationPlanner.cpp; path = source/OperationPlanner.cpp; sourceTree = "<group>"; };
+		A10000000000000000000008 /* OperationPlanner_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = OperationPlanner_UT.cpp; sourceTree = "<group>"; };
+		A10000000000000000000009 /* VFSOperationPlanningProbes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VFSOperationPlanningProbes.h; path = include/Operations/VFSOperationPlanningProbes.h; sourceTree = "<group>"; };
+		A1000000000000000000000A /* VFSOperationPlanningProbes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VFSOperationPlanningProbes.h; path = source/VFSOperationPlanningProbes.h; sourceTree = "<group>"; };
+		A1000000000000000000000B /* VFSOperationPlanningProbes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = VFSOperationPlanningProbes.cpp; path = source/VFSOperationPlanningProbes.cpp; sourceTree = "<group>"; };
+		A1000000000000000000000C /* VFSOperationPlanningProbes_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = VFSOperationPlanningProbes_UT.cpp; sourceTree = "<group>"; };
+		A1000000000000000000000D /* LegacyOperationFactory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LegacyOperationFactory.h; path = include/Operations/LegacyOperationFactory.h; sourceTree = "<group>"; };
+		A1000000000000000000000E /* LegacyOperationFactory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LegacyOperationFactory.h; path = source/LegacyOperationFactory.h; sourceTree = "<group>"; };
+		A1000000000000000000000F /* LegacyOperationFactory.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LegacyOperationFactory.cpp; path = source/LegacyOperationFactory.cpp; sourceTree = "<group>"; };
+		A10000000000000000000010 /* LegacyOperationFactory_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LegacyOperationFactory_UT.cpp; sourceTree = "<group>"; };
+		A20000000000000000000001 /* NativeCreateCopy.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeCreateCopy.h; sourceTree = "<group>"; };
+		A20000000000000000000002 /* NativeCreateCopy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = NativeCreateCopy.cpp; sourceTree = "<group>"; };
+		A20000000000000000000003 /* NativeCreateCopyJob.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeCreateCopyJob.h; sourceTree = "<group>"; };
+		A20000000000000000000004 /* NativeCreateCopyJob.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = NativeCreateCopyJob.cpp; sourceTree = "<group>"; };
+		A20000000000000000000005 /* NativeCreateCopy_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = NativeCreateCopy_UT.cpp; sourceTree = "<group>"; };
+		A30000000000000000000001 /* ReviewedOperationFactory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ReviewedOperationFactory.h; path = include/Operations/ReviewedOperationFactory.h; sourceTree = "<group>"; };
+		A30000000000000000000002 /* ReviewedOperationFactory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ReviewedOperationFactory.h; path = source/ReviewedOperationFactory.h; sourceTree = "<group>"; };
+		A30000000000000000000003 /* ReviewedOperationFactoryTesting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ReviewedOperationFactoryTesting.h; path = source/ReviewedOperationFactoryTesting.h; sourceTree = "<group>"; };
+		A30000000000000000000004 /* ReviewedOperationFactory.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ReviewedOperationFactory.cpp; path = source/ReviewedOperationFactory.cpp; sourceTree = "<group>"; };
+		A30000000000000000000005 /* ReviewedOperationFactory_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ReviewedOperationFactory_UT.cpp; sourceTree = "<group>"; };
+		A40000000000000000000001 /* OperationPlanCodec.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationPlanCodec.h; path = include/Operations/OperationPlanCodec.h; sourceTree = "<group>"; };
+		A40000000000000000000002 /* OperationPlanCodec.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationPlanCodec.h; path = source/OperationPlanCodec.h; sourceTree = "<group>"; };
+		A40000000000000000000003 /* OperationPlanCodec.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationPlanCodec.cpp; path = source/OperationPlanCodec.cpp; sourceTree = "<group>"; };
+		A40000000000000000000004 /* OperationPlanCodec_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = OperationPlanCodec_UT.cpp; sourceTree = "<group>"; };
+		A60000000000000000000001 /* OperationJournal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationJournal.h; path = include/Operations/OperationJournal.h; sourceTree = "<group>"; };
+		A60000000000000000000002 /* OperationJournal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationJournal.h; path = source/OperationJournal.h; sourceTree = "<group>"; };
+		A60000000000000000000003 /* OperationJournalTesting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationJournalTesting.h; path = source/OperationJournalTesting.h; sourceTree = "<group>"; };
+		A60000000000000000000004 /* OperationJournal.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationJournal.cpp; path = source/OperationJournal.cpp; sourceTree = "<group>"; };
+		A60000000000000000000005 /* OperationJournal_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = OperationJournal_UT.cpp; sourceTree = "<group>"; };
+		B70000000000000000000001 /* ProviderConditionalCopyJournalMapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ProviderConditionalCopyJournalMapper.h; path = source/ProviderConditionalCopyJournalMapper.h; sourceTree = "<group>"; };
+		B70000000000000000000002 /* ProviderConditionalCopyJournalMapper.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderConditionalCopyJournalMapper.cpp; path = source/ProviderConditionalCopyJournalMapper.cpp; sourceTree = "<group>"; };
+		B70000000000000000000003 /* ProviderConditionalCopyJournalMapper_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ProviderConditionalCopyJournalMapper_UT.cpp; sourceTree = "<group>"; };
+		B80000000000000000000001 /* CopyOperationExecutionProduct.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyOperationExecutionProduct.h; path = source/CopyOperationExecutionProduct.h; sourceTree = "<group>"; };
+		B80000000000000000000002 /* ProviderConditionalCopyOperation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ProviderConditionalCopyOperation.h; path = source/ProviderConditionalCopyOperation.h; sourceTree = "<group>"; };
+		B80000000000000000000003 /* ProviderConditionalCopyOperationTesting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ProviderConditionalCopyOperationTesting.h; path = source/ProviderConditionalCopyOperationTesting.h; sourceTree = "<group>"; };
+		B80000000000000000000004 /* ProviderConditionalCopyOperation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderConditionalCopyOperation.cpp; path = source/ProviderConditionalCopyOperation.cpp; sourceTree = "<group>"; };
+		B80000000000000000000005 /* ProviderConditionalCopyOperation_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ProviderConditionalCopyOperation_UT.cpp; sourceTree = "<group>"; };
 		CF197C261FB4381E009F6C59 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/CopyingDialogDisclosedView.xib; sourceTree = "<group>"; };
 		CF22F0D5258F43610033E850 /* OperationsUT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = OperationsUT; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF22F0F4258F43A80033E850 /* Deletion_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Deletion_UT.cpp; sourceTree = "<group>"; };
@@ -553,6 +596,16 @@
 				CFAB6D7D258A742D00397DB5 /* CopyingFindNonExistingItemPath_UT.cpp */,
 				CFC4F9211F09DFD80000B3EE /* Deletion_IT.cpp */,
 				CF22F0F4258F43A80033E850 /* Deletion_UT.cpp */,
+				A10000000000000000000010 /* LegacyOperationFactory_UT.cpp */,
+				A20000000000000000000005 /* NativeCreateCopy_UT.cpp */,
+				A30000000000000000000005 /* ReviewedOperationFactory_UT.cpp */,
+				A10000000000000000000004 /* OperationPlan_UT.cpp */,
+				A40000000000000000000004 /* OperationPlanCodec_UT.cpp */,
+				A60000000000000000000005 /* OperationJournal_UT.cpp */,
+				B70000000000000000000003 /* ProviderConditionalCopyJournalMapper_UT.cpp */,
+				B80000000000000000000005 /* ProviderConditionalCopyOperation_UT.cpp */,
+					A10000000000000000000008 /* OperationPlanner_UT.cpp */,
+					A1000000000000000000000C /* VFSOperationPlanningProbes_UT.cpp */,
 				CFC4F90C1F0628CC0000B3EE /* DirectoryCreations_IT.cpp */,
 				CF2C102422A4116B00A5359D /* DirectoryPathAutoCompetion_IT.mm */,
 				CF3ABD8223BA1B2800D1878B /* Environment.h */,
@@ -599,9 +652,16 @@
 				CFC4F9561F0CB0260000B3EE /* DirectoryCreationDialog.h */,
 				CF2C102222A2F02E00A5359D /* FilenameTextControl.h */,
 				CFF53B8C1EE24F9E00F567C4 /* Job.h */,
+				A1000000000000000000000D /* LegacyOperationFactory.h */,
+				A30000000000000000000001 /* ReviewedOperationFactory.h */,
 				CFC4F99B1F0F33C20000B3EE /* Linkage.h */,
 				CF47861E2EE716AE00736117 /* Localizable.h */,
 				CFF53B8D1EE24F9E00F567C4 /* Operation.h */,
+				A10000000000000000000001 /* OperationPlan.h */,
+				A40000000000000000000001 /* OperationPlanCodec.h */,
+				A60000000000000000000001 /* OperationJournal.h */,
+					A10000000000000000000005 /* OperationPlanner.h */,
+					A10000000000000000000009 /* VFSOperationPlanningProbes.h */,
 				CF7084DA1EF7CCB00072F0F6 /* Pool.h */,
 				CF47861F2EE716AE00736117 /* PoolEnqueueFilter.h */,
 				CFC4F8CD1EFA07F00000B3EE /* PoolView.h */,
@@ -617,12 +677,47 @@
 				CF4786192EE7127500736117 /* _Operations.cpp */,
 				CF47861B2EE7144500736117 /* _Operations.mm */,
 				CF4786202EE7171400736117 /* Localizable.mm */,
+				A1000000000000000000000E /* LegacyOperationFactory.h */,
+				A1000000000000000000000F /* LegacyOperationFactory.cpp */,
+				A20000000000000000000006 /* NativeCreateCopy */,
+				A30000000000000000000002 /* ReviewedOperationFactory.h */,
+				A30000000000000000000003 /* ReviewedOperationFactoryTesting.h */,
+				A30000000000000000000004 /* ReviewedOperationFactory.cpp */,
+				A10000000000000000000002 /* OperationPlan.h */,
+				A10000000000000000000003 /* OperationPlan.cpp */,
+				A40000000000000000000002 /* OperationPlanCodec.h */,
+				A40000000000000000000003 /* OperationPlanCodec.cpp */,
+				A60000000000000000000002 /* OperationJournal.h */,
+				A60000000000000000000003 /* OperationJournalTesting.h */,
+				A60000000000000000000004 /* OperationJournal.cpp */,
+				B70000000000000000000001 /* ProviderConditionalCopyJournalMapper.h */,
+				B70000000000000000000002 /* ProviderConditionalCopyJournalMapper.cpp */,
+				B80000000000000000000001 /* CopyOperationExecutionProduct.h */,
+				B80000000000000000000002 /* ProviderConditionalCopyOperation.h */,
+				B80000000000000000000003 /* ProviderConditionalCopyOperationTesting.h */,
+				B80000000000000000000004 /* ProviderConditionalCopyOperation.cpp */,
+				A10000000000000000000006 /* OperationPlanner.h */,
+					A10000000000000000000007 /* OperationPlanner.cpp */,
+					A1000000000000000000000A /* VFSOperationPlanningProbes.h */,
+					A1000000000000000000000B /* VFSOperationPlanningProbes.cpp */,
 				CFC4F90E1F0745170000B3EE /* Base */,
 				CFC4F9611F0CC6550000B3EE /* Operations */,
 				CF2C101D22A2EFED00A5359D /* Views */,
 			);
 			name = Source;
 			sourceTree = "<group>";
+		};
+		A20000000000000000000006 /* NativeCreateCopy */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* NativeCreateCopy.h */,
+				A20000000000000000000002 /* NativeCreateCopy.cpp */,
+				A20000000000000000000003 /* NativeCreateCopyJob.h */,
+				A20000000000000000000004 /* NativeCreateCopyJob.cpp */,
+			);
+			name = NativeCreateCopy;
+			path = source/NativeCreateCopy;
+			sourceTree = SOURCE_ROOT;
 		};
 		CFF53B8E1EE24FC300F567C4 /* Compression */ = {
 			isa = PBXGroup;

@@ -7,6 +7,47 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		34BBA7112548DACC966E141E /* PaneStoreAdapter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8BCFBC4FC64F57749ECB21B4 /* PaneStoreAdapter.cpp */; };
+		FA0078408EA805D2E69DDF82 /* PaneStoreAdapter_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = 6D0A2A876D76B04DF531CB2D /* PaneStoreAdapter_UT.mm */; };
+		5FE621A117C74BC79AF5E886 /* PanelControllerPaneStoreAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = 2371690610B0487A8A7DEA02 /* PanelControllerPaneStoreAdapter.mm */; };
+		676A7E68C500419B825245FF /* PanelControllerPaneStoreAdapter_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = EB8635BA9E0E429B96E4A005 /* PanelControllerPaneStoreAdapter_UT.mm */; };
+		E220E00131A2C0DE00000001 /* FileManagerErrorAdapter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E220E01331A2C0DE00000001 /* FileManagerErrorAdapter.cpp */; };
+		E220E00231A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E220E01431A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp */; };
+		D4C04D0131A2C0DE00000001 /* CommandRegistry.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D4C04D1531A2C0DE00000001 /* CommandRegistry.cpp */; };
+		D4C04D0231A2C0DE00000001 /* CommandRegistry_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */; };
+		F1C0A00131A2C0DE00000001 /* FileCopyCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */; };
+		F1C0A00231A2C0DE00000001 /* FileCopyCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */; };
+		C17C000131B8000000000001 /* FileCutCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C17C000131B8000000000012 /* FileCutCommand.cpp */; };
+		C17C000131B8000000000002 /* FileCutCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C17C000131B8000000000013 /* FileCutCommand_UT.cpp */; };
+		A7E9000131B9000000000001 /* FileRenameCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A7E9000131B9000000000012 /* FileRenameCommand.cpp */; };
+		A7E9000131B9000000000002 /* FileRenameCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A7E9000131B9000000000013 /* FileRenameCommand_UT.cpp */; };
+		F10E000131D5000000000001 /* FileOpenCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F10E000131D5000000000012 /* FileOpenCommand.cpp */; };
+		F10E000131D5000000000002 /* FileOpenCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F10E000131D5000000000013 /* FileOpenCommand_UT.cpp */; };
+		7EAD000131BA000000000001 /* ToggleHiddenFilesCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7EAD000131BA000000000012 /* ToggleHiddenFilesCommand.cpp */; };
+		7EAD000131BA000000000002 /* ToggleHiddenFilesCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7EAD000131BA000000000013 /* ToggleHiddenFilesCommand_UT.cpp */; };
+		BACC000131C2000000000001 /* NavigationHistoryCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BACC000131C2000000000012 /* NavigationHistoryCommand.cpp */; };
+		BACC000131C2000000000002 /* NavigationHistoryCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BACC000131C2000000000013 /* NavigationHistoryCommand_UT.cpp */; };
+		BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */; };
+		BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */; };
+		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
+		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
+		9A10A00131B0000000000001 /* VisualStateMapper.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9A10A00131B0000000000013 /* VisualStateMapper.cpp */; };
+		9A10A00131B0000000000002 /* VisualStateMapper_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9A10A00131B0000000000014 /* VisualStateMapper_UT.cpp */; };
+		B71A000131B1000000000001 /* CommandPresentationAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = B71A000131B1000000000012 /* CommandPresentationAdapter.mm */; };
+		B71A000131B1000000000002 /* NCEditMenuPresentationDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = B71A000131B1000000000014 /* NCEditMenuPresentationDelegate.mm */; };
+		B71A000131B1000000000003 /* CommandPresentationAdapter_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = B71A000131B1000000000015 /* CommandPresentationAdapter_UT.mm */; };
+		C81F000131B2000000000001 /* PaneLifecycleProducer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C81F000131B2000000000012 /* PaneLifecycleProducer.cpp */; };
+		C81F000131B2000000000002 /* PaneLifecycleProducer_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = C81F000131B2000000000013 /* PaneLifecycleProducer_UT.mm */; };
+		D92A000131B3000000000001 /* PanelControllerLifecycle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D92A000131B3000000000012 /* PanelControllerLifecycle.cpp */; };
+		D92A000131B3000000000002 /* PanelControllerLifecycle_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D92A000131B3000000000013 /* PanelControllerLifecycle_UT.mm */; };
+		F4E2000131B7000000000001 /* PanelControllerNavigation_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = F4E2000131B7000000000011 /* PanelControllerNavigation_UT.mm */; };
+		E31D000131B4000000000001 /* PaneLifecycleReducer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E31D000131B4000000000012 /* PaneLifecycleReducer.cpp */; };
+		E31D000131B4000000000002 /* PaneLifecycleReducer_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E31D000131B4000000000013 /* PaneLifecycleReducer_UT.cpp */; };
+		A1B2C3D531C1000100C0DE02 /* PanelHistory_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D431C1000100C0DE02 /* PanelHistory_UT.cpp */; };
+		95901CBF265F41D88A280D49 /* LegacyShortcutBindingAdapter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E465329C92C49B8A22E62BC /* LegacyShortcutBindingAdapter.cpp */; };
+		A8CF21AD2F6B4969BBB7DD3D /* LegacyShortcutBindingAdapter_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 620C765247E94D5693592AB6 /* LegacyShortcutBindingAdapter_UT.cpp */; };
+		B6AC000131C0000000000001 /* VFSOperationPlanningAccessChecker.mm in Sources */ = {isa = PBXBuildFile; fileRef = B6AC000131C0000000000012 /* VFSOperationPlanningAccessChecker.mm */; };
+		B6AC000131C0000000000002 /* VFSOperationPlanningAccessChecker_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = B6AC000131C0000000000013 /* VFSOperationPlanningAccessChecker_UT.mm */; };
 		CF0A46FA2BDD830D00833160 /* PFMoveToApplicationsShim.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF0A46F92BDD830D00833160 /* PFMoveToApplicationsShim.mm */; };
 		CF0A46FB2BDD830D00833160 /* PFMoveToApplicationsShim.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF0A46F92BDD830D00833160 /* PFMoveToApplicationsShim.mm */; };
 		CF0A46FC2BDD830D00833160 /* PFMoveToApplicationsShim.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF0A46F92BDD830D00833160 /* PFMoveToApplicationsShim.mm */; };
@@ -862,6 +903,73 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B623B724F2A47A53C6E699A4 /* PaneSnapshot.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneSnapshot.h; path = WinCommander/Core/Pane/PaneSnapshot.h; sourceTree = SOURCE_ROOT; };
+		FC253E74056C8068A69BC009 /* PaneStoreAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneStoreAdapter.h; path = WinCommander/Core/Pane/PaneStoreAdapter.h; sourceTree = SOURCE_ROOT; };
+		8BCFBC4FC64F57749ECB21B4 /* PaneStoreAdapter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneStoreAdapter.cpp; path = WinCommander/Core/Pane/PaneStoreAdapter.cpp; sourceTree = SOURCE_ROOT; };
+		6D0A2A876D76B04DF531CB2D /* PaneStoreAdapter_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PaneStoreAdapter_UT.mm; path = WinCommander/Tests/PaneStoreAdapter_UT.mm; sourceTree = "<group>"; };
+		AE22724626C844C784885E81 /* PanelControllerPaneStoreAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PanelControllerPaneStoreAdapter.h; path = WinCommander/States/FilePanels/PanelControllerPaneStoreAdapter.h; sourceTree = SOURCE_ROOT; };
+		2371690610B0487A8A7DEA02 /* PanelControllerPaneStoreAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelControllerPaneStoreAdapter.mm; path = WinCommander/States/FilePanels/PanelControllerPaneStoreAdapter.mm; sourceTree = SOURCE_ROOT; };
+		EB8635BA9E0E429B96E4A005 /* PanelControllerPaneStoreAdapter_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelControllerPaneStoreAdapter_UT.mm; path = WinCommander/Tests/PanelControllerPaneStoreAdapter_UT.mm; sourceTree = "<group>"; };
+		E220E01131A2C0DE00000001 /* FileManagerError.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileManagerError.h; path = WinCommander/Core/Errors/FileManagerError.h; sourceTree = SOURCE_ROOT; };
+		E220E01231A2C0DE00000001 /* FileManagerErrorAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileManagerErrorAdapter.h; path = WinCommander/Core/Errors/FileManagerErrorAdapter.h; sourceTree = SOURCE_ROOT; };
+		E220E01331A2C0DE00000001 /* FileManagerErrorAdapter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileManagerErrorAdapter.cpp; path = WinCommander/Core/Errors/FileManagerErrorAdapter.cpp; sourceTree = SOURCE_ROOT; };
+		E220E01431A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileManagerErrorAdapter_UT.cpp; path = WinCommander/Tests/FileManagerErrorAdapter_UT.cpp; sourceTree = "<group>"; };
+		D4C04D1131A2C0DE00000001 /* CommandId.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandId.h; path = WinCommander/Core/Commands/CommandId.h; sourceTree = SOURCE_ROOT; };
+		D4C04D1231A2C0DE00000001 /* CommandIds.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandIds.h; path = WinCommander/Core/Commands/CommandIds.h; sourceTree = SOURCE_ROOT; };
+		D4C04D1331A2C0DE00000001 /* Command.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = Command.h; path = WinCommander/Core/Commands/Command.h; sourceTree = SOURCE_ROOT; };
+		D4C04D1431A2C0DE00000001 /* CommandRegistry.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandRegistry.h; path = WinCommander/Core/Commands/CommandRegistry.h; sourceTree = SOURCE_ROOT; };
+		D4C04D1531A2C0DE00000001 /* CommandRegistry.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandRegistry.cpp; path = WinCommander/Core/Commands/CommandRegistry.cpp; sourceTree = SOURCE_ROOT; };
+		D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandRegistry_UT.cpp; path = WinCommander/Tests/CommandRegistry_UT.cpp; sourceTree = "<group>"; };
+		F1C0A01131A2C0DE00000001 /* FileCopyCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileCopyCommand.h; path = WinCommander/Core/Commands/FileCopyCommand.h; sourceTree = SOURCE_ROOT; };
+		F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCopyCommand.cpp; path = WinCommander/Core/Commands/FileCopyCommand.cpp; sourceTree = SOURCE_ROOT; };
+		F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCopyCommand_UT.cpp; path = WinCommander/Tests/FileCopyCommand_UT.cpp; sourceTree = "<group>"; };
+		C17C000131B8000000000011 /* FileCutCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileCutCommand.h; path = WinCommander/Core/Commands/FileCutCommand.h; sourceTree = SOURCE_ROOT; };
+		C17C000131B8000000000012 /* FileCutCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCutCommand.cpp; path = WinCommander/Core/Commands/FileCutCommand.cpp; sourceTree = SOURCE_ROOT; };
+		C17C000131B8000000000013 /* FileCutCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCutCommand_UT.cpp; path = WinCommander/Tests/FileCutCommand_UT.cpp; sourceTree = "<group>"; };
+		A7E9000131B9000000000011 /* FileRenameCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileRenameCommand.h; path = WinCommander/Core/Commands/FileRenameCommand.h; sourceTree = SOURCE_ROOT; };
+		A7E9000131B9000000000012 /* FileRenameCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileRenameCommand.cpp; path = WinCommander/Core/Commands/FileRenameCommand.cpp; sourceTree = SOURCE_ROOT; };
+		A7E9000131B9000000000013 /* FileRenameCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileRenameCommand_UT.cpp; path = WinCommander/Tests/FileRenameCommand_UT.cpp; sourceTree = "<group>"; };
+		F10E000131D5000000000011 /* FileOpenCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileOpenCommand.h; path = WinCommander/Core/Commands/FileOpenCommand.h; sourceTree = SOURCE_ROOT; };
+		F10E000131D5000000000012 /* FileOpenCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileOpenCommand.cpp; path = WinCommander/Core/Commands/FileOpenCommand.cpp; sourceTree = SOURCE_ROOT; };
+		F10E000131D5000000000013 /* FileOpenCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileOpenCommand_UT.cpp; path = WinCommander/Tests/FileOpenCommand_UT.cpp; sourceTree = "<group>"; };
+		7EAD000131BA000000000011 /* ToggleHiddenFilesCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ToggleHiddenFilesCommand.h; path = WinCommander/Core/Commands/ToggleHiddenFilesCommand.h; sourceTree = SOURCE_ROOT; };
+		7EAD000131BA000000000012 /* ToggleHiddenFilesCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ToggleHiddenFilesCommand.cpp; path = WinCommander/Core/Commands/ToggleHiddenFilesCommand.cpp; sourceTree = SOURCE_ROOT; };
+		7EAD000131BA000000000013 /* ToggleHiddenFilesCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ToggleHiddenFilesCommand_UT.cpp; path = WinCommander/Tests/ToggleHiddenFilesCommand_UT.cpp; sourceTree = "<group>"; };
+		BACC000131C2000000000011 /* NavigationHistoryCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NavigationHistoryCommand.h; path = WinCommander/Core/Commands/NavigationHistoryCommand.h; sourceTree = SOURCE_ROOT; };
+		BACC000131C2000000000012 /* NavigationHistoryCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NavigationHistoryCommand.cpp; path = WinCommander/Core/Commands/NavigationHistoryCommand.cpp; sourceTree = SOURCE_ROOT; };
+		BACC000131C2000000000013 /* NavigationHistoryCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NavigationHistoryCommand_UT.cpp; path = WinCommander/Tests/NavigationHistoryCommand_UT.cpp; sourceTree = "<group>"; };
+		BAEC000241D3000000000011 /* PaneNavigationCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationCommand.h; path = WinCommander/Core/Commands/PaneNavigationCommand.h; sourceTree = SOURCE_ROOT; };
+		BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationCommand.cpp; path = WinCommander/Core/Commands/PaneNavigationCommand.cpp; sourceTree = SOURCE_ROOT; };
+		BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationCommand_UT.cpp; path = WinCommander/Tests/PaneNavigationCommand_UT.cpp; sourceTree = "<group>"; };
+		BAEC000241D3000000000014 /* PaneNavigationAvailability.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationAvailability.h; path = WinCommander/Core/Pane/PaneNavigationAvailability.h; sourceTree = SOURCE_ROOT; };
+		BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability_UT.cpp; path = WinCommander/Tests/PaneNavigationAvailability_UT.cpp; sourceTree = "<group>"; };
+		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
+		9A10A00131B0000000000011 /* VisualState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VisualState.h; path = WinCommander/Core/VisualState/VisualState.h; sourceTree = SOURCE_ROOT; };
+		9A10A00131B0000000000012 /* VisualStateMapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VisualStateMapper.h; path = WinCommander/Core/VisualState/VisualStateMapper.h; sourceTree = SOURCE_ROOT; };
+		9A10A00131B0000000000013 /* VisualStateMapper.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = VisualStateMapper.cpp; path = WinCommander/Core/VisualState/VisualStateMapper.cpp; sourceTree = SOURCE_ROOT; };
+		9A10A00131B0000000000014 /* VisualStateMapper_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = VisualStateMapper_UT.cpp; path = WinCommander/Tests/VisualStateMapper_UT.cpp; sourceTree = "<group>"; };
+		B71A000131B1000000000011 /* CommandPresentationAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandPresentationAdapter.h; path = WinCommander/States/CommandPresentationAdapter.h; sourceTree = SOURCE_ROOT; };
+		B71A000131B1000000000012 /* CommandPresentationAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CommandPresentationAdapter.mm; path = WinCommander/States/CommandPresentationAdapter.mm; sourceTree = SOURCE_ROOT; };
+		B71A000131B1000000000013 /* NCEditMenuPresentationDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCEditMenuPresentationDelegate.h; path = WinCommander/Bootstrap/NCEditMenuPresentationDelegate.h; sourceTree = SOURCE_ROOT; };
+		B71A000131B1000000000014 /* NCEditMenuPresentationDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCEditMenuPresentationDelegate.mm; path = WinCommander/Bootstrap/NCEditMenuPresentationDelegate.mm; sourceTree = SOURCE_ROOT; };
+		B71A000131B1000000000015 /* CommandPresentationAdapter_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CommandPresentationAdapter_UT.mm; path = WinCommander/Tests/CommandPresentationAdapter_UT.mm; sourceTree = "<group>"; };
+		C81F000131B2000000000011 /* PaneLifecycleProducer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneLifecycleProducer.h; path = WinCommander/Core/Pane/PaneLifecycleProducer.h; sourceTree = SOURCE_ROOT; };
+		C81F000131B2000000000012 /* PaneLifecycleProducer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneLifecycleProducer.cpp; path = WinCommander/Core/Pane/PaneLifecycleProducer.cpp; sourceTree = SOURCE_ROOT; };
+		C81F000131B2000000000013 /* PaneLifecycleProducer_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PaneLifecycleProducer_UT.mm; path = WinCommander/Tests/PaneLifecycleProducer_UT.mm; sourceTree = "<group>"; };
+		D92A000131B3000000000011 /* PanelControllerLifecycle.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PanelControllerLifecycle.h; path = WinCommander/Core/Pane/PanelControllerLifecycle.h; sourceTree = SOURCE_ROOT; };
+		D92A000131B3000000000012 /* PanelControllerLifecycle.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PanelControllerLifecycle.cpp; path = WinCommander/Core/Pane/PanelControllerLifecycle.cpp; sourceTree = SOURCE_ROOT; };
+		D92A000131B3000000000013 /* PanelControllerLifecycle_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelControllerLifecycle_UT.mm; path = WinCommander/Tests/PanelControllerLifecycle_UT.mm; sourceTree = "<group>"; };
+		F4E2000131B7000000000011 /* PanelControllerNavigation_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelControllerNavigation_UT.mm; path = WinCommander/Tests/PanelControllerNavigation_UT.mm; sourceTree = "<group>"; };
+		E31D000131B4000000000011 /* PaneLifecycleReducer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneLifecycleReducer.h; path = WinCommander/Core/Pane/PaneLifecycleReducer.h; sourceTree = SOURCE_ROOT; };
+		E31D000131B4000000000012 /* PaneLifecycleReducer.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneLifecycleReducer.cpp; path = WinCommander/Core/Pane/PaneLifecycleReducer.cpp; sourceTree = SOURCE_ROOT; };
+		E31D000131B4000000000013 /* PaneLifecycleReducer_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneLifecycleReducer_UT.cpp; path = WinCommander/Tests/PaneLifecycleReducer_UT.cpp; sourceTree = "<group>"; };
+		A1B2C3D431C1000100C0DE02 /* PanelHistory_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PanelHistory_UT.cpp; path = WinCommander/Tests/PanelHistory_UT.cpp; sourceTree = "<group>"; };
+		9342789A6E594D8392A98057 /* LegacyShortcutBindingAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LegacyShortcutBindingAdapter.h; path = WinCommander/Core/Commands/LegacyShortcutBindingAdapter.h; sourceTree = SOURCE_ROOT; };
+		0E465329C92C49B8A22E62BC /* LegacyShortcutBindingAdapter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LegacyShortcutBindingAdapter.cpp; path = WinCommander/Core/Commands/LegacyShortcutBindingAdapter.cpp; sourceTree = SOURCE_ROOT; };
+		620C765247E94D5693592AB6 /* LegacyShortcutBindingAdapter_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LegacyShortcutBindingAdapter_UT.cpp; path = WinCommander/Tests/LegacyShortcutBindingAdapter_UT.cpp; sourceTree = "<group>"; };
+		B6AC000131C0000000000011 /* VFSOperationPlanningAccessChecker.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VFSOperationPlanningAccessChecker.h; path = WinCommander/Core/VFSOperationPlanningAccessChecker.h; sourceTree = SOURCE_ROOT; };
+		B6AC000131C0000000000012 /* VFSOperationPlanningAccessChecker.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSOperationPlanningAccessChecker.mm; path = WinCommander/Core/VFSOperationPlanningAccessChecker.mm; sourceTree = SOURCE_ROOT; };
+		B6AC000131C0000000000013 /* VFSOperationPlanningAccessChecker_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSOperationPlanningAccessChecker_UT.mm; path = WinCommander/Tests/VFSOperationPlanningAccessChecker_UT.mm; sourceTree = "<group>"; };
 		CF0139AD1E99DAC100E44F2D /* ToggleSort.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ToggleSort.h; path = WinCommander/States/FilePanels/Actions/ToggleSort.h; sourceTree = SOURCE_ROOT; };
 		CF0139AE1E99DAC100E44F2D /* ToggleSort.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = ToggleSort.mm; path = WinCommander/States/FilePanels/Actions/ToggleSort.mm; sourceTree = SOURCE_ROOT; };
 		CF0139B01E99EC4A00E44F2D /* DefaultAction.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DefaultAction.h; path = WinCommander/States/FilePanels/Actions/DefaultAction.h; sourceTree = SOURCE_ROOT; };
@@ -936,6 +1044,7 @@
 		E6F783314A1B09A96A343A98 /* NCExplorerBreadcrumbControl.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerBreadcrumbControl.mm; path = WinCommander/States/Explorer/NCExplorerBreadcrumbControl.mm; sourceTree = SOURCE_ROOT; };
 		9FFC0D40F94DC445DAC7B5D4 /* NCExplorerCommandBarView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandBarView.h; path = WinCommander/States/Explorer/NCExplorerCommandBarView.h; sourceTree = SOURCE_ROOT; };
 		A3DB0EBE07157AC08219105D /* NCExplorerCommandBarView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandBarView.mm; path = WinCommander/States/Explorer/NCExplorerCommandBarView.mm; sourceTree = SOURCE_ROOT; };
+		1F9E000131BB000000000011 /* NCExplorerPanePresentationModel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerPanePresentationModel.h; path = WinCommander/States/Explorer/NCExplorerPanePresentationModel.h; sourceTree = SOURCE_ROOT; };
 		46D557F68546EF2C975C20CF /* NCExplorerStatusBarView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerStatusBarView.h; path = WinCommander/States/Explorer/NCExplorerStatusBarView.h; sourceTree = SOURCE_ROOT; };
 		52E86FCE0ECC8CA2631FAD7B /* NCExplorerStatusBarView.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerStatusBarView.mm; path = WinCommander/States/Explorer/NCExplorerStatusBarView.mm; sourceTree = SOURCE_ROOT; };
 		BB294F0B2C69547454CF82C9 /* NCExplorerInspectorPlaceholderView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NCExplorerInspectorPlaceholderView.h; path = WinCommander/States/Explorer/NCExplorerInspectorPlaceholderView.h; sourceTree = SOURCE_ROOT; };
@@ -1454,6 +1563,54 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D4C04D2031A2C0DE00000001 /* Commands */ = {
+			isa = PBXGroup;
+			children = (
+				D4C04D1131A2C0DE00000001 /* CommandId.h */,
+				D4C04D1231A2C0DE00000001 /* CommandIds.h */,
+				D4C04D1331A2C0DE00000001 /* Command.h */,
+				D4C04D1431A2C0DE00000001 /* CommandRegistry.h */,
+				D4C04D1531A2C0DE00000001 /* CommandRegistry.cpp */,
+				F1C0A01131A2C0DE00000001 /* FileCopyCommand.h */,
+				F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */,
+				C17C000131B8000000000011 /* FileCutCommand.h */,
+				C17C000131B8000000000012 /* FileCutCommand.cpp */,
+				A7E9000131B9000000000011 /* FileRenameCommand.h */,
+				A7E9000131B9000000000012 /* FileRenameCommand.cpp */,
+				F10E000131D5000000000011 /* FileOpenCommand.h */,
+				F10E000131D5000000000012 /* FileOpenCommand.cpp */,
+				7EAD000131BA000000000011 /* ToggleHiddenFilesCommand.h */,
+				7EAD000131BA000000000012 /* ToggleHiddenFilesCommand.cpp */,
+				BACC000131C2000000000011 /* NavigationHistoryCommand.h */,
+				BACC000131C2000000000012 /* NavigationHistoryCommand.cpp */,
+				BAEC000241D3000000000011 /* PaneNavigationCommand.h */,
+				BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */,
+				9342789A6E594D8392A98057 /* LegacyShortcutBindingAdapter.h */,
+				0E465329C92C49B8A22E62BC /* LegacyShortcutBindingAdapter.cpp */,
+			);
+			name = Commands;
+			sourceTree = "<group>";
+		};
+		E220E02031A2C0DE00000001 /* Errors */ = {
+			isa = PBXGroup;
+			children = (
+				E220E01131A2C0DE00000001 /* FileManagerError.h */,
+				E220E01231A2C0DE00000001 /* FileManagerErrorAdapter.h */,
+				E220E01331A2C0DE00000001 /* FileManagerErrorAdapter.cpp */,
+			);
+			name = Errors;
+			sourceTree = "<group>";
+		};
+		9A10A00131B0000000000020 /* VisualState */ = {
+			isa = PBXGroup;
+			children = (
+				9A10A00131B0000000000011 /* VisualState.h */,
+				9A10A00131B0000000000012 /* VisualStateMapper.h */,
+				9A10A00131B0000000000013 /* VisualStateMapper.cpp */,
+			);
+			name = VisualState;
+			sourceTree = "<group>";
+		};
 		B51014CF170721340023FF24 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -1584,6 +1741,8 @@
 				CFDAC2C01DFD0DE40039A104 /* PanelAux.mm */,
 				CFDAC24A1DFBF0B30039A104 /* PanelController.h */,
 				CFDAC24B1DFBF0B30039A104 /* PanelController.mm */,
+				AE22724626C844C784885E81 /* PanelControllerPaneStoreAdapter.h */,
+				2371690610B0487A8A7DEA02 /* PanelControllerPaneStoreAdapter.mm */,
 				CFDAC24C1DFBF0B30039A104 /* PanelController+DataAccess.h */,
 				CFDAC24D1DFBF0B30039A104 /* PanelController+DataAccess.mm */,
 				CF4D98A520284C1500ECE06D /* PanelControllerActions.h */,
@@ -1706,6 +1865,7 @@
 				E6F783314A1B09A96A343A98 /* NCExplorerBreadcrumbControl.mm */,
 				9FFC0D40F94DC445DAC7B5D4 /* NCExplorerCommandBarView.h */,
 				A3DB0EBE07157AC08219105D /* NCExplorerCommandBarView.mm */,
+				1F9E000131BB000000000011 /* NCExplorerPanePresentationModel.h */,
 				46D557F68546EF2C975C20CF /* NCExplorerStatusBarView.h */,
 				52E86FCE0ECC8CA2631FAD7B /* NCExplorerStatusBarView.mm */,
 				BB294F0B2C69547454CF82C9 /* NCExplorerInspectorPlaceholderView.h */,
@@ -1766,17 +1926,56 @@
 			isa = PBXGroup;
 			children = (
 				CF371DA92D18472E0034EB3F /* ActionsShortcutsManager_UT.cpp */,
+				D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */,
+				F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */,
+				C17C000131B8000000000013 /* FileCutCommand_UT.cpp */,
+				A7E9000131B9000000000013 /* FileRenameCommand_UT.cpp */,
+				F10E000131D5000000000013 /* FileOpenCommand_UT.cpp */,
+				7EAD000131BA000000000013 /* ToggleHiddenFilesCommand_UT.cpp */,
+				BACC000131C2000000000013 /* NavigationHistoryCommand_UT.cpp */,
+				BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */,
+				BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */,
+				E220E01431A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp */,
+				620C765247E94D5693592AB6 /* LegacyShortcutBindingAdapter_UT.cpp */,
+				B6AC000131C0000000000013 /* VFSOperationPlanningAccessChecker_UT.mm */,
 				CF764CE62587661300D7ED17 /* DragSender_UT.mm */,
 				CF764D422587837200D7ED17 /* PanelBriefViewDynamicWidthLayoutEngine_UT.mm */,
 				CF764D4E258785CC00D7ED17 /* PanelBriefViewFixedNumberLayoutEngine_UT.mm */,
 				CF764D562587875E00D7ED17 /* PanelBriefViewFixedWidthLayoutEngine_UT.mm */,
 				A1C0D3F331A1000100C0DE01 /* PanelPresentationGeometry_UT.mm */,
+				6D0A2A876D76B04DF531CB2D /* PaneStoreAdapter_UT.mm */,
+				EB8635BA9E0E429B96E4A005 /* PanelControllerPaneStoreAdapter_UT.mm */,
+				9A10A00131B0000000000014 /* VisualStateMapper_UT.cpp */,
+				B71A000131B1000000000015 /* CommandPresentationAdapter_UT.mm */,
+				C81F000131B2000000000013 /* PaneLifecycleProducer_UT.mm */,
+				D92A000131B3000000000013 /* PanelControllerLifecycle_UT.mm */,
+				F4E2000131B7000000000011 /* PanelControllerNavigation_UT.mm */,
+				E31D000131B4000000000013 /* PaneLifecycleReducer_UT.cpp */,
+				A1B2C3D431C1000100C0DE02 /* PanelHistory_UT.cpp */,
 				CF5DE0C02584157B00604DEE /* Tests.h */,
 				CF5DE0C12584157B00604DEE /* Tests.cpp */,
 				CF67F1BE2954689000B92944 /* Theme_UT.mm */,
 				CFD2D26028A03DC0003C18F9 /* ThemesManager_UT.mm */,
 			);
 			name = Tests;
+			sourceTree = "<group>";
+		};
+		FDE3E28A7F15994A517A24AA /* Pane */ = {
+			isa = PBXGroup;
+			children = (
+				B623B724F2A47A53C6E699A4 /* PaneSnapshot.h */,
+				BAEC000241D3000000000014 /* PaneNavigationAvailability.h */,
+				BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */,
+				FC253E74056C8068A69BC009 /* PaneStoreAdapter.h */,
+				8BCFBC4FC64F57749ECB21B4 /* PaneStoreAdapter.cpp */,
+				C81F000131B2000000000011 /* PaneLifecycleProducer.h */,
+				C81F000131B2000000000012 /* PaneLifecycleProducer.cpp */,
+				D92A000131B3000000000011 /* PanelControllerLifecycle.h */,
+				D92A000131B3000000000012 /* PanelControllerLifecycle.cpp */,
+				E31D000131B4000000000011 /* PaneLifecycleReducer.h */,
+				E31D000131B4000000000012 /* PaneLifecycleReducer.cpp */,
+			);
+			name = Pane;
 			sourceTree = "<group>";
 		};
 		CF5FE7D21E120A3100CD83B4 /* Actions */ = {
@@ -1965,6 +2164,8 @@
 				CFE08B0C23D4BE3D007E99B8 /* NativeVFSHostInstance.h */,
 				CF2F10B02567DF2500622405 /* NCHelpMenuDelegate.h */,
 				CF2F10972567DF2500622405 /* NCHelpMenuDelegate.mm */,
+				B71A000131B1000000000013 /* NCEditMenuPresentationDelegate.h */,
+				B71A000131B1000000000014 /* NCEditMenuPresentationDelegate.mm */,
 				CF0A46EA2BDD830D00833160 /* PFMoveToApplicationsShim.h */,
 				CF0A46F92BDD830D00833160 /* PFMoveToApplicationsShim.mm */,
 				CF0B78F825739F79003061D0 /* SparkleShim.h */,
@@ -1978,6 +2179,8 @@
 		CF876D171D51E00B009C0CCE /* States */ = {
 			isa = PBXGroup;
 			children = (
+				B71A000131B1000000000011 /* CommandPresentationAdapter.h */,
+				B71A000131B1000000000012 /* CommandPresentationAdapter.mm */,
 				CFDAC2431DFBEE340039A104 /* MainWindow.h */,
 				CFDAC2441DFBEE340039A104 /* MainWindow.mm */,
 				CFDAC2451DFBEE340039A104 /* MainWindowController.h */,
@@ -2056,6 +2259,12 @@
 		CFAC50D5171557E100A3E5C5 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				D4C04D2031A2C0DE00000001 /* Commands */,
+				E220E02031A2C0DE00000001 /* Errors */,
+				FDE3E28A7F15994A517A24AA /* Pane */,
+				9A10A00131B0000000000020 /* VisualState */,
+				B6AC000131C0000000000011 /* VFSOperationPlanningAccessChecker.h */,
+				B6AC000131C0000000000012 /* VFSOperationPlanningAccessChecker.mm */,
 				CF46C23420317FD700A91E2F /* ServicesHandler.h */,
 				CF46C23520317FD700A91E2F /* ServicesHandler.mm */,
 				CFDAC23F1DFBE18C0039A104 /* ActionsShortcutsManager.h */,
@@ -3047,6 +3256,26 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				34BBA7112548DACC966E141E /* PaneStoreAdapter.cpp in Sources */,
+				5FE621A117C74BC79AF5E886 /* PanelControllerPaneStoreAdapter.mm in Sources */,
+				E220E00131A2C0DE00000001 /* FileManagerErrorAdapter.cpp in Sources */,
+				D4C04D0131A2C0DE00000001 /* CommandRegistry.cpp in Sources */,
+				F1C0A00131A2C0DE00000001 /* FileCopyCommand.cpp in Sources */,
+				C17C000131B8000000000001 /* FileCutCommand.cpp in Sources */,
+				A7E9000131B9000000000001 /* FileRenameCommand.cpp in Sources */,
+				F10E000131D5000000000001 /* FileOpenCommand.cpp in Sources */,
+				7EAD000131BA000000000001 /* ToggleHiddenFilesCommand.cpp in Sources */,
+				BACC000131C2000000000001 /* NavigationHistoryCommand.cpp in Sources */,
+				BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */,
+				BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */,
+				9A10A00131B0000000000001 /* VisualStateMapper.cpp in Sources */,
+				B71A000131B1000000000001 /* CommandPresentationAdapter.mm in Sources */,
+				B71A000131B1000000000002 /* NCEditMenuPresentationDelegate.mm in Sources */,
+				C81F000131B2000000000001 /* PaneLifecycleProducer.cpp in Sources */,
+				D92A000131B3000000000001 /* PanelControllerLifecycle.cpp in Sources */,
+				E31D000131B4000000000001 /* PaneLifecycleReducer.cpp in Sources */,
+				95901CBF265F41D88A280D49 /* LegacyShortcutBindingAdapter.cpp in Sources */,
+				B6AC000131C0000000000001 /* VFSOperationPlanningAccessChecker.mm in Sources */,
 				CF0A47F82BDD9E8000833160 /* AppDelegate+ViewerCreation.mm in Sources */,
 				CF0A47032BDD864D00833160 /* Dock.mm in Sources */,
 				CF0A487A2BDDA51600833160 /* GoToFolderSheetController.mm in Sources */,
@@ -3262,6 +3491,27 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA0078408EA805D2E69DDF82 /* PaneStoreAdapter_UT.mm in Sources */,
+				676A7E68C500419B825245FF /* PanelControllerPaneStoreAdapter_UT.mm in Sources */,
+				E220E00231A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp in Sources */,
+				D4C04D0231A2C0DE00000001 /* CommandRegistry_UT.cpp in Sources */,
+				F1C0A00231A2C0DE00000001 /* FileCopyCommand_UT.cpp in Sources */,
+				C17C000131B8000000000002 /* FileCutCommand_UT.cpp in Sources */,
+				A7E9000131B9000000000002 /* FileRenameCommand_UT.cpp in Sources */,
+				F10E000131D5000000000002 /* FileOpenCommand_UT.cpp in Sources */,
+				7EAD000131BA000000000002 /* ToggleHiddenFilesCommand_UT.cpp in Sources */,
+				BACC000131C2000000000002 /* NavigationHistoryCommand_UT.cpp in Sources */,
+				BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */,
+				BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */,
+				9A10A00131B0000000000002 /* VisualStateMapper_UT.cpp in Sources */,
+				B71A000131B1000000000003 /* CommandPresentationAdapter_UT.mm in Sources */,
+				C81F000131B2000000000002 /* PaneLifecycleProducer_UT.mm in Sources */,
+				D92A000131B3000000000002 /* PanelControllerLifecycle_UT.mm in Sources */,
+				F4E2000131B7000000000001 /* PanelControllerNavigation_UT.mm in Sources */,
+				E31D000131B4000000000002 /* PaneLifecycleReducer_UT.cpp in Sources */,
+				A1B2C3D531C1000100C0DE02 /* PanelHistory_UT.cpp in Sources */,
+				A8CF21AD2F6B4969BBB7DD3D /* LegacyShortcutBindingAdapter_UT.cpp in Sources */,
+				B6AC000131C0000000000002 /* VFSOperationPlanningAccessChecker_UT.mm in Sources */,
 				CF67F1BF2954689000B92944 /* Theme_UT.mm in Sources */,
 				CF764D572587875E00D7ED17 /* PanelBriefViewFixedWidthLayoutEngine_UT.mm in Sources */,
 				A1C0D3F431A1000100C0DE01 /* PanelPresentationGeometry_UT.mm in Sources */,

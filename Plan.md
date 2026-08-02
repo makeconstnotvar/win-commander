@@ -1,3 +1,7 @@
+# Справочный UI-разбор и каталог макетов
+
+> **Статус:** архивный дизайн-документ, заменённый в роли execution tracker документом [Development Plan](Docs/Development-Plan.md). Его визуальные решения и каталог макетов служат справочным материалом; канонические требования задаёт [Ideal File Manager Spec](Docs/win_commander_ideal_file_manager_spec.md).
+
 Скрин в целом движется в правильную сторону: есть sidebar, breadcrumb/search, command bar, таблица, inspector справа. Но центральная область действительно сбилась в “dashboard для проекта”, а не в File Explorer. Для Explorer-подобного UX центральная часть должна быть почти скучной: путь уже объясняет, где мы находимся; контент начинается с файлов; статистика живёт в status bar; секции появляются только как результат группировки.
 
 Эталонная анатомия Windows 11 File Explorer: сверху вкладки, слева navigation pane, в центре content pane, опционально справа details pane, снизу status bar; toolbar содержит Back/Forward/Up/Refresh/Search, а app/command bar — действия вроде New, Copy/Move/Delete/Share. В Details view сортировка идёт через заголовки колонок вроде Name и Date modified. ([Microsoft Support][1]) Microsoft отдельно фиксирует команды Cut, Copy, Paste, Rename, Share, Delete, View, Compact view, file extensions, hidden items и item checkboxes как базовые элементы File Explorer. ([Microsoft Support][2]) Для macOS-оболочки логично держаться нативной структуры: leading sidebar, toolbar с логическими группами контролов, split view и inspector-панель справа. ([Apple Developer][3])

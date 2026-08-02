@@ -103,6 +103,16 @@ static void check(const Case &test_case)
     std::shared_ptr<ArchiveRawHost> host;
     REQUIRE_NOTHROW(host = std::make_shared<ArchiveRawHost>(path.c_str(), TestEnv().vfs_native));
 
+    const ProviderCapabilities capabilities = ProviderCapabilitiesResolver::Resolve(*host, "/");
+    CHECK(host->Features() == ArchiveRawHost::DeclaredFeatures);
+    CHECK(capabilities.can_read);
+    CHECK_FALSE(capabilities.can_write);
+    CHECK_FALSE(capabilities.can_create_file);
+    CHECK_FALSE(capabilities.can_generate_thumbnails);
+    CHECK_FALSE(capabilities.can_resolve_symlink);
+    CHECK_FALSE(capabilities.can_watch_changes);
+    CHECK_FALSE(capabilities.is_immutable);
+
     // let's read a file
     CHECK(host->CreateFile("").error() == Error{Error::POSIX, EINVAL});
     CHECK(host->CreateFile("blah-blah").error() == Error{Error::POSIX, EINVAL});

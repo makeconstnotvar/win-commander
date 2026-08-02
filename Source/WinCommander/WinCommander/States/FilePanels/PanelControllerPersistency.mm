@@ -65,13 +65,14 @@ static void LoadHomeDirectory(PanelController *_panel)
     [_panel GoToDirWithContext:context];
 }
 
-static void EnsureNonEmptyStateAsync(PanelController *_panel)
+static void EnsureNonEmptyState(PanelController *_panel)
 {
+    dispatch_assert_main_queue();
     if( !_panel.data.IsLoaded() ) {
         // the VFS was not recovered.
         // we should not leave panel in empty/dummy state,
         // lets go to home directory as a fallback path
-        dispatch_to_main_queue([=] { LoadHomeDirectory(_panel); });
+        LoadHomeDirectory(_panel);
     }
 }
 
@@ -82,18 +83,29 @@ static void RecoverSavedPathAtVFSAsync(const VFSHostPtr &_host, const std::strin
     ctx.VFS = _host;
     ctx.PerformAsynchronous = true;
     ctx.RequestedDirectory = _path;
-    ctx.LoadingResultCallback = [=](const std::expected<void, Error> &_result) {
-        if( !_result && !_panel.data.IsLoaded() ) {
+    __weak PanelController *weak_panel = _panel;
+    ctx.LoadingResultCallback = [_host, _path, weak_panel](const std::expected<void, Error> &_result,
+                                                          DirectoryChangeResultSource,
+                                                          const std::function<bool()> &_is_current) {
+        if( !_result ) {
             // failed to load a listing on this VFS on specified path
             // will try upper directories on this VFS up to the root,
             // in case if everyone fails we will fallback to Home Directory on native VFS.
             auto fs_path = std::filesystem::path{EnsureNoTrailingSlash(_path)};
             if( fs_path.has_parent_path() ) {
                 auto upper_dir = fs_path.parent_path().native();
-                dispatch_to_main_queue([=] { RecoverSavedPathAtVFSAsync(_host, upper_dir, _panel); });
+                dispatch_to_main_queue([_host, upper_dir, weak_panel, is_current = _is_current] {
+                    PanelController *const panel = weak_panel;
+                    if( panel && is_current() && !panel.data.IsLoaded() )
+                        RecoverSavedPathAtVFSAsync(_host, upper_dir, panel);
+                });
             }
             else {
-                dispatch_to_main_queue([=] { LoadHomeDirectory(_panel); });
+                dispatch_to_main_queue([weak_panel, is_current = _is_current] {
+                    PanelController *const panel = weak_panel;
+                    if( panel && is_current() && !panel.data.IsLoaded() )
+                        LoadHomeDirectory(panel);
+                });
             }
         }
     };
@@ -126,7 +138,7 @@ void ControllerStateJSONDecoder::RecoverSavedContentSync(const PersistentLocatio
     const std::expected<VFSHostPtr, Error> exp_host =
         m_Persistency.CreateVFSFromLocation(_location, m_VFSInstanceManager);
     if( !exp_host ) {
-        EnsureNonEmptyStateAsync(_panel);
+        EnsureNonEmptyState(_panel);
         return;
     }
     const VFSHostPtr &host = *exp_host;
@@ -136,8 +148,11 @@ void ControllerStateJSONDecoder::RecoverSavedContentSync(const PersistentLocatio
     request->VFS = host;
     request->PerformAsynchronous = false;
     request->RequestedDirectory = _location.path;
-    request->LoadingResultCallback = [host, path, _panel](const std::expected<void, Error> &_result) {
-        if( !_result && !_panel.data.IsLoaded() ) {
+    __weak PanelController *weak_panel = _panel;
+    request->LoadingResultCallback = [host, path, weak_panel](const std::expected<void, Error> &_result,
+                                                              DirectoryChangeResultSource,
+                                                              const std::function<bool()> &_is_current) {
+        if( !_result ) {
             // failed to load a listing on this VFS on specified path
             // will try upper directories on this VFS up to the root,
             // in case if everyone fails we will fallback to Home Directory on native VFS.
@@ -145,10 +160,18 @@ void ControllerStateJSONDecoder::RecoverSavedContentSync(const PersistentLocatio
 
             if( fs_path.has_parent_path() ) {
                 auto upper_dir = fs_path.parent_path().native();
-                dispatch_to_main_queue([=] { RecoverSavedPathAtVFSAsync(host, upper_dir, _panel); });
+                dispatch_to_main_queue([host, upper_dir, weak_panel, is_current = _is_current] {
+                    PanelController *const panel = weak_panel;
+                    if( panel && is_current() && !panel.data.IsLoaded() )
+                        RecoverSavedPathAtVFSAsync(host, upper_dir, panel);
+                });
             }
             else {
-                dispatch_to_main_queue([=] { LoadHomeDirectory(_panel); });
+                dispatch_to_main_queue([weak_panel, is_current = _is_current] {
+                    PanelController *const panel = weak_panel;
+                    if( panel && is_current() && !panel.data.IsLoaded() )
+                        LoadHomeDirectory(panel);
+                });
             }
         }
     };
@@ -158,17 +181,17 @@ void ControllerStateJSONDecoder::RecoverSavedContentSync(const PersistentLocatio
 void ControllerStateJSONDecoder::RecoverSavedContentAsync(PersistentLocation _location, PanelController *_panel)
 {
     auto workload =
-        [this, _panel, location = std::move(_location)]([[maybe_unused]] const std::function<bool()> &_cancel_checker) {
+        [this, _panel, location = std::move(_location)](const CancelableLoadingTaskContext &_context) {
             const std::expected<VFSHostPtr, Error> exp_host =
                 m_Persistency.CreateVFSFromLocation(location, m_VFSInstanceManager);
             if( exp_host && *exp_host != nullptr ) {
                 // the VFS was recovered, lets go inside it.
                 const VFSHostPtr &host = *exp_host;
                 auto path = location.path;
-                dispatch_to_main_queue([=] { RecoverSavedPathAtVFSAsync(host, path, _panel); });
+                _context.commit_on_main([=] { RecoverSavedPathAtVFSAsync(host, path, _panel); });
             }
             else {
-                EnsureNonEmptyStateAsync(_panel);
+                _context.commit_on_main([=] { EnsureNonEmptyState(_panel); });
                 return;
             }
         };

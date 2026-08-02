@@ -3,6 +3,7 @@
 
 #include <VFS/VFS.h>
 #include "DefaultAction.h"
+#include <span>
 
 @class NCPanelOpenWithMenuDelegate;
 
@@ -11,6 +12,12 @@ class FileOpener;
 }
 
 namespace nc::panel::actions {
+
+/** Hands an already validated item snapshot to FileOpener. The snapshot is consumed synchronously. */
+[[nodiscard]] bool SubmitOpenItemsWithDefaultHandler(std::span<const VFSListingItem> _items,
+                                                     PanelController *_target,
+                                                     FileOpener &_file_opener);
+void UpdateOpenWithDefaultHandlerMenuItemTitle(PanelController *_target, NSMenuItem *_item);
 
 struct OpenFileWithSubmenu final : PanelAction {
     OpenFileWithSubmenu(NCPanelOpenWithMenuDelegate *_menu_delegate);
@@ -39,19 +46,5 @@ struct OpenFilesWithDefaultHandler final : PanelAction {
 private:
     FileOpener &m_FileOpener;
 };
-
-namespace context {
-
-struct OpenFileWithDefaultHandler final : PanelAction {
-    OpenFileWithDefaultHandler(const std::vector<VFSListingItem> &_items, FileOpener &_file_opener);
-    [[nodiscard]] bool Predicate(PanelController *_target) const override;
-    void Perform(PanelController *_target, id _sender) const override;
-
-private:
-    const std::vector<VFSListingItem> &m_Items;
-    FileOpener &m_FileOpener;
-};
-
-} // namespace context
 
 } // namespace nc::panel::actions

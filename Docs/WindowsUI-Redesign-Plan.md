@@ -1,7 +1,7 @@
 # План работ: редизайн Nimble Commander в стиле Windows Explorer
 
-> Статус: черновик для обсуждения. Документ описывает форк Nimble Commander (NC), у которого сохраняется весь движок (VFS, файловые операции, панельная модель данных, встроенный вьювер, терминал, конфиги), но полностью переосмысляется UI/UX по образцу проводника Windows 11.
-> Второй документ — [WindowsUI-Redesign-Design.md](WindowsUI-Redesign-Design.md) — описывает сам дизайн (макеты, компоненты, палитра, иконки, хоткеи). Этот файл — про то, **как** до него дойти.
+> **Статус:** справочный документ раннего этапа, заменённый в роли execution tracker документом [Development Plan](Development-Plan.md). Его декомпозиция и оценки сохранены как исторический контекст; канонические требования задаёт [Ideal File Manager Spec](win_commander_ideal_file_manager_spec.md).
+> Связанный [WindowsUI-Redesign-Design.md](WindowsUI-Redesign-Design.md) сохраняет исходные макеты, компоненты, палитру, иконки и хоткеи.
 
 ## 0. Как читать этот документ
 
@@ -16,7 +16,7 @@
 - по **визуальному языку и раскладке экрана** — узнаваемо похоже на Windows 11 Проводник (File Explorer): командная панель вместо меню-ориентированного тулбара, sidebar с «Быстрым доступом»/«Этим Mac»/«Сетью», breadcrumb-адресная строка, список файлов в духе Details View, статус-бар снизу, реорганизованное контекстное меню.
 
 **Не цель:**
-- пиксель-в-пиксель клон Windows (юридически рискованно и бессмысленно на другой ОС — см. [раздел 9](#9-риски-и-открытые-вопросы));
+- пиксель-в-пиксель клон Windows (юридически рискованно и бессмысленно на другой ОС — см. [раздел 7](#7-риски-и-открытые-вопросы));
 - переписывание движка (VFS/Operations/Viewer/Term) — он остаётся практически нетронутым, см. [раздел 2](#2-что-не-трогаем-движок);
 - отказ от «фишек» NC (двухпанельный режим, VFS-архивы, batch rename, quick search, вкладки) — они остаются, но получают новую визуальную упаковку и, где уместно, новые точки входа в духе Explorer.
 
@@ -41,8 +41,8 @@
 | Движок файловых операций | `Source/Operations/source/Job.h/.cpp` + каждый `*Job.h/.cpp` (`CopyingJob`, `DeletionJob`, `AttrsChangingJob`, `BatchRenamingJob`, `CompressionJob`, `DirectoryCreationJob`, `LinkageJob`) | Доказано grep’ом по всем Job-файлам — ноль ссылок на Cocoa/NSWindow/NSView. Job общается наружу только через `std::function`-колбэки с безопасными дефолтами. Также используется в `_IT`-тестах без единого диалога. |
 | Движок вьювера | `Source/Viewer` — `DataBackend`, `TextModeFrame`/`TextModeWorkingSet`, `HexModeFrame`/`HexModeLayout`/`HexModeProcessing`, `Highlighting/*` | Буфер файла, текстовый/hex-layout, подсветка синтаксиса. |
 | Движок терминала | `Source/Term` — `Screen`/`ScreenBuffer`, `ParserImpl` (VT100), `InterpreterImpl`, `ShellTask`, `InputTranslatorImpl` | Полностью независим от UI, читает палитру только через абстракцию `nc::term::Settings`. |
-| Архитектура тем | `Source/NimbleCommander/NimbleCommander/Core/Theming/Theme.h/.mm`, `ThemesManager.*`, `SystemThemeDetector.h` | Механизм (типизированный снэпшот темы + менеджер переключения + авто light/dark) остаётся; меняется только **содержимое** JSON-тем (см. Design-документ). |
-| State-machine окна | `Source/NimbleCommander/NimbleCommander/States/MainWindowStateProtocol.h`, `MainWindowController.h/.mm` | Протокол `NCMainWindowState` (`windowStateContentView`/`windowStateToolbar` + lifecycle-хуки) и стек push/pop — это уже готовая точка расширения для переключения панели/вьювера/терминала. Redesign использует её, не переизобретает. |
+| Архитектура тем | `Source/WinCommander/WinCommander/Core/Theming/Theme.h/.mm`, `ThemesManager.*`, `SystemThemeDetector.h` | Механизм (типизированный снэпшот темы + менеджер переключения + авто light/dark) остаётся; меняется только **содержимое** JSON-тем (см. Design-документ). |
+| State-machine окна | `Source/WinCommander/WinCommander/States/MainWindowStateProtocol.h`, `MainWindowController.h/.mm` | Протокол `NCMainWindowState` (`windowStateContentView`/`windowStateToolbar` + lifecycle-хуки) и стек push/pop — это уже готовая точка расширения для переключения панели/вьювера/терминала. Redesign использует её, не переизобретает. |
 
 **Практическое следствие:** весь существующий набор unit/integration-тестов (`_UT`/`_IT`, см. `Docs/Building.md`) должен продолжать проходить на протяжении всего проекта. Если какой-то PR ломает тест из `Source/Operations/tests`, `Source/VFS/tests` и т.д. — это сигнал, что редизайн случайно залез в движок.
 
@@ -74,7 +74,7 @@
 | Окно настроек | `Preferences/PreferencesWindow.swift`, `Preferences.mm`, 8 вкладок `PreferencesWindow*Tab.h` | **reskin** | Уже сделано в стиле системных настроек macOS (Swift-контроллер + toolbar-переключатель вкладок) — самая низкорисковая зона, минимум структурных изменений. |
 | Диалог атрибутов | `Command > File Attributes` (Ctrl+A) | **rebuild под «Свойства»** | Становится основой вкладки «Разрешения» нового диалога Properties (см. Design-документ §10). |
 | Содержимое JSON-тем | данные `ThemesManager`/`ThemePersistence` | **новый контент, старый движок** | Авторские новые темы Light/Dark «Explorer», без переписывания `Theme.h`/`ThemesManager.h`. |
-| Иконка приложения, bundle ID, имя | `NimbleCommander.xcodeproj/project.pbxproj`, `Resources/*-Info.plist`, `Resources/Icon.icns` | **new identity** | `info.filesmanager.Files` → новый bundle id; новое имя вместо `PRODUCT_NAME = "Nimble Commander"`. |
+| Иконка приложения, bundle ID, имя | `Source/WinCommander/WinCommander.xcodeproj/project.pbxproj`, `Resources/*-Info.plist`, `Resources/Icon.icns` | **new identity** | `info.filesmanager.Files` → новый bundle id; новое имя вместо `PRODUCT_NAME = "Nimble Commander"`. |
 
 ---
 

@@ -226,7 +226,7 @@ std::expected<void, Error> SFTPHost::DoInit()
 
     ReturnConnection(std::move(*exp_conn));
 
-    AddFeatures(HostFeatures::SetOwnership | HostFeatures::SetPermissions | HostFeatures::SetTimes);
+    AddFeatures(DeclaredFeatures);
     if( m_OSType != sftp::OSType::Unknown )
         AddFeatures(HostFeatures::FetchUsers | HostFeatures::FetchGroups);
 
@@ -607,6 +607,46 @@ std::expected<std::shared_ptr<VFSFile>, Error> SFTPHost::CreateFile(std::string_
 bool SFTPHost::IsWritable() const
 {
     return true; // dummy now
+}
+
+HostErrorKind SFTPHost::ClassifyError(const Error &_error) const noexcept
+{
+    if( _error.Domain() != sftp::ErrorDomain )
+        return Host::ClassifyError(_error);
+    return ClassifySFTPError(_error);
+}
+
+HostErrorKind SFTPHost::ClassifySFTPError(const Error &_error) noexcept
+{
+    if( _error.Domain() != sftp::ErrorDomain )
+        return HostErrorKind::Other;
+    switch( _error.Code() ) {
+        case sftp::Errors::fx_no_such_file:
+        case sftp::Errors::fx_no_such_path:
+        case sftp::Errors::fx_not_a_directory:
+            return HostErrorKind::Missing;
+        case sftp::Errors::fx_permission_denied:
+        case sftp::Errors::fx_write_protect:
+            return HostErrorKind::PermissionDenied;
+        case sftp::Errors::fx_op_unsupported:
+        case sftp::Errors::method_not_supported:
+            return HostErrorKind::Unsupported;
+        case sftp::Errors::fx_no_connection:
+        case sftp::Errors::fx_connection_lost:
+        case sftp::Errors::connect_failed:
+        case sftp::Errors::couldnt_resolve:
+        case sftp::Errors::socket_none:
+        case sftp::Errors::socket_send:
+        case sftp::Errors::socket_disconnect:
+        case sftp::Errors::timeout:
+        case sftp::Errors::socket_timeout:
+        case sftp::Errors::socket_recv:
+        case sftp::Errors::bad_socket:
+        case sftp::Errors::eagain:
+            return HostErrorKind::Unavailable;
+        default:
+            return HostErrorKind::Other;
+    }
 }
 
 std::expected<void, Error> SFTPHost::Unlink(std::string_view _path,

@@ -3,6 +3,7 @@
 
 #include <Base/ScopedObservable.h>
 #include <VFS/VFS.h>
+#include <memory>
 #include <string_view>
 
 #include "ItemStateReport.h"
@@ -36,7 +37,7 @@ enum class OperationState : uint8_t {
           --Paused ---|
 #endif
 
-class Operation : private base::ScopedObservableBase
+class Operation : public std::enable_shared_from_this<Operation>, private base::ScopedObservableBase
 {
 public:
     Operation(const Operation &) = delete;
@@ -92,6 +93,7 @@ protected:
     virtual void OnJobPaused();
     virtual void OnJobResumed();
     bool IsInteractive() const noexcept;
+    void DispatchDialog(std::shared_ptr<AsyncDialogResponse> _response, std::function<void()> _show_dialog);
     void Show(NSWindow *_dialog, std::shared_ptr<AsyncDialogResponse> _response);
     static void AddButtonsForGenericDialog(GenericDialog _dialog_type, NCOpsGenericErrorDialog *_dialog);
     void ShowGenericDialog(GenericDialog _dialog_type,
@@ -108,8 +110,6 @@ private:
     void JobFinished();
     void JobPaused();
     void JobResumed();
-
-    mutable std::condition_variable m_FinishCV;
 
     std::function<bool(NSWindow *dialog, std::function<void(long response)>)> m_DialogCallback;
     mutable spinlock m_DialogCallbackLock;

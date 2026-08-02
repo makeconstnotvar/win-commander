@@ -6,6 +6,8 @@
 #include "Options.h"
 #include "CopyingJobCallbacks.h"
 
+#include <functional>
+
 namespace nc::ops {
 
 class CopyingJob;
@@ -14,6 +16,8 @@ struct CopyingJobCallbacks;
 class Copying : public Operation
 {
 public:
+    using RuntimePreflightValidator = std::function<bool()>;
+
     Copying(std::vector<VFSListingItem> _source_files,
             const std::string &_destination_path,
             const std::shared_ptr<VFSHost> &_destination_host,
@@ -21,6 +25,8 @@ public:
     ~Copying() override;
 
     void SetCallbackHooks(const CopyingJobCallbacks *_callbacks);
+    /** Installs a side-effect-free validator run immediately before preparation and mutation. */
+    void SetRuntimePreflightValidator(RuntimePreflightValidator _validator);
 
 private:
     using CB = CopyingJobCallbacks;

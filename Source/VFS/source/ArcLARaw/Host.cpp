@@ -189,6 +189,8 @@ VFSMeta ArchiveRawHost::Meta()
 
 void ArchiveRawHost::Init(const VFSCancelChecker &_cancel_checker)
 {
+    AddFeatures(DeclaredFeatures);
+
     const auto &path = Configuration().Get<VFSArchiveRawHostConfiguration>().path;
     auto extracted = read_stream(g_ArcLARawMaxBytes, path, *Parent(), _cancel_checker);
     if( !extracted.bytes ) {

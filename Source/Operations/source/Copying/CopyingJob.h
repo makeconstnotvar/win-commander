@@ -12,6 +12,7 @@
 #include "SourceItems.h"
 #include "ChecksumExpectation.h"
 #include "CopyingJobCallbacks.h"
+#include <functional>
 #include <stdlib.h>
 
 namespace nc::ops {
@@ -39,6 +40,7 @@ public:
     const std::vector<VFSListingItem> &SourceItems() const noexcept;
     const std::string &DestinationPath() const noexcept;
     const CopyingOptions &Options() const noexcept;
+    void SetRuntimePreflightValidator(std::function<bool()> _validator);
 
 private:
     using ChecksumVerification = CopyingOptions::ChecksumVerification;
@@ -81,6 +83,7 @@ private:
     };
 
     void Perform() override;
+    [[nodiscard]] bool RuntimePreflightIsValid() const noexcept;
     void ProcessItems();
     StepResult ProcessItemNo(int _item_number);
     StepResult ProcessSymlinkItem(VFSHost &_source_host,
@@ -205,6 +208,7 @@ private:
     enum Stage m_Stage = Stage::Default;
 
     CopyingOptions m_Options;
+    std::function<bool()> m_RuntimePreflightValidator;
 };
 
 } // namespace nc::ops

@@ -169,6 +169,30 @@
         }
       }
     },
+    "Cut “%@”" : {
+      "comment" : "Cut one item",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вырезать “%@”"
+          }
+        }
+      }
+    },
+    "Cut %lu Items" : {
+      "comment" : "Cut many items",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вырезать %lu объектов"
+          }
+        }
+      }
+    },
     "default" : {
       "comment" : "Menu item postfix marker for default apps to open with, for English is 'default'",
       "extractionState" : "manual",

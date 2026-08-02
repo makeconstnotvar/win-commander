@@ -14,6 +14,11 @@ class Cache;
 class WebDAVHost final : public Host
 {
 public:
+    static constexpr uint64_t DeclaredFeatures = HostFeatures::Read | HostFeatures::CreateFile |
+                                                 HostFeatures::CreateDirectory | HostFeatures::Rename |
+                                                 HostFeatures::Unlink | HostFeatures::RemoveDirectory |
+                                                 HostFeatures::NonEmptyRmDir;
+
     static const char *UniqueTag;
 
     WebDAVHost(const std::string &_serv_url,

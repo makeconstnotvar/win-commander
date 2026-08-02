@@ -65,7 +65,7 @@ void WebDAVHost::Init()
     //        throw ErrorException( Error{Error::POSIX, EPROTONOSUPPORT} );
     //    }
 
-    AddFeatures(HostFeatures::NonEmptyRmDir);
+    AddFeatures(DeclaredFeatures);
 }
 
 VFSConfiguration WebDAVHost::Configuration() const

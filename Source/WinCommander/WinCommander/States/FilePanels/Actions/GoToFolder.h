@@ -64,6 +64,9 @@ struct GoToEnclosingFolder final : PanelAction {
     void Perform(PanelController *_target, id _sender) const override;
 };
 
+/** Submits only the explicit uniform-pane Up transition; indirect legacy callers retain fallback. */
+[[nodiscard]] bool SubmitExplicitGoToEnclosingFolder(PanelController *_target);
+
 struct GoIntoFolder final : PanelAction {
     GoIntoFolder(bool _force_checking_for_archive = false);
     [[nodiscard]] bool Predicate(PanelController *_target) const override;

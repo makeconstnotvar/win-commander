@@ -38,7 +38,10 @@ Deletion::Deletion(std::vector<VFSListingItem> _items, DeletionOptions _options)
     };
 }
 
-Deletion::~Deletion() = default;
+Deletion::~Deletion()
+{
+    Wait();
+}
 
 Job *Deletion::GetJob() noexcept
 {
@@ -52,7 +55,8 @@ Deletion::OnReadDirError(Error _err, const std::string &_path, VFSHost &_vfs)
         return m_SkipAll ? Callbacks::ReadDirErrorResolution::Skip : Callbacks::ReadDirErrorResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this, vfs = _vfs.shared_from_this()] { OnReadDirErrorUI(_err, _path, vfs, ctx); });
+    DispatchDialog(ctx,
+                   [=, this, vfs = _vfs.shared_from_this()] { OnReadDirErrorUI(_err, _path, vfs, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip )
@@ -93,7 +97,8 @@ DeletionJobCallbacks::UnlinkErrorResolution Deletion::OnUnlinkError(Error _err, 
         return m_SkipAll ? Callbacks::UnlinkErrorResolution::Skip : Callbacks::UnlinkErrorResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this, vfs = _vfs.shared_from_this()] { OnUnlinkErrorUI(_err, _path, vfs, ctx); });
+    DispatchDialog(ctx,
+                   [=, this, vfs = _vfs.shared_from_this()] { OnUnlinkErrorUI(_err, _path, vfs, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip )
@@ -134,7 +139,8 @@ DeletionJobCallbacks::RmdirErrorResolution Deletion::OnRmdirError(Error _err, co
         return m_SkipAll ? Callbacks::RmdirErrorResolution::Skip : Callbacks::RmdirErrorResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this, vfs = _vfs.shared_from_this()] { OnRmdirErrorUI(_err, _path, vfs, ctx); });
+    DispatchDialog(ctx,
+                   [=, this, vfs = _vfs.shared_from_this()] { OnRmdirErrorUI(_err, _path, vfs, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip )
@@ -179,7 +185,8 @@ Deletion::OnTrashError(const Error _err, const std::string &_path, VFSHost &_vfs
         return m_SkipAll ? Callbacks::TrashErrorResolution::Skip : Callbacks::TrashErrorResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this, vfs = _vfs.shared_from_this()] { OnTrashErrorUI(_err, _path, vfs, ctx); });
+    DispatchDialog(ctx,
+                   [=, this, vfs = _vfs.shared_from_this()] { OnTrashErrorUI(_err, _path, vfs, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip ) {
@@ -235,7 +242,8 @@ Deletion::OnLockedItem(const Error _err, const std::string &_path, VFSHost &_vfs
     }
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this, vfs = _vfs.shared_from_this()] { OnLockedItemUI(_err, _path, vfs, _type, ctx); });
+    DispatchDialog(
+        ctx, [=, this, vfs = _vfs.shared_from_this()] { OnLockedItemUI(_err, _path, vfs, _type, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip ) {
@@ -283,7 +291,8 @@ DeletionJobCallbacks::UnlockErrorResolution Deletion::OnUnlockError(Error _err, 
         return m_SkipAll ? Callbacks::UnlockErrorResolution::Skip : Callbacks::UnlockErrorResolution::Stop;
 
     const auto ctx = std::make_shared<AsyncDialogResponse>();
-    dispatch_to_main_queue([=, this, vfs = _vfs.shared_from_this()] { OnUnlockErrorUI(_err, _path, vfs, ctx); });
+    DispatchDialog(ctx,
+                   [=, this, vfs = _vfs.shared_from_this()] { OnUnlockErrorUI(_err, _path, vfs, ctx); });
     WaitForDialogResponse(ctx);
 
     if( ctx->response == NSModalResponseSkip )

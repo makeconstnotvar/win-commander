@@ -1,7 +1,7 @@
-# Дизайн-документация: UI в стиле Windows Explorer поверх движка Nimble Commander
+# Справочный дизайн: Explorer-подобный UI Win Commander
 
-> Компаньон к [WindowsUI-Redesign-Plan.md](WindowsUI-Redesign-Plan.md). Тот документ — про то, *как* и *в каком порядке* делать; этот — про то, *что именно* должно получиться: раскладка, компоненты, поведение, палитра, иконки, хоткеи.
-> Визуальные референсы (wireframe-макеты) — в отдельном интерактивном артефакте, ссылка в конце документа.
+> Статус: визуальный и UX-референс. Канонический продуктовый контракт находится в [win_commander_ideal_file_manager_spec.md](win_commander_ideal_file_manager_spec.md), а порядок реализации и текущие статусы — в [Development-Plan.md](Development-Plan.md).
+> Интерактивный макет хранится в [`../win-commander.pen`](../win-commander.pen). Историческая декомпозиция редизайна сохранена в [WindowsUI-Redesign-Plan.md](WindowsUI-Redesign-Plan.md) и не используется как трекер выполнения.
 
 ## 1. Принципы дизайна
 

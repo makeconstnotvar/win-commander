@@ -9,6 +9,8 @@
 #include "Views/BriefSystemOverview.h"
 #include <WinCommander/Core/Alert.h>
 #include <WinCommander/Core/ActionsShortcutsManager.h>
+#include <WinCommander/Core/Errors/FileManagerErrorAdapter.h>
+#include <WinCommander/Core/Pane/PanelControllerLifecycle.h>
 #include <WinCommander/Bootstrap/Config.h>
 #include "PanelViewLayoutSupport.h"
 #include <Panel/PanelDataItemVolatileData.h>
@@ -39,6 +41,12 @@
 #include <Base/mach_time.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cerrno>
+#include <exception>
+#include <optional>
+#include <stdexcept>
+#include <type_traits>
 
 using namespace nc;
 using namespace nc::core;
@@ -52,6 +60,293 @@ static const auto g_ConfigShowDotDotEntry = "filePanel.general.showDotDotEntry";
 static const auto g_ConfigIgnoreDirectoriesOnMaskSelection = "filePanel.general.ignoreDirectoriesOnSelectionWithMask";
 static const auto g_ConfigShowLocalizedFilenames = "filePanel.general.showLocalizedFilenames";
 static const auto g_ConfigEnableFinderTags = "filePanel.FinderTags.enable";
+
+namespace {
+
+constexpr std::string_view g_PanelNavigationErrorDomain = "PanelController.Navigation";
+constexpr std::string_view g_PanelRefreshErrorDomain = "PanelController.Refresh";
+static_assert(std::is_nothrow_move_assignable_v<data::Model>);
+
+struct NavigationFetchOutcome {
+    VFSListingPtr listing;
+    std::optional<Error> error;
+    std::exception_ptr exception;
+    bool cancelled = false;
+};
+
+struct NavigationWorkerSlot {
+    PaneRequestId request_id;
+    std::shared_ptr<std::atomic_bool> callback_allowed;
+    std::shared_ptr<std::atomic_bool> worker_finished;
+    bool uses_loading_queue = true;
+};
+
+struct NavigationAdmissionState {
+    std::optional<PaneRequestId> correlated_worker;
+};
+
+[[nodiscard]] bool IsCancellationError(const Error &_error) noexcept;
+
+[[nodiscard]] NavigationFetchOutcome FetchNavigationRequestDetached(
+    const std::shared_ptr<DirectoryChangeRequest> &_request,
+    const unsigned long _fetch_flags,
+    const std::shared_ptr<std::atomic_bool> &_callback_allowed)
+{
+    NavigationFetchOutcome outcome;
+    try {
+        const auto canceller = VFSCancelChecker(
+            [_callback_allowed] { return !_callback_allowed->load(std::memory_order_acquire); });
+        const std::expected<VFSListingPtr, Error> listing =
+            _request->VFS->FetchDirectoryListing(_request->RequestedDirectory, _fetch_flags, canceller);
+
+        if( listing )
+            outcome.listing = *listing;
+        else
+            outcome.error = listing.error();
+        outcome.cancelled = !_callback_allowed->load(std::memory_order_acquire) ||
+                            (outcome.error && IsCancellationError(*outcome.error));
+    } catch( ... ) {
+        outcome.exception = std::current_exception();
+    }
+    return outcome;
+}
+
+struct ControllerLoadingWorkFacts {
+    bool has_external_work = false;
+    std::optional<PaneRequestId> correlated_navigation_worker;
+};
+
+struct RefreshWorkRequest {
+    VFSListingPtr source_listing;
+    unsigned long source_generation = 0;
+    bool is_uniform = false;
+    VFSHostPtr host;
+    VFSHostPtr native_host;
+    std::string path;
+    unsigned long fetch_flags = 0;
+    FileManagerErrorContext error_context;
+};
+
+struct RefreshRecoveryTarget {
+    VFSHostPtr host;
+    std::string path;
+};
+
+struct RefreshFetchOutcome {
+    VFSListingPtr listing;
+    std::optional<Error> error;
+    std::exception_ptr exception;
+    std::optional<RefreshRecoveryTarget> recovery_target;
+    bool cancelled = false;
+};
+
+struct RefreshWorkerSlot {
+    PaneRequestId request_id;
+    std::shared_ptr<std::atomic_bool> cancel_requested;
+    std::shared_ptr<std::atomic_bool> worker_finished;
+};
+
+struct PendingRefreshWork {
+    PaneRequestId request_id;
+    RefreshWorkRequest request;
+    unsigned long content_generation = 0;
+    std::shared_ptr<std::atomic_bool> cancel_requested;
+};
+
+struct RefreshAdmissionState {
+    std::optional<RefreshWorkRequest> work;
+};
+
+struct LifecycleMappedException {
+    FileManagerError error;
+};
+
+struct WeakPanelControllerRef {
+    __weak PanelController *panel = nil;
+};
+
+[[nodiscard]] bool IsCancellationError(const Error &_error) noexcept
+{
+    return _error.Domain() == Error::POSIX && _error.Code() == ECANCELED;
+}
+
+[[nodiscard]] bool IsInvalidLocationError(const Error &_error) noexcept
+{
+    return _error.Domain() == Error::POSIX &&
+           (_error.Code() == ENOENT || _error.Code() == ENOTDIR || _error.Code() == ESTALE);
+}
+
+[[nodiscard]] FileManagerErrorContext NavigationErrorContext(
+    const std::shared_ptr<DirectoryChangeRequest> &_request)
+{
+    FileManagerErrorContext context;
+    if( !_request )
+        return context;
+    if( !_request->RequestedDirectory.empty() )
+        context.affected_items.emplace_back(_request->RequestedDirectory);
+    if( _request->VFS )
+        context.provider_id = _request->VFS->Tag();
+    return context;
+}
+
+[[nodiscard]] FileManagerError MapNavigationError(
+    Error _error,
+    const std::shared_ptr<DirectoryChangeRequest> &_request = {})
+{
+    return FileManagerErrorAdapter::FromError(std::move(_error), NavigationErrorContext(_request));
+}
+
+[[nodiscard]] FileManagerError MapNavigationException(
+    std::exception_ptr _exception,
+    const std::shared_ptr<DirectoryChangeRequest> &_request = {})
+{
+    try {
+        if( _exception )
+            std::rethrow_exception(_exception);
+    } catch( const LifecycleMappedException &mapped ) {
+        return mapped.error;
+    } catch( const ErrorException &error_exception ) {
+        return MapNavigationError(error_exception.error(), _request);
+    } catch( const std::exception &exception ) {
+        Error error{g_PanelNavigationErrorDomain, EIO};
+        error.LocalizedFailureReason(file_manager_error_messages::UnknownErrorFallback);
+        FileManagerError mapped = MapNavigationError(std::move(error), _request);
+        mapped.technical_message = exception.what();
+        return mapped;
+    } catch( ... ) {
+    }
+
+    return MapNavigationError(Error{g_PanelNavigationErrorDomain, EIO}, _request);
+}
+
+[[nodiscard]] FileManagerError MapRefreshError(Error _error, const RefreshWorkRequest &_request)
+{
+    return FileManagerErrorAdapter::FromError(std::move(_error), _request.error_context);
+}
+
+[[nodiscard]] FileManagerError MapRefreshException(std::exception_ptr _exception,
+                                                   const RefreshWorkRequest &_request)
+{
+    try {
+        if( _exception )
+            std::rethrow_exception(_exception);
+    } catch( const ErrorException &error_exception ) {
+        return MapRefreshError(error_exception.error(), _request);
+    } catch( const std::exception &exception ) {
+        Error error{g_PanelRefreshErrorDomain, EIO};
+        error.LocalizedFailureReason(file_manager_error_messages::UnknownErrorFallback);
+        FileManagerError mapped = MapRefreshError(std::move(error), _request);
+        mapped.technical_message = exception.what();
+        return mapped;
+    } catch( ... ) {
+    }
+
+    return MapRefreshError(Error{g_PanelRefreshErrorDomain, EIO}, _request);
+}
+
+[[nodiscard]] std::optional<RefreshRecoveryTarget>
+FindRefreshRecoveryTarget(const RefreshWorkRequest &_request,
+                          const std::shared_ptr<std::atomic_bool> &_cancel_requested)
+{
+    if( !_request.is_uniform || !_request.host )
+        return std::nullopt;
+
+    std::filesystem::path path = EnsureNoTrailingSlash(_request.path);
+    while( true ) {
+        if( _cancel_requested->load(std::memory_order_acquire) )
+            return std::nullopt;
+        if( _request.host->IterateDirectoryListing(path.native(), [](const VFSDirEnt &) { return false; }) )
+            return RefreshRecoveryTarget{.host = _request.host, .path = path.native()};
+        if( path == "/" )
+            break;
+        path = path.parent_path();
+    }
+
+    if( _cancel_requested->load(std::memory_order_acquire) || !_request.native_host )
+        return std::nullopt;
+    return RefreshRecoveryTarget{
+        .host = _request.native_host,
+        .path = nc::base::CommonPaths::Home(),
+    };
+}
+
+[[nodiscard]] RefreshFetchOutcome
+FetchRefreshRequest(const RefreshWorkRequest &_request,
+                    const std::shared_ptr<std::atomic_bool> &_cancel_requested)
+{
+    RefreshFetchOutcome outcome;
+    const auto is_cancelled = [&] {
+        return _cancel_requested->load(std::memory_order_acquire);
+    };
+
+    try {
+        if( is_cancelled() ) {
+            outcome.cancelled = true;
+            return outcome;
+        }
+
+        if( _request.is_uniform ) {
+            const std::expected<VFSListingPtr, Error> listing =
+                _request.host->FetchDirectoryListing(_request.path, _request.fetch_flags, is_cancelled);
+            if( listing )
+                outcome.listing = *listing;
+            else
+                outcome.error = listing.error();
+        }
+        else {
+            outcome.listing =
+                VFSListing::ProduceUpdatedTemporaryPanelListing(*_request.source_listing, is_cancelled);
+        }
+        outcome.cancelled = is_cancelled() || (outcome.error && IsCancellationError(*outcome.error));
+        if( !outcome.cancelled && outcome.error && IsInvalidLocationError(*outcome.error) )
+            outcome.recovery_target = FindRefreshRecoveryTarget(_request, _cancel_requested);
+    } catch( const ErrorException &error_exception ) {
+        outcome.cancelled = IsCancellationError(error_exception.error());
+        if( !outcome.cancelled )
+            outcome.error = error_exception.error();
+    } catch( ... ) {
+        outcome.exception = std::current_exception();
+    }
+    return outcome;
+}
+
+void PresentNavigationException(std::exception_ptr _exception)
+{
+    try {
+        if( _exception )
+            std::rethrow_exception(_exception);
+    } catch( const std::exception &exception ) {
+        ShowExceptionAlert(exception);
+    } catch( ... ) {
+        ShowExceptionAlert();
+    }
+}
+
+[[nodiscard]] PaneRequestDescriptor NavigationDescriptor(
+    const std::shared_ptr<DirectoryChangeRequest> &_request)
+{
+    PaneRequestDescriptor descriptor{
+        .kind = PaneRequestKind::Navigation,
+        .initiated_by_user = _request ? _request->InitiatedByUser : false,
+    };
+    if( _request && _request->VFS && !_request->RequestedDirectory.empty() ) {
+        descriptor.target = PaneRequestLocation{
+            .host = _request->VFS,
+            .path = _request->RequestedDirectory,
+        };
+    }
+    return descriptor;
+}
+
+[[nodiscard]] PaneRequestDescriptor RefreshDescriptor(const bool _initiated_by_user)
+{
+    return PaneRequestDescriptor{
+        .kind = PaneRequestKind::Refresh,
+        .initiated_by_user = _initiated_by_user,
+    };
+}
+
+} // namespace
 
 namespace nc::panel {
 
@@ -100,32 +395,32 @@ struct CalculatedSizesBatch {
 
 } // namespace nc::panel
 
-#define MAKE_AUTO_UPDATING_BOOL_CONFIG_VALUE(_name, _path)                                                             \
-    static bool _name()                                                                                                \
-    {                                                                                                                  \
-        static const auto fetch = [] { return GlobalConfig().GetBool((_path)); };                                      \
-        static bool value = [] {                                                                                       \
-            GlobalConfig().ObserveForever((_path), [] { value = fetch(); });                                           \
-            return fetch();                                                                                            \
-        }();                                                                                                           \
-        return value;                                                                                                  \
-    }
-
-MAKE_AUTO_UPDATING_BOOL_CONFIG_VALUE(ConfigShowDotDotEntry, g_ConfigShowDotDotEntry);
-MAKE_AUTO_UPDATING_BOOL_CONFIG_VALUE(ConfigShowLocalizedFilenames, g_ConfigShowLocalizedFilenames);
-MAKE_AUTO_UPDATING_BOOL_CONFIG_VALUE(ConfigEnableFinderTags, g_ConfigEnableFinderTags);
-
-static void HeatUpConfigValues()
-{
-    ConfigShowDotDotEntry();
-    ConfigShowLocalizedFilenames();
-    ConfigEnableFinderTags();
-}
-
 @interface PanelController ()
 
 @property(nonatomic, readonly)
     bool receivesUpdateNotifications; // returns true if underlying vfs will notify controller that content has changed
+
+- (NavigationFetchOutcome)fetchNavigationRequest:(const std::shared_ptr<DirectoryChangeRequest> &)_request
+                                      fetchFlags:(unsigned long)_fetch_flags
+                               contentGeneration:(unsigned long)_content_generation;
+- (void)finishNavigationRequest:(PaneRequestId)_request_id
+                         request:(const std::shared_ptr<DirectoryChangeRequest> &)_request
+                         outcome:(const NavigationFetchOutcome &)_outcome
+               contentGeneration:(unsigned long)_content_generation
+               synchronousResult:(std::expected<void, Error> *)_synchronous_result;
+- (void)finishRefreshRequest:(PaneRequestId)_request_id
+                      request:(const RefreshWorkRequest &)_request
+                      outcome:(const RefreshFetchOutcome &)_outcome
+            contentGeneration:(unsigned long)_content_generation;
+- (void)startRefreshWorker:(const PendingRefreshWork &)_work;
+- (void)refreshQueueDidBecomeDry;
+- (void)refreshWorkerDidFinish:(PaneRequestId)_request_id
+                 finishedToken:(const std::shared_ptr<std::atomic_bool> &)_finished_token;
+- (void)cancelBackgroundOperationsForLifecycleReason:(PaneCancellationReason)_reason;
+- (void)stopBackgroundQueues;
+- (unsigned long)claimContentIntentInvalidatingNavigationAdmission;
+- (ControllerLoadingWorkFacts)loadingWorkFactsForLifecycleContext:
+    (std::optional<PanelControllerLifecycleProbeContext>)_context;
 @end
 
 @implementation PanelController {
@@ -141,8 +436,8 @@ static void HeatUpConfigValues()
 
     // background operations' queues
     nc::base::SerialQueue m_DirectorySizeCountingQ;
-    nc::base::SerialQueue m_DirectoryLoadingQ;
-    nc::base::SerialQueue m_DirectoryReLoadingQ;
+    std::shared_ptr<nc::base::SerialQueue> m_DirectoryLoadingQ;
+    std::shared_ptr<nc::base::SerialQueue> m_DirectoryReLoadingQ;
 
     NCPanelQuickSearch *m_QuickSearch;
     __weak id<NCPanelQuickSearchPresentation> m_QuickSearchPresentation;
@@ -184,16 +479,28 @@ static void HeatUpConfigValues()
     std::shared_ptr<PanelViewLayoutsStorage> m_Layouts;
     int m_ViewLayoutIndex;
     std::shared_ptr<const PanelViewLayout> m_AssignedViewLayout;
+    bool m_AssignedViewLayoutUsesConfiguredSlot;
     PanelViewLayoutsStorage::ObservationTicket m_LayoutsObservation;
     ContextMenuProvider m_ContextMenuProvider;
     nc::utility::NativeFSManager *m_NativeFSManager;
     nc::vfs::NativeHost *m_NativeHost;
+    nc::config::Config *m_Config;
 
+    nc::core::PaneId m_PaneId;
+    std::unique_ptr<nc::core::PanelControllerLifecycle> m_PaneLifecycle;
+    std::optional<NavigationWorkerSlot> m_NavigationWorker;
+    std::optional<RefreshWorkerSlot> m_RefreshWorker;
+    std::optional<PendingRefreshWork> m_PendingRefresh;
+    std::shared_ptr<std::atomic_bool> m_NavigationAdmissionCallbackAllowed;
+    bool m_AcceptsNavigation;
     unsigned long m_DataGeneration;
+    /** Global content-intent epoch captured by every delayed model commit. */
+    std::atomic_ulong m_ContentRequestGeneration;
 }
 
 @synthesize view = m_View;
 @synthesize data = m_Data;
+@synthesize paneId = m_PaneId;
 @synthesize history = m_History;
 @synthesize layoutIndex = m_ViewLayoutIndex;
 @synthesize vfsFetchingFlags = m_VFSFetchingFlags;
@@ -222,7 +529,9 @@ static void HeatUpConfigValues()
 }
 
 - (instancetype)initWithView:(PanelView *)_panel_view
+                      paneId:(const nc::core::PaneId)_pane_id
                      layouts:(std::shared_ptr<nc::panel::PanelViewLayoutsStorage>)_layouts
+                      config:(nc::config::Config &)_config
           vfsInstanceManager:(nc::core::VFSInstanceManager &)_vfs_mgr
      directoryAccessProvider:(nc::panel::DirectoryAccessProvider &)_directory_access_provider
          contextMenuProvider:(nc::panel::ContextMenuProvider)_context_menu_provider
@@ -232,41 +541,65 @@ static void HeatUpConfigValues()
     assert(_layouts);
     assert(_context_menu_provider);
 
-    static std::once_flag once;
-    std::call_once(once, HeatUpConfigValues);
-
     self = [super init];
     if( self ) {
+        m_PaneId = _pane_id;
+        m_PaneLifecycle = std::make_unique<PanelControllerLifecycle>(m_PaneId, [](std::exception_ptr _exception) {
+            return MapNavigationException(std::move(_exception));
+        });
         m_Layouts = std::move(_layouts);
         m_VFSInstanceManager = &_vfs_mgr;
         m_NativeFSManager = &_native_fs_mgr;
         m_NativeHost = &_native_host;
+        m_Config = &_config;
         m_DirectoryAccessProvider = &_directory_access_provider;
         m_ContextMenuProvider = std::move(_context_menu_provider);
         m_History.SetVFSInstanceManager(_vfs_mgr);
         m_VFSFetchingFlags = 0;
         m_NextActivityTicket = 1;
         m_DataGeneration = 0;
+        m_ContentRequestGeneration = 0;
+        m_AcceptsNavigation = true;
         m_IsAnythingWorksInBackground = false;
+        m_DirectoryLoadingQ = std::make_shared<nc::base::SerialQueue>();
+        m_DirectoryReLoadingQ = std::make_shared<nc::base::SerialQueue>();
         m_ViewLayoutIndex = m_Layouts->DefaultLayoutIndex();
         m_AssignedViewLayout = m_Layouts->DefaultLayout();
+        m_AssignedViewLayoutUsesConfiguredSlot = m_ViewLayoutIndex >= 0;
 
-        __weak PanelController *weakself = self;
-        auto on_change = [=] {
-            dispatch_to_main_queue([=] { [static_cast<PanelController *>(weakself) updateSpinningIndicator]; });
+        const auto weak_panel = std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
+        auto on_change = [weak_panel] {
+            dispatch_to_main_queue([weak_panel] {
+                if( PanelController *const panel = weak_panel->panel )
+                    [panel updateSpinningIndicator];
+            });
         };
         m_DirectorySizeCountingQ.SetOnChange(on_change);
-        m_DirectoryReLoadingQ.SetOnChange(on_change);
-        m_DirectoryLoadingQ.SetOnChange(on_change);
+        m_DirectoryReLoadingQ->SetOnChange(on_change);
+        m_DirectoryLoadingQ->SetOnChange(on_change);
+        m_DirectoryReLoadingQ->SetOnDry([weak_panel] {
+            dispatch_to_main_queue([weak_panel] {
+                if( PanelController *const panel = weak_panel->panel )
+                    [panel refreshQueueDidBecomeDry];
+            });
+        });
 
         m_View = _panel_view;
         m_View.delegate = self;
         m_View.data = &m_Data;
+        __weak PanelView *weak_view = m_View;
+        m_History.SetNavigationStateChangeCallback([weak_view]() noexcept {
+            dispatch_assert_main_queue();
+            if( PanelView *const view = weak_view )
+                [NSNotificationCenter.defaultCenter
+                    postNotificationName:NCPanelViewContextDidChangeNotification
+                                  object:view];
+        });
         [m_View setPresentationLayout:*m_AssignedViewLayout];
 
         // wire up config changing notifications
         auto add_co = [&](const char *_path, SEL _sel) {
-            m_ConfigObservers.emplace_back(GlobalConfig().Observe(_path, objc_callback(self, _sel)));
+            m_ConfigObservers.emplace_back(m_Config->Observe(_path, objc_callback_to_main_queue(self, _sel)));
         };
         add_co(g_ConfigShowDotDotEntry, @selector(configVFSFetchFlagsChanged));
         add_co(g_ConfigShowLocalizedFilenames, @selector(configVFSFetchFlagsChanged));
@@ -277,7 +610,7 @@ static void HeatUpConfigValues()
         // loading config via simulating it's change
         [self configVFSFetchFlagsChanged];
 
-        m_QuickSearch = [[NCPanelQuickSearch alloc] initWithData:m_Data delegate:self config:GlobalConfig()];
+        m_QuickSearch = [[NCPanelQuickSearch alloc] initWithData:m_Data delegate:self config:*m_Config];
         self.quickSearchPresentation = m_View.headerView;
 
         [m_View addKeystrokeSink:self];
@@ -287,8 +620,43 @@ static void HeatUpConfigValues()
     return self;
 }
 
+- (nc::panel::PaneLifecycleSubscription)subscribeToPaneLifecycle:
+    (nc::panel::PaneLifecycleObserver)_observer
+{
+    dispatch_assert_main_queue();
+    if( !m_PaneLifecycle )
+        throw std::logic_error("PanelController lifecycle is unavailable");
+
+    return m_PaneLifecycle->Subscribe(std::move(_observer));
+}
+
 - (void)dealloc
 {
+    dispatch_assert_main_queue();
+    m_AcceptsNavigation = false;
+    if( m_NavigationAdmissionCallbackAllowed )
+        m_NavigationAdmissionCallbackAllowed->store(false, std::memory_order_release);
+    if( m_NavigationWorker )
+        m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+    if( m_DirectoryLoadingQ )
+        m_DirectoryLoadingQ->Stop();
+    if( m_RefreshWorker )
+        m_RefreshWorker->cancel_requested->store(true, std::memory_order_release);
+    if( m_PendingRefresh )
+        m_PendingRefresh->cancel_requested->store(true, std::memory_order_release);
+    if( m_PaneLifecycle ) {
+        try {
+            m_PaneLifecycle->Shutdown();
+        } catch( ... ) {
+            // The coordinator destructor retains the final no-throw shutdown fallback.
+        }
+        m_PaneLifecycle.reset();
+    }
+    m_NavigationWorker.reset();
+    m_RefreshWorker.reset();
+    m_PendingRefresh.reset();
+    m_DirectoryLoadingQ.reset();
+
     // we need to manually set data to nullptr, since PanelView can be destroyed a bit later due
     // to other strong pointers. in that case view will contain a dangling pointer, which can lead
     // to a crash.
@@ -297,17 +665,17 @@ static void HeatUpConfigValues()
 
 - (void)configVFSFetchFlagsChanged
 {
-    if( !ConfigShowDotDotEntry() )
+    if( !m_Config->GetBool(g_ConfigShowDotDotEntry) )
         m_VFSFetchingFlags |= VFSFlags::F_NoDotDot;
     else
         m_VFSFetchingFlags &= ~VFSFlags::F_NoDotDot;
 
-    if( ConfigShowLocalizedFilenames() )
+    if( m_Config->GetBool(g_ConfigShowLocalizedFilenames) )
         m_VFSFetchingFlags |= VFSFlags::F_LoadDisplayNames;
     else
         m_VFSFetchingFlags &= ~VFSFlags::F_LoadDisplayNames;
 
-    if( ConfigEnableFinderTags() )
+    if( m_Config->GetBool(g_ConfigEnableFinderTags) )
         m_VFSFetchingFlags |= VFSFlags::F_LoadTags;
     else
         m_VFSFetchingFlags &= ~VFSFlags::F_LoadTags;
@@ -347,7 +715,7 @@ static void HeatUpConfigValues()
 
 - (bool)ignoreDirectoriesOnSelectionByMask
 {
-    return GlobalConfig().GetBool(g_ConfigIgnoreDirectoriesOnMaskSelection);
+    return m_Config->GetBool(g_ConfigIgnoreDirectoriesOnMaskSelection);
 }
 
 - (void)copyOptionsFromController:(PanelController *)_pc
@@ -394,91 +762,322 @@ static void HeatUpConfigValues()
     }
 }
 
-- (void)reloadRefreshedListing:(const VFSListingPtr &)_ptr
+- (void)finishRefreshRequest:(const PaneRequestId)_request_id
+                      request:(const RefreshWorkRequest &)_request
+                      outcome:(const RefreshFetchOutcome &)_outcome
+            contentGeneration:(const unsigned long)_content_generation
 {
-    assert(dispatch_is_main_queue());
-    Log::Info("Reloading refreshed listing, {}", _ptr->IsUniform() ? _ptr->Directory().c_str() : "uniform");
+    dispatch_assert_main_queue();
 
-    const auto pers = CursorBackup{m_View.curpos, m_Data};
+    const auto active = m_PaneLifecycle->Active();
+    if( !active || active->request_id != _request_id )
+        return;
 
-    m_Data.ReLoad(_ptr);
+    bool source_matches = _content_generation == m_ContentRequestGeneration.load(std::memory_order_acquire) &&
+                          m_Data.IsLoaded() && m_DataGeneration == _request.source_generation &&
+                          m_Data.ListingPtr() == _request.source_listing &&
+                          m_Data.Listing().IsUniform() == _request.is_uniform;
+    if( source_matches && _request.is_uniform ) {
+        source_matches = m_Data.Host() == _request.host &&
+                         m_Data.DirectoryPathWithTrailingSlash() == _request.path;
+    }
+    if( !source_matches ) {
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+        return;
+    }
+
+    if( _outcome.exception ) {
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Fail(_request_id, MapRefreshException(_outcome.exception, _request));
+        return;
+    }
+    if( _outcome.cancelled ) {
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::QueueStopped);
+        return;
+    }
+    if( _outcome.error ) {
+        const auto result =
+            m_PaneLifecycle->Fail(_request_id, MapRefreshError(*_outcome.error, _request));
+        if( result == PaneLifecycleProducer::FinishResult::Published && _outcome.recovery_target &&
+            _content_generation == m_ContentRequestGeneration.load(std::memory_order_acquire) &&
+            !m_PaneLifecycle->Active() ) {
+            auto recovery = std::make_shared<DirectoryChangeRequest>();
+            recovery->RequestedDirectory = _outcome.recovery_target->path;
+            recovery->VFS = _outcome.recovery_target->host;
+            recovery->PerformAsynchronous = true;
+            [[maybe_unused]] const auto recovery_submission = [self GoToDirWithContext:std::move(recovery)];
+        }
+        return;
+    }
+    if( !_outcome.listing ) {
+        const auto exception = std::make_exception_ptr(std::logic_error{"Refresh fetch returned no outcome"});
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Fail(_request_id, MapRefreshException(exception, _request));
+        return;
+    }
+
+    bool listing_matches = _outcome.listing->IsUniform() == _request.is_uniform;
+    if( listing_matches && _request.is_uniform ) {
+        listing_matches = _outcome.listing->Host() == _request.host &&
+                          _outcome.listing->Directory() == _request.path;
+    }
+    if( !listing_matches ) {
+        const auto exception =
+            std::make_exception_ptr(std::logic_error{"Refresh fetch returned an incompatible listing"});
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Fail(_request_id, MapRefreshException(exception, _request));
+        return;
+    }
+
+    std::optional<data::Model> prepared;
+    try {
+        prepared.emplace(m_Data);
+        prepared->ReLoad(_outcome.listing);
+    } catch( ... ) {
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Fail(_request_id, MapRefreshException(std::current_exception(), _request));
+        return;
+    }
+
+    const auto cursor = CursorBackup{m_View.curpos, m_Data};
+    m_DirectorySizeCountingQ.Stop();
+    const auto commit_result = m_PaneLifecycle->Commit(
+        _request_id,
+        PaneLifecycleCommitted{
+            .controller_generation = _request.source_generation,
+            .listing = _outcome.listing,
+        },
+        [&] { m_Data = std::move(*prepared); });
+    if( commit_result != PaneLifecycleProducer::FinishResult::Published ||
+        m_DataGeneration != _request.source_generation ||
+        m_Data.ListingPtr() != _outcome.listing )
+        return;
+
     [m_View dataUpdated];
     [m_QuickSearch dataUpdated];
-
     if( [self checkAgainstRequestedFocusing] ) {
         Log::Trace("Cursor position was changed by requested focusing, skipping RestoredCursorPosition()");
     }
     else {
-        m_View.curpos = pers.RestoredCursorPosition();
+        m_View.curpos = cursor.RestoredCursorPosition();
     }
-
     [self onCursorChanged];
     [m_View setNeedsDisplay];
 }
 
-- (void)refreshPanelDiscardingCaches:(bool)_force
+- (ControllerLoadingWorkFacts)loadingWorkFactsForLifecycleContext:
+    (std::optional<PanelControllerLifecycleProbeContext>)_context
 {
-    Log::Debug("refreshPanelDiscardingCaches:{} was called", _force);
-
-    if( m_View == nil )
-        return; // guard agains calls from init process
-    if( &m_Data.Listing() == VFSListing::EmptyListing().get() )
-        return; // guard agains calls from init process
-
-    if( !m_DirectoryLoadingQ.Empty() ) {
-        Log::Debug("Discarding the refresh request as there is a load request in place");
-        return; // reducing overhead
+    const int loading_queue_length = m_DirectoryLoadingQ->Length();
+    const bool loading_queue_occupied = loading_queue_length != 0;
+    bool navigation_worker_matches =
+        m_NavigationWorker && m_NavigationWorker->uses_loading_queue &&
+        !m_NavigationWorker->worker_finished->load(std::memory_order_acquire);
+    if( navigation_worker_matches && _context ) {
+        navigation_worker_matches =
+            (_context->lifecycle_active_request &&
+             *_context->lifecycle_active_request == m_NavigationWorker->request_id) ||
+            (_context->lifecycle_tail_request &&
+             *_context->lifecycle_tail_request == m_NavigationWorker->request_id);
     }
 
-    if( m_DirectoryReLoadingQ.Length() >= 2 ) {
-        Log::Debug("Discarding the refresh request as the current length of reload queue is {}",
-                   m_DirectoryReLoadingQ.Length());
-        return; // reducing overhead
-    }
+    ControllerLoadingWorkFacts facts;
+    if( loading_queue_occupied && navigation_worker_matches )
+        facts.correlated_navigation_worker = m_NavigationWorker->request_id;
+    const bool lifecycle_owns_loading_queue =
+        loading_queue_length == 1 && facts.correlated_navigation_worker.has_value();
+    const int reload_queue_length = m_DirectoryReLoadingQ->Length();
+    const bool lifecycle_owns_reload_queue =
+        reload_queue_length == 1 && m_RefreshWorker && !m_DirectoryReLoadingQ->IsStopped();
+    facts.has_external_work =
+        (loading_queue_occupied && !lifecycle_owns_loading_queue) ||
+        (reload_queue_length != 0 && !lifecycle_owns_reload_queue) ||
+        m_DirectoryReLoadingQ->IsStopped();
+    return facts;
+}
 
-    // later: maybe check PanelType somehow
+- (void)startRefreshWorker:(const PendingRefreshWork &)_work
+{
+    dispatch_assert_main_queue();
+    if( m_RefreshWorker )
+        throw std::logic_error("Refresh worker is already running");
 
-    if( self.isUniform ) {
-        const auto fetch_flags = m_VFSFetchingFlags | (_force ? VFSFlags::F_ForceRefresh : 0);
-        const auto dirpath = m_Data.DirectoryPathWithTrailingSlash();
-        const auto vfs = self.vfs;
+    auto worker_finished = std::make_shared<std::atomic_bool>(false);
+    m_RefreshWorker = RefreshWorkerSlot{
+        .request_id = _work.request_id,
+        .cancel_requested = _work.cancel_requested,
+        .worker_finished = worker_finished,
+    };
 
-        m_DirectoryReLoadingQ.Run([=] {
-            if( m_DirectoryReLoadingQ.IsStopped() ) {
-                Log::Trace("[PanelController refreshPanelDiscardingCaches] cancelled the refresh");
-                return;
-            }
-            const std::expected<VFSListingPtr, Error> listing =
-                vfs->FetchDirectoryListing(dirpath, fetch_flags, [&] { return m_DirectoryReLoadingQ.IsStopped(); });
-            if( m_DirectoryReLoadingQ.IsStopped() ) {
-                Log::Trace("[PanelController refreshPanelDiscardingCaches] cancelled the refresh");
-                return;
-            }
-            dispatch_to_main_queue([=] {
-                if( self.currentDirectoryPath != dirpath ) {
-                    Log::Debug(
-                        "[PanelController refreshPanelDiscardingCaches]: discarding a stale request to refresh '{}'",
-                        dirpath);
+    const auto weak_panel = std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
+    const auto reload_queue = m_DirectoryReLoadingQ;
+    try {
+        reload_queue->Run([request_id = _work.request_id,
+                           request = _work.request,
+                           content_generation = _work.content_generation,
+                           cancel_requested = _work.cancel_requested,
+                           worker_finished,
+                           weak_panel,
+                           reload_queue] {
+            (void)reload_queue;
+            const RefreshFetchOutcome outcome = FetchRefreshRequest(request, cancel_requested);
+            worker_finished->store(true, std::memory_order_release);
+            dispatch_to_main_queue([request_id,
+                                    request,
+                                    outcome,
+                                    content_generation,
+                                    worker_finished,
+                                    weak_panel,
+                                    reload_queue] {
+                (void)reload_queue;
+                PanelController *const panel = weak_panel->panel;
+                if( !panel )
                     return;
-                }
-
-                if( listing )
-                    [self reloadRefreshedListing:*listing];
-                else
-                    [self recoverFromInvalidDirectory];
+                [panel finishRefreshRequest:request_id
+                                    request:request
+                                    outcome:outcome
+                          contentGeneration:content_generation];
             });
         });
+    } catch( ... ) {
+        if( m_RefreshWorker && m_RefreshWorker->request_id == _work.request_id &&
+            m_RefreshWorker->worker_finished == worker_finished )
+            m_RefreshWorker.reset();
+        throw;
     }
-    else {
-        m_DirectoryReLoadingQ.Run([=] {
-            if( m_DirectoryReLoadingQ.IsStopped() )
-                return;
-            auto listing = VFSListing::ProduceUpdatedTemporaryPanelListing(
-                m_Data.Listing(), [&] { return m_DirectoryReLoadingQ.IsStopped(); });
-            if( listing )
-                dispatch_to_main_queue([=] { [self reloadRefreshedListing:listing]; });
+}
+
+- (void)refreshQueueDidBecomeDry
+{
+    dispatch_assert_main_queue();
+    if( !m_RefreshWorker || !m_RefreshWorker->worker_finished->load(std::memory_order_acquire) )
+        return;
+    [self refreshWorkerDidFinish:m_RefreshWorker->request_id finishedToken:m_RefreshWorker->worker_finished];
+}
+
+- (void)refreshWorkerDidFinish:(const PaneRequestId)_request_id
+                 finishedToken:(const std::shared_ptr<std::atomic_bool> &)_finished_token
+{
+    dispatch_assert_main_queue();
+    if( !m_RefreshWorker || m_RefreshWorker->request_id != _request_id ||
+        m_RefreshWorker->worker_finished != _finished_token )
+        return;
+    assert(m_DirectoryReLoadingQ->Empty());
+    if( !m_DirectoryReLoadingQ->Empty() )
+        return;
+    m_RefreshWorker.reset();
+
+    if( !m_PendingRefresh )
+        return;
+    PendingRefreshWork pending = std::move(*m_PendingRefresh);
+    m_PendingRefresh.reset();
+    const auto active = m_PaneLifecycle ? m_PaneLifecycle->Active() : std::nullopt;
+    if( pending.cancel_requested->load(std::memory_order_acquire) || !active ||
+        active->request_id != pending.request_id ||
+        pending.content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+        return;
+
+    try {
+        [self startRefreshWorker:pending];
+    } catch( ... ) {
+        [[maybe_unused]] const auto result = m_PaneLifecycle->Fail(
+            pending.request_id, MapRefreshException(std::current_exception(), pending.request));
+    }
+}
+
+- (bool)refreshPanelDiscardingCaches:(const bool)_force
+{
+    dispatch_assert_main_queue();
+    Log::Debug("refreshPanelDiscardingCaches:{} was called", _force);
+    if( !m_PaneLifecycle )
+        return false;
+
+    auto admission_state = std::make_shared<RefreshAdmissionState>();
+    const auto navigation_admission_to_invalidate = m_NavigationAdmissionCallbackAllowed;
+    const auto submission = m_PaneLifecycle->SubmitRefresh(
+        RefreshDescriptor(_force),
+        [=](const PanelControllerLifecycleProbeContext &_context) {
+            admission_state->work.reset();
+            RefreshWorkRequest work;
+            bool valid = false;
+            try {
+                valid = m_View != nil && m_Data.IsLoaded() &&
+                        m_Data.ListingPtr() != VFSListing::EmptyListing();
+                if( valid ) {
+                    work.source_listing = m_Data.ListingPtr();
+                    work.source_generation = m_DataGeneration;
+                    work.is_uniform = m_Data.Listing().IsUniform();
+                    work.fetch_flags = m_VFSFetchingFlags | (_force ? VFSFlags::F_ForceRefresh : 0);
+                    work.native_host = m_NativeHost->SharedPtr();
+                    if( work.is_uniform ) {
+                        work.host = m_Data.Host();
+                        work.path = m_Data.DirectoryPathWithTrailingSlash();
+                        work.error_context.affected_items.emplace_back(work.path);
+                        if( const char *const provider = work.host->Tag(); provider != nullptr )
+                            work.error_context.provider_id = provider;
+                    }
+                    admission_state->work.emplace(std::move(work));
+                }
+            } catch( ... ) {
+                throw LifecycleMappedException{MapRefreshException(std::current_exception(), work)};
+            }
+
+            const auto work_facts = [self loadingWorkFactsForLifecycleContext:_context];
+            return PanelControllerLifecycleAdmission{
+                .valid = valid,
+                .available = m_AcceptsNavigation,
+                .has_external_loading_work = work_facts.has_external_work,
+            };
+        },
+        [=](const PaneRequestId _request_id) {
+            RefreshWorkRequest work;
+            try {
+                if( !admission_state->work )
+                    throw std::logic_error("Accepted refresh has no admission snapshot");
+                work = *admission_state->work;
+                if( m_RefreshWorker )
+                    m_RefreshWorker->cancel_requested->store(true, std::memory_order_release);
+                if( m_PendingRefresh ) {
+                    m_PendingRefresh->cancel_requested->store(true, std::memory_order_release);
+                    m_PendingRefresh.reset();
+                }
+                if( navigation_admission_to_invalidate &&
+                    m_NavigationAdmissionCallbackAllowed == navigation_admission_to_invalidate ) {
+                    navigation_admission_to_invalidate->store(false, std::memory_order_release);
+                    m_NavigationAdmissionCallbackAllowed.reset();
+                }
+                if( m_NavigationWorker )
+                    m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+                const unsigned long content_generation =
+                    m_ContentRequestGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+                auto cancel_requested = std::make_shared<std::atomic_bool>(false);
+                PendingRefreshWork pending{
+                    .request_id = _request_id,
+                    .request = work,
+                    .content_generation = content_generation,
+                    .cancel_requested = std::move(cancel_requested),
+                };
+                if( m_RefreshWorker )
+                    m_PendingRefresh.emplace(std::move(pending));
+                else
+                    [self startRefreshWorker:pending];
+            } catch( ... ) {
+                if( m_PendingRefresh && m_PendingRefresh->request_id == _request_id ) {
+                    m_PendingRefresh->cancel_requested->store(true, std::memory_order_release);
+                    m_PendingRefresh.reset();
+                }
+                throw LifecycleMappedException{MapRefreshException(std::current_exception(), work)};
+            }
         });
+
+    if( submission.status == PanelControllerLifecycleSubmissionStatus::Rejected ) {
+        Log::Debug("Refresh request was rejected with reason {}",
+                   static_cast<int>(submission.rejection_reason.value_or(PaneRejectionReason::Unavailable)));
     }
+    return submission.status == PanelControllerLifecycleSubmissionStatus::Accepted ||
+           submission.status == PanelControllerLifecycleSubmissionStatus::Deferred;
 }
 
 - (void)refreshPanel
@@ -493,6 +1092,48 @@ static void HeatUpConfigValues()
     [self refreshPanelDiscardingCaches:true];
 }
 
+- (bool)submitUserRefresh
+{
+    Log::Trace("[Panel submitUserRefresh] was called");
+    return [self refreshPanelDiscardingCaches:true];
+}
+
+- (std::optional<PaneNavigationAvailability>)paneNavigationAvailability
+{
+    dispatch_assert_main_queue();
+    if( !m_PaneLifecycle || !m_AcceptsNavigation || m_View == nil )
+        return PaneNavigationAvailability{};
+
+    if( [self loadingWorkFactsForLifecycleContext:std::nullopt].has_external_work ) {
+        return PaneNavigationAvailability{
+            .up = NavigationUpAvailability::Busy,
+            .refresh = NavigationRefreshAvailability::Busy,
+        };
+    }
+
+    PaneState state;
+    if( const auto active = m_PaneLifecycle->Active();
+        active && active->descriptor.kind == PaneRequestKind::Navigation ) {
+        state.load_phase = PaneLoadPhase::Loading;
+        return MapPaneNavigationAvailability(state);
+    }
+
+    const bool has_listing = m_Data.IsLoaded() && m_Data.ListingPtr() != VFSListing::EmptyListing();
+    state.load_phase = has_listing ? PaneLoadPhase::Loaded : PaneLoadPhase::Empty;
+    if( const auto active = m_PaneLifecycle->Active();
+        active && active->descriptor.kind == PaneRequestKind::Refresh )
+        state.load_phase = PaneLoadPhase::Refreshing;
+    if( has_listing ) {
+        state.listing = m_Data.ListingPtr();
+        state.is_uniform = m_Data.Listing().IsUniform();
+        if( state.is_uniform ) {
+            state.host = m_Data.Host();
+            state.path = m_Data.DirectoryPathWithTrailingSlash();
+        }
+    }
+    return MapPaneNavigationAvailability(state);
+}
+
 - (int)bidForHandlingKeyDown:(NSEvent *)_event forPanelView:(PanelView *) [[maybe_unused]] _panel_view
 {
     // this is doubtful, actually. need to figure out something clearer:
@@ -500,7 +1141,8 @@ static void HeatUpConfigValues()
 
     const auto keycode = _event.keyCode;
     if( keycode == 53 ) { // Esc button
-        if( m_IsAnythingWorksInBackground )
+        const auto active = m_PaneLifecycle ? m_PaneLifecycle->Active() : std::nullopt;
+        if( m_IsAnythingWorksInBackground || active )
             return panel::view::BiddingPriority::Default;
         if( self.quickLook || self.briefSystemOverview )
             return panel::view::BiddingPriority::Default;
@@ -514,8 +1156,9 @@ static void HeatUpConfigValues()
 {
     const auto keycode = _event.keyCode;
     if( keycode == 53 ) { // Esc button
-        if( m_IsAnythingWorksInBackground ) {
-            [self CancelBackgroundOperations];
+        const auto active = m_PaneLifecycle ? m_PaneLifecycle->Active() : std::nullopt;
+        if( m_IsAnythingWorksInBackground || active ) {
+            [self cancelBackgroundOperationsForLifecycleReason:PaneCancellationReason::User];
             return;
         }
         if( self.quickLook || self.briefSystemOverview ) {
@@ -606,11 +1249,58 @@ static void HeatUpConfigValues()
     }
 }
 
-- (void)CancelBackgroundOperations
+- (void)stopBackgroundQueues
 {
     m_DirectorySizeCountingQ.Stop();
-    m_DirectoryLoadingQ.Stop();
-    m_DirectoryReLoadingQ.Stop();
+    m_DirectoryLoadingQ->Stop();
+    m_DirectoryReLoadingQ->Stop();
+}
+
+- (unsigned long)claimContentIntentInvalidatingNavigationAdmission
+{
+    dispatch_assert_main_queue();
+    if( m_NavigationAdmissionCallbackAllowed ) {
+        m_NavigationAdmissionCallbackAllowed->store(false, std::memory_order_release);
+        m_NavigationAdmissionCallbackAllowed.reset();
+    }
+    if( m_NavigationWorker )
+        m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+    if( m_RefreshWorker )
+        m_RefreshWorker->cancel_requested->store(true, std::memory_order_release);
+    if( m_PendingRefresh ) {
+        m_PendingRefresh->cancel_requested->store(true, std::memory_order_release);
+        m_PendingRefresh.reset();
+    }
+    return m_ContentRequestGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+}
+
+- (void)cancelBackgroundOperationsForLifecycleReason:(const PaneCancellationReason)_reason
+{
+    dispatch_assert_main_queue();
+
+    [self claimContentIntentInvalidatingNavigationAdmission];
+    const bool accepted_navigation_before_cancel = m_AcceptsNavigation;
+    m_AcceptsNavigation = false;
+    if( m_PaneLifecycle ) {
+        const auto active = m_PaneLifecycle->Active();
+        if( active ) {
+            const auto request_id = active->request_id;
+            if( active->descriptor.kind == PaneRequestKind::Navigation && m_NavigationWorker &&
+                m_NavigationWorker->request_id == request_id )
+                m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+            [[maybe_unused]] const auto result = m_PaneLifecycle->Cancel(request_id, _reason);
+            if( active->descriptor.kind == PaneRequestKind::Navigation && m_NavigationWorker &&
+                m_NavigationWorker->request_id == request_id )
+                m_NavigationWorker.reset();
+        }
+    }
+    [self stopBackgroundQueues];
+    m_AcceptsNavigation = accepted_navigation_before_cancel;
+}
+
+- (void)CancelBackgroundOperations
+{
+    [self cancelBackgroundOperationsForLifecycleReason:PaneCancellationReason::InternalAbort];
 }
 
 - (void)updateSpinningIndicator
@@ -618,8 +1308,8 @@ static void HeatUpConfigValues()
     dispatch_assert_main_queue();
 
     size_t ext_activities_no = call_locked(m_ActivitiesTicketsLock, [&] { return m_ActivitiesTickets.size(); });
-    bool is_anything_working = !m_DirectorySizeCountingQ.Empty() || !m_DirectoryLoadingQ.Empty() ||
-                               !m_DirectoryReLoadingQ.Empty() || ext_activities_no > 0;
+    bool is_anything_working = !m_DirectorySizeCountingQ.Empty() || !m_DirectoryLoadingQ->Empty() ||
+                               !m_DirectoryReLoadingQ->Empty() || ext_activities_no > 0;
 
     if( is_anything_working == m_IsAnythingWorksInBackground )
         return; // nothing to update;
@@ -862,27 +1552,34 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
             if( !l->is_disabled() ) {
                 m_ViewLayoutIndex = layoutIndex;
                 m_AssignedViewLayout = l;
+                m_AssignedViewLayoutUsesConfiguredSlot = true;
                 [m_View setPresentationLayout:*l];
                 [self markRestorableStateAsInvalid];
+                [NSNotificationCenter.defaultCenter
+                    postNotificationName:NCPanelViewContextDidChangeNotification
+                                  object:m_View];
             }
     }
 }
 
 - (void)panelLayoutsChanged
 {
-    if( auto l = m_Layouts->GetLayout(m_ViewLayoutIndex) ) {
-        if( m_AssignedViewLayout && *m_AssignedViewLayout == *l )
-            return;
+    const auto configured_layout = m_Layouts->GetLayout(m_ViewLayoutIndex);
+    const bool uses_configured_slot = configured_layout && !configured_layout->is_disabled();
+    const auto next_layout = uses_configured_slot
+                                 ? configured_layout
+                                 : nc::panel::PanelViewLayoutsStorage::LastResortLayout();
+    const bool presentation_changed = !m_AssignedViewLayout || *m_AssignedViewLayout != *next_layout;
+    const bool slot_validity_changed =
+        m_AssignedViewLayoutUsesConfiguredSlot != uses_configured_slot;
+    if( !presentation_changed && !slot_validity_changed )
+        return;
 
-        if( !l->is_disabled() ) {
-            m_AssignedViewLayout = l;
-            [m_View setPresentationLayout:*l];
-        }
-        else {
-            m_AssignedViewLayout = nc::panel::PanelViewLayoutsStorage::LastResortLayout();
-            [m_View setPresentationLayout:*m_AssignedViewLayout];
-        }
-    }
+    m_AssignedViewLayout = next_layout;
+    m_AssignedViewLayoutUsesConfiguredSlot = uses_configured_slot;
+    if( presentation_changed )
+        [m_View setPresentationLayout:*m_AssignedViewLayout];
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:m_View];
 }
 
 - (void)panelViewDidChangePresentationLayout
@@ -895,10 +1592,28 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
         m_Layouts->ReplaceLayout(std::move(layout), m_ViewLayoutIndex);
 }
 
-- (void)commitCancelableLoadingTask:(std::function<void(const std::function<bool()> &_is_cancelled)>)_task
+- (void)commitCancelableLoadingTask:(std::function<void(const CancelableLoadingTaskContext &)>)_task
 {
-    m_DirectoryLoadingQ.Run(
-        [task = std::move(_task), sq = &m_DirectoryLoadingQ] { task([sq] { return sq->IsStopped(); }); });
+    dispatch_assert_main_queue();
+    const auto content_generation = [self claimContentIntentInvalidatingNavigationAdmission];
+    m_DirectoryLoadingQ->Run([task = std::move(_task), sq = m_DirectoryLoadingQ, self, content_generation] {
+        const CancelableLoadingTaskContext context{
+            .is_cancelled = [sq, self, content_generation] {
+                return sq->IsStopped() ||
+                       content_generation !=
+                           self->m_ContentRequestGeneration.load(std::memory_order_acquire);
+            },
+            .commit_on_main = [self, content_generation](std::function<void()> _commit) {
+                dispatch_to_main_queue([self, content_generation, commit = std::move(_commit)] {
+                    if( content_generation !=
+                        self->m_ContentRequestGeneration.load(std::memory_order_acquire) )
+                        return;
+                    commit();
+                });
+            },
+        };
+        task(context);
+    });
 }
 
 - (bool)probeDirectoryAccessForRequest:(DirectoryChangeRequest &)_request
@@ -919,10 +1634,13 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 }
 
 - (std::expected<void, Error>)doGoToDirWithContext:(std::shared_ptr<DirectoryChangeRequest>)_request
+                                  contentGeneration:(const unsigned long)_content_generation
 {
     assert(_request != nullptr);
     assert(_request->VFS != nullptr);
     Log::Debug("[PanelController doGoToDirWithContext] was called with {}", *_request);
+    if( _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+        return std::unexpected(Error{Error::POSIX, ECANCELED});
 
     try {
         if( ![self probeDirectoryAccessForRequest:*_request] ) {
@@ -931,21 +1649,32 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 
         auto directory = _request->RequestedDirectory;
         auto &vfs = *_request->VFS;
-        const auto canceller = VFSCancelChecker([&] { return m_DirectoryLoadingQ.IsStopped(); });
+        const auto canceller = VFSCancelChecker([&] { return m_DirectoryLoadingQ->IsStopped(); });
         const std::expected<VFSListingPtr, Error> listing =
             vfs.FetchDirectoryListing(directory, m_VFSFetchingFlags, canceller);
         if( _request->LoadingResultCallback ) {
-            _request->LoadingResultCallback(listing ? std::expected<void, Error>{}
-                                                    : std::expected<void, Error>{std::unexpected(listing.error())});
+            _request->LoadingResultCallback(
+                listing ? std::expected<void, Error>{}
+                        : std::expected<void, Error>{std::unexpected(listing.error())},
+                DirectoryChangeResultSource::Fetch,
+                [=] {
+                    return _content_generation ==
+                           m_ContentRequestGeneration.load(std::memory_order_acquire);
+                });
         }
 
         if( !listing )
             return std::unexpected(listing.error());
+        if( m_DirectoryLoadingQ->IsStopped() ||
+            _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+            return std::unexpected(Error{Error::POSIX, ECANCELED});
 
         // TODO: need an ability to show errors at least
 
-        [self CancelBackgroundOperations]; // clean running operations if any
+        [self stopBackgroundQueues]; // legacy recovery path; no lifecycle request owns this worker
         dispatch_or_run_in_main_queue([=] {
+            if( _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+                return;
             [m_View savePathState];
             m_Data.Load(*listing, data::Model::PanelType::Directory);
             for( auto &i : _request->RequestSelectedEntries )
@@ -964,71 +1693,522 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     return {};
 }
 
+- (NavigationFetchOutcome)fetchNavigationRequest:(const std::shared_ptr<DirectoryChangeRequest> &)_request
+                                      fetchFlags:(const unsigned long)_fetch_flags
+                               contentGeneration:(const unsigned long)_content_generation
+{
+    NavigationFetchOutcome outcome;
+    try {
+        const auto canceller = VFSCancelChecker([&] {
+            return m_DirectoryLoadingQ->IsStopped() ||
+                   _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire);
+        });
+        const std::expected<VFSListingPtr, Error> listing =
+            _request->VFS->FetchDirectoryListing(_request->RequestedDirectory, _fetch_flags, canceller);
+
+        if( listing )
+            outcome.listing = *listing;
+        else
+            outcome.error = listing.error();
+        outcome.cancelled = m_DirectoryLoadingQ->IsStopped() ||
+                            _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) ||
+                            (outcome.error && IsCancellationError(*outcome.error));
+    } catch( ... ) {
+        outcome.exception = std::current_exception();
+    }
+    return outcome;
+}
+
+- (void)finishNavigationRequest:(const PaneRequestId)_request_id
+                         request:(const std::shared_ptr<DirectoryChangeRequest> &)_request
+                         outcome:(const NavigationFetchOutcome &)_outcome
+               contentGeneration:(const unsigned long)_content_generation
+               synchronousResult:(std::expected<void, Error> *)_synchronous_result
+{
+    dispatch_assert_main_queue();
+
+    const auto clear_worker_slot = [&] {
+        if( m_NavigationWorker && m_NavigationWorker->request_id == _request_id &&
+            !m_NavigationWorker->uses_loading_queue )
+            m_NavigationWorker.reset();
+    };
+    const auto set_synchronous_error = [&](const Error &_error) {
+        if( _synchronous_result )
+            *_synchronous_result = std::unexpected(_error);
+    };
+
+    if( _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) ) {
+        set_synchronous_error(Error{Error::POSIX, ECANCELED});
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+        clear_worker_slot();
+        return;
+    }
+
+    if( _outcome.exception ) {
+        FileManagerError error = MapNavigationException(_outcome.exception, _request);
+        set_synchronous_error(error.original_error);
+        const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        clear_worker_slot();
+        if( result == PaneLifecycleProducer::FinishResult::Published )
+            PresentNavigationException(_outcome.exception);
+        return;
+    }
+
+    if( _outcome.cancelled ) {
+        const Error error = _outcome.error.value_or(Error{Error::POSIX, ECANCELED});
+        set_synchronous_error(error);
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::QueueStopped);
+        clear_worker_slot();
+        return;
+    }
+
+    if( _outcome.error ) {
+        set_synchronous_error(*_outcome.error);
+        [[maybe_unused]] const auto result =
+            m_PaneLifecycle->Fail(_request_id, MapNavigationError(*_outcome.error, _request));
+        clear_worker_slot();
+        return;
+    }
+
+    if( !_outcome.listing ) {
+        const auto exception = std::make_exception_ptr(std::logic_error{"Navigation fetch returned no outcome"});
+        FileManagerError error = MapNavigationException(exception, _request);
+        set_synchronous_error(error.original_error);
+        const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        clear_worker_slot();
+        if( result == PaneLifecycleProducer::FinishResult::Published )
+            PresentNavigationException(exception);
+        return;
+    }
+
+    const auto active = m_PaneLifecycle->Active();
+    if( !active || active->request_id != _request_id ) {
+        set_synchronous_error(Error{Error::POSIX, ECANCELED});
+        clear_worker_slot();
+        return;
+    }
+
+    std::optional<data::Model> prepared;
+    try {
+        prepared.emplace(m_Data);
+        prepared->Load(_outcome.listing, data::Model::PanelType::Directory);
+        for( const auto &item : _request->RequestSelectedEntries )
+            prepared->CustomFlagsSelectSorted(prepared->SortedIndexForName(item), true);
+    } catch( ... ) {
+        const auto exception = std::current_exception();
+        FileManagerError error = MapNavigationException(exception, _request);
+        set_synchronous_error(error.original_error);
+        const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        clear_worker_slot();
+        if( result == PaneLifecycleProducer::FinishResult::Published )
+            PresentNavigationException(exception);
+        return;
+    }
+
+    const unsigned long next_generation = m_DataGeneration + 1;
+    [m_View savePathState];
+    m_DirectorySizeCountingQ.Stop();
+
+    PaneLifecycleProducer::FinishResult commit_result;
+    try {
+        commit_result = m_PaneLifecycle->Commit(
+            _request_id,
+            PaneLifecycleCommitted{.controller_generation = next_generation, .listing = _outcome.listing},
+            [&] {
+                m_Data = std::move(*prepared);
+                m_DataGeneration = next_generation;
+            });
+    } catch( ... ) {
+        const auto exception = std::current_exception();
+        FileManagerError error = MapNavigationException(exception, _request);
+        set_synchronous_error(error.original_error);
+        const auto failure_result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        clear_worker_slot();
+        if( failure_result == PaneLifecycleProducer::FinishResult::Published )
+            PresentNavigationException(exception);
+        return;
+    }
+    clear_worker_slot();
+
+    if( commit_result != PaneLifecycleProducer::FinishResult::Published ||
+        m_DataGeneration != next_generation || m_Data.ListingPtr() != _outcome.listing ) {
+        set_synchronous_error(Error{Error::POSIX, ECANCELED});
+        return;
+    }
+
+    if( _synchronous_result )
+        *_synchronous_result = {};
+    [m_View dataUpdated];
+    [m_View panelChangedWithFocusedFilename:_request->RequestFocusedEntry
+                          loadPreviousState:_request->LoadPreviousViewState];
+    [self onPathChanged];
+}
+
 - (std::expected<void, Error>)GoToDirWithContext:(std::shared_ptr<DirectoryChangeRequest>)_request
 {
-    if( _request == nullptr )
-        return std::unexpected(Error{Error::POSIX, EINVAL});
+    dispatch_assert_main_queue();
 
-    if( _request->RequestedDirectory.empty() || _request->RequestedDirectory.front() != '/' ||
-        _request->VFS == nullptr )
-        return std::unexpected(Error{Error::POSIX, EINVAL});
+    if( m_NavigationAdmissionCallbackAllowed )
+        m_NavigationAdmissionCallbackAllowed->store(false, std::memory_order_release);
+    auto admission_callback_allowed = std::make_shared<std::atomic_bool>(true);
+    m_NavigationAdmissionCallbackAllowed = admission_callback_allowed;
 
-    assert(_request != nullptr);
-    assert(_request->VFS != nullptr);
-    Log::Debug("[PanelController GoToDirWithContext] was called with {}", *_request);
+    const bool asynchronous = !_request || _request->PerformAsynchronous;
+    if( _request )
+        Log::Debug("[PanelController GoToDirWithContext] was called with {}", *_request);
 
-    if( !_request->PerformAsynchronous ) {
-        assert(dispatch_is_main_queue());
-        m_DirectoryLoadingQ.Stop();
-        m_DirectoryLoadingQ.Wait();
+    const bool structurally_valid = _request && _request->VFS && !_request->RequestedDirectory.empty() &&
+                                    _request->RequestedDirectory.front() == '/';
 
-        const std::expected<void, Error> result = [self doGoToDirWithContext:_request];
-        return result;
-    }
-    else {
-        if( !m_DirectoryLoadingQ.Empty() )
+    auto synchronous_result = std::make_shared<std::expected<void, Error>>(
+        std::unexpected(Error{Error::POSIX, ECANCELED}));
+    auto admission_state = std::make_shared<NavigationAdmissionState>();
+    __weak PanelController *weakself = self;
+    const auto rejected_callback_is_current = [admission_callback_allowed, weakself] {
+        PanelController *const panel = weakself;
+        return panel && admission_callback_allowed->load(std::memory_order_acquire);
+    };
+    const auto report_rejection = [_request, rejected_callback_is_current](
+                                      Error _error) -> std::expected<void, Error> {
+        if( _request && _request->LoadingResultCallback ) {
+            try {
+                _request->LoadingResultCallback(std::unexpected(_error),
+                                                DirectoryChangeResultSource::Admission,
+                                                rejected_callback_is_current);
+            } catch( ... ) {
+                PresentNavigationException(std::current_exception());
+            }
+        }
+        return std::unexpected(std::move(_error));
+    };
+    const auto submission_error = [](const PanelControllerLifecycleSubmissionResult &_result)
+        -> std::optional<Error> {
+        if( _result.status == PanelControllerLifecycleSubmissionStatus::Accepted )
+            return std::nullopt;
+        if( _result.status == PanelControllerLifecycleSubmissionStatus::Rejected ) {
+            if( _result.rejection_error )
+                return _result.rejection_error->original_error;
+            if( _result.rejection_reason == PaneRejectionReason::InvalidRequest )
+                return Error{Error::POSIX, EINVAL};
+            if( _result.rejection_reason == PaneRejectionReason::Unavailable )
+                return Error{Error::POSIX, ENODEV};
+            return Error{Error::POSIX, EBUSY};
+        }
+        if( _result.status == PanelControllerLifecycleSubmissionStatus::SynchronousReentrancyUnsupported )
+            return Error{Error::POSIX, EBUSY};
+        if( _result.status == PanelControllerLifecycleSubmissionStatus::Shutdown )
+            return Error{Error::POSIX, ECANCELED};
+        return Error{Error::POSIX, EIO};
+    };
+    const auto submission = m_PaneLifecycle->SubmitNavigation(
+        NavigationDescriptor(_request),
+        asynchronous ? PaneNavigationExecution::Asynchronous : PaneNavigationExecution::Synchronous,
+        [=](const PanelControllerLifecycleProbeContext &_context) {
+            bool external_loading_work = false;
+            if( asynchronous ) {
+                const auto work_facts = [self loadingWorkFactsForLifecycleContext:_context];
+                admission_state->correlated_worker = work_facts.correlated_navigation_worker;
+                external_loading_work = work_facts.has_external_work;
+            }
+            return PanelControllerLifecycleAdmission{
+                .valid = structurally_valid,
+                .available = m_AcceptsNavigation && m_View != nil && m_DirectoryAccessProvider != nullptr,
+                .has_external_loading_work = external_loading_work,
+            };
+        },
+        [=](const PaneRequestId _request_id) {
+            try {
+                // Admission feedback and accepted-worker feedback have separate validity. A later
+                // rejected admission must not invalidate this accepted request's worker callback.
+                if( m_NavigationAdmissionCallbackAllowed == admission_callback_allowed )
+                    m_NavigationAdmissionCallbackAllowed.reset();
+                auto worker_callback_allowed = std::make_shared<std::atomic_bool>(true);
+                // Claim the accepted content intent before access checks. RequestAccessSync can
+                // run a nested main loop, where every older delayed commit must already be stale.
+                // Preserve a different admission token: it belongs to a newer request submitted
+                // reentrantly from this request's Started publication.
+                if( m_RefreshWorker )
+                    m_RefreshWorker->cancel_requested->store(true, std::memory_order_release);
+                if( m_PendingRefresh ) {
+                    m_PendingRefresh->cancel_requested->store(true, std::memory_order_release);
+                    m_PendingRefresh.reset();
+                }
+                const unsigned long content_generation =
+                    m_ContentRequestGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+                if( m_NavigationWorker )
+                    m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+                if( !asynchronous ) {
+                    m_NavigationWorker = NavigationWorkerSlot{
+                        .request_id = _request_id,
+                        .callback_allowed = worker_callback_allowed,
+                        .worker_finished = std::make_shared<std::atomic_bool>(true),
+                        .uses_loading_queue = false,
+                    };
+                    m_DirectoryLoadingQ->Stop();
+                    m_DirectoryLoadingQ->Wait();
+                    m_DirectorySizeCountingQ.Stop();
+                }
+
+                if( ![self probeDirectoryAccessForRequest:*_request] ) {
+                    const Error access_error{Error::POSIX, EPERM};
+                    if( !asynchronous )
+                        *synchronous_result = std::unexpected(access_error);
+                    [[maybe_unused]] const auto result =
+                        m_PaneLifecycle->Fail(_request_id, MapNavigationError(access_error, _request));
+                    if( m_NavigationWorker && m_NavigationWorker->request_id == _request_id )
+                        m_NavigationWorker.reset();
+                    return;
+                }
+
+                const auto active = m_PaneLifecycle->Active();
+                if( !active || active->request_id != _request_id ) {
+                    if( !asynchronous )
+                        *synchronous_result = std::unexpected(Error{Error::POSIX, ECANCELED});
+                    if( m_NavigationWorker && m_NavigationWorker->request_id == _request_id )
+                        m_NavigationWorker.reset();
+                    return;
+                }
+
+                // Started observers and a modal access prompt can enqueue legacy work after the
+                // admission sample. Do not place an accepted lifecycle worker behind that work.
+                const int loading_queue_length_after_access =
+                    asynchronous ? m_DirectoryLoadingQ->Length() : 0;
+                const bool correlated_worker_still_running =
+                    admission_state->correlated_worker && m_NavigationWorker &&
+                    m_NavigationWorker->request_id == *admission_state->correlated_worker &&
+                    m_NavigationWorker->uses_loading_queue &&
+                    !m_NavigationWorker->worker_finished->load(std::memory_order_acquire);
+                const int reload_queue_length_after_access = m_DirectoryReLoadingQ->Length();
+                const bool refresh_queue_owned_after_access =
+                    reload_queue_length_after_access == 1 && m_RefreshWorker &&
+                    !m_DirectoryReLoadingQ->IsStopped();
+                if( asynchronous &&
+                    ((loading_queue_length_after_access != 0 &&
+                      (loading_queue_length_after_access != 1 || !correlated_worker_still_running)) ||
+                     (reload_queue_length_after_access != 0 && !refresh_queue_owned_after_access) ||
+                     m_DirectoryReLoadingQ->IsStopped()) ) {
+                    [[maybe_unused]] const auto result =
+                        m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+                    return;
+                }
+
+                if( !asynchronous ) {
+                    const auto fetch_flags = m_VFSFetchingFlags;
+                    const auto callback_allowed = m_NavigationWorker->callback_allowed;
+                    __weak PanelController *weakself = self;
+                    const auto callback_is_current = [callback_allowed, content_generation, weakself] {
+                        PanelController *const panel = weakself;
+                        return panel && callback_allowed->load(std::memory_order_acquire) &&
+                               content_generation ==
+                                   panel->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                    };
+                    NavigationFetchOutcome outcome = [self fetchNavigationRequest:_request
+                                                                        fetchFlags:fetch_flags
+                                                                 contentGeneration:content_generation];
+                    const std::expected<void, Error> callback_result = outcome.error
+                        ? std::expected<void, Error>{std::unexpected(*outcome.error)}
+                        : std::expected<void, Error>{};
+
+                    if( !outcome.exception && !outcome.cancelled && !outcome.error &&
+                        _request->LoadingResultCallback ) {
+                        try {
+                            _request->LoadingResultCallback(callback_result,
+                                                            DirectoryChangeResultSource::Fetch,
+                                                            callback_is_current);
+                        } catch( ... ) {
+                            outcome.listing.reset();
+                            outcome.exception = std::current_exception();
+                        }
+                    }
+
+                    [self finishNavigationRequest:_request_id
+                                           request:_request
+                                           outcome:outcome
+                                 contentGeneration:content_generation
+                                 synchronousResult:synchronous_result.get()];
+
+                    if( (outcome.cancelled || outcome.error) && _request->LoadingResultCallback ) {
+                        try {
+                            _request->LoadingResultCallback(callback_result,
+                                                            DirectoryChangeResultSource::Fetch,
+                                                            callback_is_current);
+                        } catch( ... ) {
+                            PresentNavigationException(std::current_exception());
+                        }
+                    }
+                    return;
+                }
+
+                const auto fetch_flags = m_VFSFetchingFlags;
+                auto callback_allowed = worker_callback_allowed;
+                auto worker_finished = std::make_shared<std::atomic_bool>(false);
+                const auto weak_panel =
+                    std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
+                const auto loading_queue = m_DirectoryLoadingQ;
+                loading_queue->Run([request_id = _request_id,
+                                    request = _request,
+                                    fetch_flags,
+                                    content_generation,
+                                    callback_allowed,
+                                    worker_finished,
+                                    weak_panel,
+                                    loading_queue] {
+                    (void)loading_queue;
+                    const auto mark_worker_finished = at_scope_end(
+                        [worker_finished] { worker_finished->store(true, std::memory_order_release); });
+                    const auto callback_is_current = [callback_allowed, content_generation, weak_panel] {
+                        PanelController *const panel = weak_panel->panel;
+                        return panel && callback_allowed->load(std::memory_order_acquire) &&
+                               content_generation ==
+                                   panel->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                    };
+                    NavigationFetchOutcome outcome =
+                        FetchNavigationRequestDetached(request, fetch_flags, callback_allowed);
+                    const std::expected<void, Error> callback_result = outcome.error
+                        ? std::expected<void, Error>{std::unexpected(*outcome.error)}
+                        : std::expected<void, Error>{};
+
+                    if( !outcome.exception && !outcome.cancelled && !outcome.error &&
+                        request->LoadingResultCallback &&
+                        callback_is_current() ) {
+                        try {
+                            request->LoadingResultCallback(
+                                callback_result, DirectoryChangeResultSource::Fetch, callback_is_current);
+                        } catch( ... ) {
+                            outcome.listing.reset();
+                            outcome.exception = std::current_exception();
+                        }
+                    }
+
+                    dispatch_to_main_queue([request_id,
+                                            request,
+                                            outcome,
+                                            content_generation,
+                                            weak_panel] {
+                        PanelController *const panel = weak_panel->panel;
+                        if( !panel )
+                            return;
+                        [panel finishNavigationRequest:request_id
+                                                request:request
+                                                outcome:outcome
+                                      contentGeneration:content_generation
+                                      synchronousResult:nullptr];
+                    });
+
+                    if( (outcome.cancelled || outcome.error) && request->LoadingResultCallback &&
+                        callback_is_current() ) {
+                        try {
+                            request->LoadingResultCallback(
+                                callback_result, DirectoryChangeResultSource::Fetch, callback_is_current);
+                        } catch( ... ) {
+                            const auto exception = std::current_exception();
+                            dispatch_to_main_queue([exception] { PresentNavigationException(exception); });
+                        }
+                    }
+
+                    worker_finished->store(true, std::memory_order_release);
+                    dispatch_to_main_queue([request_id, worker_finished, weak_panel] {
+                        PanelController *const panel = weak_panel->panel;
+                        if( !panel )
+                            return;
+                        if( panel->m_NavigationWorker &&
+                            panel->m_NavigationWorker->request_id == request_id &&
+                            panel->m_NavigationWorker->worker_finished == worker_finished )
+                            panel->m_NavigationWorker.reset();
+                    });
+                });
+                m_NavigationWorker = NavigationWorkerSlot{
+                    .request_id = _request_id,
+                    .callback_allowed = std::move(callback_allowed),
+                    .worker_finished = std::move(worker_finished),
+                    .uses_loading_queue = true,
+                };
+            } catch( ... ) {
+                const auto exception = std::current_exception();
+                if( !asynchronous )
+                    *synchronous_result =
+                        std::unexpected(MapNavigationException(exception, _request).original_error);
+                if( m_NavigationWorker && m_NavigationWorker->request_id == _request_id )
+                    m_NavigationWorker.reset();
+                dispatch_to_main_queue([exception] { PresentNavigationException(exception); });
+                std::rethrow_exception(exception);
+            }
+        },
+        [submission_error, report_rejection](
+            const PanelControllerLifecycleSubmissionResult &_resolution) noexcept {
+            try {
+                if( const auto error = submission_error(_resolution) )
+                    [[maybe_unused]] const auto reported = report_rejection(*error);
+            } catch( ... ) {
+                PresentNavigationException(std::current_exception());
+            }
+        });
+
+    switch( submission.status ) {
+        case PanelControllerLifecycleSubmissionStatus::Accepted:
+            return asynchronous ? std::expected<void, Error>{} : *synchronous_result;
+        case PanelControllerLifecycleSubmissionStatus::Rejected:
+            return report_rejection(*submission_error(submission));
+        case PanelControllerLifecycleSubmissionStatus::Deferred:
             return {};
-
-        m_DirectoryLoadingQ.Run([=] { [self doGoToDirWithContext:_request]; });
-        return {};
+        case PanelControllerLifecycleSubmissionStatus::SynchronousReentrancyUnsupported:
+            return report_rejection(Error{Error::POSIX, EBUSY});
+        case PanelControllerLifecycleSubmissionStatus::Shutdown:
+            return report_rejection(Error{Error::POSIX, ECANCELED});
     }
+    return report_rejection(Error{Error::POSIX, EIO});
 }
 
 - (void)loadListing:(const VFSListingPtr &)_listing
 {
-    [self CancelBackgroundOperations]; // clean running operations if any
-    dispatch_or_run_in_main_queue([=] {
-        [m_View savePathState];
-        if( _listing->IsUniform() )
-            m_Data.Load(_listing, data::Model::PanelType::Directory);
-        else
-            m_Data.Load(_listing, data::Model::PanelType::Temporary);
-        m_DataGeneration++;
-        [m_View dataUpdated];
-        [m_View panelChangedWithFocusedFilename:"" loadPreviousState:false];
-        [self onPathChanged];
-    });
+    dispatch_assert_main_queue();
+    [self claimContentIntentInvalidatingNavigationAdmission];
+    [self CancelBackgroundOperations];
+    [m_View savePathState];
+    if( _listing->IsUniform() )
+        m_Data.Load(_listing, data::Model::PanelType::Directory);
+    else
+        m_Data.Load(_listing, data::Model::PanelType::Temporary);
+    m_DataGeneration++;
+    [m_View dataUpdated];
+    [m_View panelChangedWithFocusedFilename:"" loadPreviousState:false];
+    [self onPathChanged];
 }
 
 - (void)recoverFromInvalidDirectory
 {
+    assert(dispatch_is_main_queue());
+    const auto recovery_generation = [self claimContentIntentInvalidatingNavigationAdmission];
     std::filesystem::path initial_path = EnsureNoTrailingSlash(self.currentDirectoryPath);
     auto initial_vfs = self.vfs;
-    m_DirectoryLoadingQ.Run([=] {
+    m_DirectoryLoadingQ->Run([=] {
+        const auto is_stale = [=] {
+            return m_DirectoryLoadingQ->IsStopped() ||
+                   recovery_generation !=
+                       m_ContentRequestGeneration.load(std::memory_order_acquire);
+        };
         // 1st - try to locate a valid dir in current host
         std::filesystem::path path = initial_path;
         const auto &vfs = initial_vfs;
 
         while( true ) {
-            if( vfs->IterateDirectoryListing(path.native(), [](const VFSDirEnt &) { return false; }) ) {
-                dispatch_to_main_queue([=] {
-                    auto request = std::make_shared<DirectoryChangeRequest>();
-                    request->RequestedDirectory = path.native();
-                    request->VFS = vfs;
-                    request->PerformAsynchronous = true;
-                    [self GoToDirWithContext:request];
-                });
-                break;
+            if( is_stale() )
+                return;
+
+            const auto is_accessible =
+                vfs->IterateDirectoryListing(path.native(), [](const VFSDirEnt &) { return false; });
+            if( is_stale() )
+                return;
+
+            if( is_accessible ) {
+                auto request = std::make_shared<DirectoryChangeRequest>();
+                request->RequestedDirectory = path.native();
+                request->VFS = vfs;
+                request->PerformAsynchronous = true;
+                [self doGoToDirWithContext:request contentGeneration:recovery_generation];
+                return;
             }
 
             if( path == "/" )
@@ -1037,12 +2217,15 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
             path = path.parent_path();
         }
 
+        if( is_stale() )
+            return;
+
         // we can't work on this vfs. currently for simplicity - just go home
         auto request = std::make_shared<DirectoryChangeRequest>();
         request->RequestedDirectory = nc::base::CommonPaths::Home();
         request->VFS = m_NativeHost->SharedPtr();
         request->PerformAsynchronous = true;
-        [self GoToDirWithContext:request];
+        [self doGoToDirWithContext:request contentGeneration:recovery_generation];
     });
 }
 
@@ -1167,7 +2350,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 
 - (bool)isDoingBackgroundLoading
 {
-    return !m_DirectoryLoadingQ.Empty();
+    return !m_DirectoryLoadingQ->Empty() || !m_DirectoryReLoadingQ->Empty();
 }
 
 - (std::unique_ptr<nc::panel::DragReceiver>)panelView:(PanelView *) [[maybe_unused]] _view

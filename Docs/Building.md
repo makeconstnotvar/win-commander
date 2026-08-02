@@ -1,20 +1,21 @@
 # Building Win Commander
-This guide outlines the steps to build Win Commander from its source code. Follow these instructions to set up your development environment and start contributing to or experimenting with NC.
+This guide outlines the steps to build Win Commander from source. Before changing the project, read [`AGENTS.md`](../AGENTS.md), the [canonical product specification](win_commander_ideal_file_manager_spec.md), and the [development plan](Development-Plan.md).
 
 ## Getting the code
 Clone this repository with `git clone`.  
 To minimize internet bandwidth, you can opt to fetch only the latest version with `git clone --depth=1`.
 
 ## Compiling the Project
-After obtaining the source code, you'll need Xcode 26.5 to open and compile the project. Navigate to the `WinCommander.xcodeproj` folder within the source code and open it using either the Xcode GUI or the command line with:  
-`open win-commander/Source/WinCommander/WinCommander.xcodeproj`  
+After obtaining the source code, you'll need Xcode 26.5 to open and compile the project. From the repository root, open the project with:
+
+`open Source/WinCommander/WinCommander.xcodeproj`
 
 ![](schema.png)
 
-Make sure to select the `WinCommander-Unsigned` schema in Xcode. Now, you are ready to build the project. Use `Cmd+B` to build and `Cmd+R` to run the project under Xcode's debugger.
+Select the `WinCommander-Unsigned` scheme in Xcode. Use `Cmd+B` to build and `Cmd+R` to run the project under Xcode's debugger.
 
 ## Exploring the Source Code
-Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The project includes the main application and 10 sub-projects:
+Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The source tree includes the main application and 11 library projects:
   * Base: Foundational, general-purpose tools.
   * Config: Configuration management.
   * CUI: Shared UI components.
@@ -31,9 +32,19 @@ Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-
 Win Commander employs two testing strategies: unit tests (`_UT` suffix) for individual components, and integration tests (`_IT` suffix) for checking how those components interact. Each type of test is easily identifiable by its unique filename suffix and corresponding build target. For example, `Term` represents the library, `TermUT` the unit tests for this library, and `TermIT` the integration tests.  
 Unit tests are quick and standalone, not requiring any external setups. In contrast, integration tests might need specific conditions, like running Docker VMs (detailed in `Source/VFS/tests/data/docker/[start|stop].sh`), to properly execute.  
 
+Run the repository suites from the project root:
+
+```sh
+Scripts/verify_m0.sh
+Scripts/run_all_unit_tests.sh Debug
+Scripts/run_all_integration_tests.sh
+```
+
+`verify_m0.sh` and the unit-test runner require only `xcodebuild`. Integration tests additionally require a running Docker daemon and `nc`; `xcpretty` is optional, and the runner owns provider fixture startup, readiness checks, and cleanup. Record the exact commands and results in [Development-Plan.md](Development-Plan.md) when closing a milestone.
+
 ## Limitations
-While this source code mirrors that of the official Win Commander builds, the public repository does not include sensitive information such as specific accounts, addresses, and keys. Consequently, some features might be restricted or unavailable:
-  * Privileged Helper: Requires proper signing to be installed and function correctly.
+Unsigned local builds do not contain distribution signing identities, notarization credentials, or release secrets. Consequently, some features are restricted:
+  * Privileged Helper: requires proper signing to be installed and function correctly.
   
 ## Implementation Notes
   * [Syntax Highlighting](SyntaxHighlighting.md)

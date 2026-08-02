@@ -4,17 +4,28 @@
 #include "DefaultAction.h"
 #include "GoToFolder.h"
 #include "ExecuteInTerminal.h"
+#include "OpenFile.h"
 
 namespace nc::panel::actions {
 
 struct Enter final : PanelAction {
-    Enter(const PanelAction &_open_files_action);
+    enum class Route {
+        EnterFolder,
+        ExecuteInTerminal,
+        OpenWithDefaultHandler
+    };
+
+    Enter(FileOpener &_file_opener);
     [[nodiscard]] bool Predicate(PanelController *_target) const override;
     [[nodiscard]] bool ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const override;
     void Perform(PanelController *_target, id _sender) const override;
 
+    /** True when Enter resolves to ordinary default-handler opening rather than navigation or execution. */
+    [[nodiscard]] static Route ResolveRoute(PanelController *_target);
+    [[nodiscard]] static bool UsesDefaultFileOpen(PanelController *_target);
+
 private:
-    const PanelAction &m_OpenFilesAction;
+    OpenFilesWithDefaultHandler m_OpenFilesAction;
     GoIntoFolder m_GoIntoFolder;
     ExecuteInTerminal m_ExecuteInTerminal;
 };

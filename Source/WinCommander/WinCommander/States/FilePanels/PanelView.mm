@@ -21,6 +21,7 @@
 #include "ContextMenu.h"
 #include <Panel/PanelViewFieldEditor.h>
 #include <Panel/PanelViewKeystrokeSink.h>
+#include <VFS/ProviderCapabilities.h>
 #include "PanelViewDummyPresentation.h"
 #include "PanelControllerActionsDispatcher.h"
 
@@ -217,6 +218,7 @@ struct StateStorage {
     m_ExplorerDetailsGroupingEnabled = _enabled;
     if( NCPanelListView *const list_view = nc::objc_cast<NCPanelListView>(m_ItemsView) )
         list_view.groupingEnabled = _enabled;
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:self];
 }
 
 - (NCPanelBriefView *)spawnBriefView
@@ -952,22 +954,27 @@ struct StateStorage {
     [self setHeaderTitle:self.headerTitleForPanel];
 }
 
-- (void)startFieldEditorRenaming
+- (bool)startFieldEditorRenaming
 {
     if( m_RenamingEditor != nil ) {
+        if( m_RenamingEditor.superview == nil || ![self.window makeFirstResponder:m_RenamingEditor] ) {
+            [self discardFieldEditor];
+            return false;
+        }
         // if renaming editor is already here - just iterate a selection.
         // (assuming consequent ctrl+f6 hits here)
         [m_RenamingEditor markNextFilenamePart];
-        return;
+        return true;
     }
 
     const int cursor_pos = m_CursorPos;
     if( ![m_ItemsView isItemVisible:cursor_pos] )
-        return;
+        return false;
 
     const auto item = self.item;
-    if( !item || item.IsDotDot() || !item.Host()->IsWritable() )
-        return;
+    if( !item || item.IsDotDot() || !item.Host() ||
+        !nc::vfs::ProviderCapabilitiesResolver::Resolve(*item.Host(), item.Directory()).can_rename )
+        return false;
 
     m_RenamingEditor = [[NCPanelViewFieldEditor alloc] initWithItem:item];
     __weak PanelView *weak_self = self;
@@ -990,7 +997,11 @@ struct StateStorage {
     m_RenamingEditor.editor.nextKeyView = self;
 
     [m_ItemsView setupFieldEditor:m_RenamingEditor forItemAtIndex:cursor_pos];
-    [self.window makeFirstResponder:m_RenamingEditor];
+    if( m_RenamingEditor.superview == nil || ![self.window makeFirstResponder:m_RenamingEditor] ) {
+        [self discardFieldEditor];
+        return false;
+    }
+    return true;
 }
 
 - (void)commitFieldEditor
@@ -1147,10 +1158,13 @@ struct StateStorage {
     [self setCurpos:_sorted_index];
 }
 
-- (void)panelItem:(int)_sorted_index fieldEditor:(NSEvent *) [[maybe_unused]] _event
+- (void)panelItem:(int)_sorted_index fieldEditor:(NSEvent *)_event
 {
-    if( _sorted_index >= 0 && _sorted_index == m_CursorPos )
-        [self startFieldEditorRenaming];
+    if( _sorted_index >= 0 && _sorted_index == m_CursorPos ) {
+        if( NCPanelControllerActionsDispatcher *const dispatcher = self.actionsDispatcher )
+            [dispatcher executeFileRenameCommandFromSource:nc::core::CommandInvocationSource::Programmatic
+                                                    sender:_event];
+    }
 }
 
 - (void)panelItem:(int)_sorted_index dblClick:(NSEvent *) [[maybe_unused]] _event

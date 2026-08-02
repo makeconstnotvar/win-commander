@@ -1,5 +1,10 @@
 #!/bin/sh
 
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$script_dir"
+
 docker build --tag nc_sftp_alpine sftp_alpine
 docker create --name nc_sftp_alpine -p 127.0.0.1:9022:22 nc_sftp_alpine
 docker start nc_sftp_alpine

@@ -119,6 +119,7 @@
 		CF4C98082EDA011C001E6496 /* _Base.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = _Base.mm; path = source/_Base.mm; sourceTree = "<group>"; };
 		CF4C980F2EDA03B0001E6496 /* _BaseUT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _BaseUT.cpp; sourceTree = "<group>"; };
 		CF5338682532512100022EE8 /* ExecutionDeadline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ExecutionDeadline.cpp; path = source/ExecutionDeadline.cpp; sourceTree = "<group>"; };
+		CF53A7202E5F000100A1B2C3 /* SerialQueue_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = SerialQueue_UT.cpp; sourceTree = "<group>"; };
 		CF614ACD1F9D8EDC0005F2DB /* Hash_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Hash_UT.cpp; sourceTree = "<group>"; };
 		CF614ACE1F9D8EDD0005F2DB /* VariableContainer_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = VariableContainer_UT.cpp; sourceTree = "<group>"; };
 		CF614AD11F9D8EF00005F2DB /* chained_strings_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = chained_strings_UT.cpp; sourceTree = "<group>"; };
@@ -201,6 +202,7 @@
 				CF614ACD1F9D8EDC0005F2DB /* Hash_UT.cpp */,
 				CFE08ADE23C20664007E99B8 /* intrusive_ptr_UT.cpp */,
 				CFD22CD52012DDF800608DFE /* LRUCache_Tests.cpp */,
+				CF53A7202E5F000100A1B2C3 /* SerialQueue_UT.cpp */,
 				CFE8F90321A27F3000300019 /* spinlock_UT.cpp */,
 				CF2084021FEFB2F70014D6AD /* StringsBulk_UT.cpp */,
 				CFDA17E72D46520700EE375B /* UnitTests_main.h */,

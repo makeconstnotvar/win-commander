@@ -2,6 +2,8 @@
 #include "FileWindow_UT.cpp"
 #include "Host_UT.cpp"
 #include "ListingInput_UT.cpp"
+#include "NativeConditionalCopyTransaction_UT.cpp"
+#include "ProviderCapabilities_UT.cpp"
 #include "SearchInFile_UT.cpp"
 #include "VFSArchive_UT.cpp"
 #include "VFSArchiveRaw_UT.cpp"

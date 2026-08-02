@@ -13,12 +13,13 @@ namespace nc::ops {
 struct AsyncDialogResponse {
     std::optional<long> response;
     ankerl::unordered_dense::map<std::string, std::any> messages;
-    std::mutex lock;
+    mutable std::mutex lock;
     std::condition_variable blocker;
 
     void Abort() noexcept;
     void Commit(long _response) noexcept;
     void Wait() noexcept;
+    bool IsResolved() const noexcept;
 
     void SetApplyToAll(bool _v = true);
     bool IsApplyToAllSet() noexcept;

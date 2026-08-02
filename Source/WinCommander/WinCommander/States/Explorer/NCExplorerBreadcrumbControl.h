@@ -5,17 +5,23 @@
 
 @class PanelController;
 
+#ifdef __cplusplus
+namespace nc::core {
+struct PaneSnapshot;
+}
+#endif
+
+NS_ASSUME_NONNULL_BEGIN
+
 /** Explorer address bar: path segments, sibling menus, editable path and Find Files entry point. */
 @interface NCExplorerBreadcrumbControl : NSView
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel;
 
-/**
- * Re-reads the panel controller's current directory/listing state and updates the displayed
- * breadcrumb (or the fallback label) accordingly. Must be called by the owner whenever the panel's
- * path changes.
- */
-- (void)panelPathChanged;
+#ifdef __cplusplus
+/** Renders immutable pane state. Must be called on the main queue. */
+- (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;
+#endif
 
 /** Switches to editable path mode and focuses the path field. */
 - (void)focusAddressField;
@@ -23,4 +29,12 @@
 /** Loading feedback hosted by the visible Explorer chrome. */
 @property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
 
+/** Persistent pane failure/notice surface. Hidden when the current snapshot has no visible error. */
+@property(nonatomic, readonly) NSTextField *errorLabel;
+
+/** Request-local address failure, cleared when a newer address navigation starts. */
+@property(nonatomic, readonly, nullable) NSString *requestErrorMessage;
+
 @end
+
+NS_ASSUME_NONNULL_END

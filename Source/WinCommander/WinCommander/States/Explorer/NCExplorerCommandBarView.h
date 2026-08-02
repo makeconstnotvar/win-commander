@@ -5,6 +5,12 @@
 
 @class PanelController;
 
+#ifdef __cplusplus
+namespace nc::core {
+struct PaneSnapshot;
+}
+#endif
+
 /**
  * A horizontal row of file-operation buttons for placement below the Explorer toolbar:
  * New, Cut, Copy, Paste, Rename, Share, Delete, Sort, View, More.
@@ -13,11 +19,16 @@
  * NCPanelControllerActionsDispatcher, the same idiom NCExplorerToolbarDelegate uses for its
  * Back/Forward/Up/Refresh buttons. Share is self-contained, built on NSSharingServicePicker over
  * the panel's currently selected items. Sort/View/More each show a CUI NCCommandPopover: Sort
- * lists the existing sort-mode toggle actions (see ToggleSort.h), View/More are minimal
- * placeholders for now - their real content is out of scope for this pass.
+ * lists the existing sort-mode toggle actions (see ToggleSort.h), View includes the Store-backed
+ * hidden-files command, and More remains a minimal overflow placeholder.
  */
 @interface NCExplorerCommandBarView : NSView
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel;
+
+#ifdef __cplusplus
+/** Updates Store-backed command presentation state. Must be called on the main queue. */
+- (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;
+#endif
 
 @end

@@ -10,6 +10,9 @@ namespace nc::vfs {
 class XAttrHost final : public Host
 {
 public:
+    static constexpr uint64_t DeclaredFeatures =
+        HostFeatures::Read | HostFeatures::CreateFile | HostFeatures::Rename | HostFeatures::Unlink;
+
     XAttrHost(std::string_view _file_path, const VFSHostPtr &_host); // _host must be native currently
     XAttrHost(const VFSHostPtr &_parent, const VFSConfiguration &_config);
     ~XAttrHost() override;

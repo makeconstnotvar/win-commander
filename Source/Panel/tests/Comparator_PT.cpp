@@ -82,6 +82,16 @@ static std::string GenerateFilename(std::mt19937 &rng)
     return filename;
 }
 
+static std::vector<std::string> GenerateFilenames(size_t _count)
+{
+    std::mt19937 rng(42);
+    std::vector<std::string> filenames;
+    filenames.reserve(_count);
+    for( size_t index = 0; index < _count; ++index )
+        filenames.push_back(GenerateFilename(rng));
+    return filenames;
+}
+
 static VFSListingPtr ProduceDummyListing(const std::vector<std::string> &_filenames)
 {
     vfs::ListingInput l;
@@ -101,15 +111,9 @@ static VFSListingPtr ProduceDummyListing(const std::vector<std::string> &_filena
     return VFSListing::Build(std::move(l));
 }
 
-TEST_CASE("Sorting performace test")
+TEST_CASE("Sorting performance test")
 {
-    std::mt19937 rng(42);
-    std::vector<std::string> filenames;
-    for( int i = 0; i < 1'000; ++i ) {
-        filenames.push_back(GenerateFilename(rng));
-    }
-
-    auto listing = ProduceDummyListing(filenames);
+    auto listing = ProduceDummyListing(GenerateFilenames(1'000));
     Model model;
 
     SortMode mode;
@@ -133,6 +137,32 @@ TEST_CASE("Sorting performace test")
         mode.collation = SortMode::Collation::Natural;
         model.SetSortMode(mode);
         model.Load(listing, Model::PanelType::Directory);
+        return model.RawEntriesCount();
+    };
+}
+
+TEST_CASE("Large listing model baseline")
+{
+    const auto listing_10k = ProduceDummyListing(GenerateFilenames(10'000));
+    const auto listing_100k = ProduceDummyListing(GenerateFilenames(100'000));
+
+    SortMode mode;
+    mode.sort = SortMode::Mode::SortByName;
+    mode.collation = SortMode::Collation::Natural;
+
+    BENCHMARK("Load and natural-sort 10,000 items")
+    {
+        Model model;
+        model.SetSortMode(mode);
+        model.Load(listing_10k, Model::PanelType::Directory);
+        return model.RawEntriesCount();
+    };
+
+    BENCHMARK("Load and natural-sort 100,000 items")
+    {
+        Model model;
+        model.SetSortMode(mode);
+        model.Load(listing_100k, Model::PanelType::Directory);
         return model.RawEntriesCount();
     };
 }

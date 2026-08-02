@@ -4,6 +4,12 @@
 namespace nc::ops {
 
 struct CopyingOptions {
+    enum class DestinationPathInterpretation : char {
+        Infer = 0,
+        Directory = 1,
+        ExactItem = 2
+    };
+
     enum class ChecksumVerification : char {
         Never = 0,
         WhenMoves = 1,
@@ -34,9 +40,11 @@ struct CopyingOptions {
     bool copy_unix_flags : 1 = true;
     bool copy_unix_owners : 1 = true;
     bool disable_system_caches : 1 = false;
+    bool reject_final_component_symlinks : 1 = false;
     ChecksumVerification verification = ChecksumVerification::Never;
     ExistBehavior exist_behavior = ExistBehavior::Ask;
     LockedItemBehavior locked_items_behaviour = LockedItemBehavior::Ask;
+    DestinationPathInterpretation destination_path_interpretation = DestinationPathInterpretation::Infer;
 };
 
 } // namespace nc::ops

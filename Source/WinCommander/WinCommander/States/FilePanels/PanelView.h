@@ -101,7 +101,7 @@ struct PresentationFactory {
  */
 - (NSPopover *)showPopoverUnderPathBarWithView:(NSViewController *)_view andDelegate:(id<NSPopoverDelegate>)_delegate;
 
-- (void)startFieldEditorRenaming;
+- (bool)startFieldEditorRenaming;
 - (void)discardFieldEditor;
 
 // Encodes a layout of the currently active presentation mode as PanelViewLayout's variant

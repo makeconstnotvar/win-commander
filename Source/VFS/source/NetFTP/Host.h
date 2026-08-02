@@ -14,6 +14,10 @@ namespace nc::vfs {
 class FTPHost final : public Host
 {
 public:
+    static constexpr uint64_t DeclaredFeatures = HostFeatures::Read | HostFeatures::CreateFile |
+                                                 HostFeatures::CreateDirectory | HostFeatures::Rename |
+                                                 HostFeatures::Unlink | HostFeatures::RemoveDirectory;
+
     FTPHost(const std::string &_serv_url,
             const std::string &_user,
             const std::string &_passwd,

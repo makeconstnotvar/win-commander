@@ -1,6 +1,7 @@
 // Copyright (C) 2013-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "Host.h"
 #include <sys/attr.h>
+#include <sys/clonefile.h>
 #include <sys/errno.h>
 #include <sys/vnode.h>
 #include <sys/stat.h>
@@ -12,6 +13,7 @@
 #include <RoutedIO/RoutedIO.h>
 #include "DisplayNamesCache.h"
 #include "File.h"
+#include "ConditionalCopy.h"
 #include <VFS/Log.h>
 #include "../ListingInput.h"
 #include "Fetching.h"
@@ -24,8 +26,404 @@
 #include <pstld/pstld.h>
 #include <fmt/ranges.h>
 #include <algorithm>
+#include <mutex>
 
 namespace nc::vfs {
+
+namespace {
+
+template <class Callable>
+int NativeConditionalCopyRetryInterrupted(Callable &&_call) noexcept
+{
+    int result = 0;
+    do {
+        errno = 0;
+        result = _call();
+    } while( result != 0 && errno == EINTR );
+    return result;
+}
+
+int NativeConditionalCopyErrno() noexcept
+{
+    return errno == 0 ? EIO : errno;
+}
+
+ProviderConditionalCopyCommitResult NativeConditionalCopyNotPublished(
+    ProviderConditionalCopyCommitFailure _failure,
+    int _system_error = 0) noexcept
+{
+    if( _failure == ProviderConditionalCopyCommitFailure::ProviderFailure && _system_error == 0 )
+        _system_error = EIO;
+    return ProviderConditionalCopyCommitResult{
+        .publication = ProviderConditionalCopyPublicationState::NotPublished,
+        .failure = _failure,
+        .system_error = _system_error,
+    };
+}
+
+ProviderConditionalCopyCommitResult NativeConditionalCopyUnknown(int _system_error) noexcept
+{
+    return ProviderConditionalCopyCommitResult{
+        .publication = ProviderConditionalCopyPublicationState::Unknown,
+        .failure = ProviderConditionalCopyCommitFailure::ProviderFailure,
+        .system_error = _system_error == 0 ? EIO : _system_error,
+    };
+}
+
+ProviderConditionalCopyCommitResult NativeConditionalCopyPublished(
+    int _metadata_error,
+    int _filesystem_sync_error) noexcept
+{
+    const auto sync_status = _filesystem_sync_error == 0
+                                 ? ProviderConditionalCopyFilesystemSyncStatus::Confirmed
+                                 : ProviderConditionalCopyFilesystemSyncStatus::Failed;
+    if( _metadata_error != 0 ) {
+        return ProviderConditionalCopyCommitResult{
+            .publication = ProviderConditionalCopyPublicationState::Published,
+            .failure = ProviderConditionalCopyCommitFailure::MetadataFailed,
+            .system_error = _metadata_error,
+            .filesystem_sync_status = sync_status,
+            .filesystem_sync_system_error = _filesystem_sync_error,
+        };
+    }
+    if( _filesystem_sync_error != 0 ) {
+        return ProviderConditionalCopyCommitResult{
+            .publication = ProviderConditionalCopyPublicationState::Published,
+            .failure = ProviderConditionalCopyCommitFailure::FileSystemSyncFailed,
+            .system_error = _filesystem_sync_error,
+            .filesystem_sync_status = ProviderConditionalCopyFilesystemSyncStatus::Failed,
+            .filesystem_sync_system_error = _filesystem_sync_error,
+        };
+    }
+    return ProviderConditionalCopyCommitResult{
+        .publication = ProviderConditionalCopyPublicationState::Published,
+        .failure = ProviderConditionalCopyCommitFailure::None,
+        .filesystem_sync_status = ProviderConditionalCopyFilesystemSyncStatus::Confirmed,
+    };
+}
+
+class NativeConditionalCopyState final
+{
+public:
+    NativeConditionalCopyState(int _source_fd,
+                               int _destination_parent_fd,
+                               ProviderConditionalCopyExistingExpectation _source,
+                               ProviderConditionalCopyExistingExpectation _destination_parent,
+                               std::string _destination_name,
+                               native::ConditionalCopyMetadataSnapshot _source_metadata,
+                               native::ConditionalCopyMetadataSnapshot _destination_parent_metadata,
+                               nc::utility::NativeFSManager &_native_fs_manager,
+                               std::shared_ptr<native::ConditionalCopyIO> _io) noexcept
+        : m_SourceFD{_source_fd},
+          m_DestinationParentFD{_destination_parent_fd},
+          m_Source{std::move(_source)},
+          m_DestinationParent{std::move(_destination_parent)},
+          m_DestinationName{std::move(_destination_name)},
+          m_SourceMetadata{std::move(_source_metadata)},
+          m_DestinationParentMetadata{std::move(_destination_parent_metadata)},
+          m_NativeFSManager{_native_fs_manager},
+          m_IO{std::move(_io)}
+    {
+    }
+
+    NativeConditionalCopyState(const NativeConditionalCopyState &) = delete;
+    NativeConditionalCopyState &operator=(const NativeConditionalCopyState &) = delete;
+
+    ~NativeConditionalCopyState() { Close(); }
+
+    [[nodiscard]] ProviderConditionalCopyCommitResult Commit() noexcept;
+
+    [[nodiscard]] ProviderConditionalCopyPublicationState Abort() noexcept
+    {
+        Close();
+        return ProviderConditionalCopyPublicationState::NotPublished;
+    }
+
+private:
+    void Close() noexcept
+    {
+        const auto lock = std::lock_guard{m_Mutex};
+        CloseUnlocked();
+    }
+
+    void CloseUnlocked() noexcept
+    {
+        if( m_SourceFD >= 0 ) {
+            m_IO->Close(m_SourceFD);
+            m_SourceFD = -1;
+        }
+        if( m_DestinationParentFD >= 0 ) {
+            m_IO->Close(m_DestinationParentFD);
+            m_DestinationParentFD = -1;
+        }
+    }
+
+    int m_SourceFD;
+    int m_DestinationParentFD;
+    ProviderConditionalCopyExistingExpectation m_Source;
+    ProviderConditionalCopyExistingExpectation m_DestinationParent;
+    std::string m_DestinationName;
+    native::ConditionalCopyMetadataSnapshot m_SourceMetadata;
+    native::ConditionalCopyMetadataSnapshot m_DestinationParentMetadata;
+    nc::utility::NativeFSManager &m_NativeFSManager;
+    std::shared_ptr<native::ConditionalCopyIO> m_IO;
+    std::mutex m_Mutex;
+};
+
+bool NativeConditionalCopyTimestampMatches(const timespec &_actual,
+                                           const ProviderConditionalCopyTimestamp &_expected) noexcept
+{
+    return _actual.tv_sec == _expected.seconds && _actual.tv_nsec == _expected.nanoseconds;
+}
+
+bool NativeConditionalCopyStatMatches(const struct stat &_actual,
+                                      const ProviderConditionalCopyExistingExpectation &_expected) noexcept
+{
+    const bool kind_matches =
+        (_expected.kind == ProviderConditionalCopyExpectedKind::RegularFile && S_ISREG(_actual.st_mode)) ||
+        (_expected.kind == ProviderConditionalCopyExpectedKind::Directory && S_ISDIR(_actual.st_mode));
+    return kind_matches && static_cast<int32_t>(_actual.st_dev) == _expected.device &&
+           static_cast<uint64_t>(_actual.st_ino) == _expected.inode &&
+           NativeConditionalCopyTimestampMatches(_actual.st_birthtimespec, _expected.birth_time) &&
+           static_cast<uint16_t>(_actual.st_mode) == _expected.mode &&
+           static_cast<uint64_t>(_actual.st_size) == _expected.byte_size &&
+           NativeConditionalCopyTimestampMatches(_actual.st_mtimespec, _expected.modification_time) &&
+           NativeConditionalCopyTimestampMatches(_actual.st_ctimespec, _expected.status_change_time);
+}
+
+bool NativeConditionalCopyMetadataMatchesExpectation(
+    const native::ConditionalCopyMetadataSnapshot &_actual,
+    const ProviderConditionalCopyExistingExpectation &_expected) noexcept
+{
+    const bool kind_matches =
+        (_expected.kind == ProviderConditionalCopyExpectedKind::RegularFile && S_ISREG(_actual.mode)) ||
+        (_expected.kind == ProviderConditionalCopyExpectedKind::Directory && S_ISDIR(_actual.mode));
+    return kind_matches && static_cast<int32_t>(_actual.device) == _expected.device &&
+           _actual.inode == _expected.inode && _actual.birth_time.seconds == _expected.birth_time.seconds &&
+           _actual.birth_time.nanoseconds == _expected.birth_time.nanoseconds &&
+           static_cast<uint16_t>(_actual.mode) == _expected.mode && _actual.size == _expected.byte_size &&
+           _actual.modification_time.seconds == _expected.modification_time.seconds &&
+           _actual.modification_time.nanoseconds == _expected.modification_time.nanoseconds &&
+           _actual.change_time.seconds == _expected.status_change_time.seconds &&
+           _actual.change_time.nanoseconds == _expected.status_change_time.nanoseconds;
+}
+
+bool NativeConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
+                                       const nc::utility::NativeFileSystemInfo &_destination) noexcept
+{
+    return _source.mounted_at_path == _destination.mounted_at_path &&
+           _source.basic.fs_id.val[0] == _destination.basic.fs_id.val[0] &&
+           _source.basic.fs_id.val[1] == _destination.basic.fs_id.val[1];
+}
+
+ProviderConditionalCopyCommitResult NativeConditionalCopyState::Commit() noexcept
+{
+    const auto lock = std::lock_guard{m_Mutex};
+    if( m_SourceFD < 0 || m_DestinationParentFD < 0 ) {
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, EBADF);
+    }
+
+    struct stat source_stat {};
+    if( m_IO->FStat(m_SourceFD, &source_stat) != 0 ) {
+        const int stat_error = NativeConditionalCopyErrno();
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, stat_error);
+    }
+    if( !NativeConditionalCopyStatMatches(source_stat, m_Source) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale,
+                                                 ESTALE);
+    }
+    const auto source_metadata = m_IO->CaptureMetadata(m_SourceFD);
+    if( !source_metadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                 source_metadata.error());
+    }
+    if( *source_metadata != m_SourceMetadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale,
+                                                 ESTALE);
+    }
+
+    struct stat destination_stat {};
+    if( m_IO->FStatAt(m_DestinationParentFD,
+                      m_DestinationName.c_str(),
+                      &destination_stat,
+                      AT_SYMLINK_NOFOLLOW) == 0 ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::DestinationExists,
+                                                 EEXIST);
+    }
+    if( errno != ENOENT ) {
+        const int stat_error = NativeConditionalCopyErrno();
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, stat_error);
+    }
+
+    struct stat destination_parent_stat {};
+    if( m_IO->FStat(m_DestinationParentFD, &destination_parent_stat) != 0 ) {
+        const int stat_error = NativeConditionalCopyErrno();
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, stat_error);
+    }
+    if( !NativeConditionalCopyStatMatches(destination_parent_stat, m_DestinationParent) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(
+            ProviderConditionalCopyCommitFailure::DestinationParentStale, ESTALE);
+    }
+    const auto destination_parent_metadata = m_IO->CaptureMetadata(m_DestinationParentFD);
+    if( !destination_parent_metadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                 destination_parent_metadata.error());
+    }
+    if( *destination_parent_metadata != m_DestinationParentMetadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(
+            ProviderConditionalCopyCommitFailure::DestinationParentStale, ESTALE);
+    }
+
+    const auto source_volume = m_NativeFSManager.VolumeFromFD(m_SourceFD);
+    const auto destination_volume = m_NativeFSManager.VolumeFromFD(m_DestinationParentFD);
+    if( !source_volume || !destination_volume || source_stat.st_dev != destination_parent_stat.st_dev ||
+        !NativeConditionalCopyVolumesMatch(*source_volume, *destination_volume) ||
+        !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
+        !native::EvaluateConditionalCopyVolume(*destination_volume).IsSupported() ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, ENOTSUP);
+    }
+
+    if( m_IO->Clone(m_SourceFD, m_DestinationParentFD, m_DestinationName.c_str(), CLONE_ACL) != 0 ) {
+        const int clone_error = NativeConditionalCopyErrno();
+        if( clone_error == EEXIST ) {
+            CloseUnlocked();
+            return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::DestinationExists,
+                                                     EEXIST);
+        }
+        struct stat post_clone_stat {};
+        const int probe_result = m_IO->FStatAt(m_DestinationParentFD,
+                                               m_DestinationName.c_str(),
+                                               &post_clone_stat,
+                                               AT_SYMLINK_NOFOLLOW);
+        const int probe_error = NativeConditionalCopyErrno();
+        const auto post_clone_parent_metadata =
+            probe_result != 0 && probe_error == ENOENT
+                ? m_IO->CaptureMetadata(m_DestinationParentFD)
+                : std::expected<native::ConditionalCopyMetadataSnapshot, int>{std::unexpected(EIO)};
+        CloseUnlocked();
+        // Absence alone is insufficient: a clone may have published and then been removed concurrently. The
+        // anchored parent seal must also prove that the namespace did not change across the failed syscall.
+        if( probe_result != 0 && probe_error == ENOENT && post_clone_parent_metadata &&
+            *post_clone_parent_metadata == m_DestinationParentMetadata ) {
+            return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                     clone_error);
+        }
+        return NativeConditionalCopyUnknown(clone_error);
+    }
+
+    int metadata_error = 0;
+    int filesystem_sync_error = 0;
+    const auto remember_metadata_error = [&](int _error) noexcept {
+        if( metadata_error == 0 )
+            metadata_error = _error == 0 ? EIO : _error;
+    };
+    const auto remember_sync_error = [&](int _error) noexcept {
+        if( filesystem_sync_error == 0 )
+            filesystem_sync_error = _error == 0 ? EIO : _error;
+    };
+
+    const auto post_clone_source_metadata = m_IO->CaptureMetadata(m_SourceFD);
+    if( !post_clone_source_metadata ) {
+        remember_metadata_error(post_clone_source_metadata.error());
+    } else if( *post_clone_source_metadata != m_SourceMetadata ) {
+        // Publication is already known. A source mutation racing the clone invalidates the reviewed metadata proof,
+        // so the caller must see a published metadata failure even when the durability barriers still succeed.
+        remember_metadata_error(ESTALE);
+    }
+
+    const int destination_fd = m_IO->OpenAt(
+        m_DestinationParentFD, m_DestinationName.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+    if( destination_fd < 0 ) {
+        remember_metadata_error(NativeConditionalCopyErrno());
+        remember_sync_error(EBADF);
+    } else {
+        const auto destination_metadata = m_IO->CaptureMetadata(destination_fd);
+        if( !destination_metadata ) {
+            remember_metadata_error(destination_metadata.error());
+        } else {
+            struct stat named_destination {};
+            if( m_IO->FStatAt(m_DestinationParentFD,
+                              m_DestinationName.c_str(),
+                              &named_destination,
+                              AT_SYMLINK_NOFOLLOW) != 0 ) {
+                remember_metadata_error(NativeConditionalCopyErrno());
+            } else if( static_cast<uint64_t>(named_destination.st_dev) != destination_metadata->device ||
+                       static_cast<uint64_t>(named_destination.st_ino) != destination_metadata->inode ||
+                       !native::ConditionalCopyMetadataMatchesClone(m_SourceMetadata, *destination_metadata) ) {
+                remember_metadata_error(ESTALE);
+            }
+        }
+
+        if( NativeConditionalCopyRetryInterrupted([&] { return m_IO->FSync(destination_fd); }) != 0 )
+            remember_sync_error(NativeConditionalCopyErrno());
+    }
+
+    if( NativeConditionalCopyRetryInterrupted([&] { return m_IO->FSync(m_DestinationParentFD); }) != 0 )
+        remember_sync_error(NativeConditionalCopyErrno());
+
+    if( destination_fd >= 0 ) {
+        if( NativeConditionalCopyRetryInterrupted([&] { return m_IO->FullFSync(destination_fd); }) != 0 )
+            remember_sync_error(NativeConditionalCopyErrno());
+
+        struct stat final_named_destination {};
+        struct stat final_open_destination {};
+        if( m_IO->FStat(destination_fd, &final_open_destination) != 0 ) {
+            remember_metadata_error(NativeConditionalCopyErrno());
+        } else if( m_IO->FStatAt(m_DestinationParentFD,
+                                 m_DestinationName.c_str(),
+                                 &final_named_destination,
+                                 AT_SYMLINK_NOFOLLOW) != 0 ) {
+            remember_metadata_error(NativeConditionalCopyErrno());
+        } else if( final_named_destination.st_dev != final_open_destination.st_dev ||
+                   final_named_destination.st_ino != final_open_destination.st_ino ) {
+            remember_metadata_error(ESTALE);
+        }
+        m_IO->Close(destination_fd);
+    }
+
+    CloseUnlocked();
+    return NativeConditionalCopyPublished(metadata_error, filesystem_sync_error);
+}
+
+std::optional<std::string> NativeConditionalCopyDestinationName(
+    const ProviderConditionalCopyReviewedClaims &_claims) noexcept
+{
+    const auto &parent = _claims.destination_parent.absolute_path;
+    const auto &destination = _claims.destination.absolute_path;
+    if( parent.empty() || destination.empty() || parent.front() != '/' || destination.front() != '/' )
+        return std::nullopt;
+    const size_t name_offset = parent == "/" ? 1 : parent.size() + 1;
+    if( destination.size() <= name_offset || destination.substr(0, name_offset) !=
+                                                 (parent == "/" ? "/" : parent + "/") )
+        return std::nullopt;
+    const auto name = destination.substr(name_offset);
+    if( name.empty() || name.find('/') != std::string::npos || name == "." || name == ".." ||
+        name.find('\0') != std::string::npos )
+        return std::nullopt;
+    return name;
+}
+
+bool NativeConditionalCopyCancelled(const VFSCancelChecker &_cancel_checker) noexcept
+{
+    try {
+        return _cancel_checker && _cancel_checker();
+    } catch( ... ) {
+        return true;
+    }
+}
+
+} // namespace
 
 const char *NativeHost::UniqueTag = "native";
 
@@ -54,10 +452,25 @@ VFSMeta NativeHost::Meta()
 
 NativeHost::NativeHost(nc::utility::NativeFSManager &_native_fs_man,
                        nc::utility::FSEventsFileUpdate &_fsevents_file_update)
-    : Host("", nullptr, UniqueTag), m_NativeFSManager(_native_fs_man), m_FSEventsFileUpdate(_fsevents_file_update)
+    : NativeHost(_native_fs_man, _fsevents_file_update, std::make_shared<native::ConditionalCopyIO>())
+{
+}
+
+NativeHost::NativeHost(nc::utility::NativeFSManager &_native_fs_man,
+                       nc::utility::FSEventsFileUpdate &_fsevents_file_update,
+                       std::shared_ptr<native::ConditionalCopyIO> _conditional_copy_io)
+    : Host("", nullptr, UniqueTag),
+      m_NativeFSManager(_native_fs_man),
+      m_FSEventsFileUpdate(_fsevents_file_update),
+      m_ConditionalCopyIO(_conditional_copy_io ? std::move(_conditional_copy_io)
+                                               : std::make_shared<native::ConditionalCopyIO>())
 {
     AddFeatures(HostFeatures::FetchUsers | HostFeatures::FetchGroups | HostFeatures::SetOwnership |
-                HostFeatures::SetFlags | HostFeatures::SetPermissions | HostFeatures::SetTimes);
+                HostFeatures::SetFlags | HostFeatures::SetPermissions | HostFeatures::SetTimes | HostFeatures::Read |
+                HostFeatures::CreateFile | HostFeatures::CreateDirectory | HostFeatures::Rename |
+                HostFeatures::Unlink | HostFeatures::RemoveDirectory | HostFeatures::Trash |
+                HostFeatures::ReadSymlink | HostFeatures::ObserveDirectoryChanges |
+                HostFeatures::CreateSymlink);
 }
 
 bool NativeHost::ShouldProduceThumbnails() const
@@ -567,8 +980,14 @@ NativeHost::IterateDirectoryListing(std::string_view _path,
         return std::unexpected(Error{Error::POSIX, errno});
     const auto close_dirp = at_scope_end([&] { io.closedir(dirp); });
 
-    dirent *entp = nullptr;
-    while( (entp = io.readdir(dirp)) != nullptr ) {
+    while( true ) {
+        errno = 0;
+        dirent *const entp = io.readdir(dirp);
+        if( entp == nullptr ) {
+            if( errno != 0 )
+                return std::unexpected(Error{Error::POSIX, errno});
+            break;
+        }
         if( (entp->d_namlen == 1 && entp->d_name[0] == '.') ||
             (entp->d_namlen == 2 && entp->d_name[0] == '.' && entp->d_name[1] == '.') )
             continue;
@@ -578,7 +997,7 @@ NativeHost::IterateDirectoryListing(std::string_view _path,
         vfs_dirent.name = std::string_view{entp->d_name, entp->d_namlen};
 
         if( !_handler(vfs_dirent) )
-            break;
+            return {};
     }
 
     return {};
@@ -830,11 +1249,128 @@ NativeHost::FetchGroups([[maybe_unused]] const VFSCancelChecker &_cancel_checker
 
 bool NativeHost::IsCaseSensitiveAtPath(std::string_view _dir) const
 {
+    return CaseSensitivityAtPath(_dir).value_or(true);
+}
+
+std::optional<bool> NativeHost::CaseSensitivityAtPath(std::string_view _dir) const
+{
     if( _dir.empty() || _dir[0] != '/' )
-        return true;
+        return std::nullopt;
     if( const auto fs_info = m_NativeFSManager.VolumeFromPath(_dir) )
         return fs_info->format.case_sensitive;
-    return true;
+    return std::nullopt;
+}
+
+std::optional<std::string> NativeHost::SemanticNamespaceIdentity() const
+{
+    return std::string{UniqueTag};
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+              ProviderConditionalCopyTransactionBeginError>
+NativeHost::BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
+                                            const VFSCancelChecker &_cancel_checker)
+{
+    if( NativeConditionalCopyCancelled(_cancel_checker) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
+
+    const auto &claims = _authority.Claims();
+    const auto destination_name = NativeConditionalCopyDestinationName(claims);
+    if( claims.destination_binding.host.get() != this || claims.source_binding.host.get() != this ||
+        claims.source.kind != ProviderConditionalCopyExpectedKind::RegularFile ||
+        claims.destination_parent.kind != ProviderConditionalCopyExpectedKind::Directory || !destination_name ||
+        !ValidateFilename(*destination_name) ) {
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::InvalidRequest);
+    }
+
+    const int source_fd = m_ConditionalCopyIO->Open(
+        claims.source.absolute_path.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW_ANY | O_CLOEXEC);
+    if( source_fd < 0 ) {
+        const int open_error = errno;
+        return std::unexpected(open_error == ENOENT || open_error == ENOTDIR || open_error == ELOOP
+                                   ? ProviderConditionalCopyTransactionBeginError::SourceStale
+                                   : ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    }
+    auto close_source = at_scope_end([source_fd, io = m_ConditionalCopyIO] { io->Close(source_fd); });
+
+    struct stat source_stat {};
+    if( m_ConditionalCopyIO->FStat(source_fd, &source_stat) != 0 )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyStatMatches(source_stat, claims.source) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::SourceStale);
+
+    const int destination_parent_fd = m_ConditionalCopyIO->Open(
+        claims.destination_parent.absolute_path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC);
+    if( destination_parent_fd < 0 ) {
+        const int open_error = errno;
+        return std::unexpected(open_error == ENOENT || open_error == ENOTDIR || open_error == ELOOP
+                                   ? ProviderConditionalCopyTransactionBeginError::DestinationParentStale
+                                   : ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    }
+    auto close_destination_parent =
+        at_scope_end([destination_parent_fd, io = m_ConditionalCopyIO] { io->Close(destination_parent_fd); });
+
+    struct stat destination_parent_stat {};
+    if( m_ConditionalCopyIO->FStat(destination_parent_fd, &destination_parent_stat) != 0 )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyStatMatches(destination_parent_stat, claims.destination_parent) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::DestinationParentStale);
+
+    struct stat destination_stat {};
+    if( m_ConditionalCopyIO->FStatAt(
+            destination_parent_fd, destination_name->c_str(), &destination_stat, AT_SYMLINK_NOFOLLOW) == 0 )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::DestinationExists);
+    if( errno != ENOENT )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+
+    const auto source_volume = m_NativeFSManager.VolumeFromFD(source_fd);
+    const auto destination_volume = m_NativeFSManager.VolumeFromFD(destination_parent_fd);
+    if( !source_volume || !destination_volume )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    if( source_stat.st_dev != destination_parent_stat.st_dev ||
+        !NativeConditionalCopyVolumesMatch(*source_volume, *destination_volume) ||
+        !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
+        !native::EvaluateConditionalCopyVolume(*destination_volume).IsSupported() ) {
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::Unsupported);
+    }
+
+    auto source_metadata = m_ConditionalCopyIO->CaptureMetadata(source_fd);
+    if( !source_metadata )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyMetadataMatchesExpectation(*source_metadata, claims.source) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::SourceStale);
+
+    auto destination_parent_metadata = m_ConditionalCopyIO->CaptureMetadata(destination_parent_fd);
+    if( !destination_parent_metadata )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyMetadataMatchesExpectation(*destination_parent_metadata, claims.destination_parent) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::DestinationParentStale);
+    if( !native::ValidateConditionalCopyMetadataPolicy(*source_metadata, *destination_parent_metadata) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::Unsupported);
+
+    if( NativeConditionalCopyCancelled(_cancel_checker) )
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
+
+    std::shared_ptr<NativeConditionalCopyState> state;
+    try {
+        state = std::make_shared<NativeConditionalCopyState>(source_fd,
+                                                             destination_parent_fd,
+                                                             claims.source,
+                                                             claims.destination_parent,
+                                                             *destination_name,
+                                                             std::move(*source_metadata),
+                                                             std::move(*destination_parent_metadata),
+                                                             m_NativeFSManager,
+                                                             m_ConditionalCopyIO);
+    } catch( ... ) {
+        return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    }
+    close_source.disengage();
+    close_destination_parent.disengage();
+    return MintConditionalCopyTransaction(
+        std::move(_authority),
+        [state] { return state->Commit(); },
+        [state] { return state->Abort(); });
 }
 
 nc::utility::NativeFSManager &NativeHost::NativeFSManager() const noexcept

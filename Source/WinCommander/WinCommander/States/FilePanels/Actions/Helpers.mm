@@ -20,20 +20,20 @@ void AsyncVFSPromiseRestorer::Restore(const nc::core::VFSInstanceManager::Promis
     auto task = [&manager = m_InstanceManager,
                  promise = _promise,
                  success = std::move(_success_handler),
-                 failure = std::move(_failure_handler)](const std::function<bool()> &_is_cancelled) {
+                 failure = std::move(_failure_handler)](const CancelableLoadingTaskContext &_context) {
         VFSHostPtr host;
         try {
 
-            host = manager.RetrieveVFS(promise, _is_cancelled);
+            host = manager.RetrieveVFS(promise, _context.is_cancelled);
 
         } catch( ErrorException &ex ) {
             if( failure != nullptr )
-                failure(ex.error());
+                _context.commit_on_main([failure, error = ex.error()] { failure(error); });
         }
 
         if( host != nullptr ) {
             if( success != nullptr ) {
-                success(host);
+                _context.commit_on_main([success, host] { success(host); });
             }
         }
     };
@@ -56,19 +56,19 @@ void AsyncPersistentLocationRestorer::Restore(const nc::panel::PersistentLocatio
                  &netmgr = m_NetConnManager,
                  location = _location,
                  success = std::move(_success_handler),
-                 failure = std::move(_failure_handler)]([[maybe_unused]] const std::function<bool()> &_is_cancelled) {
+                 failure = std::move(_failure_handler)](const CancelableLoadingTaskContext &_context) {
         PanelDataPersistency persistency(netmgr);
         const std::expected<VFSHostPtr, Error> exp_host = persistency.CreateVFSFromLocation(location, manager);
 
         if( !exp_host ) {
             if( failure != nullptr )
-                failure(exp_host.error());
+                _context.commit_on_main([failure, error = exp_host.error()] { failure(error); });
             return;
         }
 
         if( exp_host && *exp_host != nullptr ) {
             if( success != nullptr ) {
-                success(*exp_host);
+                _context.commit_on_main([success, host = *exp_host] { success(host); });
             }
         }
     };

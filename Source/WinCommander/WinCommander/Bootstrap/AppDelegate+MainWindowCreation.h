@@ -5,6 +5,10 @@
 
 @class PanelController;
 
+namespace nc::panel {
+class FileOpener;
+}
+
 // this category is private to NCAppDelegate
 @interface NCAppDelegate (MainWindowCreation)
 
@@ -17,5 +21,8 @@
 // Builds a standalone PanelController (own PanelView, icon repository, actions dispatcher) with no
 // dual-pane assumptions, for hosting inside NCExplorerState.
 - (PanelController *)allocateExplorerPanelController;
+
+/** Shared opener used by production file.open composition and Open With surfaces. */
+- (nc::panel::FileOpener &)fileOpener;
 
 @end

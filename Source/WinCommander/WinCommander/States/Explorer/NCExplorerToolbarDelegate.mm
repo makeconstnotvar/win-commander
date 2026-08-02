@@ -1,10 +1,14 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "NCExplorerToolbarDelegate.h"
+#include "NCExplorerPanePresentationModel.h"
 #include "../FilePanels/PanelController.h"
 #include "../FilePanels/PanelView.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
+#include "../CommandPresentationAdapter.h"
 #include "../MainWindowController.h"
+#include "../../Core/Pane/PaneSnapshot.h"
 #include "NCExplorerBreadcrumbControl.h"
+#include <optional>
 
 static auto g_ToolbarIdentifier = @"ExplorerToolbar";
 
@@ -23,6 +27,8 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
     NSButton *m_RefreshButton;
     NSButton *m_CommanderModeButton;
     NCExplorerBreadcrumbControl *m_Breadcrumb;
+    __weak NCPanelControllerActionsDispatcher *m_ActionsDispatcher;
+    std::optional<nc::explorer::PanePresentationModel> m_PanePresentation;
 }
 
 @synthesize toolbar = m_Toolbar;
@@ -34,8 +40,16 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
 
 - (instancetype)initWithPanelController:(PanelController *)_panel
 {
+    return [self initWithPanelController:_panel actionsDispatcher:_panel.view.actionsDispatcher];
+}
+
+- (instancetype)initWithPanelController:(PanelController *)_panel
+                       actionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher
+{
     self = [super init];
     if( self ) {
+        m_ActionsDispatcher = _dispatcher;
+        m_PanePresentation.emplace(_panel.paneId);
         [self buildControlsForPanel:_panel];
         [self buildToolbar];
     }
@@ -56,12 +70,34 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
 
 - (void)buildControlsForPanel:(PanelController *)_panel
 {
-    const id dispatcher = _panel.view.actionsDispatcher;
+    const id dispatcher = m_ActionsDispatcher;
 
     m_BackButton = [self makeButtonWithSymbol:@"chevron.left" target:dispatcher action:@selector(OnGoBack:)];
     m_ForwardButton = [self makeButtonWithSymbol:@"chevron.right" target:dispatcher action:@selector(OnGoForward:)];
     m_UpButton = [self makeButtonWithSymbol:@"chevron.up" target:dispatcher action:@selector(OnGoToUpperDirectory:)];
     m_RefreshButton = [self makeButtonWithSymbol:@"arrow.clockwise" target:dispatcher action:@selector(OnRefreshPanel:)];
+    m_BackButton.enabled = false;
+    m_ForwardButton.enabled = false;
+    m_UpButton.enabled = false;
+    m_RefreshButton.enabled = false;
+    if( m_ActionsDispatcher ) {
+        const auto back_state = [m_ActionsDispatcher
+            navigationBackCommandStateForAvailability:std::nullopt
+                                                source:nc::core::CommandInvocationSource::Toolbar];
+        const auto forward_state = [m_ActionsDispatcher
+            navigationForwardCommandStateForAvailability:std::nullopt
+                                                   source:nc::core::CommandInvocationSource::Toolbar];
+        const auto up_state = [m_ActionsDispatcher
+            navigationUpCommandStateForAvailability:std::nullopt
+                                              source:nc::core::CommandInvocationSource::Toolbar];
+        const auto refresh_state = [m_ActionsDispatcher
+            navigationRefreshCommandStateForAvailability:std::nullopt
+                                                   source:nc::core::CommandInvocationSource::Toolbar];
+        nc::presentation::CommandPresentationAdapter::Apply(back_state, m_BackButton);
+        nc::presentation::CommandPresentationAdapter::Apply(forward_state, m_ForwardButton);
+        nc::presentation::CommandPresentationAdapter::Apply(up_state, m_UpButton);
+        nc::presentation::CommandPresentationAdapter::Apply(refresh_state, m_RefreshButton);
+    }
 
     // target is nil - this is dispatched up the responder chain to NCMainWindowController.
     m_CommanderModeButton = [self makeButtonWithSymbol:@"rectangle.split.2x1"
@@ -72,9 +108,41 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
                                                         panelController:_panel];
 }
 
-- (void)panelPathChanged
+- (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot
 {
-    [m_Breadcrumb panelPathChanged];
+    dispatch_assert_queue(dispatch_get_main_queue());
+    const bool matches = m_PanePresentation->Apply(_snapshot);
+    const auto history_availability = m_PanePresentation->HistoryAvailability();
+    const auto navigation_availability = m_PanePresentation->NavigationAvailability();
+    if( m_ActionsDispatcher ) {
+        const auto back_state = [m_ActionsDispatcher
+            navigationBackCommandStateForAvailability:history_availability
+                                                source:nc::core::CommandInvocationSource::Toolbar];
+        const auto forward_state = [m_ActionsDispatcher
+            navigationForwardCommandStateForAvailability:history_availability
+                                                   source:nc::core::CommandInvocationSource::Toolbar];
+        const auto up_state = [m_ActionsDispatcher
+            navigationUpCommandStateForAvailability:
+                navigation_availability ? std::optional{navigation_availability->up} : std::nullopt
+                                              source:nc::core::CommandInvocationSource::Toolbar];
+        const auto refresh_state = [m_ActionsDispatcher
+            navigationRefreshCommandStateForAvailability:
+                navigation_availability ? std::optional{navigation_availability->refresh} : std::nullopt
+                                                   source:nc::core::CommandInvocationSource::Toolbar];
+        nc::presentation::CommandPresentationAdapter::Apply(back_state, m_BackButton);
+        nc::presentation::CommandPresentationAdapter::Apply(forward_state, m_ForwardButton);
+        nc::presentation::CommandPresentationAdapter::Apply(up_state, m_UpButton);
+        nc::presentation::CommandPresentationAdapter::Apply(refresh_state, m_RefreshButton);
+    }
+    else {
+        m_BackButton.enabled = false;
+        m_ForwardButton.enabled = false;
+        m_UpButton.enabled = false;
+        m_RefreshButton.enabled = false;
+    }
+    if( !matches )
+        return;
+    [m_Breadcrumb applyPaneSnapshot:_snapshot];
 }
 
 - (void)focusAddressField

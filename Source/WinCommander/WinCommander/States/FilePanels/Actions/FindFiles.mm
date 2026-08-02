@@ -80,10 +80,10 @@ void FindFiles::Perform(PanelController *_target, id _sender) const
     __weak PanelController *wp = _target;
     sheet.onPanelize = [wp](const std::vector<vfs::VFSPath> &_paths) {
         if( PanelController *const panel = wp ) {
-            auto task = [=](const std::function<bool()> &_cancelled) {
-                auto l = FetchSearchResultsAsListing(_paths, panel.vfsFetchingFlags, _cancelled);
+            auto task = [=](const CancelableLoadingTaskContext &_context) {
+                auto l = FetchSearchResultsAsListing(_paths, panel.vfsFetchingFlags, _context.is_cancelled);
                 if( l )
-                    dispatch_to_main_queue([=] { [panel loadListing:l]; });
+                    _context.commit_on_main([=] { [panel loadListing:l]; });
             };
             [panel commitCancelableLoadingTask:std::move(task)];
         }

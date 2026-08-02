@@ -1,15 +1,19 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "NCExplorerCommandBarView.h"
+#include "NCExplorerPanePresentationModel.h"
 #include "../FilePanels/PanelController.h"
 #include "../FilePanels/PanelView.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
 #include "../FilePanels/Helpers/Pasteboard.h"
+#include <WinCommander/Core/Pane/PaneSnapshot.h>
+#include <WinCommander/States/CommandPresentationAdapter.h>
 #include <CUI/CommandPopover.h>
 #include <Panel/PanelData.h>
 #include <Panel/PanelDataSortMode.h>
 #include <Utility/ObjCpp.h>
 #include <Utility/StringExtras.h>
 #include <VFS/VFS.h>
+#include <optional>
 
 @interface NCExplorerCommandBarView () <NCCommandPopoverDelegate, NSSharingServicePickerDelegate>
 @end
@@ -26,6 +30,7 @@
     NSButton *m_DeleteButton;
     NSTimer *m_PasteboardMonitor;
     NSInteger m_LastPasteboardChangeCount;
+    std::optional<nc::explorer::PanePresentationModel> m_PanePresentation;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
@@ -33,6 +38,7 @@
     self = [super initWithFrame:frameRect];
     if( self ) {
         m_Panel = _panel;
+        m_PanePresentation.emplace(_panel.paneId);
         m_LastPasteboardChangeCount = NSPasteboard.generalPasteboard.changeCount;
         [self buildLayout];
         [NSNotificationCenter.defaultCenter addObserver:self
@@ -50,6 +56,12 @@
         [self updateCommandAvailability];
     }
     return self;
+}
+
+- (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    m_PanePresentation->Apply(_snapshot);
 }
 
 - (void)dealloc
@@ -196,10 +208,16 @@
 {
     NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
     m_LastPasteboardChangeCount = NSPasteboard.generalPasteboard.changeCount;
-    m_CutButton.enabled = [dispatcher validateActionBySelector:@selector(cut:)];
-    m_CopyButton.enabled = [dispatcher validateActionBySelector:@selector(copy:)];
+    const auto cut_state =
+        [dispatcher fileCutCommandStateFromSource:nc::core::CommandInvocationSource::Toolbar];
+    nc::presentation::CommandPresentationAdapter::Apply(cut_state, m_CutButton);
+    const auto copy_state =
+        [dispatcher fileCopyCommandStateFromSource:nc::core::CommandInvocationSource::Toolbar];
+    nc::presentation::CommandPresentationAdapter::Apply(copy_state, m_CopyButton);
     m_PasteButton.enabled = [dispatcher validateActionBySelector:@selector(paste:)];
-    m_RenameButton.enabled = [dispatcher validateActionBySelector:@selector(OnRenameFileInPlace:)];
+    const auto rename_state =
+        [dispatcher fileRenameCommandStateFromSource:nc::core::CommandInvocationSource::Toolbar];
+    nc::presentation::CommandPresentationAdapter::Apply(rename_state, m_RenameButton);
     m_DeleteButton.enabled = [dispatcher validateActionBySelector:@selector(OnMoveToTrash:)];
 
     bool has_shareable_item = false;
@@ -220,12 +238,16 @@
 
 - (void)performCut:(id)_sender
 {
-    [self performAction:@selector(cut:) sender:_sender];
+    [m_Panel.view.actionsDispatcher executeFileCutCommandFromSource:nc::core::CommandInvocationSource::Toolbar
+                                                             sender:_sender];
+    [self updateCommandAvailability];
 }
 
 - (void)performCopy:(id)_sender
 {
-    [self performAction:@selector(copy:) sender:_sender];
+    [m_Panel.view.actionsDispatcher executeFileCopyCommandFromSource:nc::core::CommandInvocationSource::Toolbar
+                                                              sender:_sender];
+    [self updateCommandAvailability];
 }
 
 - (void)performPaste:(id)_sender
@@ -235,7 +257,9 @@
 
 - (void)performRename:(id)_sender
 {
-    [self performAction:@selector(OnRenameFileInPlace:) sender:_sender];
+    [m_Panel.view.actionsDispatcher executeFileRenameCommandFromSource:nc::core::CommandInvocationSource::Toolbar
+                                                                sender:_sender];
+    [self updateCommandAvailability];
 }
 
 - (void)performDelete:(id)_sender
@@ -250,7 +274,15 @@
         NSBeep();
         return;
     }
-    [self performAction:NSSelectorFromString(static_cast<NSString *>(item.representedObject)) sender:item];
+    const SEL selector = NSSelectorFromString(static_cast<NSString *>(item.representedObject));
+    if( selector == @selector(ToggleViewHiddenFiles:) ) {
+        [m_Panel.view.actionsDispatcher
+            executeViewToggleHiddenFilesCommandFromSource:nc::core::CommandInvocationSource::Toolbar
+                                                  sender:item];
+        [self updateCommandAvailability];
+        return;
+    }
+    [self performAction:selector sender:item];
 }
 
 #pragma mark - New
@@ -315,10 +347,28 @@
         @selector(ToggleSortByAddTime:),
         @selector(ToggleSortByATime:)
     };
+    static constexpr nc::core::PaneSortKey sort_keys[] = {
+        nc::core::PaneSortKey::Name,
+        nc::core::PaneSortKey::Extension,
+        nc::core::PaneSortKey::Size,
+        nc::core::PaneSortKey::ModifiedTime,
+        nc::core::PaneSortKey::CreatedTime,
+        nc::core::PaneSortKey::AddedTime,
+        nc::core::PaneSortKey::AccessedTime,
+    };
 
     for( NSUInteger i = 0; i < sort_titles.count; ++i ) {
         NCCommandPopoverItem *const item = [[NCCommandPopoverItem alloc] init];
         item.title = sort_titles[i];
+        if( const auto direction = m_PanePresentation->ActiveSortDirection(sort_keys[i]) ) {
+            const bool ascending = *direction == nc::core::PaneSortDirection::Ascending;
+            item.image = [NSImage imageWithSystemSymbolName:ascending ? @"arrow.up" : @"arrow.down"
+                                          accessibilityDescription:ascending
+                                                                       ? NSLocalizedString(@"Ascending",
+                                                                                           "Sort direction")
+                                                                       : NSLocalizedString(@"Descending",
+                                                                                           "Sort direction")];
+        }
         item.target = self;
         item.action = @selector(performPopoverAction:);
         item.representedObject = NSStringFromSelector(sort_actions[i]);
@@ -330,14 +380,11 @@
                          sectionHeaderWithTitle:NSLocalizedString(@"Group by",
                                                                   "Explorer command bar - Group section")]];
 
-    const bool grouping_enabled = m_Panel.view.explorerDetailsGroupingEnabled;
-    const auto current_sort = m_Panel.data.SortMode().sort;
-
     NCCommandPopoverItem *const no_grouping = [[NCCommandPopoverItem alloc] init];
     no_grouping.title = NSLocalizedString(@"None", "Explorer command bar - Group popover item");
-    no_grouping.image = grouping_enabled
-                            ? nil
-                            : [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:nil];
+    no_grouping.image = m_PanePresentation->NoGroupingMarkerActive()
+                            ? [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:nil]
+                            : nil;
     no_grouping.target = self;
     no_grouping.action = @selector(disableGrouping:);
     [popover addItem:no_grouping];
@@ -350,16 +397,17 @@
     ];
     static const SEL group_actions[] = {
         @selector(groupByName:), @selector(groupByType:), @selector(groupBySize:), @selector(groupByDateModified:)};
-    using SortMode = nc::panel::data::SortMode;
-    static const SortMode::Mode group_direct_modes[] = {
-        SortMode::SortByName, SortMode::SortByExt, SortMode::SortBySize, SortMode::SortByModTime};
-    static const SortMode::Mode group_reverse_modes[] = {
-        SortMode::SortByNameRev, SortMode::SortByExtRev, SortMode::SortBySizeRev, SortMode::SortByModTimeRev};
+    static constexpr nc::core::PaneGroupingKey group_keys[] = {
+        nc::core::PaneGroupingKey::Name,
+        nc::core::PaneGroupingKey::Extension,
+        nc::core::PaneGroupingKey::Size,
+        nc::core::PaneGroupingKey::ModifiedTime,
+    };
 
     for( NSUInteger i = 0; i < group_titles.count; ++i ) {
         NCCommandPopoverItem *const item = [[NCCommandPopoverItem alloc] init];
         item.title = group_titles[i];
-        if( grouping_enabled && (current_sort == group_direct_modes[i] || current_sort == group_reverse_modes[i]) )
+        if( m_PanePresentation->GroupingMarkerActive(group_keys[i]) )
             item.image = [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:nil];
         item.target = self;
         item.action = group_actions[i];
@@ -448,7 +496,8 @@
     for( NSUInteger i = 0; i < view_titles.count; ++i ) {
         NCCommandPopoverItem *const item = [[NCCommandPopoverItem alloc] init];
         item.title = view_titles[i];
-        NSString *const symbol = m_Panel.layoutIndex == static_cast<int>(i) ? @"checkmark" : view_symbols[i];
+        const bool active_layout = m_PanePresentation->LayoutMarkerActive(static_cast<int32_t>(i));
+        NSString *const symbol = active_layout ? @"checkmark" : view_symbols[i];
         item.image = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil];
         item.target = self;
         item.action = @selector(performPopoverAction:);
@@ -459,11 +508,36 @@
     [popover addItem:NCCommandPopoverItem.separatorItem];
 
     NCCommandPopoverItem *const show_hidden = [[NCCommandPopoverItem alloc] init];
-    show_hidden.title = NSLocalizedString(@"Show Hidden Items", "Explorer command bar - View popover item");
-    show_hidden.target = self;
-    show_hidden.action = @selector(performPopoverAction:);
+    show_hidden.title =
+        NSLocalizedString(@"commands.view.toggleHiddenFiles.title", "Show hidden files command title");
     show_hidden.representedObject = NSStringFromSelector(@selector(ToggleViewHiddenFiles:));
-    [popover addItem:show_hidden];
+    const auto show_hidden_state = [m_Panel.view.actionsDispatcher
+        viewToggleHiddenFilesCommandStateForVisibility:m_PanePresentation->HiddenFilesVisibility()
+                                                source:nc::core::CommandInvocationSource::Toolbar];
+
+    // NCCommandPopoverItem has no enabled, hidden, or check-state properties. Project the shared
+    // command presentation through an AppKit menu-item proxy, then copy the capabilities the
+    // popover model supports. A disabled item has no action and therefore remains fail closed.
+    NSMenuItem *const presentation = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    const bool show_hidden_enabled =
+        nc::presentation::CommandPresentationAdapter::Apply(show_hidden_state, presentation);
+    show_hidden.toolTip = presentation.toolTip;
+    switch( show_hidden_state.check_state ) {
+        case nc::core::CommandCheckState::On:
+            show_hidden.image = [NSImage imageWithSystemSymbolName:@"checkmark" accessibilityDescription:nil];
+            break;
+        case nc::core::CommandCheckState::Mixed:
+            show_hidden.image = [NSImage imageWithSystemSymbolName:@"minus" accessibilityDescription:nil];
+            break;
+        case nc::core::CommandCheckState::Off:
+            break;
+    }
+    if( show_hidden_enabled ) {
+        show_hidden.target = self;
+        show_hidden.action = @selector(performPopoverAction:);
+    }
+    if( !presentation.hidden )
+        [popover addItem:show_hidden];
 
     [self presentPopover:popover relativeToButton:button];
 }

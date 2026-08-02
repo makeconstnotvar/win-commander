@@ -18,7 +18,6 @@
 #include "Actions/BatchRename.h"
 #include "Actions/ToggleLayout.h"
 #include "Actions/ChangeAttributes.h"
-#include "Actions/RenameInPlace.h"
 #include "Actions/Select.h"
 #include "Actions/CopyToPasteboard.h"
 #include "Actions/OpenNetworkConnection.h"
@@ -53,9 +52,8 @@ PanelActionsMap BuildPanelActionsMap(nc::config::Config &_global_config,
     PanelActionsMap m;
     auto add = [&](SEL _sel, actions::PanelAction *_action) { m[_sel].reset(_action); };
 
-    add(@selector(OnOpenNatively:), new OpenFilesWithDefaultHandler{_file_opener});
     add(@selector(onOpenFileWith:), new OpenFileWithSubmenu{_open_with_menu_delegate});
-    add(@selector(OnOpen:), new Enter { *m[@selector(OnOpenNatively:)] });
+    add(@selector(OnOpen:), new Enter{_file_opener});
     add(@selector(onAlwaysOpenFileWith:), new AlwaysOpenFileWithSubmenu{_open_with_menu_delegate});
     add(@selector(onMainMenuPerformFindAction:), new FindFiles{_make_viewer, _make_viewer_controller});
     add(@selector(OnSpotlightSearch:), new SpotlightSearch);
@@ -66,8 +64,6 @@ PanelActionsMap BuildPanelActionsMap(nc::config::Config &_global_config,
     add(@selector(OnQuickNewFile:), new MakeNewFile);
     add(@selector(OnQuickNewFolder:), new MakeNewFolder);
     add(@selector(OnQuickNewFolderWithSelection:), new MakeNewFolderWithSelection);
-    add(@selector(cut:), new CutToPasteboard);
-    add(@selector(copy:), new CopyToPasteboard);
     add(@selector(paste:), new PasteFromPasteboard{_native_host});
     add(@selector(moveItemHere:), new MoveFromPasteboard{_native_host});
     add(@selector(selectAll:), new SelectAll);
@@ -96,12 +92,8 @@ PanelActionsMap BuildPanelActionsMap(nc::config::Config &_global_config,
     add(@selector(onToggleViewLayout8:), new ToggleLayout{7});
     add(@selector(onToggleViewLayout9:), new ToggleLayout{8});
     add(@selector(onToggleViewLayout10:), new ToggleLayout{9});
-    add(@selector(OnRefreshPanel:), new RefreshPanel);
-    add(@selector(OnGoToUpperDirectory:), new GoToEnclosingFolder);
     add(@selector(OnGoIntoDirectory:), new GoIntoFolder{true});
     add(@selector(onFollowSymlink:), new FollowSymlink);
-    add(@selector(OnGoBack:), new GoBack);
-    add(@selector(OnGoForward:), new GoForward);
     add(@selector(OnGoToHome:), new GoToHomeFolder);
     add(@selector(OnGoToDocuments:), new GoToDocumentsFolder);
     add(@selector(OnGoToDesktop:), new GoToDesktopFolder);
@@ -143,7 +135,6 @@ PanelActionsMap BuildPanelActionsMap(nc::config::Config &_global_config,
     add(@selector(OnCreateDirectoryCommand:), new MakeNewNamedFolder);
     add(@selector(OnCreateDirectoryInOppositePanel:), new MakeNewNamedFolderInOppositePanel);
     add(@selector(OnBatchRename:), new BatchRename);
-    add(@selector(OnRenameFileInPlace:), new RenameInPlace);
     add(@selector(OnOpenExtendedAttributes:), new OpenXAttr);
     add(@selector(OnMoveToTrash:), new MoveToTrash{_native_fs_mgr});
     add(@selector(OnDeleteCommand:), new Delete{_native_fs_mgr});

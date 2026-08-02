@@ -90,6 +90,11 @@ void CopyingJob::Perform()
 {
     SetStage(Stage::Preparing);
 
+    if( !RuntimePreflightIsValid() ) {
+        Stop();
+        return;
+    }
+
     bool need_to_build = false;
     const auto composition_type = AnalyzeInitialDestination(m_DestinationPath, need_to_build);
     if( need_to_build ) {
@@ -117,12 +122,34 @@ void CopyingJob::Perform()
     m_SourceItems = std::move(source_db);
     m_IsSingleScannedItemProcessing = m_SourceItems.ItemsAmount() == 1;
 
+    if( !RuntimePreflightIsValid() ) {
+        Stop();
+        return;
+    }
+
     ProcessItems();
 
     if( BlockIfPaused(); IsStopped() )
         return;
 
     SetStage(Stage::Default);
+}
+
+void CopyingJob::SetRuntimePreflightValidator(std::function<bool()> _validator)
+{
+    m_RuntimePreflightValidator = std::move(_validator);
+}
+
+bool CopyingJob::RuntimePreflightIsValid() const noexcept
+{
+    if( !m_RuntimePreflightValidator )
+        return true;
+    try {
+        return m_RuntimePreflightValidator();
+    }
+    catch( ... ) {
+        return false;
+    }
 }
 
 void CopyingJob::ProcessItems()
@@ -442,6 +469,19 @@ std::string CopyingJob::ComposeDestinationNameForItem(int _src_item_index) const
 CopyingJob::PathCompositionType CopyingJob::AnalyzeInitialDestination(std::string &_result_destination,
                                                                       bool &_need_to_build)
 {
+    if( m_Options.destination_path_interpretation ==
+        CopyingOptions::DestinationPathInterpretation::Directory ) {
+        _result_destination = EnsureTrailingSlash(m_InitialDestinationPath);
+        _need_to_build = !m_DestinationHost->Exists(_result_destination);
+        return PathCompositionType::PathPreffix;
+    }
+    if( m_Options.destination_path_interpretation ==
+        CopyingOptions::DestinationPathInterpretation::ExactItem ) {
+        _result_destination = m_InitialDestinationPath;
+        _need_to_build = !m_DestinationHost->Exists(_result_destination);
+        return PathCompositionType::FixedPath;
+    }
+
     if( const std::expected<VFSStat, Error> st = m_DestinationHost->Stat(m_InitialDestinationPath, 0) ) {
         // destination entry already exist
         m_IsSingleDirectoryCaseRenaming = copying::IsSingleDirectoryCaseRenaming(
@@ -676,10 +716,14 @@ CopyingJob::StepResult CopyingJob::CopyNativeFileToNativeFile(vfs::NativeHost &_
 
     // we initially try to open a source file in non-blocking mode, so we can fail early.
     int source_fd = -1;
+    const int source_open_safety_flags =
+        m_Options.reject_final_component_symlinks ? O_NOFOLLOW : 0;
     while( true ) {
-        source_fd = io.open(_src_path.c_str(), O_RDONLY | O_NONBLOCK | O_SHLOCK);
+        source_fd = io.open(
+            _src_path.c_str(), O_RDONLY | O_NONBLOCK | O_SHLOCK | source_open_safety_flags);
         if( source_fd == -1 )
-            source_fd = io.open(_src_path.c_str(), O_RDONLY | O_NONBLOCK);
+            source_fd = io.open(
+                _src_path.c_str(), O_RDONLY | O_NONBLOCK | source_open_safety_flags);
         if( source_fd >= 0 )
             break;
         switch( m_OnCantAccessSourceItem(Error{Error::POSIX, errno}, _src_path, _native_host) ) {
@@ -708,8 +752,10 @@ CopyingJob::StepResult CopyingJob::CopyNativeFileToNativeFile(vfs::NativeHost &_
     struct stat src_stat_buffer;
     while( true ) {
         const auto rc = fstat(source_fd, &src_stat_buffer);
-        if( rc == 0 )
+        if( rc == 0 && S_ISREG(src_stat_buffer.st_mode) )
             break;
+        if( rc == 0 )
+            return StepResult::Stop;
         switch( m_OnCantAccessSourceItem(Error{Error::POSIX, errno}, _src_path, _native_host) ) {
             case CantAccessSourceItemResolution::Skip:
                 return StepResult::Skipped;
@@ -806,7 +852,10 @@ CopyingJob::StepResult CopyingJob::CopyNativeFileToNativeFile(vfs::NativeHost &_
     while( true ) {
         const mode_t open_mode = m_Options.copy_unix_flags ? src_stat_buffer.st_mode : S_IRUSR | S_IWUSR | S_IRGRP;
         const mode_t old_umask = umask(0);
-        destination_fd = io.open(_dst_path.c_str(), dst_open_flags, open_mode);
+        const int destination_open_safety_flags =
+            m_Options.reject_final_component_symlinks ? O_NOFOLLOW : 0;
+        destination_fd = io.open(
+            _dst_path.c_str(), dst_open_flags | destination_open_safety_flags, open_mode);
         const auto open_err = Error{Error::POSIX, errno};
         umask(old_umask);
 
@@ -1188,7 +1237,10 @@ CopyingJob::StepResult CopyingJob::CopyVFSFileToNativeFile(VFSHost &_src_vfs,
         // we want to copy src permissions if options say so or just to put default ones
         const mode_t open_mode = m_Options.copy_unix_flags ? src_stat_buffer.mode : S_IRUSR | S_IWUSR | S_IRGRP;
         const mode_t old_umask = umask(0);
-        destination_fd = io.open(_dst_path.c_str(), dst_open_flags, open_mode);
+        const int destination_open_safety_flags =
+            m_Options.reject_final_component_symlinks ? O_NOFOLLOW : 0;
+        destination_fd = io.open(
+            _dst_path.c_str(), dst_open_flags | destination_open_safety_flags, open_mode);
         const auto open_err = Error{Error::POSIX, errno};
         umask(old_umask);
 

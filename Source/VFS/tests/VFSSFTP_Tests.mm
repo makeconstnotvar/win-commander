@@ -2,6 +2,7 @@
 #include "Tests.h"
 #include "TestEnv.h"
 #include <VFS/NetSFTP.h>
+#include <VFS/ProviderCapabilities.h>
 #include <Base/dispatch_cpp.h>
 #include <Base/DispatchGroup.h>
 #include <Base/WriteAtomically.h>
@@ -321,6 +322,28 @@ TEST_CASE(PREFIX "auth via plain password")
     auto host = hostForAlpine_User1_Pwd();
     TestAlpineLayoutWithHost(*host);
     CHECK(host->HomeDir() == "/home/user1");
+}
+
+TEST_CASE(PREFIX "provider capabilities")
+{
+    const auto host = hostForAlpine_User1_Pwd();
+    const auto capabilities = ProviderCapabilitiesResolver::Resolve(*host, "/");
+
+    CHECK(capabilities.can_read);
+    CHECK(capabilities.can_write);
+    CHECK(capabilities.can_create_file);
+    CHECK(capabilities.can_create_folder);
+    CHECK(capabilities.can_rename);
+    CHECK(capabilities.can_delete_permanently);
+    CHECK_FALSE(capabilities.can_trash);
+    CHECK_FALSE(capabilities.can_watch_changes);
+    CHECK_FALSE(capabilities.can_generate_thumbnails);
+    CHECK(capabilities.can_resolve_symlink);
+    CHECK(capabilities.can_set_permissions);
+    CHECK(capabilities.can_set_owner_group);
+    CHECK(capabilities.can_set_times);
+    CHECK_FALSE(capabilities.is_native);
+    CHECK_FALSE(capabilities.is_immutable);
 }
 
 TEST_CASE(PREFIX "auth via RSA key")

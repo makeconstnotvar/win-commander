@@ -45,15 +45,15 @@ namespace nc::panel {
 
 void ListingPromiseLoader::Load(const ListingPromise &_promise, PanelController *_panel)
 {
-    auto task = [=](const std::function<bool()> &_cancelled) {
+    auto task = [=](const CancelableLoadingTaskContext &_context) {
         const auto vfs_adapter = [&](const core::VFSInstancePromise &_promise) {
-            return _panel.vfsInstanceManager.RetrieveVFS(_promise, _cancelled);
+            return _panel.vfsInstanceManager.RetrieveVFS(_promise, _context.is_cancelled);
         };
 
         try {
-            const auto listing = _promise.Restore(_panel.vfsFetchingFlags, vfs_adapter, _cancelled);
+            const auto listing = _promise.Restore(_panel.vfsFetchingFlags, vfs_adapter, _context.is_cancelled);
             if( listing )
-                dispatch_to_main_queue([=] { [_panel loadListing:listing]; });
+                _context.commit_on_main([=] { [_panel loadListing:listing]; });
         } catch( ... ) {
             //...
         }
