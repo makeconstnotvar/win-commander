@@ -150,4 +150,50 @@ CopyOperationRecoveryCoordinator::CurrentRunReceiptCustodian() const noexcept
     return m_Custodian;
 }
 
+CopyOperationRecoveryHistoryRefreshResult
+ServiceCopyRecoveryAndRefreshHistory(const std::shared_ptr<CopyOperationRecoveryCoordinator> &_recovery_coordinator,
+                                     const std::shared_ptr<nc::ops::OperationCenterCoordinator> &_operation_center,
+                                     const std::string_view _plan_id) noexcept
+{
+    auto result = CopyOperationRecoveryHistoryRefreshResult{};
+    if( !_recovery_coordinator ) {
+        result.recovery.error = CopyOperationRecoveryServiceError::RuntimeUnavailable;
+        return result;
+    }
+
+    result.recovery = _recovery_coordinator->Service(_plan_id);
+    if( result.recovery.error != CopyOperationRecoveryServiceError::None || !result.recovery.reconciliation )
+        return result;
+
+    const auto reconciliation_status = result.recovery.reconciliation->status;
+    const bool confirmed =
+        reconciliation_status == nc::ops::CopyOperationRunReceiptReconciliationStatus::TerminalConfirmed ||
+        reconciliation_status == nc::ops::CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed;
+    if( !confirmed ||
+        (result.recovery.reconciliation->pool_release_required &&
+         (!result.recovery.release || *result.recovery.release != nc::ops::CopyOperationRunReceiptPoolReleaseStatus::Released)) )
+        return result;
+
+    if( !_operation_center ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::CoordinatorUnavailable;
+        return result;
+    }
+
+    const auto journal = _recovery_coordinator->CurrentJournal();
+    if( !journal ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::JournalUnavailable;
+        return result;
+    }
+
+    const auto refreshed = _operation_center->RefreshColdHistory(*journal);
+    if( !refreshed ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::Deferred;
+        result.history_refresh_error = refreshed.error();
+        return result;
+    }
+
+    result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::Refreshed;
+    return result;
+}
+
 } // namespace nc::core

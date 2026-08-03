@@ -1084,6 +1084,15 @@ struct StateStorage {
     [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:self];
 }
 
+- (void)applyExplorerPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot
+{
+    dispatch_assert_main_queue();
+    PanelController *const controller = self.controller;
+    if( !m_FooterView.explorerAppearance || !controller || _snapshot.pane_id != controller.paneId )
+        return;
+    [m_FooterView applyExplorerPaneSnapshot:_snapshot];
+}
+
 - (void)windowStatusDidChange
 {
     [self refreshActiveStatus];

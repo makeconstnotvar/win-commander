@@ -87,7 +87,7 @@ void Operation::Resume()
         j->Resume();
 }
 
-void Operation::Stop()
+bool Operation::Stop()
 {
     if( auto j = GetJob() ) {
         const auto is_running = j->IsRunning();
@@ -105,7 +105,9 @@ void Operation::Stop()
                 std::cerr << "Error: cold operation finish callback has thrown an unknown exception.\n";
             }
         }
+        return stopped;
     }
+    return false;
 }
 
 void Operation::Wait() const

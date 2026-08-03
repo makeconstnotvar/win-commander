@@ -8,6 +8,7 @@
 #include "../PanelAux.h"
 #include "Helpers.h"
 #include <Operations/CopyOperationOrchestrator.h>
+#include <Operations/OperationCenterCoordinator.h>
 #include <Operations/Copying.h>
 #include <Operations/CopyingDialog.h>
 #include <Operations/OperationPlan.h>
@@ -17,6 +18,7 @@
 #include <WinCommander/Core/Alert.h>
 #include <WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h>
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
+#include <WinCommander/Core/Operations/ReviewedCopyAsApplicationBoundary.h>
 #include <WinCommander/Core/VFSOperationPlanningAccessChecker.h>
 #include <WinCommander/States/MainWindowController.h>
 #include <Base/dispatch_cpp.h>
@@ -244,6 +246,9 @@ NSString *SubmissionErrorDescription(const nc::ops::CopyOperationOrchestratorErr
         case JournalAdmissionFailed:
             description = @"The copy could not be admitted to the durable operation journal.";
             break;
+        case InvalidJournalAdmissionReceipt:
+            description = @"The reviewed copy no longer matches its durable admission.";
+            break;
         case ExecutionFactoryFailed:
             description = @"The reviewed copy operation could not be constructed.";
             break;
@@ -264,6 +269,9 @@ NSString *SubmissionErrorDescription(const nc::ops::CopyOperationOrchestratorErr
             break;
         case RunReceiptArmFailed:
             description = @"The durable run receipt could not be armed.";
+            break;
+        case PreEnqueuePreparationFailed:
+            description = @"The reviewed copy could not be prepared for safe queue admission.";
             break;
         case RunningFinalizationFailed:
             description = @"The copy stopped, but its terminal state still requires recovery.";
@@ -313,6 +321,22 @@ NSString *SubmissionErrorDescription(const nc::ops::CopyOperationOrchestratorErr
         }
     }
     return details;
+}
+
+NSString *CoordinatorSubmissionErrorDescription(const nc::ops::OperationCenterSubmissionError &_error)
+{
+    using enum nc::ops::OperationCenterSubmissionErrorCode;
+    switch( _error.code ) {
+        case HookPreparationFailed:
+            return @"The operation lifecycle projection could not be prepared safely.";
+        case AdmissionStagingFailed:
+            return @"The operation queue could not prepare a durable admission.";
+        case AdmissionCommitFailed:
+            return @"The operation queue could not commit the durable admission.";
+        case OrchestratorRejected:
+            return @"The reviewed copy could not enter the operation queue.";
+    }
+    return @"The reviewed copy could not enter the operation queue.";
 }
 
 NSString *RecoveryServiceDescription(const nc::core::CopyOperationRecoveryServiceResult &_result)
@@ -391,10 +415,27 @@ void ShowCopyAlert(NCMainWindowController *_window_controller,
                    NSString *_message,
                    NSAlertStyle _style);
 
+NSString *RecoveryHistoryRefreshDescription(const nc::core::CopyOperationRecoveryHistoryRefreshResult &_result)
+{
+    switch( _result.history_refresh ) {
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::NotRequired:
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::Refreshed:
+            return @"";
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::CoordinatorUnavailable:
+            return @"\n\nThe durable recovery completed, but operation history is unavailable in this application session.";
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::JournalUnavailable:
+            return @"\n\nThe durable recovery completed, but its operation history could not be reopened for display.";
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::Deferred:
+            return @"\n\nThe durable recovery completed, but operation history could not be refreshed in this application session.";
+    }
+    return @"";
+}
+
 void PresentSubmissionFailure(NCMainWindowController *_window_controller,
                               const nc::ops::CopyOperationOrchestratorError &_error,
                               std::string _plan_id,
                               std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> _recovery_coordinator,
+                              std::shared_ptr<nc::ops::OperationCenterCoordinator> _operation_center,
                               std::shared_ptr<std::atomic_bool> _durable_outcome_delivered)
 {
     dispatch_assert_main_queue();
@@ -417,26 +458,53 @@ void PresentSubmissionFailure(NCMainWindowController *_window_controller,
                     if( response != NSAlertFirstButtonReturn )
                         return;
                     dispatch_to_default([recovery_coordinator = std::move(_recovery_coordinator),
+                                         operation_center = std::move(_operation_center),
                                          plan_id = std::move(_plan_id),
                                          durable_outcome_delivered = std::move(_durable_outcome_delivered),
                                          weak_window_controller] {
-                        const auto result = recovery_coordinator->Service(plan_id);
+                        const auto result = nc::core::ServiceCopyRecoveryAndRefreshHistory(
+                            recovery_coordinator, operation_center, plan_id);
                         if( durable_outcome_delivered->load(std::memory_order_acquire) )
                             return;
                         dispatch_to_main_queue([result, weak_window_controller] {
                             if( NCMainWindowController *const controller = weak_window_controller ) {
+                                NSString *const history_description = RecoveryHistoryRefreshDescription(result);
                                 ShowCopyAlert(controller,
-                                              result.error == nc::core::CopyOperationRecoveryServiceError::None
+                                              result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
                                                   ? @"Copy recovery result"
                                                   : @"Copy recovery incomplete",
-                                              RecoveryServiceDescription(result),
-                                              result.error == nc::core::CopyOperationRecoveryServiceError::None
+                                              [RecoveryServiceDescription(result.recovery)
+                                                  stringByAppendingString:history_description],
+                                              result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
                                                   ? NSAlertStyleInformational
                                                   : NSAlertStyleCritical);
                             }
                         });
                     });
                   }];
+}
+
+void PresentCoordinatorSubmissionFailure(
+    NCMainWindowController *_window_controller,
+    const nc::ops::OperationCenterSubmissionError &_error,
+    std::string _plan_id,
+    std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> _recovery_coordinator,
+    std::shared_ptr<nc::ops::OperationCenterCoordinator> _operation_center,
+    std::shared_ptr<std::atomic_bool> _durable_outcome_delivered)
+{
+    dispatch_assert_main_queue();
+    if( _error.orchestrator_error ) {
+        PresentSubmissionFailure(
+            _window_controller,
+            *_error.orchestrator_error,
+            std::move(_plan_id),
+            std::move(_recovery_coordinator),
+            std::move(_operation_center),
+            std::move(_durable_outcome_delivered));
+        return;
+    }
+    ShowCopyAlert(
+        _window_controller, @"Copy submission failed", CoordinatorSubmissionErrorDescription(_error), NSAlertStyleCritical);
 }
 
 void ShowCopyAlert(NCMainWindowController *_window_controller,
@@ -693,41 +761,41 @@ NSString *ReviewedCopyWarningDescription(const nc::ops::OperationPlanningWarning
     return @"The copy requires additional runtime validation.";
 }
 
-NSString *ReviewedCopyDetails(const nc::ops::AcceptedOperationPlan &_accepted)
+NSString *ReviewedCopyDetails(const reviewed_copy_as::ReviewPresentation &_presentation)
 {
-    const auto &report = _accepted.Report();
-    const auto &copy_item = report.items.front();
-    NSString *const source = [NSString stringWithUTF8StdString:copy_item.source.absolute_path];
-    NSString *const destination = [NSString stringWithUTF8StdString:copy_item.destination.absolute_path];
+    NSString *const source = [NSString stringWithUTF8StdString:_presentation.source_path];
+    NSString *const destination = [NSString stringWithUTF8StdString:_presentation.destination_path];
     NSMutableString *const details = [NSMutableString
         stringWithFormat:
             @"Source: %@\nDestination: %@\n\nScope: one item, create only\nConflict policy: ask for this item",
             source,
             destination];
 
-    if( report.estimated_files )
-        [details appendFormat:@"\nEstimated files: %llu", static_cast<unsigned long long>(*report.estimated_files)];
+    if( _presentation.estimated_files )
+        [details
+            appendFormat:@"\nEstimated files: %llu", static_cast<unsigned long long>(*_presentation.estimated_files)];
     else
         [details appendString:@"\nEstimated files: unknown"];
-    if( report.estimated_bytes )
-        [details appendFormat:@"\nEstimated bytes: %llu", static_cast<unsigned long long>(*report.estimated_bytes)];
+    if( _presentation.estimated_bytes )
+        [details
+            appendFormat:@"\nEstimated bytes: %llu", static_cast<unsigned long long>(*_presentation.estimated_bytes)];
     else
         [details appendString:@"\nEstimated bytes: unknown"];
 
-    if( report.destination_space && report.destination_space->available_bytes ) {
+    if( _presentation.available_bytes ) {
         [details appendFormat:@"\nDestination available bytes: %llu",
-                              static_cast<unsigned long long>(*report.destination_space->available_bytes)];
+                              static_cast<unsigned long long>(*_presentation.available_bytes)];
     }
     else {
         [details appendString:@"\nDestination available bytes: unknown"];
     }
-    [details
-        appendFormat:@"\nAccess checks granted: %llu", static_cast<unsigned long long>(report.access_evidence.size())];
+    [details appendFormat:@"\nAccess checks granted: %llu",
+                          static_cast<unsigned long long>(_presentation.access_evidence_count)];
 
-    if( !report.warnings.empty() ) {
+    if( !_presentation.warnings.empty() ) {
         [details appendString:@"\n\nValidation notes:"];
-        for( const auto &warning : report.warnings )
-            [details appendFormat:@"\n• %@", ReviewedCopyWarningDescription(warning.code)];
+        for( const auto warning : _presentation.warnings )
+            [details appendFormat:@"\n• %@", ReviewedCopyWarningDescription(warning)];
     }
     return details;
 }
@@ -744,8 +812,9 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
     NCAppDelegate *const app = NCAppDelegate.me;
     const auto journal = app.operationJournal;
     const auto custodian = app.copyOperationRunReceiptCustodian;
+    const auto operation_center = app.operationCenterCoordinator;
     const auto recovery_coordinator = app.copyOperationRecoveryCoordinator;
-    if( !journal || !custodian || !recovery_coordinator ) {
+    if( !journal || !custodian || !operation_center || !recovery_coordinator ) {
         ShowCopyAlert(_target.mainWindowController,
                       @"Copy unavailable",
                       @"The durable operation journal could not be opened. The copy was not started.",
@@ -763,6 +832,7 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                          destination = std::move(_destination),
                          journal,
                          custodian,
+                         operation_center,
                          recovery_coordinator,
                          pool,
                          access_provider,
@@ -777,6 +847,7 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                                 destination = std::move(destination),
                                 journal,
                                 custodian,
+                                operation_center,
                                 recovery_coordinator,
                                 pool,
                                 weak_panel,
@@ -791,37 +862,42 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
             MainWindowFilePanelState *const state = weak_state;
             if( !panel || !window_controller || !state )
                 return;
-            if( !ReviewedCopyIntentIsCurrent(state, panel, pane_id, data_generation, item) ) {
-                ShowCopyAlert(window_controller,
-                              @"Copy request expired",
-                              @"The active pane or focused item changed while the copy request was being validated.");
-                return;
-            }
             if( !preflight ) {
                 ShowCopyAlert(window_controller, @"Copy validation failed", preflight.error());
                 return;
             }
 
-            const auto *const accepted = std::get_if<nc::ops::AcceptedOperationPlan>(&preflight->Result());
-            if( !accepted ) {
-                const auto &blocked = std::get<nc::ops::BlockedOperationPlan>(preflight->Result());
-                NSString *const message = blocked.Blockers().empty()
-                                              ? @"The reviewed copy is blocked."
-                                              : PlanningBlockerDescription(blocked.Blockers().front().code);
-                ShowCopyAlert(window_controller, @"Copy blocked", message);
-                return;
+            auto prepared = reviewed_copy_as::PrepareReviewedCopyApplicationBoundary(
+                std::move(*preflight), true, ReviewedCopyIntentIsCurrent(state, panel, pane_id, data_generation, item));
+            if( !prepared ) {
+                switch( prepared.error().code ) {
+                    case reviewed_copy_as::PreparationErrorCode::StaleIntent:
+                        ShowCopyAlert(
+                            window_controller,
+                            @"Copy request expired",
+                            @"The active pane or focused item changed while the copy request was being validated.");
+                        return;
+                    case reviewed_copy_as::PreparationErrorCode::BlockedPreflight:
+                        ShowCopyAlert(window_controller,
+                                      @"Copy blocked",
+                                      prepared.error().blocker ? PlanningBlockerDescription(*prepared.error().blocker)
+                                                               : @"The reviewed copy is blocked.");
+                        return;
+                    case reviewed_copy_as::PreparationErrorCode::UnsupportedScope:
+                        ShowCopyAlert(window_controller,
+                                      @"Copy blocked",
+                                      @"The validated copy no longer satisfies the create-only single-item scope.");
+                        return;
+                    case reviewed_copy_as::PreparationErrorCode::UnpersistedRuntime:
+                        ShowCopyAlert(window_controller,
+                                      @"Copy unavailable",
+                                      @"The durable operation journal could not be opened. The copy was not started.",
+                                      NSAlertStyleCritical);
+                        return;
+                }
             }
 
-            const auto &report = accepted->Report();
-            if( report.items.size() != 1 || !report.conflicts.empty() || !report.destructive_effects.empty() ||
-                report.requires_confirmation ) {
-                ShowCopyAlert(window_controller,
-                              @"Copy blocked",
-                              @"The validated copy no longer satisfies the create-only single-item scope.");
-                return;
-            }
-
-            NSString *const details = ReviewedCopyDetails(*accepted);
+            NSString *const details = ReviewedCopyDetails(prepared->Presentation());
 
             Alert *const review = [[Alert alloc] init];
             review.alertStyle = NSAlertStyleInformational;
@@ -830,37 +906,17 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
             [review addButtonWithTitle:NSLocalizedString(@"Copy", "Approve a reviewed single-item copy")];
             [review addButtonWithTitle:NSLocalizedString(@"Cancel", "Cancel a reviewed single-item copy")];
 
-            auto bound_preflight = std::make_shared<nc::ops::VFSBoundOperationPreflight>(std::move(*preflight));
+            auto prepared_review = std::make_shared<reviewed_copy_as::PreparedReview>(std::move(*prepared));
             [review
                 beginSheetModalForWindow:window_controller.window
                        completionHandler:^(NSModalResponse response) {
-                         if( response != NSAlertFirstButtonReturn )
-                             return;
-
                          MainWindowFilePanelState *const current_state = weak_state;
-                         if( !current_state ||
-                             !ReviewedCopyIntentIsCurrent(current_state, panel, pane_id, data_generation, item) ) {
+                         if( !current_state ) {
+                             if( response != NSAlertFirstButtonReturn )
+                                 return;
                              ShowCopyAlert(window_controller,
                                            @"Copy request expired",
                                            @"The active pane or focused item changed before approval.");
-                             return;
-                         }
-
-                         auto reviewed = nc::ops::ReviewedVFSOperationPreflight::Review(
-                             std::move(*bound_preflight), nc::ops::VFSOperationPreflightReviewDecision::Approved);
-                         if( !reviewed ) {
-                             ShowCopyAlert(window_controller,
-                                           @"Copy approval failed",
-                                           @"The bound copy request could not be approved safely.");
-                             return;
-                         }
-                         const auto plan_id = std::string{reviewed->AcceptedPlan().Plan().Id().Value()};
-
-                         const auto submission_ticket = current_state.operationSubmissionGate.Acquire();
-                         if( !submission_ticket ) {
-                             ShowCopyAlert(window_controller,
-                                           @"Copy submission cancelled",
-                                           @"The window is closing. The copy was not started.");
                              return;
                          }
 
@@ -868,60 +924,108 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                          if( deselect )
                              deselector = std::make_shared<const DeselectorViaOpNotification>(panel);
 
-                         nc::ops::CopyOperationSubmissionHooks hooks;
-                         const auto durable_outcome_delivered = std::make_shared<std::atomic_bool>(false);
+                         nc::ops::ItemStateReportCallback item_status_observer;
                          if( deselector ) {
-                             hooks.item_status_observer = [deselector](nc::ops::ItemStateReport _report) {
+                             item_status_observer = [deselector](nc::ops::ItemStateReport _report) {
                                  deselector->Handle(_report);
                              };
                          }
-                         hooks.durable_terminal_observer =
-                             [weak_panel, weak_window_controller, destination, durable_outcome_delivered](
-                                 const nc::ops::CopyOperationDurableTerminalOutcome &_outcome) {
-                                 auto outcome = _outcome;
-                                 durable_outcome_delivered->store(true, std::memory_order_release);
-                                 dispatch_to_main_queue(
-                                     [weak_panel, weak_window_controller, destination, outcome = std::move(outcome)] {
-                                         PresentDurableCopyOutcome(
-                                             outcome, weak_panel, weak_window_controller, destination);
-                                     });
-                             };
 
-                         dispatch_to_default([reviewed = std::move(*reviewed),
-                                              journal,
-                                              custodian,
-                                              recovery_coordinator,
-                                              pool,
-                                              plan_id,
-                                              hooks = std::move(hooks),
-                                              durable_outcome_delivered,
-                                              submission_ticket,
-                                              weak_window_controller]() mutable {
-                             nc::ops::CopyOperationOrchestrator orchestrator{journal, pool, custodian};
-                             auto submitted = orchestrator.Submit(
-                                 std::move(reviewed),
-                                 [submission_ticket] { return submission_ticket->IsCancelled(); },
-                                 std::move(hooks));
-                             if( !submitted ) {
-                                 const auto error = submitted.error();
-                                 if( error.code == nc::ops::CopyOperationOrchestratorErrorCode::Cancelled ||
-                                     durable_outcome_delivered->load(std::memory_order_acquire) )
-                                     return;
-                                 dispatch_to_main_queue([weak_window_controller,
-                                                         error,
-                                                         plan_id,
-                                                         recovery_coordinator,
-                                                         durable_outcome_delivered] {
-                                     if( NCMainWindowController *const controller = weak_window_controller ) {
-                                         PresentSubmissionFailure(controller,
-                                                                  error,
-                                                                  plan_id,
-                                                                  recovery_coordinator,
-                                                                  durable_outcome_delivered);
-                                     }
-                                 });
-                             }
-                         });
+                         const auto approval = prepared_review->Approve(
+                             response == NSAlertFirstButtonReturn,
+                             [weak_state, panel, pane_id, data_generation, item] {
+                                 MainWindowFilePanelState *const current_state = weak_state;
+                                 return current_state && ReviewedCopyIntentIsCurrent(
+                                                             current_state, panel, pane_id, data_generation, item);
+                             },
+                             current_state.operationSubmissionGate,
+                             {
+                                 .dispatch_to_ui =
+                                     [](std::function<void()> _task) { dispatch_to_main_queue(std::move(_task)); },
+                                 .present_durable_outcome =
+                                     [weak_panel, weak_window_controller, destination](
+                                         nc::ops::CopyOperationDurableTerminalOutcome _outcome) {
+                                         PresentDurableCopyOutcome(
+                                             _outcome, weak_panel, weak_window_controller, destination);
+                                     },
+                                 .item_status_observer = std::move(item_status_observer),
+                                 .submit =
+                                     [journal, custodian, operation_center, recovery_coordinator, pool, weak_window_controller](
+                                         nc::ops::ReviewedVFSOperationPreflight _reviewed,
+                                         std::shared_ptr<nc::core::OperationSubmissionGate::Ticket> _submission_ticket,
+                                         nc::ops::CopyOperationSubmissionHooks _hooks,
+                                         std::shared_ptr<std::atomic_bool> _durable_outcome_delivered) mutable {
+                                         const auto plan_id = std::string{_reviewed.AcceptedPlan().Plan().Id().Value()};
+                                         dispatch_to_default([reviewed = std::move(_reviewed),
+                                                              journal,
+                                                              custodian,
+                                                              operation_center,
+                                                              recovery_coordinator,
+                                                              pool,
+                                                              plan_id,
+                                                              hooks = std::move(_hooks),
+                                                              durable_outcome_delivered =
+                                                                  std::move(_durable_outcome_delivered),
+                                                              submission_ticket = std::move(_submission_ticket),
+                                                              weak_window_controller]() mutable {
+                                             nc::ops::CopyOperationOrchestrator orchestrator{journal, pool, custodian};
+                                             auto submitted = operation_center->SubmitReviewedCopy(
+                                                 *journal,
+                                                 orchestrator,
+                                                 std::move(reviewed),
+                                                 [submission_ticket] { return submission_ticket->IsCancelled(); },
+                                                 std::move(hooks));
+                                             if( !submitted ) {
+                                                 const auto error = submitted.error();
+                                                 if( (error.orchestrator_error &&
+                                                      error.orchestrator_error->code ==
+                                                          nc::ops::CopyOperationOrchestratorErrorCode::Cancelled) ||
+                                                     durable_outcome_delivered->load(std::memory_order_acquire) )
+                                                     return;
+                                                 dispatch_to_main_queue([weak_window_controller,
+                                                                         error,
+                                                                         plan_id,
+                                                                         recovery_coordinator,
+                                                                         operation_center,
+                                                                         durable_outcome_delivered] {
+                                                     if( NCMainWindowController *const controller =
+                                                             weak_window_controller ) {
+                                                         PresentCoordinatorSubmissionFailure(controller,
+                                                                                             error,
+                                                                                             plan_id,
+                                                                                             recovery_coordinator,
+                                                                                             operation_center,
+                                                                                             durable_outcome_delivered);
+                                                     }
+                                                 });
+                                             }
+                                         });
+                                     },
+                             });
+
+                         switch( approval ) {
+                             case reviewed_copy_as::ApprovalResult::Submitted:
+                             case reviewed_copy_as::ApprovalResult::Declined:
+                                 return;
+                             case reviewed_copy_as::ApprovalResult::StaleIntent:
+                                 ShowCopyAlert(window_controller,
+                                               @"Copy request expired",
+                                               @"The active pane or focused item changed before approval.");
+                                 return;
+                             case reviewed_copy_as::ApprovalResult::Cancelled:
+                                 ShowCopyAlert(window_controller,
+                                               @"Copy submission cancelled",
+                                               @"The window is closing. The copy was not started.");
+                                 return;
+                             case reviewed_copy_as::ApprovalResult::ReviewFailed:
+                             case reviewed_copy_as::ApprovalResult::AlreadyConsumed:
+                             case reviewed_copy_as::ApprovalResult::MissingSubmissionPort:
+                             case reviewed_copy_as::ApprovalResult::SubmissionPortFailed:
+                                 ShowCopyAlert(window_controller,
+                                               @"Copy approval failed",
+                                               @"The bound copy request could not be approved safely.");
+                                 return;
+                         }
                        }];
         });
     });

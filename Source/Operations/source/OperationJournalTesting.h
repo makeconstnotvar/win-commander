@@ -35,10 +35,14 @@ public:
          Clock _clock);
 
     [[nodiscard]] static OperationJournalAdmissionReceipt
-    ForgeAdmissionReceipt(const OperationJournal &_journal, OperationPlan _plan);
+    ForgeAdmissionReceipt(const OperationJournal &_journal, OperationId _operation_id, OperationPlan _plan);
 
     [[nodiscard]] static OperationJournalRunReceipt
-    ForgeRunReceipt(const OperationJournal &_journal, OperationPlan _plan);
+    ForgeRunReceipt(const OperationJournal &_journal, OperationId _operation_id, OperationPlan _plan);
+
+    /** Test-only fixture path for decoding/migration cases that require a chosen persisted ID. */
+    [[nodiscard]] static std::expected<OperationJournalAdmissionReceipt, OperationJournalError>
+    AdmitWithOperationId(OperationJournal &_journal, OperationId _operation_id, const OperationPlan &_plan);
 
     [[nodiscard]] static std::expected<void, OperationJournalError>
     Transition(OperationJournal &_journal, std::string_view _plan_id, OperationJournalState _state);

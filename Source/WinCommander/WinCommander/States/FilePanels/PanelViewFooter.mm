@@ -1,5 +1,6 @@
 // Copyright (C) 2016-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "PanelViewFooter.h"
+#include <WinCommander/Core/VisualState/VisualStateMapper.h>
 #include <Utility/ByteCountFormatter.h>
 #include <Utility/ColoredSeparatorLine.h>
 #include <Utility/AdaptiveDateFormatting.h>
@@ -12,6 +13,26 @@
 
 using namespace nc::panel;
 using nc::utility::AdaptiveDateFormatting;
+
+namespace {
+
+NSString *StringFromUTF8(const std::string &_value)
+{
+    return [[NSString alloc] initWithBytes:_value.data() length:_value.size() encoding:NSUTF8StringEncoding];
+}
+
+NSString *LocalizedVisualMessage(const nc::core::VisualMessage &_message)
+{
+    NSString *const fallback = StringFromUTF8(_message.user_message_fallback) ?: @"";
+    NSString *const key = StringFromUTF8(_message.user_message_key);
+    if( key.length == 0 )
+        return fallback;
+
+    NSString *const value = [NSBundle.mainBundle localizedStringForKey:key value:fallback table:nil];
+    return value.length == 0 || ([value isEqualToString:key] && fallback.length != 0) ? fallback : value;
+}
+
+} // namespace
 
 static NSString *FileSizeToString(const VFSListingItem &_dirent,
                                   const data::ItemVolatileData &_vd,
@@ -510,29 +531,15 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 
 - (void)updateStatistics:(const data::Statistics &)_stats
 {
-    if( m_Stats == _stats && !(m_ExplorerAppearance && m_ItemsLabel.stringValue.length == 0) )
+    // Explorer accepts counts only from PaneStore. PanelView still calls this legacy path for
+    // Commander, so accepting it here would let PanelData overwrite a newer Store snapshot.
+    if( m_ExplorerAppearance )
+        return;
+
+    if( m_Stats == _stats )
         return;
 
     m_Stats = _stats;
-
-    if( m_ExplorerAppearance ) {
-        const auto items_fmt =
-            NSLocalizedString(@"%d items", "Explorer status bar, total number of items in the current directory");
-        m_ItemsLabel.stringValue = [NSString stringWithFormat:items_fmt, m_Stats.total_entries_amount];
-
-        if( m_Stats.selected_entries_amount > 0 ) {
-            const auto size = ByteCountFormatter::Instance().ToNSString(m_Stats.bytes_in_selected_entries,
-                                                                        ByteCountFormatter::Adaptive6);
-            const auto selection_fmt = NSLocalizedString(
-                @"%d selected (%@)", "Explorer status bar, number and total size of currently selected items");
-            m_SelectionLabel.stringValue =
-                [NSString stringWithFormat:selection_fmt, m_Stats.selected_entries_amount, size];
-        }
-        else {
-            m_SelectionLabel.stringValue = @"";
-        }
-        return;
-    }
 
     m_ItemsLabel.stringValue = [NSString stringWithFormat:@"(%d)", m_Stats.total_entries_amount];
 
@@ -558,8 +565,61 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
 
 - (void)updateListing:(const VFSListingPtr &)_listing
 {
+    if( m_ExplorerAppearance )
+        return;
     m_VolumeInfoFetcher.SetTarget(_listing);
     [self updateVolumeInfo];
+}
+
+- (void)applyExplorerPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot
+{
+    dispatch_assert_main_queue();
+    if( !m_ExplorerAppearance )
+        return;
+
+    const nc::core::PaneStatusVisualState &status = nc::core::VisualStateMapper::MapPane(_snapshot).status;
+    switch( status.kind ) {
+        case nc::core::PaneStatusVisualKind::Counts: {
+            if( status.item_count < 0 ) {
+                m_ItemsLabel.stringValue = @"";
+                m_SelectionLabel.stringValue = @"";
+                break;
+            }
+
+            const auto items_format =
+                NSLocalizedString(@"%d items", "Explorer status bar, total number of items in the current directory");
+            m_ItemsLabel.stringValue = [NSString stringWithFormat:items_format, status.item_count];
+
+            if( status.selected_count > 0 && status.selected_bytes >= 0 ) {
+                const auto size =
+                    ByteCountFormatter::Instance().ToNSString(status.selected_bytes, ByteCountFormatter::Adaptive6);
+                const auto selection_format = NSLocalizedString(
+                    @"%d selected (%@)", "Explorer status bar, number and total size of currently selected items");
+                m_SelectionLabel.stringValue = [NSString stringWithFormat:selection_format, status.selected_count, size];
+            }
+            else {
+                m_SelectionLabel.stringValue = @"";
+            }
+            break;
+        }
+        case nc::core::PaneStatusVisualKind::Loading:
+        case nc::core::PaneStatusVisualKind::Empty:
+        case nc::core::PaneStatusVisualKind::Error:
+            m_ItemsLabel.stringValue = status.message ? LocalizedVisualMessage(*status.message) : @"";
+            m_SelectionLabel.stringValue = @"";
+            break;
+        case nc::core::PaneStatusVisualKind::Unavailable:
+            m_ItemsLabel.stringValue = @"";
+            m_SelectionLabel.stringValue = @"";
+            break;
+    }
+
+    // SetTarget requires a non-null listing. Retaining the previous volume presentation while a
+    // new location is loading is deliberate; volume-state ownership is outside this count slice.
+    if( _snapshot.state.listing ) {
+        m_VolumeInfoFetcher.SetTarget(_snapshot.state.listing);
+        [self updateVolumeInfo];
+    }
 }
 
 - (void)updateVolumeInfo

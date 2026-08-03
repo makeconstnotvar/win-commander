@@ -8,22 +8,23 @@ This foundation implements the lifecycle ordering required by the canonical spec
 
 ## Implemented contract
 
-For a structurally valid single-item Copy plan, the orchestrator:
+For a structurally valid single-item Copy plan, public compatibility `Submit` durably admits the plan itself; the private coordinator-only `SubmitAdmitted` instead accepts an exact existing receipt, validates its Journal instance and full reviewed plan, and never admits twice. The common continuation then:
 
-1. durably admits the exact serialized plan to `OperationJournal`;
-2. requests a transaction-owning execution product through the private `ReviewedOperationFactory` path;
-3. converts cancellation or construction rejection before Running into a durable terminal journal record;
-4. transitions the admitted entry to Running before enqueue;
-5. enqueues the operation with a terminal finalizer that reads the typed item result;
-6. persists the item result and terminal state before allowing `Pool` to release the operation;
-7. retains operations whose result is unavailable, inconsistent, or cannot be persisted, allowing finalization to be retried;
-8. transfers the same preallocated exact run-receipt slot from pre-enqueue custody to the Pool finalizer only after accepted enqueue;
-9. installs validated lifecycle observations and the item-status callback while the product is cold, before Running and Pool admission;
-10. delivers an owning exact durable terminal outcome at most once, before Pool removal and generic success reporting.
+1. requests a transaction-owning execution product through the private `ReviewedOperationFactory` path;
+2. converts cancellation or construction rejection before Running into a durable terminal journal record;
+3. transitions the admitted entry to Running before enqueue;
+4. enqueues the operation with a terminal finalizer that reads the typed item result;
+5. persists the item result and terminal state before allowing `Pool` to release the operation;
+6. retains operations whose result is unavailable, inconsistent, or cannot be persisted, allowing finalization to be retried;
+7. transfers the same preallocated exact run-receipt slot from pre-enqueue custody to the Pool finalizer only after accepted enqueue;
+8. installs validated lifecycle observations and the item-status callback while the product is cold, before Running and Pool admission;
+9. invokes a coordinator-only pre-enqueue handoff after run-receipt arm; its opaque admission lease survives `BeginEnqueue` and `Pool::TryEnqueue`, and a throwing handoff durably fails without Pool admission;
+10. repeats cancellation after that handoff and before custody opens enqueue;
+11. delivers an owning exact durable terminal outcome at most once, before Pool removal and generic success reporting.
 
 Queue shutdown and enqueue rejection are also represented as durable terminal outcomes. Contract violations and persistence uncertainty fail closed; they do not manufacture publication authority or silently discard unfinished state.
 
-The lifecycle hook surface accepts only Start, Pause, Resume, Stop and TitleChange observations. Generic Completion and the combined Finish mask are rejected because provider failure may still leave the transport operation in `Completed`. The separate item-status callback is installed on the cold operation and retains its existing worker-thread delivery contract. Invalid hook configuration durably fails the admitted entry without reaching Running or `Pool`.
+The public lifecycle hook surface accepts only Start, Pause, Resume, Stop and TitleChange observations. Generic Completion and the combined Finish mask are rejected because provider failure may still leave the transport operation in `Completed`. The separate item-status callback is installed on the cold operation and retains its existing worker-thread delivery contract. Public hooks never receive mutable `Pool` or `Operation` authority; the pre-enqueue handoff is private to the coordinator. Invalid hook configuration durably fails the admitted entry without reaching Running or `Pool`.
 
 ## Run-receipt custody and recovery
 
@@ -52,24 +53,24 @@ Publication evidence is tri-state: `NotPublished`, `Published`, or `Unknown`. `U
 
 The Native provider owns a bounded same-host internal-APFS transaction with private-sealed reviewed authority, exclusive clone publication, exact metadata parity, destination verification and ordered durability. The provider mapper, transaction-backed operation/result state, private reviewed-factory construction, public production orchestrator constructor and bounded `CopyAs` caller are joined and tested.
 
-The application supplies an exact bound-plan review, process-owned recovery coordinator, window submission gate and UI dispatch of item status plus owning durable outcomes for one create-only regular Native item through `CopyAs::Perform`. It distinguishes journal success, failure, cancellation, publication uncertainty, retry, reconcile and Pool release. Physical-volume fixtures, live UI boundary proof and cross-volume bounded staging remain later gates.
+The application supplies an exact bound-plan review, process-owned recovery coordinator, process-owned `OperationCenterCoordinator`, window submission gate and UI dispatch of item status plus owning durable outcomes for one create-only regular Native item through `CopyAs::Perform`. The coordinator owns the exact receipt handoff, preallocates and registers exact live residency before Pool admission, observes `Queued → Running` and durable terminal reduction before forwarding application hooks, and preserves the full typed orchestrator error for UI recovery presentation. The app-boundary seam proves zero enqueue for blocked, stale, unpersisted and cancelled intent, exact review projection and durable dispatch before `ReleaseWithoutCompletion` removes the operation. An opt-in physical-volume fixture is implemented; its physical execution/power-loss evidence and cross-volume bounded staging remain later gates.
 
 ## Verification snapshot
 
 Current recorded Debug evidence for the tree containing this foundation:
 
-- focused Debug journal: 27 / 592; focused Debug orchestrator: 15 / 758, including production construction at 3 / 138;
+- focused Debug journal: 33 / 752; focused Debug coordinator/orchestrator/control integration: 28 / 999, including production construction at 3 / 138, receipt-aware no-re-admission, `Queued` before Pool addition, private pre-enqueue failure, Start/durable-terminal reduction, exact cancellation and reentrant cancellation rejection;
 - focused Debug Pool: 17 / 219;
 - provider result mapper: 4 / 237; execution product: 9 / 188; reviewed factory: 8 / 225; Job lifecycle: 10 / 608;
-- full Debug `OperationsUT`: 170 cases / 4,748 assertions.
+- full Debug `OperationsUT`: 192 / 193 passing cases and 5,209 / 5,213 passing assertions; the sole set-ID metadata failure is the existing host-specific NativeCreateCopy baseline.
 
 Separate evidence is the latest full Debug `VFSUT` run at 95 / 43,566, recorded M0 at 897 / 132,011 across ten aggregate unit-test binaries, and seeded ASAN integration at 163 / 89,392.
 
-Full `OperationsUT` passes 170 / 4,748 in Debug and explicitly instrumented Release ASAN/UBSAN. Both sanitizer runtimes were confirmed and emitted no diagnostics. App policy/gate and recovery coordination pass 6 / 28 and 6 / 67.
+At the previous foundation snapshot, full `OperationsUT` passed 170 / 4,748 in Debug and explicitly instrumented Release ASAN/UBSAN. The current coordinator/control subset passes Release ASAN and UBSAN at 28 / 999 with no diagnostics. App policy/gate and recovery coordination pass 6 / 28 and 6 / 67.
 
 ## Next development slice
 
-Add live zero-enqueue and UI-dispatch proof for the bounded `CopyAs::Perform` consumer, then run physical-volume fixtures. Cross-volume support requires a separate provider-owned staging authority.
+Run the physical-volume protocol for the bounded `CopyAs::Perform` consumer. Cross-volume support requires a separate provider-owned staging authority.
 
 ## Related documents
 

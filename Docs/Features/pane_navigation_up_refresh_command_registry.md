@@ -66,6 +66,7 @@ One regular file is eligible on a provider with `Read`. A multi-item payload is 
 - matching/foreign Explorer model and toolbar presentation/click routing: 2 / 154;
 - total focused slice: 32 / 549;
 - broader production navigation/refresh regression prefixes: 8 / 103 and 16 / 154; the navigation prefix includes the subsequent dot-dot regression, which is outside the 32 / 549 focused slice;
+- production deferred-Busy admission: 1 case / 22 assertions. A `Started` observer queues a gated legacy loading task and submits a nested asynchronous navigation; the first request becomes `Cancelled(InternalAbort)`, the deferred successor resolves once as `Rejected(Busy)` with `EBUSY` admission feedback, and neither provider fetch nor model commit occurs;
 - adjacent `file.open` evidence: core 23 / 201, focused production route 1 / 66, combined 24 / 267; the full Registry fixture passes 3 / 122;
 - incremental application build, `git diff --check`, project-file lint and localization JSON validation belong to the local verification boundary.
 
@@ -76,4 +77,4 @@ Hosted CI has not run for this slice. The first hosted M0 workflow run remains a
 - migrate the remaining folder/archive open-location adapters while preserving Enter as their navigation router;
 - migrate remaining P0 commands and command contexts through the Registry;
 - persist per-pane History and correlate Back/Forward restore with navigation lifecycle identity in M2;
-- complete live-provider, permission/deferred-Busy and manual keyboard/VoiceOver evidence.
+- complete live-provider, permission and manual keyboard/VoiceOver evidence.

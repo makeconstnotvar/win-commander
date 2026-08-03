@@ -3,6 +3,8 @@
 
 #include <WinCommander/Core/Operations/CopyOperationRecoveryCoordinatorTesting.h>
 
+#include <Operations/OperationCenterCoordinator.h>
+
 #include <cerrno>
 #include <chrono>
 #include <filesystem>
@@ -13,8 +15,10 @@ namespace {
 
 using nc::core::CopyOperationRecoveryCoordinator;
 using nc::core::CopyOperationRecoveryCoordinatorTesting;
+using nc::core::CopyOperationRecoveryHistoryRefreshStatus;
 using nc::core::CopyOperationRecoveryServiceError;
 using nc::core::CopyOperationRecoveryServiceStep;
+using nc::core::ServiceCopyRecoveryAndRefreshHistory;
 using nc::ops::CopyOperationRunReceiptCustodyResult;
 using nc::ops::CopyOperationRunReceiptCustodyStatus;
 using nc::ops::CopyOperationRunReceiptPoolReleaseStatus;
@@ -24,6 +28,9 @@ using nc::ops::OperationJournal;
 using nc::ops::OperationJournalError;
 using nc::ops::OperationJournalErrorCode;
 using nc::ops::OperationJournalState;
+using nc::ops::OperationCenterCoordinator;
+using nc::ops::OperationCenterCoordinatorErrorCode;
+using nc::ops::OperationRecordState;
 using nc::ops::OperationPlan;
 using nc::ops::OperationPlanConflictDecision;
 using nc::ops::OperationPlanConflictPolicy;
@@ -309,4 +316,91 @@ TEST_CASE(PREFIX "does not release Pool authority after an unconfirmed reconcili
     CHECK(result.reconciliation->status == CopyOperationRunReceiptReconciliationStatus::Mismatch);
     CHECK_FALSE(result.release);
     CHECK(releases == 0);
+}
+
+TEST_CASE(PREFIX "projects confirmed reopened history into an exact cold Operation Center")
+{
+    TempTestDir temporary;
+    const auto directory = CanonicalDirectory(temporary);
+    auto journal = OpenJournal(directory);
+    auto initial = journal->Admit(Plan("initial-history"));
+    REQUIRE(initial);
+    REQUIRE(journal->FinalizeAdmission(std::move(*initial), OperationJournalState::Failed));
+
+    auto operation_center = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(operation_center);
+    const auto before = (*operation_center)->Model().Snapshot();
+    REQUIRE(before.size() == 1);
+
+    auto recovered = journal->Admit(Plan("recovered-history"));
+    REQUIRE(recovered);
+    REQUIRE(journal->TransitionToRunning(std::move(*recovered)));
+
+    auto services = PassiveServices();
+    services.retry = [](std::string_view) {
+        return CopyOperationRunReceiptCustodyResult{.status = CopyOperationRunReceiptCustodyStatus::ReconcileRequired};
+    };
+    services.reconcile = [](std::string_view, const OperationJournal &) {
+        return CopyOperationRunReceiptReconciliationResult{
+            .status = CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed};
+    };
+    auto recovery = CopyOperationRecoveryCoordinatorTesting::Make(std::move(journal), directory, std::move(services));
+
+    const auto result = ServiceCopyRecoveryAndRefreshHistory(recovery, *operation_center, "recovered-history");
+
+    CHECK(result.recovery.error == CopyOperationRecoveryServiceError::None);
+    REQUIRE(result.recovery.reconciliation);
+    CHECK(result.recovery.reconciliation->status == CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed);
+    CHECK(result.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Refreshed);
+    CHECK_FALSE(result.history_refresh_error);
+    const auto refreshed = (*operation_center)->Model().Snapshot();
+    REQUIRE(refreshed.size() == 2);
+    CHECK(refreshed[0] == before[0]);
+    CHECK(refreshed[1].operation_id.ToString() == "op-2");
+    CHECK(refreshed[1].plan_id.Value() == "recovered-history");
+    CHECK(refreshed[1].state == OperationRecordState::Interrupted);
+    CHECK(refreshed[1].revision == 1);
+    CHECK(refreshed[1].finished_at);
+    CHECK_FALSE(refreshed[1].started_at);
+    CHECK(refreshed[1].controls.can_retry);
+    CHECK_FALSE(refreshed[1].controls.can_cancel);
+}
+
+TEST_CASE(PREFIX "keeps confirmed custody separate when Operation Center history is busy")
+{
+    TempTestDir temporary;
+    const auto directory = CanonicalDirectory(temporary);
+    auto journal = OpenJournal(directory);
+    auto initial = journal->Admit(Plan("initial-history"));
+    REQUIRE(initial);
+    REQUIRE(journal->FinalizeAdmission(std::move(*initial), OperationJournalState::Failed));
+
+    auto operation_center = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(operation_center);
+    auto staging = (*operation_center)->StageAdmission(*journal, Plan("staged-history"));
+    REQUIRE(staging);
+    const auto before = (*operation_center)->Model().Snapshot();
+
+    auto recovered = journal->Admit(Plan("recovered-history"));
+    REQUIRE(recovered);
+    REQUIRE(journal->TransitionToRunning(std::move(*recovered)));
+
+    auto services = PassiveServices();
+    services.retry = [](std::string_view) {
+        return CopyOperationRunReceiptCustodyResult{.status = CopyOperationRunReceiptCustodyStatus::ReconcileRequired};
+    };
+    services.reconcile = [](std::string_view, const OperationJournal &) {
+        return CopyOperationRunReceiptReconciliationResult{
+            .status = CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed};
+    };
+    auto recovery = CopyOperationRecoveryCoordinatorTesting::Make(std::move(journal), directory, std::move(services));
+
+    const auto result = ServiceCopyRecoveryAndRefreshHistory(recovery, *operation_center, "recovered-history");
+
+    CHECK(result.recovery.error == CopyOperationRecoveryServiceError::None);
+    REQUIRE(result.recovery.reconciliation);
+    CHECK(result.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Deferred);
+    REQUIRE(result.history_refresh_error);
+    CHECK(result.history_refresh_error->code == OperationCenterCoordinatorErrorCode::ColdHistoryBusy);
+    CHECK((*operation_center)->Model().Snapshot() == before);
 }

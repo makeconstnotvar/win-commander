@@ -917,6 +917,45 @@ CopyOperationOrchestrator::Submit(ReviewedVFSOperationPreflight _reviewed,
             CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::JournalAdmissionFailed, admission.error()));
     }
 
+    return SubmitAdmitted(
+        std::move(_reviewed), std::move(*admission), std::move(_cancel_checker), std::move(_hooks), {});
+}
+
+std::expected<std::shared_ptr<Operation>, CopyOperationOrchestratorError>
+CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewed,
+                                          OperationJournalAdmissionReceipt _admission,
+                                          CancelChecker _cancel_checker,
+                                          CopyOperationSubmissionHooks _hooks,
+                                          PreEnqueueHandoff _pre_enqueue_handoff)
+{
+    if( !m_Journal )
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::MissingJournal));
+    if( !m_Pool )
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::MissingPool));
+    if( m_UseInjectedExecutionFactory && !m_ExecutionFactory )
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::MissingExecutionFactory));
+    if( !m_RunReceiptCustodian )
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::MissingRunReceiptCustodian));
+
+    const auto &accepted = _reviewed.AcceptedPlan();
+    const OperationPlan plan = accepted.Plan();
+    if( plan.Type() != OperationPlanType::Copy || plan.Sources().size() != 1 || accepted.Report().items.size() != 1 )
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan));
+
+    std::expected<void, OperationJournalError> validated =
+        std::unexpected(OperationJournalError{.code = OperationJournalErrorCode::JournalUnusable});
+    try {
+        validated = m_Journal->ValidateAdmissionReceiptForOrchestration(_admission);
+    } catch( ... ) {
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::InvalidJournalAdmissionReceipt));
+    }
+    if( !validated )
+        return std::unexpected(
+            CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::InvalidJournalAdmissionReceipt, validated.error()));
+    if( _admission.m_Plan != plan )
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::InvalidJournalAdmissionReceipt));
+    std::expected<OperationJournalAdmissionReceipt, OperationJournalError> admission{std::move(_admission)};
+
     const auto finalize_admission = [&](OperationJournalState _state) -> std::optional<CopyOperationOrchestratorError> {
         try {
             const auto finalized = m_Journal->FinalizeAdmission(std::move(*admission), _state);
@@ -1072,7 +1111,52 @@ CopyOperationOrchestrator::Submit(ReviewedVFSOperationPreflight _reviewed,
         return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::Cancelled));
     }
 
+    std::optional<CopyOperationPreEnqueueLease> pre_enqueue_lease;
+    try {
+        if( _pre_enqueue_handoff )
+            pre_enqueue_lease.emplace(_pre_enqueue_handoff(m_Pool, operation));
+    } catch( ... ) {
+        const auto finalized = m_RunReceiptCustodian->FinalizeBeforeEnqueue(
+            *reservation, CopyOrchestratorEnqueueFailureItemResult(PoolEnqueueResult::NotCold), OperationJournalState::Failed);
+        if( finalized.status != CopyOperationRunReceiptCustodyStatus::Finalized ) {
+            return std::unexpected(
+                CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::RunningFinalizationFailed,
+                                        finalized.journal_error,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        CopyOrchestratorRecoveryDisposition(finalized.status)));
+        }
+        return std::unexpected(
+            CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::PreEnqueuePreparationFailed));
+    }
+
+    // The private lease serializes this final intent check with coordinator cancellation. A cancel
+    // accepted before custody opens Pool enqueue is durably terminalized without Pool admission.
+    if( sanitized_cancel_checker() ) {
+        const auto finalized = m_RunReceiptCustodian->FinalizeBeforeEnqueue(
+            *reservation, CopyOrchestratorCancelledItemResult(), OperationJournalState::Cancelled);
+        if( finalized.status != CopyOperationRunReceiptCustodyStatus::Finalized ) {
+            return std::unexpected(
+                CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::RunningFinalizationFailed,
+                                        finalized.journal_error,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        CopyOrchestratorRecoveryDisposition(finalized.status)));
+        }
+        return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::Cancelled));
+    }
+
     if( !m_RunReceiptCustodian->BeginEnqueue(*reservation, m_Pool, operation) ) {
+        const auto finalized = m_RunReceiptCustodian->FinalizeBeforeEnqueue(
+            *reservation, CopyOrchestratorEnqueueFailureItemResult(PoolEnqueueResult::NotCold), OperationJournalState::Failed);
+        if( finalized.status != CopyOperationRunReceiptCustodyStatus::Finalized ) {
+            return std::unexpected(
+                CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::RunningFinalizationFailed,
+                                        finalized.journal_error,
+                                        std::nullopt,
+                                        std::nullopt,
+                                        CopyOrchestratorRecoveryDisposition(finalized.status)));
+        }
         return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::RunReceiptArmFailed));
     }
     const auto finalization_slot = reservation->m_Slot;

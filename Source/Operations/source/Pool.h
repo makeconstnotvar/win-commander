@@ -2,7 +2,11 @@
 #pragma once
 
 #include "Operation.h"
+#ifdef __OBJC__
 #include <Cocoa/Cocoa.h>
+#else
+#include <Utility/NSCppDeclarations.h>
+#endif
 #include <deque>
 #include <mutex>
 

@@ -64,7 +64,7 @@ The production [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foun
 
 The combined foundation now includes application access composition, schema-v1 structural-plan persistence, durable journal admission, explicit review, private-sealed conditional authority, a clone-only Native provider transaction, lossless provider-result mapping, a transaction-owning execution product, and production journal/`Pool` orchestration. `ReviewedOperationFactory` exposes its production execution-product authority only to the orchestrator; the public compatibility construction surface remains fail closed. Other providers, cross-volume targets and filesystems without clone capability return `Unsupported`.
 
-The bounded `CopyAs` consumer now supplies exact create-only review, app coordination of restricted cold hooks and durable result/recovery presentation. Remaining boundaries are live permission/conflict and zero-enqueue evidence, broader mutation-consumer adoption, cross-volume staging, dedicated physical-volume fixtures, Operation Center presentation, and preflight for Move, Rename, Trash, Permanent Delete or archive operations. Committed Rename still reaches `nc::ops::Copying(docopy = false)`, and Cut remains clipboard Move intent until Paste.
+The bounded `CopyAs` consumer now supplies exact create-only review, app coordination of restricted cold hooks and durable result/recovery presentation. Its production boundary proves zero enqueue for blocked, stale, unpersisted and cancelled intent plus exact review and durable outcome dispatch. Remaining boundaries are live permission/conflict, broader mutation-consumer adoption, cross-volume staging, execution of the physical-volume/power-loss protocol, Operation Center presentation, and preflight for Move, Rename, Trash, Permanent Delete or archive operations. Committed Rename still reaches `nc::ops::Copying(docopy = false)`, and Cut remains clipboard Move intent until Paste.
 
 ## Verified coverage
 
@@ -83,11 +83,11 @@ Current Debug evidence for the operation pipeline:
 - `OperationJournal`: 27 / 592;
 - Job lifecycle: 10 / 608;
 - `Pool`: 17 / 219;
-- `CopyOperationOrchestrator`: 15 / 758, including production construction at 3 / 138;
-- full Debug, Release ASAN, and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
+- `CopyOperationOrchestrator`: 17 / 806, including production construction at 3 / 138 and receipt-aware no-re-admission;
+- historical foundation snapshot: Debug, Release ASAN, and Release UBSAN `OperationsUT` passed 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics; the current coordinator/control subset separately passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 
 The current-tree M0 run from 2026-08-01 passed the unsigned Debug application and all 10 seeded aggregate binaries: 897 cases / 132,011 assertions in the recorded run. Docker-backed seeded ASAN integration passed 163 / 89,392; hosted CI remains open.
 
 ## Next slice
 
-Add live zero-enqueue and UI-dispatch proof for the bounded `CopyAs::Perform` consumer, preserving tri-state publication, terminal durability, read-only post-rename reconciliation and exact reconciled Pool release. Cross-volume Copy requires separate provider-owned bounded staging; non-Copy preflight follows as separate slices.
+Add physical-volume proof for the bounded `CopyAs::Perform` consumer, preserving tri-state publication, terminal durability, read-only post-rename reconciliation and exact reconciled Pool release. Cross-volume Copy requires separate provider-owned bounded staging; non-Copy preflight follows as separate slices.

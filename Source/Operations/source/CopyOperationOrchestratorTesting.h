@@ -14,6 +14,7 @@ public:
     using ExecutionFactory = CopyOperationOrchestrator::ExecutionFactory;
     using ConditionalCommitTransactionResolver =
         CopyOperationOrchestrator::ConditionalCommitTransactionResolver;
+    using PreEnqueueHandoff = CopyOperationOrchestrator::PreEnqueueHandoff;
 
     [[nodiscard]] static CopyOperationExecutionProduct
     MakeExecutionProduct(
@@ -46,6 +47,22 @@ public:
             std::move(_journal), std::move(_pool), std::move(_run_receipt_custodian)};
         orchestrator.m_ConditionalCommitTransactionResolver = std::move(_resolver);
         return orchestrator;
+    }
+
+    [[nodiscard]] static std::expected<std::shared_ptr<Operation>, CopyOperationOrchestratorError>
+    SubmitAdmitted(CopyOperationOrchestrator &_orchestrator,
+                   ReviewedVFSOperationPreflight _reviewed,
+                   OperationJournalAdmissionReceipt _admission,
+                   CopyOperationOrchestrator::CancelChecker _cancel_checker = {},
+                   CopyOperationSubmissionHooks _hooks = {},
+                   PreEnqueueHandoff _pre_enqueue_handoff = {})
+    {
+        return _orchestrator.SubmitAdmitted(
+            std::move(_reviewed),
+            std::move(_admission),
+            std::move(_cancel_checker),
+            std::move(_hooks),
+            std::move(_pre_enqueue_handoff));
     }
 };
 

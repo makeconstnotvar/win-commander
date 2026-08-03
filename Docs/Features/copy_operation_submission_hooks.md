@@ -8,6 +8,8 @@
 
 `CopyOperationSubmissionHooks` is the narrow application-facing observation boundary of `CopyOperationOrchestrator::Submit`. It configures transport and progress observation while the produced operation is still cold and provides the durable terminal evidence required for user-visible completion. It does not grant planning, review, provider mutation, journal or queue authority.
 
+The coordinator-only receipt path separately has an opaque private pre-enqueue handoff. After the exact run receipt is armed and before custody opens `Pool` enqueue, it registers sealed live residency and holds the admission lease through `TryEnqueue`. It is not part of `CopyOperationSubmissionHooks`, does not expose a mutable `Pool` or `Operation`, and a failing handoff durably records `Failed` with zero Pool admission.
+
 ## Cold-operation contract
 
 The lifecycle observation list accepts masks composed only from:
@@ -52,11 +54,9 @@ For Pool-owned reconciliation, terminal delivery is deferred until the matching 
 
 ## Application integration boundary
 
-The core hook, delivery and release mechanics are implemented. Remaining application work is:
+`ReviewedCopyAsApplicationBoundary` now owns the app-facing reviewed preflight until a terminal review decision. It exposes an immutable exact-plan presentation, keeps blocked, stale, unpersisted and cancelled paths out of its sole submission port, acquires the window ticket before minting reviewed authority, and installs the item-status and durable-outcome hooks only for the accepted product. Its durable observer copies the owning outcome into a UI task before the finalizer can release Pool residency.
 
-1. an app-owned typed bound-plan review;
-2. a presenter/coordinator that supplies lifecycle and item-status hooks, dispatches durable outcomes to the UI executor, owns cancellation and drives retry/reconciliation;
-3. bounded `CopyAs::Perform` uses the hooks for the implemented single-item same-host internal-APFS create-only scope.
+The production `CopyAs::Perform` supplies that seam with process-owned recovery, the window submission gate, item-status deselection and UI presentation. Four focused app-boundary cases / 70 assertions cover the zero-enqueue paths, exact review projection and real `Pool::ReleaseWithoutCompletion` ordering; the same filter passes Release ASAN and UBSAN.
 
 The journal and `CopyOperationRunReceiptCustodian` need process-lifetime ownership across recovery. The coordinator can remain window-scoped around the existing `Pool`. Once the reviewed lifecycle is selected, later failure remains within its typed durable recovery path and does not fall back to a second mutation route.
 
@@ -67,9 +67,9 @@ Current Debug evidence for this snapshot:
 - `CopyOperationOrchestrator_UT`: 15 cases / 758 assertions;
 - `Pool_UT`: 17 / 219;
 - production orchestrator subset: 3 / 138;
-- full `OperationsUT`: 170 / 4,748.
+- reviewed CopyAs policy and app boundary: 10 / 98, including the app-boundary subset at 4 / 70.
 
-Explicitly instrumented Release ASAN and UBSAN each pass 170 / 4,748 with confirmed runtime linkage and no diagnostics.
+The fresh full Debug `OperationsUT` run reproduces one existing host-specific set-ID metadata failure (169 / 170 cases and 4,744 / 4,748 assertions pass). Aggregate ASAN/UBSAN reruns stop at the independent AppKit pasteboard baseline; the changed app-boundary filter passes under both sanitizers without diagnostics.
 
 ## Related documents
 

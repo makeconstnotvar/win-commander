@@ -48,7 +48,8 @@ public:
     void Start();
     void Pause();
     void Resume();
-    void Stop();
+    /** Returns whether the underlying Job accepted this stop request. */
+    bool Stop();
 
     std::string Title() const;
     OperationState State() const;

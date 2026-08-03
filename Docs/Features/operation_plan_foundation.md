@@ -63,7 +63,7 @@ The structural value ends after construction and validation. The separate [`Oper
 
 `ReviewedOperationFactory` consumes a private-sealed reviewed authority and obtains the bounded Native clone-only transaction. Its private execution-product path is the production construction authority used by `CopyOperationOrchestrator`; its public compatibility `Create` surface still resolves the cold product and fails closed so callers cannot bypass journal admission and run-receipt custody.
 
-The Native clone-only provider transaction includes a strict internal-writable-APFS predicate, exact supported metadata seals/parity, post-clone verification, ordered destination/parent/full-filesystem durability, and typed post-publication failure evidence. The lossless provider mapper, transaction-owning execution product, exact journal finalization, restricted cold hooks, owning durable-outcome delivery, preallocated `Pool` finalization barrier, `ReleaseWithoutCompletion`, production orchestrator, read-only reconciliation, exact reconciled Pool release and bounded `CopyAs` app review/presentation are implemented and unit-tested. Dedicated physical-volume fixtures, cross-volume provider-owned staging and broader mutation adoption remain open.
+The Native clone-only provider transaction includes a strict internal-writable-APFS predicate, exact supported metadata seals/parity, post-clone verification, ordered destination/parent/full-filesystem durability, and typed post-publication failure evidence. The lossless provider mapper, transaction-owning execution product, exact journal finalization, restricted cold hooks, owning durable-outcome delivery, preallocated `Pool` finalization barrier, `ReleaseWithoutCompletion`, production orchestrator, read-only reconciliation, exact reconciled Pool release and bounded `CopyAs` app review/presentation are implemented and unit-tested. An opt-in physical-volume fixture exists; its real run, hardware power-loss evidence, cross-volume provider-owned staging and broader mutation adoption remain open.
 
 ## Verified coverage
 
@@ -82,8 +82,8 @@ Current Debug evidence for the operation pipeline:
 - `OperationJournal`: 27 / 592;
 - Job lifecycle: 10 / 608;
 - `Pool`: 17 / 219;
-- `CopyOperationOrchestrator`: 15 / 758, including production construction at 3 / 138;
-- full Debug, Release ASAN, and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
+- `CopyOperationOrchestrator`: 17 / 806, including production construction at 3 / 138 and receipt-aware no-re-admission;
+- historical foundation snapshot: Debug, Release ASAN, and Release UBSAN `OperationsUT` passed 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics; the current coordinator/control subset separately passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 
 The current-tree M0 run from 2026-08-01 passed the unsigned Debug application and all 10 seeded aggregate binaries: 897 cases / 132,011 assertions in the recorded run. Docker-backed seeded ASAN integration passed 163 / 89,392; hosted CI remains open.
 
@@ -98,4 +98,4 @@ The implemented copy-first pure [`OperationPlanner`](copy_preflight_planner_foun
 
 The production [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foundation.md) adapter creates a bound preflight that retains the exact immutable provider bindings used for its evidence. [`ReviewedVFSOperationPreflight`](reviewed_copy_factory_foundation.md) records explicit approval and issues one private-sealed provider authority. `OperationJournal` issues exact admission/run receipts, and the production `CopyOperationOrchestrator` privately consumes the reviewed factory's transaction-owning execution product while preserving durable queue, terminal, reconcile, and Pool-release ordering.
 
-The next vertical slice is live application-boundary proof for the bounded `CopyAs::Perform` consumer, followed by physical-volume evidence. Cross-volume staging and non-Copy preflight remain later sequences.
+The app-boundary proof for the bounded `CopyAs::Perform` consumer is complete: its production seam covers zero enqueue for blocked, stale, unpersisted and cancelled intent, exact review projection, and durable UI dispatch before non-success Pool release. The next vertical slice runs the physical-volume/power-loss protocol; cross-volume staging and non-Copy preflight remain later sequences.

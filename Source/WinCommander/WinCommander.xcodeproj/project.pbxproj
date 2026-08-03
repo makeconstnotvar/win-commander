@@ -289,6 +289,11 @@
 		CF5DE0A325840E9200604DEE /* libWinCommanderCommon.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF5DE07E2583E73300604DEE /* libWinCommanderCommon.a */; };
 		CF5DE0C22584157B00604DEE /* Tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF5DE0C12584157B00604DEE /* Tests.cpp */; };
 		CF5DE0DA2584186600604DEE /* libWinCommanderCommon.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF5DE07E2583E73300604DEE /* libWinCommanderCommon.a */; };
+		C0DE710031D6000000000001 /* Tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF5DE0C12584157B00604DEE /* Tests.cpp */; };
+		C0DE710031D6000000000002 /* libWinCommanderCommon.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CF5DE07E2583E73300604DEE /* libWinCommanderCommon.a */; };
+		C0DE710031D6000000000003 /* PFMoveToApplicationsShim.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF0A46F92BDD830D00833160 /* PFMoveToApplicationsShim.mm */; };
+		C0DE710031D6000000000004 /* SparkleShim.m in Sources */ = {isa = PBXBuildFile; fileRef = CF0B78D925739F61003061D0 /* SparkleShim.m */; };
+		C0DE710031D6000000000006 /* PanelControllerRemoteNavigation_IT.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0DE710031D6000000000005 /* PanelControllerRemoteNavigation_IT.mm */; };
 		CF669D662EF01757001B7FA5 /* PanelGalleryCentralView.h in Headers */ = {isa = PBXBuildFile; fileRef = CF669D642EF01757001B7FA5 /* PanelGalleryCentralView.h */; };
 		CF669D672EF01757001B7FA5 /* PanelGalleryCentralView.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF669D652EF01757001B7FA5 /* PanelGalleryCentralView.mm */; };
 		CF67F1B52952034200B92944 /* Icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = CF67F19A2952034200B92944 /* Icon.icns */; };
@@ -1167,8 +1172,10 @@
 		CF5BF7EC2C0C8FA30057C92E /* SyntaxHighlighting */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SyntaxHighlighting; path = WinCommander/Resources/SyntaxHighlighting; sourceTree = "<group>"; };
 		CF5DE07E2583E73300604DEE /* libWinCommanderCommon.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libWinCommanderCommon.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF5DE0B2258414CA00604DEE /* WinCommanderUT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WinCommanderUT; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0DE710031D6000000000010 /* WinCommanderIT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WinCommanderIT; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF5DE0C02584157B00604DEE /* Tests.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Tests.h; path = WinCommander/Tests/Tests.h; sourceTree = "<group>"; };
 		CF5DE0C12584157B00604DEE /* Tests.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = Tests.cpp; path = WinCommander/Tests/Tests.cpp; sourceTree = "<group>"; };
+		C0DE710031D6000000000005 /* PanelControllerRemoteNavigation_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = PanelControllerRemoteNavigation_IT.mm; path = WinCommander/Tests/PanelControllerRemoteNavigation_IT.mm; sourceTree = "<group>"; };
 		CF5E9A361FCBC521005608F5 /* ViewFile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ViewFile.h; path = WinCommander/States/FilePanels/Actions/ViewFile.h; sourceTree = SOURCE_ROOT; };
 		CF5E9A371FCBC521005608F5 /* ViewFile.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = ViewFile.mm; path = WinCommander/States/FilePanels/Actions/ViewFile.mm; sourceTree = SOURCE_ROOT; };
 		CF5E9A4B1FCBDD37005608F5 /* RefreshPanel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = RefreshPanel.h; path = WinCommander/States/FilePanels/Actions/RefreshPanel.h; sourceTree = SOURCE_ROOT; };
@@ -1538,6 +1545,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				CF5DE0DA2584186600604DEE /* libWinCommanderCommon.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0DE710031D6000000000012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0DE710031D6000000000002 /* libWinCommanderCommon.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1961,6 +1976,7 @@
 				C81F000131B2000000000013 /* PaneLifecycleProducer_UT.mm */,
 				D92A000131B3000000000013 /* PanelControllerLifecycle_UT.mm */,
 				F4E2000131B7000000000011 /* PanelControllerNavigation_UT.mm */,
+				C0DE710031D6000000000005 /* PanelControllerRemoteNavigation_IT.mm */,
 				E31D000131B4000000000013 /* PaneLifecycleReducer_UT.cpp */,
 				A1B2C3D431C1000100C0DE02 /* PanelHistory_UT.cpp */,
 				CF5DE0C02584157B00604DEE /* Tests.h */,
@@ -2381,6 +2397,7 @@
 				CFA53A6D1D433E2A00C562A7 /* WinCommander-Unsigned.app */,
 				CF5DE07E2583E73300604DEE /* libWinCommanderCommon.a */,
 				CF5DE0B2258414CA00604DEE /* WinCommanderUT */,
+				C0DE710031D6000000000010 /* WinCommanderIT */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -2637,6 +2654,22 @@
 			productReference = CF5DE0B2258414CA00604DEE /* WinCommanderUT */;
 			productType = "com.apple.product-type.tool";
 		};
+		C0DE710031D6000000000013 /* WinCommanderIT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0DE710031D6000000000016 /* Build configuration list for PBXNativeTarget "WinCommanderIT" */;
+			buildPhases = (
+				C0DE710031D6000000000011 /* Sources */,
+				C0DE710031D6000000000012 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WinCommanderIT;
+			productName = WinCommanderIT;
+			productReference = C0DE710031D6000000000010 /* WinCommanderIT */;
+			productType = "com.apple.product-type.tool";
+		};
 		CF6D997C196675290077B146 /* WinCommander-MAS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CF6D9997196675290077B146 /* Build configuration list for PBXNativeTarget "WinCommander-MAS" */;
@@ -2717,6 +2750,9 @@
 					CF5DE07D2583E73300604DEE = {
 						CreatedOnToolsVersion = 12.2;
 						LastSwiftMigration = 1600;
+					};
+					C0DE710031D6000000000013 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 					CF5DE0B1258414CA00604DEE = {
 						CreatedOnToolsVersion = 12.2;
@@ -2813,6 +2849,7 @@
 				CF6D997C196675290077B146 /* WinCommander-MAS */,
 				CF5DE07D2583E73300604DEE /* WinCommanderCommon */,
 				CF5DE0B1258414CA00604DEE /* WinCommanderUT */,
+				C0DE710031D6000000000013 /* WinCommanderIT */,
 			);
 		};
 /* End PBXProject section */
@@ -3552,6 +3589,17 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0DE710031D6000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0DE710031D6000000000003 /* PFMoveToApplicationsShim.mm in Sources */,
+				C0DE710031D6000000000004 /* SparkleShim.m in Sources */,
+				C0DE710031D6000000000001 /* Tests.cpp in Sources */,
+				C0DE710031D6000000000006 /* PanelControllerRemoteNavigation_IT.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CF6D9979196675290077B146 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -4029,6 +4077,22 @@
 			};
 			name = Release;
 		};
+		C0DE710031D6000000000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CFA22D2B2B51BD7E00E71479 /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		C0DE710031D6000000000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = CFA22D2B2B51BD7E00E71479 /* tests.xcconfig */;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 		CF6D9998196675290077B146 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -4169,6 +4233,15 @@
 			buildConfigurations = (
 				CF5DE0B7258414CA00604DEE /* Debug */,
 				CF5DE0B8258414CA00604DEE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C0DE710031D6000000000016 /* Build configuration list for PBXNativeTarget "WinCommanderIT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0DE710031D6000000000014 /* Debug */,
+				C0DE710031D6000000000015 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

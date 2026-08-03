@@ -215,11 +215,13 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
                 if( strong_self ) {
                     [strong_self->m_ToolbarDelegate applyPaneSnapshot:_snapshot];
                     [strong_self->m_CommandBar applyPaneSnapshot:_snapshot];
+                    [strong_self->m_Panel.view applyExplorerPaneSnapshot:_snapshot];
                 }
             });
         const nc::core::PaneSnapshot snapshot = m_PaneStoreBridge->Store().Snapshot();
         [m_ToolbarDelegate applyPaneSnapshot:snapshot];
         [m_CommandBar applyPaneSnapshot:snapshot];
+        [m_Panel.view applyExplorerPaneSnapshot:snapshot];
 
         m_Panel.view.headerBarVisible = false;
         m_Panel.view.busyIndicatorOverride = m_ToolbarDelegate.busyIndicator;

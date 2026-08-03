@@ -221,6 +221,55 @@ void OperationJournalUTWriteFile(const OperationJournalUTDirectory &_directory, 
     REQUIRE(::close(fd) == 0);
 }
 
+OperationId OperationJournalUTId(const uint64_t _sequence)
+{
+    const auto operation_id = OperationId::Parse("op-" + std::to_string(_sequence));
+    if( !operation_id )
+        throw std::logic_error{"invalid operation ID test fixture"};
+    return *operation_id;
+}
+
+std::string OperationJournalUTAsV1(std::string _v3)
+{
+    const auto version = _v3.find("\"version\":3");
+    if( version == std::string::npos )
+        throw std::logic_error{"missing v3 version"};
+    _v3.replace(version, std::string_view{"\"version\":3"}.size(), "\"version\":1");
+    const auto high_water = _v3.find("\"next_operation_sequence\":");
+    if( high_water == std::string::npos )
+        throw std::logic_error{"missing v3 operation ID high-water"};
+    const auto high_water_comma = _v3.find(',', high_water);
+    if( high_water_comma == std::string::npos )
+        throw std::logic_error{"malformed v3 operation ID high-water"};
+    _v3.erase(high_water, high_water_comma - high_water + 1);
+    while( true ) {
+        const auto field = _v3.find("\"operation_id\":\"");
+        if( field == std::string::npos )
+            break;
+        const auto comma = _v3.find(',', field);
+        if( comma == std::string::npos )
+            throw std::logic_error{"malformed v3 operation ID"};
+        _v3.erase(field, comma - field + 1);
+    }
+    return _v3;
+}
+
+std::string OperationJournalUTAsV2(std::string _v3)
+{
+    const auto version = _v3.find("\"version\":3");
+    if( version == std::string::npos )
+        throw std::logic_error{"missing v3 version"};
+    _v3.replace(version, std::string_view{"\"version\":3"}.size(), "\"version\":2");
+    const auto high_water = _v3.find("\"next_operation_sequence\":");
+    if( high_water == std::string::npos )
+        throw std::logic_error{"missing v3 operation ID high-water"};
+    const auto high_water_comma = _v3.find(',', high_water);
+    if( high_water_comma == std::string::npos )
+        throw std::logic_error{"malformed v3 operation ID high-water"};
+    _v3.erase(high_water, high_water_comma - high_water + 1);
+    return _v3;
+}
+
 template <class T>
 concept OperationJournalUTExecutionAuthority = requires(T &_value) {
     _value.Execute();
@@ -234,11 +283,16 @@ concept OperationJournalUTIdAddressedMutation = requires(T &_journal) {
     _journal.RecordItemResult("plan", OperationJournalItemResult{});
 };
 
+template <class T>
+concept OperationJournalUTRawIdAdmission = requires(T &_journal, const OperationPlan &_plan) {
+    _journal.Admit(OperationJournalUTId(1), _plan);
+};
+
 } // namespace
 
 TEST_CASE("OperationJournal: durable admission receipt carries no execution authority", "[operation-journal]")
 {
-    STATIC_REQUIRE(OperationJournal::SchemaVersion == 1);
+    STATIC_REQUIRE(OperationJournal::SchemaVersion == 3);
     STATIC_REQUIRE_FALSE(OperationJournalUTExecutionAuthority<OperationJournalAdmissionReceipt>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<OperationJournalAdmissionReceipt>);
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<OperationJournalAdmissionReceipt>);
@@ -250,6 +304,9 @@ TEST_CASE("OperationJournal: durable admission receipt carries no execution auth
     STATIC_REQUIRE(std::is_move_constructible_v<OperationJournalRunReceipt>);
     STATIC_REQUIRE_FALSE(std::is_move_assignable_v<OperationJournalRunReceipt>);
     STATIC_REQUIRE_FALSE(OperationJournalUTIdAddressedMutation<OperationJournal>);
+    STATIC_REQUIRE_FALSE(OperationJournalUTRawIdAdmission<OperationJournal>);
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<OperationJournal::AdmissionReservation>);
+    STATIC_REQUIRE(std::is_move_constructible_v<OperationJournal::AdmissionReservation>);
 
     OperationJournalUTDirectory directory;
     auto journal = OperationJournal::Open(directory.path);
@@ -257,13 +314,249 @@ TEST_CASE("OperationJournal: durable admission receipt carries no execution auth
     const auto admitted = journal->Admit(OperationJournalUTPlan());
     REQUIRE(admitted);
     CHECK(admitted->PlanId() == "plan-1");
+    CHECK(admitted->OperationId().ToString() == "op-1");
     REQUIRE(journal->Snapshot().size() == 1);
+    CHECK(journal->Snapshot()[0].operation_id == admitted->OperationId());
     CHECK(journal->Snapshot()[0].state == OperationJournalState::Admitted);
     CHECK(OperationJournalUTReadFile(directory).find("\"state\":\"admitted\"") != std::string::npos);
     struct stat state{};
     const auto journal_path = std::filesystem::path{directory.path} / OperationJournal::Filename;
     REQUIRE(::stat(journal_path.c_str(), &state) == 0);
     CHECK((state.st_mode & 0777) == 0600);
+}
+
+TEST_CASE("OperationJournal: reservations allocate exact durable IDs without raw admission", "[operation-journal]")
+{
+    OperationJournalUTDirectory directory;
+    {
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        auto first = journal->ReserveOperationId();
+        auto abandoned = journal->ReserveOperationId();
+        REQUIRE(first);
+        REQUIRE(abandoned);
+        CHECK(first->Id().ToString() == "op-1");
+        CHECK(abandoned->Id().ToString() == "op-2");
+        auto admitted = journal->Admit(std::move(*first), OperationJournalUTPlan("reserved"));
+        REQUIRE(admitted);
+        CHECK(admitted->OperationId().ToString() == "op-1");
+
+        auto third = journal->ReserveOperationId();
+        REQUIRE(third);
+        CHECK(third->Id().ToString() == "op-3");
+        auto second_admission = journal->Admit(std::move(*third), OperationJournalUTPlan("reserved-next"));
+        REQUIRE(second_admission);
+        CHECK(second_admission->OperationId().ToString() == "op-3");
+    }
+
+    auto reopened = OperationJournal::Open(directory.path);
+    REQUIRE(reopened);
+    const auto next = reopened->ReserveOperationId();
+    REQUIRE(next);
+    CHECK(next->Id().ToString() == "op-4");
+    const auto json = OperationJournalUTReadFile(directory);
+    CHECK(json.find("\"version\":3") != std::string::npos);
+    CHECK(json.find("\"next_operation_sequence\":4") != std::string::npos);
+}
+
+TEST_CASE("OperationJournal: schema-v2 migration derives and persists the operation ID high-water", "[operation-journal]")
+{
+    OperationJournalUTDirectory directory;
+    {
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        REQUIRE(OperationJournalTesting::AdmitWithOperationId(
+            *journal, OperationJournalUTId(41), OperationJournalUTPlan("v2-existing")));
+    }
+    OperationJournalUTWriteFile(directory, OperationJournalUTAsV2(OperationJournalUTReadFile(directory)));
+
+    {
+        auto migrated = OperationJournal::Open(directory.path);
+        REQUIRE(migrated);
+        auto reservation = migrated->ReserveOperationId();
+        REQUIRE(reservation);
+        CHECK(reservation->Id().ToString() == "op-42");
+        const auto admission = migrated->Admit(std::move(*reservation), OperationJournalUTPlan("v3-next"));
+        REQUIRE(admission);
+        CHECK(admission->OperationId().ToString() == "op-42");
+        CHECK(OperationJournalUTReadFile(directory).find("\"version\":3") != std::string::npos);
+        CHECK(OperationJournalUTReadFile(directory).find("\"next_operation_sequence\":43") != std::string::npos);
+    }
+
+    auto reopened = OperationJournal::Open(directory.path);
+    REQUIRE(reopened);
+    const auto next = reopened->ReserveOperationId();
+    REQUIRE(next);
+    CHECK(next->Id().ToString() == "op-43");
+}
+
+TEST_CASE("OperationJournal: explicit execution IDs survive durable admission and restart", "[operation-journal]")
+{
+    OperationJournalUTDirectory directory;
+    const auto operation_id = OperationJournalUTId(41);
+    {
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        auto admission = OperationJournalTesting::AdmitWithOperationId(*journal, operation_id, OperationJournalUTPlan("explicit-id"));
+        REQUIRE(admission);
+        CHECK(admission->OperationId() == operation_id);
+        CHECK(journal->Snapshot()[0].operation_id == operation_id);
+
+        const auto duplicate =
+            OperationJournalTesting::AdmitWithOperationId(*journal, operation_id, OperationJournalUTPlan("other-plan"));
+        REQUIRE_FALSE(duplicate);
+        CHECK(duplicate.error().code == OperationJournalErrorCode::DuplicateOperationId);
+    }
+    const auto json = OperationJournalUTReadFile(directory);
+    CHECK(json.find("\"version\":3") != std::string::npos);
+    CHECK(json.find("\"operation_id\":\"op-41\"") != std::string::npos);
+
+    auto reopened = OperationJournal::Open(directory.path);
+    REQUIRE(reopened);
+    REQUIRE(reopened->Snapshot().size() == 1);
+    CHECK(reopened->Snapshot()[0].operation_id == operation_id);
+    CHECK(reopened->Snapshot()[0].state == OperationJournalState::Interrupted);
+}
+
+TEST_CASE("OperationJournal: migrates schema-v1 IDs atomically before exposing a snapshot", "[operation-journal]")
+{
+    OperationJournalUTDirectory directory;
+    {
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        auto completed =
+            OperationJournalTesting::AdmitWithOperationId(*journal, OperationJournalUTId(41), OperationJournalUTPlan("completed"));
+        REQUIRE(completed);
+        auto completed_run = journal->TransitionToRunning(std::move(*completed));
+        REQUIRE(completed_run);
+        REQUIRE(journal->Finalize(
+            std::move(*completed_run), OperationJournalUTSuccess(), OperationJournalState::Completed));
+
+        auto running =
+            OperationJournalTesting::AdmitWithOperationId(*journal, OperationJournalUTId(99), OperationJournalUTPlan("running"));
+        REQUIRE(running);
+        REQUIRE(journal->TransitionToRunning(std::move(*running)));
+    }
+    OperationJournalUTWriteFile(directory, OperationJournalUTAsV1(OperationJournalUTReadFile(directory)));
+
+    {
+        auto migrated = OperationJournal::Open(directory.path);
+        REQUIRE(migrated);
+        const auto snapshot = migrated->Snapshot();
+        REQUIRE(snapshot.size() == 2);
+        CHECK(snapshot[0].operation_id == OperationJournalUTId(1));
+        CHECK(snapshot[0].state == OperationJournalState::Completed);
+        CHECK(snapshot[1].operation_id == OperationJournalUTId(2));
+        CHECK(snapshot[1].state == OperationJournalState::Interrupted);
+        CHECK(OperationJournalUTReadFile(directory).find("\"version\":3") != std::string::npos);
+    }
+    auto reopened = OperationJournal::Open(directory.path);
+    REQUIRE(reopened);
+    REQUIRE(reopened->Snapshot().size() == 2);
+    CHECK(reopened->Snapshot()[0].operation_id == OperationJournalUTId(1));
+    CHECK(reopened->Snapshot()[1].operation_id == OperationJournalUTId(2));
+}
+
+TEST_CASE("OperationJournal: schema-v1 migration fails closed after post-rename uncertainty", "[operation-journal]")
+{
+    OperationJournalUTDirectory directory;
+    {
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        auto admission = OperationJournalTesting::AdmitWithOperationId(
+            *journal, OperationJournalUTId(41), OperationJournalUTPlan("migration-fault"));
+        REQUIRE(admission);
+        auto run = journal->TransitionToRunning(std::move(*admission));
+        REQUIRE(run);
+        REQUIRE(journal->Finalize(std::move(*run), OperationJournalUTSuccess(), OperationJournalState::Completed));
+    }
+    OperationJournalUTWriteFile(directory, OperationJournalUTAsV1(OperationJournalUTReadFile(directory)));
+
+    auto syscalls = OperationJournalTesting::DefaultSyscalls();
+    const auto real_fsync = syscalls->fsync;
+    size_t fsync_calls = 0;
+    syscalls->fsync = [real_fsync, &fsync_calls](const int fd) {
+        ++fsync_calls;
+        if( fsync_calls == 2 ) {
+            errno = EIO;
+            return -1;
+        }
+        return real_fsync(fd);
+    };
+    const auto migration = OperationJournalUTOpen(directory, std::move(syscalls));
+    REQUIRE_FALSE(migration);
+    CHECK(migration.error().code == OperationJournalErrorCode::DurabilityUncertain);
+
+    auto reopened = OperationJournal::Open(directory.path);
+    REQUIRE(reopened);
+    REQUIRE(reopened->Snapshot().size() == 1);
+    CHECK(reopened->Snapshot()[0].operation_id == OperationJournalUTId(1));
+    CHECK(OperationJournalUTReadFile(directory).find("\"version\":3") != std::string::npos);
+}
+
+TEST_CASE("OperationJournal: rejects malformed and duplicated schema-v3 operation IDs", "[operation-journal]")
+{
+    SECTION("high-water does not cover persisted IDs")
+    {
+        OperationJournalUTDirectory directory;
+        {
+            auto journal = OperationJournal::Open(directory.path);
+            REQUIRE(journal);
+            REQUIRE(journal->Admit(OperationJournalUTPlan()));
+        }
+        auto json = OperationJournalUTReadFile(directory);
+        const auto high_water = json.find("\"next_operation_sequence\":2");
+        REQUIRE(high_water != std::string::npos);
+        json.replace(high_water,
+                     std::string_view{"\"next_operation_sequence\":2"}.size(),
+                     "\"next_operation_sequence\":1");
+        OperationJournalUTWriteFile(directory, json);
+        const auto reopened = OperationJournal::Open(directory.path);
+        REQUIRE_FALSE(reopened);
+        CHECK(reopened.error().code == OperationJournalErrorCode::CorruptJournal);
+    }
+
+    SECTION("missing or noncanonical ID")
+    {
+        OperationJournalUTDirectory directory;
+        {
+            auto journal = OperationJournal::Open(directory.path);
+            REQUIRE(journal);
+            REQUIRE(journal->Admit(OperationJournalUTPlan()));
+        }
+        auto json = OperationJournalUTReadFile(directory);
+        const auto field = json.find("\"operation_id\":\"op-1\",");
+        REQUIRE(field != std::string::npos);
+
+        SECTION("missing") { json.erase(field, std::string_view{"\"operation_id\":\"op-1\","}.size()); }
+        SECTION("zero") { json.replace(field, std::string_view{"\"operation_id\":\"op-1\""}.size(), "\"operation_id\":\"op-0\""); }
+        SECTION("leading zero") { json.replace(field, std::string_view{"\"operation_id\":\"op-1\""}.size(), "\"operation_id\":\"op-01\""); }
+        OperationJournalUTWriteFile(directory, json);
+        const auto reopened = OperationJournal::Open(directory.path);
+        REQUIRE_FALSE(reopened);
+        CHECK(reopened.error().code == OperationJournalErrorCode::CorruptJournal);
+    }
+
+    SECTION("duplicate")
+    {
+        OperationJournalUTDirectory directory;
+        {
+            auto journal = OperationJournal::Open(directory.path);
+            REQUIRE(journal);
+            REQUIRE(OperationJournalTesting::AdmitWithOperationId(
+                *journal, OperationJournalUTId(1), OperationJournalUTPlan("first")));
+            REQUIRE(OperationJournalTesting::AdmitWithOperationId(
+                *journal, OperationJournalUTId(2), OperationJournalUTPlan("second")));
+        }
+        auto json = OperationJournalUTReadFile(directory);
+        const auto second = json.find("\"operation_id\":\"op-2\"");
+        REQUIRE(second != std::string::npos);
+        json.replace(second, std::string_view{"\"operation_id\":\"op-2\""}.size(), "\"operation_id\":\"op-1\"");
+        OperationJournalUTWriteFile(directory, json);
+        const auto reopened = OperationJournal::Open(directory.path);
+        REQUIRE_FALSE(reopened);
+        CHECK(reopened.error().code == OperationJournalErrorCode::DuplicateOperationId);
+    }
 }
 
 TEST_CASE("OperationJournal: moving exact receipts deterministically invalidates the source authority",
@@ -307,12 +600,18 @@ TEST_CASE("OperationJournal: admission receipt is exact journal-bound and consum
     REQUIRE(second_receipt);
 
     auto wrong_exact_plan = OperationJournalTesting::ForgeAdmissionReceipt(
-        *first, OperationJournalUTPlan("same-id", 1, "/forged-"));
+        *first, first->Snapshot()[0].operation_id, OperationJournalUTPlan("same-id", 1, "/forged-"));
     const auto exact_mismatch = first->TransitionToRunning(std::move(wrong_exact_plan));
     CHECK(exact_mismatch == std::unexpected(OperationJournalError{
                                 .code = OperationJournalErrorCode::InvalidAdmissionReceipt,
                                 .system_error = 0,
                                 .plan_codec_error = std::nullopt}));
+
+    auto wrong_exact_id = OperationJournalTesting::ForgeAdmissionReceipt(
+        *first, OperationJournalUTId(999), first->Snapshot()[0].plan);
+    const auto id_mismatch = first->TransitionToRunning(std::move(wrong_exact_id));
+    REQUIRE_FALSE(id_mismatch);
+    CHECK(id_mismatch.error().code == OperationJournalErrorCode::InvalidAdmissionReceipt);
 
     const auto cross_journal = second->TransitionToRunning(std::move(*first_receipt));
     CHECK(cross_journal == std::unexpected(OperationJournalError{
@@ -368,13 +667,21 @@ TEST_CASE("OperationJournal: run receipt is exact journal-bound and consumed onc
     REQUIRE(first_run);
     REQUIRE(second_run);
     CHECK(first_run->PlanId() == "same-run-id");
+    CHECK(first_run->OperationId() == first->Snapshot()[0].operation_id);
 
     auto wrong_exact_plan = OperationJournalTesting::ForgeRunReceipt(
-        *first, OperationJournalUTPlan("same-run-id", 1, "/forged-"));
+        *first, first_run->OperationId(), OperationJournalUTPlan("same-run-id", 1, "/forged-"));
     const auto exact_mismatch = first->Finalize(
         std::move(wrong_exact_plan), OperationJournalUTFailure(), OperationJournalState::Failed);
     REQUIRE_FALSE(exact_mismatch);
     CHECK(exact_mismatch.error().code == OperationJournalErrorCode::InvalidRunReceipt);
+
+    auto wrong_exact_id = OperationJournalTesting::ForgeRunReceipt(
+        *first, OperationJournalUTId(999), first->Snapshot()[0].plan);
+    const auto id_mismatch = first->Finalize(
+        std::move(wrong_exact_id), OperationJournalUTFailure(), OperationJournalState::Failed);
+    REQUIRE_FALSE(id_mismatch);
+    CHECK(id_mismatch.error().code == OperationJournalErrorCode::InvalidRunReceipt);
 
     const auto cross_journal = second->Finalize(
         std::move(*first_run), OperationJournalUTSuccess(), OperationJournalState::Completed);
@@ -432,7 +739,9 @@ TEST_CASE("OperationJournal: admission finalization is exact journal-bound and c
     REQUIRE(second_receipt);
 
     auto wrong_exact_plan = OperationJournalTesting::ForgeAdmissionReceipt(
-        *first, OperationJournalUTPlan("same-admission-id", 1, "/forged-"));
+        *first,
+        first->Snapshot()[0].operation_id,
+        OperationJournalUTPlan("same-admission-id", 1, "/forged-"));
     const auto exact_mismatch = first->FinalizeAdmission(
         std::move(wrong_exact_plan), OperationJournalState::Failed);
     REQUIRE_FALSE(exact_mismatch);
@@ -1079,9 +1388,9 @@ TEST_CASE("OperationJournal: fails closed on corruption version mismatch and dup
         OperationJournalUTDirectory directory;
         REQUIRE(OperationJournal::Open(directory.path));
         auto contents = OperationJournalUTReadFile(directory);
-        const auto position = contents.find("\"version\":1");
+        const auto position = contents.find("\"version\":3");
         REQUIRE(position != std::string::npos);
-        contents.replace(position, std::string_view{"\"version\":1"}.size(), "\"version\":2");
+        contents.replace(position, std::string_view{"\"version\":3"}.size(), "\"version\":4");
         OperationJournalUTWriteFile(directory, contents);
         const auto result = OperationJournal::Open(directory.path);
         REQUIRE_FALSE(result);
@@ -1135,7 +1444,7 @@ TEST_CASE("OperationJournal: fails closed on corruption version mismatch and dup
     {
         OperationJournalUTDirectory directory;
         REQUIRE(OperationJournal::Open(directory.path));
-        std::string contents = "{\"version\":1,\"entries\":[";
+        std::string contents = "{\"version\":3,\"next_operation_sequence\":1,\"entries\":[";
         for( size_t index = 0; index <= OperationJournal::MaxEntries; ++index ) {
             if( index != 0 )
                 contents.push_back(',');

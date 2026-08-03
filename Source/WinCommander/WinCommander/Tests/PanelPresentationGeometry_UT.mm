@@ -4,6 +4,7 @@
 #include <Cocoa/Cocoa.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VFS/VFSListingInput.h>
+#include <Utility/ByteCountFormatter.h>
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/FileCutCommand.h>
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
@@ -14,6 +15,7 @@
 #include <WinCommander/States/Explorer/NCExplorerToolbarDelegate.h>
 #include <WinCommander/States/FilePanels/PanelController.h>
 #include <WinCommander/States/FilePanels/PanelControllerActionsDispatcher.h>
+#include <WinCommander/States/FilePanels/PanelViewFooter.h>
 #include <WinCommander/States/FilePanels/Gallery/Layout.h>
 #include <WinCommander/States/FilePanels/Helpers/Pasteboard.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewGeometry.h>
@@ -42,6 +44,18 @@ public:
     NativePasteboardTestHost() : Host("/", nullptr, "native_pasteboard_test") {}
 
     bool IsNativeFS() const noexcept override { return true; }
+};
+
+class ExplorerFooterTheme final : public nc::panel::FooterTheme
+{
+public:
+    NSFont *Font() const override { return [NSFont systemFontOfSize:12.0]; }
+    NSColor *TextColor() const override { return NSColor.textColor; }
+    NSColor *ActiveTextColor() const override { return NSColor.textColor; }
+    NSColor *SeparatorsColor() const override { return NSColor.separatorColor; }
+    NSColor *ActiveBackgroundColor() const override { return NSColor.controlBackgroundColor; }
+    NSColor *InactiveBackgroundColor() const override { return NSColor.controlBackgroundColor; }
+    void ObserveChanges(std::function<void()>) override {}
 };
 
 std::vector<VFSListingItem> NativeItems(const std::vector<std::string> &_filenames)
@@ -401,6 +415,62 @@ nc::core::FileManagerError ExplorerFailure()
 } // namespace
 
 #define PREFIX "Explorer presentation geometry "
+
+TEST_CASE(PREFIX "footer renders only PaneStore snapshot status")
+{
+    auto footer = [[NCPanelViewFooter alloc] initWithFrame:NSMakeRect(0, 0, 600, 24)
+                                                     theme:std::make_unique<ExplorerFooterTheme>()
+                                         explorerAppearance:true];
+    NSTextField *const items = [footer valueForKey:@"m_ItemsLabel"];
+    NSTextField *const selection = [footer valueForKey:@"m_SelectionLabel"];
+
+    nc::core::PaneSnapshot snapshot;
+    snapshot.pane_id = nc::core::PaneId{91};
+    [footer applyExplorerPaneSnapshot:snapshot];
+    CHECK(items.stringValue.length == 0);
+    CHECK(selection.stringValue.length == 0);
+
+    snapshot.state.load_phase = nc::core::PaneLoadPhase::Loading;
+    [footer applyExplorerPaneSnapshot:snapshot];
+    CHECK(items.stringValue.length > 0);
+    CHECK(selection.stringValue.length == 0);
+
+    snapshot.state.load_phase = nc::core::PaneLoadPhase::Loaded;
+    snapshot.state.item_count = 3;
+    snapshot.state.selected_count = 2;
+    snapshot.state.selected_bytes = 1536;
+    [footer applyExplorerPaneSnapshot:snapshot];
+    const auto items_format =
+        NSLocalizedString(@"%d items", "Explorer status bar, total number of items in the current directory");
+    CHECK([items.stringValue isEqual:[NSString stringWithFormat:items_format, 3]]);
+    const auto selection_format = NSLocalizedString(
+        @"%d selected (%@)", "Explorer status bar, number and total size of currently selected items");
+    const auto selection_size = ByteCountFormatter::Instance().ToNSString(1536, ByteCountFormatter::Adaptive6);
+    CHECK([selection.stringValue isEqual:[NSString stringWithFormat:selection_format, 2, selection_size]]);
+
+    const nc::panel::data::Statistics legacy_stats{
+        .total_entries_amount = 99,
+        .bytes_in_selected_entries = 4096,
+        .selected_entries_amount = 7,
+    };
+    [footer updateStatistics:legacy_stats];
+    [footer updateListing:VFSListingPtr{}];
+    CHECK([items.stringValue isEqual:[NSString stringWithFormat:items_format, 3]]);
+    CHECK([selection.stringValue isEqual:[NSString stringWithFormat:selection_format, 2, selection_size]]);
+
+    snapshot.state.item_count = 0;
+    snapshot.state.selected_count = 0;
+    snapshot.state.selected_bytes = 0;
+    [footer applyExplorerPaneSnapshot:snapshot];
+    CHECK(items.stringValue.length > 0);
+    CHECK(selection.stringValue.length == 0);
+
+    snapshot.state.load_phase = nc::core::PaneLoadPhase::Failed;
+    snapshot.state.visible_error = ExplorerFailure();
+    [footer applyExplorerPaneSnapshot:snapshot];
+    CHECK(items.stringValue.length > 0);
+    CHECK(selection.stringValue.length == 0);
+}
 
 TEST_CASE(PREFIX "Details uses a readable 28 point row")
 {

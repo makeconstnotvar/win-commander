@@ -6,6 +6,8 @@
 #include "OperationPlan_UT.cpp"
 #include "OperationPlanCodec_UT.cpp"
 #include "OperationJournal_UT.cpp"
+#include "OperationCenterModel_UT.cpp"
+#include "OperationCenterCoordinator_UT.cpp"
 #include "ProviderConditionalCopyJournalMapper_UT.cpp"
 #include "ProviderConditionalCopyOperation_UT.cpp"
 #include "OperationPlanner_UT.cpp"

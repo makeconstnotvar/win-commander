@@ -32,6 +32,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -39,6 +40,7 @@
 #include <sys/dirent.h>
 #include <sys/stat.h>
 #include <tuple>
+#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -493,6 +495,13 @@ private:
 @interface PanelControllerNavigationTestFooter : NCPanelViewFooter
 @end
 
+@interface PanelControllerNavigationSnapshotFooter : NCPanelViewFooter
+@property(nonatomic, readonly) int appliedSnapshotCount;
+@property(nonatomic, readonly) int itemCount;
+@property(nonatomic, readonly) int selectedCount;
+@property(nonatomic, readonly) int64_t selectedBytes;
+@end
+
 @interface NCPanelControllerActionsDispatcher (NavigationShortcutSourceTests)
 - (nc::core::CommandInvocationSource)commandInvocationSourceForSender:(id)_sender
                                                    commandId:(std::string_view)_command_id
@@ -505,6 +514,43 @@ private:
 {
     (void)_item;
     (void)_vd;
+}
+
+@end
+
+@implementation PanelControllerNavigationSnapshotFooter {
+    int m_AppliedSnapshotCount;
+    int m_ItemCount;
+    int m_SelectedCount;
+    int64_t m_SelectedBytes;
+}
+
+- (void)applyExplorerPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot
+{
+    ++m_AppliedSnapshotCount;
+    m_ItemCount = _snapshot.state.item_count;
+    m_SelectedCount = _snapshot.state.selected_count;
+    m_SelectedBytes = _snapshot.state.selected_bytes;
+}
+
+- (int)appliedSnapshotCount
+{
+    return m_AppliedSnapshotCount;
+}
+
+- (int)itemCount
+{
+    return m_ItemCount;
+}
+
+- (int)selectedCount
+{
+    return m_SelectedCount;
+}
+
+- (int64_t)selectedBytes
+{
+    return m_SelectedBytes;
 }
 
 @end
@@ -834,6 +880,34 @@ private:
 
 #define PREFIX "PanelController production navigation "
 
+TEST_CASE(PREFIX "forwards only its matching Store snapshot to the Explorer footer")
+{
+    PanelControllerNavigationFixture fixture;
+    auto footer = [[PanelControllerNavigationSnapshotFooter alloc]
+        initWithFrame:NSZeroRect
+                theme:std::make_unique<TestFooterTheme>()
+    explorerAppearance:true];
+    [fixture.View() setValue:footer forKey:@"m_FooterView"];
+
+    nc::core::PaneSnapshot snapshot;
+    snapshot.pane_id = fixture.Controller().paneId;
+    snapshot.state.item_count = 3;
+    snapshot.state.selected_count = 2;
+    snapshot.state.selected_bytes = 1536;
+    [fixture.View() applyExplorerPaneSnapshot:snapshot];
+
+    CHECK(footer.appliedSnapshotCount == 1);
+    CHECK(footer.itemCount == 3);
+    CHECK(footer.selectedCount == 2);
+    CHECK(footer.selectedBytes == 1536);
+
+    snapshot.pane_id = nc::core::PaneId{fixture.Controller().paneId.value + 1};
+    snapshot.state.item_count = 99;
+    [fixture.View() applyExplorerPaneSnapshot:snapshot];
+    CHECK(footer.appliedSnapshotCount == 1);
+    CHECK(footer.itemCount == 3);
+}
+
 TEST_CASE(PREFIX "publishes Committed only after the async worker mutates the model")
 {
     PanelControllerNavigationFixture fixture;
@@ -872,6 +946,157 @@ TEST_CASE(PREFIX "publishes Committed only after the async worker mutates the mo
     const auto calls = callback->Calls();
     REQUIRE(calls.size() == 1);
     CHECK(calls.front().succeeded);
+    CHECK(calls.front().source == DirectoryChangeResultSource::Fetch);
+    CHECK(calls.front().current);
+}
+
+TEST_CASE(PREFIX "loads and force-refreshes a real local NativeHost directory")
+{
+    PanelControllerNavigationFixture fixture;
+    TempTestDir temporary;
+    const std::filesystem::path directory = temporary.directory / "native-live";
+    std::filesystem::create_directories(directory);
+    const std::filesystem::path first_file = directory / "first.txt";
+    {
+        std::ofstream output(first_file);
+        REQUIRE(output);
+        output << "first";
+    }
+    const std::string path = std::filesystem::canonical(directory).string() + "/";
+    const auto callback = std::make_shared<CallbackRecorder>();
+    auto request = std::make_shared<DirectoryChangeRequest>();
+    request->RequestedDirectory = path;
+    request->VFS = fixture.NativeHost();
+    request->PerformAsynchronous = true;
+    request->InitiatedByUser = true;
+    request->LoadingResultCallback =
+        [_callback = callback](const std::expected<void, nc::Error> &_result,
+                               const DirectoryChangeResultSource _source,
+                               const std::function<bool()> &_is_current) {
+            _callback->Record(_result, _source, _is_current);
+        };
+    const auto initial_generation = fixture.Controller().dataGeneration;
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+
+    REQUIRE([fixture.Controller() GoToDirWithContext:request].has_value());
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 2 && std::holds_alternative<PaneLifecycleCommitted>(events.back().payload);
+    }));
+
+    REQUIRE(std::holds_alternative<PaneLifecycleStarted>(events.front().payload));
+    CHECK(events.front().descriptor.kind == PaneRequestKind::Navigation);
+    CHECK(events.front().descriptor.initiated_by_user);
+    REQUIRE(events.front().descriptor.target);
+    CHECK(events.front().descriptor.target->host == fixture.NativeHost());
+    CHECK(events.front().descriptor.target->path == path);
+    const VFSListingPtr first_listing = fixture.Controller().data.ListingPtr();
+    REQUIRE(first_listing);
+    CHECK(first_listing->IsUniform());
+    CHECK(first_listing->Host() == fixture.NativeHost());
+    CHECK(first_listing->Directory() == path);
+    CHECK(fixture.Controller().dataGeneration == initial_generation + 1);
+    CHECK(std::ranges::any_of(*first_listing, [](const VFSListingItem &_item) {
+        return _item.Filename() == "first.txt";
+    }));
+    const auto calls = callback->Calls();
+    REQUIRE(calls.size() == 1);
+    CHECK(calls.front().succeeded);
+    CHECK(calls.front().source == DirectoryChangeResultSource::Fetch);
+    CHECK(calls.front().current);
+
+    const std::filesystem::path second_file = directory / "second.txt";
+    {
+        std::ofstream output(second_file);
+        REQUIRE(output);
+        output << "second";
+    }
+    REQUIRE([fixture.Controller() submitUserRefresh]);
+    REQUIRE(RunMainLoopUntil([&] {
+        const VFSListingPtr refreshed_listing = fixture.Controller().data.ListingPtr();
+        return events.size() == 4 && std::holds_alternative<PaneLifecycleCommitted>(events.back().payload) &&
+               refreshed_listing && refreshed_listing != first_listing &&
+               std::ranges::any_of(*refreshed_listing, [](const VFSListingItem &_item) {
+                   return _item.Filename() == "second.txt";
+               });
+    }));
+
+    REQUIRE(std::holds_alternative<PaneLifecycleStarted>(events[2].payload));
+    CHECK(events[2].descriptor.kind == PaneRequestKind::Refresh);
+    CHECK(events[2].descriptor.initiated_by_user);
+    const VFSListingPtr refreshed_listing = fixture.Controller().data.ListingPtr();
+    REQUIRE(refreshed_listing);
+    CHECK(refreshed_listing->IsUniform());
+    CHECK(refreshed_listing->Host() == fixture.NativeHost());
+    CHECK(refreshed_listing->Directory() == path);
+    CHECK(fixture.Controller().dataGeneration == initial_generation + 1);
+}
+
+TEST_CASE(PREFIX "publishes typed permission failure from a real local NativeHost directory")
+{
+    PanelControllerNavigationFixture fixture;
+    TempTestDir temporary;
+    const std::filesystem::path directory = temporary.directory / "native-permission-denied";
+    std::filesystem::create_directories(directory);
+    const std::string path = std::filesystem::canonical(directory).string() + "/";
+    struct stat initial_status {};
+    REQUIRE(::stat(directory.c_str(), &initial_status) == 0);
+    struct RestoreDirectoryMode {
+        std::filesystem::path directory;
+        mode_t mode;
+
+        ~RestoreDirectoryMode() { (void)::chmod(directory.c_str(), mode); }
+    } restore_directory_mode{directory, static_cast<mode_t>(initial_status.st_mode & 07777)};
+    REQUIRE(::chmod(directory.c_str(), 0) == 0);
+    if( ::geteuid() == 0 || ::access(directory.c_str(), R_OK | X_OK) == 0 )
+        SKIP("The current test user bypasses directory permissions.");
+
+    const VFSListingPtr initial_listing = fixture.Controller().data.ListingPtr();
+    const auto initial_generation = fixture.Controller().dataGeneration;
+    const int initial_view_updates = fixture.View().dataUpdateCount;
+    const auto callback = std::make_shared<CallbackRecorder>();
+    auto request = std::make_shared<DirectoryChangeRequest>();
+    request->RequestedDirectory = path;
+    request->VFS = fixture.NativeHost();
+    request->PerformAsynchronous = true;
+    request->InitiatedByUser = true;
+    request->LoadingResultCallback =
+        [_callback = callback](const std::expected<void, nc::Error> &_result,
+                               const DirectoryChangeResultSource _source,
+                               const std::function<bool()> &_is_current) {
+            _callback->Record(_result, _source, _is_current);
+        };
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+
+    REQUIRE([fixture.Controller() GoToDirWithContext:request].has_value());
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 2 && std::holds_alternative<PaneLifecycleFailed>(events.back().payload) &&
+               callback->Calls().size() == 1;
+    }));
+
+    REQUIRE(std::holds_alternative<PaneLifecycleStarted>(events.front().payload));
+    REQUIRE(std::holds_alternative<PaneLifecycleFailed>(events.back().payload));
+    const auto &failure = std::get<PaneLifecycleFailed>(events.back().payload).error;
+    CHECK(failure.original_error == nc::Error{nc::Error::POSIX, EACCES});
+    CHECK(failure.category == nc::core::FileManagerErrorCategory::PermissionError);
+    CHECK(failure.user_message_key == "errors.permission");
+    CHECK(failure.affected_items == std::vector<std::string>{path});
+    REQUIRE(failure.provider_id);
+    REQUIRE(fixture.NativeHost()->Tag());
+    CHECK(*failure.provider_id == fixture.NativeHost()->Tag());
+    CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
+    CHECK(fixture.Controller().dataGeneration == initial_generation);
+    CHECK(fixture.View().dataUpdateCount == initial_view_updates);
+    const auto calls = callback->Calls();
+    REQUIRE(calls.size() == 1);
+    CHECK_FALSE(calls.front().succeeded);
+    REQUIRE(calls.front().error);
+    CHECK(*calls.front().error == nc::Error{nc::Error::POSIX, EACCES});
     CHECK(calls.front().source == DirectoryChangeResultSource::Fetch);
     CHECK(calls.front().current);
 }
@@ -1004,6 +1229,73 @@ TEST_CASE(PREFIX "live command availability distinguishes navigation, refresh an
     CHECK_FALSE([fixture.Controller() submitUserRefresh]);
     {
         const std::lock_guard lock{gate->mutex};
+        gate->released = true;
+    }
+    gate->changed.notify_all();
+    REQUIRE(RunMainLoopUntil([&] { return !fixture.Controller().isDoingBackgroundLoading; }));
+}
+
+TEST_CASE(PREFIX "rejects a deferred navigation as Busy when a Started observer adds external loading work")
+{
+    PanelControllerNavigationFixture fixture;
+    struct Gate {
+        std::mutex mutex;
+        std::condition_variable changed;
+        bool entered = false;
+        bool released = false;
+    };
+
+    const auto gate = std::make_shared<Gate>();
+    const auto deferred_callback = std::make_shared<CallbackRecorder>();
+    const VFSListingPtr initial_listing = fixture.Controller().data.ListingPtr();
+    const unsigned long initial_generation = fixture.Controller().dataGeneration;
+    std::vector<PaneLifecycleEvent> events;
+    bool submitted_deferred_navigation = false;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+        if( submitted_deferred_navigation || !std::holds_alternative<PaneLifecycleStarted>(_event.payload) ||
+            !_event.descriptor.target || _event.descriptor.target->path != "/first/")
+            return;
+
+        [fixture.Controller() commitCancelableLoadingTask:[gate](const nc::panel::CancelableLoadingTaskContext &) {
+            std::unique_lock lock{gate->mutex};
+            gate->entered = true;
+            gate->changed.notify_all();
+            gate->changed.wait(lock, [&] { return gate->released; });
+        }];
+        submitted_deferred_navigation = true;
+        CHECK([fixture.Controller() GoToDirWithContext:fixture.Request("/second/", true, deferred_callback)].has_value());
+    }];
+
+    CHECK([fixture.Controller() GoToDirWithContext:fixture.Request("/first/", true)].has_value());
+    REQUIRE(submitted_deferred_navigation);
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 3 && std::holds_alternative<PaneLifecycleCancelled>(events[1].payload) &&
+               std::holds_alternative<PaneLifecycleRejected>(events[2].payload);
+    }));
+
+    REQUIRE(std::holds_alternative<PaneLifecycleStarted>(events[0].payload));
+    CHECK(events[0].descriptor.target->path == "/first/");
+    REQUIRE(std::holds_alternative<PaneLifecycleCancelled>(events[1].payload));
+    CHECK(std::get<PaneLifecycleCancelled>(events[1].payload).reason == PaneCancellationReason::InternalAbort);
+    REQUIRE(std::holds_alternative<PaneLifecycleRejected>(events[2].payload));
+    CHECK(std::get<PaneLifecycleRejected>(events[2].payload).reason == PaneRejectionReason::Busy);
+    CHECK(events[2].descriptor.target->path == "/second/");
+    CHECK(fixture.Host()->FetchCount() == 0);
+    CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
+    CHECK(fixture.Controller().dataGeneration == initial_generation);
+
+    const auto deferred_calls = deferred_callback->Calls();
+    REQUIRE(deferred_calls.size() == 1);
+    CHECK_FALSE(deferred_calls.front().succeeded);
+    REQUIRE(deferred_calls.front().error);
+    CHECK(*deferred_calls.front().error == nc::Error{nc::Error::POSIX, EBUSY});
+    CHECK(deferred_calls.front().source == DirectoryChangeResultSource::Admission);
+    CHECK(deferred_calls.front().current);
+
+    {
+        std::unique_lock lock{gate->mutex};
+        REQUIRE(gate->changed.wait_for(lock, 1s, [&] { return gate->entered; }));
         gate->released = true;
     }
     gate->changed.notify_all();

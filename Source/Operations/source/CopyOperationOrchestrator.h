@@ -11,6 +11,7 @@
 #include <expected>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@
 namespace nc::ops {
 
 class CopyOperationOrchestratorTesting;
+class OperationCenterCoordinator;
 
 enum class CopyOperationExecutionFactoryError : uint8_t {
     Cancelled,
@@ -85,6 +87,30 @@ struct CopyOperationDurableTerminalOutcome final {
 struct CopyOperationColdObservation final {
     uint64_t notification_mask;
     std::function<void()> callback;
+};
+
+/**
+ * Private admission lock retained from the coordinator's pre-enqueue handoff until Pool accepts or
+ * rejects the exact operation. It intentionally exposes neither the lock nor executor authority.
+ */
+class CopyOperationPreEnqueueLease final
+{
+public:
+    CopyOperationPreEnqueueLease(const CopyOperationPreEnqueueLease &) = delete;
+    CopyOperationPreEnqueueLease &operator=(const CopyOperationPreEnqueueLease &) = delete;
+    CopyOperationPreEnqueueLease(CopyOperationPreEnqueueLease &&) noexcept = default;
+    CopyOperationPreEnqueueLease &operator=(CopyOperationPreEnqueueLease &&) noexcept = default;
+
+private:
+    explicit CopyOperationPreEnqueueLease(std::unique_lock<std::recursive_mutex> _gate) noexcept
+        : m_Gate{std::move(_gate)}
+    {
+    }
+
+    std::unique_lock<std::recursive_mutex> m_Gate;
+
+    friend class CopyOperationOrchestrator;
+    friend class OperationCenterCoordinator;
 };
 
 struct CopyOperationSubmissionHooks final {
@@ -202,6 +228,7 @@ enum class CopyOperationOrchestratorErrorCode : uint8_t {
     UnsupportedReviewedPlan,
     Cancelled,
     JournalAdmissionFailed,
+    InvalidJournalAdmissionReceipt,
     ExecutionFactoryFailed,
     InvalidExecutionProduct,
     OperationConfigurationFailed,
@@ -209,6 +236,7 @@ enum class CopyOperationOrchestratorErrorCode : uint8_t {
     RunReceiptReservationFailed,
     RunningTransitionFailed,
     RunReceiptArmFailed,
+    PreEnqueuePreparationFailed,
     RunningFinalizationFailed,
     EnqueueRejected
 };
@@ -246,6 +274,8 @@ private:
     using ExecutionFactory =
         std::function<std::expected<CopyOperationExecutionProduct,
                                     CopyOperationExecutionFactoryError>(ReviewedVFSOperationPreflight, CancelChecker)>;
+    using PreEnqueueHandoff = std::function<CopyOperationPreEnqueueLease(const std::shared_ptr<Pool> &,
+                                                                           const std::shared_ptr<Operation> &)>;
     using ConditionalCommitTransactionResolver =
         std::function<std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
                                     nc::vfs::ProviderConditionalCopyTransactionBeginError>(
@@ -257,6 +287,13 @@ private:
                               ExecutionFactory _execution_factory,
                               std::shared_ptr<CopyOperationRunReceiptCustodian> _run_receipt_custodian);
 
+    [[nodiscard]] std::expected<std::shared_ptr<Operation>, CopyOperationOrchestratorError>
+    SubmitAdmitted(ReviewedVFSOperationPreflight _reviewed,
+                   OperationJournalAdmissionReceipt _admission,
+                   CancelChecker _cancel_checker,
+                   CopyOperationSubmissionHooks _hooks,
+                   PreEnqueueHandoff _pre_enqueue_handoff = {});
+
     std::shared_ptr<OperationJournal> m_Journal;
     std::shared_ptr<Pool> m_Pool;
     ExecutionFactory m_ExecutionFactory;
@@ -265,6 +302,7 @@ private:
     std::shared_ptr<CopyOperationRunReceiptCustodian> m_RunReceiptCustodian;
 
     friend class CopyOperationOrchestratorTesting;
+    friend class OperationCenterCoordinator;
 };
 
 } // namespace nc::ops

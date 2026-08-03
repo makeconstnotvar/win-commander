@@ -84,6 +84,7 @@
 #include <Operations/PoolEnqueueFilter.h>
 #include <Operations/AggregateProgressTracker.h>
 #include <Operations/CopyOperationOrchestrator.h>
+#include <Operations/OperationCenterCoordinator.h>
 #include <Operations/OperationJournal.h>
 
 #include <Config/ConfigImpl.h>
@@ -244,6 +245,7 @@ static NCAppDelegate *g_Me = nil;
     std::unique_ptr<nc::utility::FSEventsFileUpdateImpl> m_FSEventsFileUpdate;
     nc::ops::PoolEnqueueFilter m_PoolEnqueueFilter;
     std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> m_CopyOperationRecoveryCoordinator;
+    std::shared_ptr<nc::ops::OperationCenterCoordinator> m_OperationCenterCoordinator;
     std::unique_ptr<ConfigWiring> m_ConfigWiring;
     std::unique_ptr<nc::SystemThemeDetector> m_SystemThemeDetector;
     std::unique_ptr<nc::ThemesManager> m_ThemesManager;
@@ -645,6 +647,12 @@ static NCAppDelegate *g_Me = nil;
         }
 
         auto journal = std::make_shared<nc::ops::OperationJournal>(std::move(*opened));
+        auto operation_center = nc::ops::OperationCenterCoordinator::Create(*journal);
+        if( !operation_center ) {
+            std::cerr << "Failed to initialize the Copy operation center: "
+                      << magic_enum::enum_name(operation_center.error().code) << ".\n";
+            return;
+        }
         auto custodian = std::make_shared<nc::ops::CopyOperationRunReceiptCustodian>();
         auto coordinator = std::make_shared<nc::core::CopyOperationRecoveryCoordinator>(
             std::move(journal), std::move(custodian), m_StateDirectory.native());
@@ -652,6 +660,7 @@ static NCAppDelegate *g_Me = nil;
             std::cerr << "Copy operation journal contains an Interrupted startup entry for plan "
                       << entry.plan.Id().Value() << ".\n";
         m_CopyOperationRecoveryCoordinator = std::move(coordinator);
+        m_OperationCenterCoordinator = std::move(*operation_center);
     } catch( const std::exception &error ) {
         std::cerr << "Failed to initialize the Copy operation runtime: " << error.what() << ".\n";
     } catch( ... ) {
@@ -1104,6 +1113,11 @@ static void DoTemporaryFileStoragePurge()
     if( !m_CopyOperationRecoveryCoordinator )
         return {};
     return m_CopyOperationRecoveryCoordinator->CurrentRunReceiptCustodian();
+}
+
+- (std::shared_ptr<nc::ops::OperationCenterCoordinator>)operationCenterCoordinator
+{
+    return m_OperationCenterCoordinator;
 }
 
 - (const std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> &)copyOperationRecoveryCoordinator

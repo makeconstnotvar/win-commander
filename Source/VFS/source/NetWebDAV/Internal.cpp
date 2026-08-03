@@ -95,7 +95,10 @@ std::optional<Error> CurlRCToError(int _curl_rc) noexcept
         case CURLE_COULDNT_RESOLVE_HOST:
             return Error{Error::POSIX, EHOSTUNREACH};
         case CURLE_COULDNT_CONNECT:
-            return Error{Error::POSIX, EADDRNOTAVAIL};
+            return Error{Error::POSIX, ECONNREFUSED};
+        case CURLE_SEND_ERROR:
+        case CURLE_RECV_ERROR:
+            return Error{Error::POSIX, ECONNRESET};
         case CURLE_REMOTE_ACCESS_DENIED:
             return Error{Error::POSIX, EACCES};
         case CURLE_OPERATION_TIMEDOUT:

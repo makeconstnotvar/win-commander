@@ -1,8 +1,10 @@
 # Feature: durable operation journal foundation
 
-> Status: schema-v1 journal, exact run authority, atomic terminal evidence, production Copy orchestration, bounded `CopyAs` consumer and reconciled Pool release implemented
+> Status: schema-v3 journal-owned execution-ID allocation, exact run authority, atomic terminal evidence, production Copy orchestration, bounded `CopyAs` consumer and reconciled Pool release implemented
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` sections 14 and 31
 > Execution tracker: M3 in `Docs/Development-Plan.md`
+
+The physical-volume fixture uses a fresh exact journal under a descriptor-anchored internal test workspace. Hardware power-loss recovery must reopen before retry or cleanup and relies on the existing startup conversion of `Admitted`/`Running` to `Interrupted`; the required checkpoint protocol is `Docs/Features/reviewed_copy_as_physical_volume_protocol.md`.
 
 ## Purpose
 
@@ -18,11 +20,11 @@
 - Corruption, schema mismatch, duplicate plans, invalid lifecycle/item evidence, unsafe file identity/mode and resource limits fail closed.
 - Move-only RAII owns every descriptor across callbacks, exceptions and early returns.
 
-`Admit` returns a move-only journal- and exact-plan-bound admission receipt. `TransitionToRunning` consumes it and returns a separate move-only run receipt. `FinalizeAdmission` terminates work that never started. `Finalize(run, item, terminal)` atomically persists one exact item result and its terminal entry state; the run receipt is consumed only after the durable snapshot succeeds.
+Schema v3 stores a required canonical `OperationId` beside every immutable plan and a root `next_operation_sequence` high-water mark. `ReserveOperationId()` returns a move-only, process-local journal reservation; only `Admit(reservation, plan)` can consume it, atomically persisting the exact entry and high-water mark. This removes raw production ID admission. `TransitionToRunning` consumes the resulting exact admission receipt and returns a separate move-only run receipt. `FinalizeAdmission` terminates work that never started. `Finalize(run, item, terminal)` atomically persists one exact item result and its terminal entry state; the run receipt is consumed only after the durable snapshot succeeds. Strict v1 and v2 decoding migrates in place before `Open` exposes a snapshot: v1 derives `op-1…op-N` by entry order, while v2 derives the high-water mark from persisted IDs. The filename and lock domain remain `operation-journal-v1.*` for migration safety.
 
 ## Item evidence
 
-Schema v1 stores ordered typed evidence without collapsing ambiguity:
+The schema-v3 entry keeps ordered typed evidence without collapsing ambiguity:
 
 - item status and phase-specific error;
 - primary errno plus prior error/errno for cleanup failure;
@@ -43,14 +45,15 @@ After post-rename uncertainty the custodian drops the poisoned journal, live rec
 
 When the operation is still Pool-owned, reconciliation returns `pool_release_required`. `ReleaseReconciled(plan_id)` performs the exact `Pool::RetryFinalization` handshake and releases custody only after the matching finalizer callback confirms release. The slot latches that callback, so synchronous completion, concurrent release attempts, retained finalization, and Pool teardown cannot be confused with a different operation. Public ID-addressed journal mutation is removed; compatibility calls exist only through `OperationJournalTesting`.
 
-Temporary artifacts remain manual evidence until provider-owned bounded staging supplies safe cleanup authority. Operation Center projection, retention/redaction policy and user-driven retry/reconcile UI are also open.
+Temporary artifacts remain manual evidence until provider-owned bounded staging supplies safe cleanup authority. ADR 0002 reserves that authority for a helper-owned descriptor/lease protocol; the journal must not infer cleanup from a stored pathname. Operation Center projection, retention/redaction policy and user-driven retry/reconcile UI are also open.
 
 ## Verified coverage
 
-- Journal: 27 Debug cases / 592 assertions.
-- Copy orchestrator: 15 / 758, including production private-factory construction at 3 / 138, restricted hook validation/installation, exact durable-outcome delivery, pre-running rejection, shutdown cancellation, typed-outcome retention, exact retry, both post-rename reconciliation outcomes, wrong-storage rejection, exact reconciled Pool release, concurrent release gating and synchronous completion before enqueue returns.
+- Journal: 33 Debug cases / 752 assertions, including journal-issued move-only reservations, durable high-water persistence, exact-ID forged-receipt rejection, strict schema-v3 IDs, and deterministic v1/v2 migration under normal and post-rename-uncertain persistence.
+- Copy orchestrator: 19 / 849, including production private-factory construction at 3 / 138, restricted hook validation/installation, exact durable-outcome delivery, pre-running rejection, shutdown cancellation, exact receipt validation/no-re-admission, typed-outcome retention, exact retry, both post-rename reconciliation outcomes, wrong-storage rejection, exact reconciled Pool release, concurrent release gating and synchronous completion before enqueue returns. Coordinator/orchestrator/control integration passes 28 / 999 and covers `Queued` before Pool addition, sealed pre-enqueue residency, Start/durable-terminal reduction, stale revision rejection, exact cancellation, reentrant cancellation rejection, and a failed handoff without Pool side effects.
 - Pool: 17 / 219, including preallocated terminal transition, `ReleaseWithoutCompletion`, next-start/removal semantics and fail-closed unknown finalizer decisions.
 - Provider result mapper: 4 / 237; transaction-backed execution product: 9 / 188; reviewed factory: 8 / 225; Job lifecycle: 10 / 608.
-- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
+- Production CopyAs policy and app-boundary seam: 10 / 98; the 4 / 70 app-boundary subset proves exact review projection, zero enqueue on blocked/stale/unpersisted/cancelled paths and owning durable failure dispatch before `ReleaseWithoutCompletion` removes the operation.
+- Full Debug `OperationsUT`: 192 / 193 cases and 5,209 / 5,213 assertions in isolated `TMPDIR`; the only failure remains the host-specific NativeCreateCopy set-ID metadata baseline. The current coordinator/control subset passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 - Current M0: 897 / 132,011 in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 / 89,392.

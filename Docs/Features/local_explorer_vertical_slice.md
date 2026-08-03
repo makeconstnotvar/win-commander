@@ -89,12 +89,14 @@ The slice introduces canonical definitions for:
 | `file.copy` | local selection contains copyable items | existing copy-to-pasteboard action |
 | `file.cut` | local selection contains movable items | existing cut-token action |
 | `file.paste` | clipboard has supported items and destination can accept them | reviewed plan → durable journal admission → production orchestrator/private factory → `Pool` |
-| `operationCenter.open` | always visible when operations/history exist | new Operation Center presentation |
-| `operation.cancel` | operation state supports cancellation | existing Operation/Job cancellation |
+| `operationCenter.open` | unavailable: the stable ID is declared, while the presentation port and Registry definition are pending | `OperationCenterModel` presentation surface |
+| `operation.cancel` | unavailable: the stable ID is declared, while a Registry definition and operation control projection are pending | `OperationCenterModel` resolves `OperationId` plus expected revision through a sealed control port |
 | `operation.retry` | final error is retryable | recreate execution from persisted plan/result |
 | navigation commands | derived from pane history/location state | existing panel action dispatcher |
 
 Every entry point resolves `CommandState` from the same `CommandContext`. Existing selectors remain adapter details during migration.
+
+`Operation::Stop()` and `Job::Stop()` remain engine lifecycle primitives. They become an application command bridge only after `OperationCenterModel` publishes a live `OperationId` and revision, and its control port owns the corresponding Pool/operation reference.
 
 ## Data model
 

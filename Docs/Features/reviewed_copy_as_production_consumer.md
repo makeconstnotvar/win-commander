@@ -20,19 +20,20 @@ Blocked, stale, cancelled, unpersisted or insufficiently bound reviewed intent n
 
 ## Verified evidence
 
-- full Debug `WinCommanderUT`: 309 cases / 4,995 assertions;
-- reviewed CopyAs selection, unavailable fail-closed behavior and submission gate: 6 / 28;
+- reviewed CopyAs selection, unavailable fail-closed behavior, submission gate and app boundary: 10 / 98;
+- app boundary: blocked, stale, unpersisted and cancelled paths make zero submission calls; the exact review projection and owning durable failure dispatch before Pool removal with generic completion suppressed pass 4 / 70 in Debug, Release ASAN and Release UBSAN;
 - recovery coordinator: 6 / 67;
-- full Debug `OperationsUT`: 170 / 4,748;
-- explicitly instrumented Release ASAN and UBSAN `OperationsUT`: 170 / 4,748 each, with runtime linkage confirmed and no sanitizer diagnostics;
+- fresh unsigned Debug `WinCommander-Unsigned` build passes;
+- fresh full Debug `WinCommanderUT`: 309 / 313 cases and 4,994 / 4,998 assertions pass; four AppKit pasteboard cases reproducibly fail because the service is unavailable;
+- fresh full Debug `OperationsUT`: 169 / 170 and 4,744 / 4,748 pass; one existing set-ID NativeCreateCopy metadata case fails on this host;
+- aggregate ASAN and UBSAN both reach the same pasteboard baseline after BaseUT and ConfigUT without sanitizer diagnostics;
 - latest full Debug `VFSUT` run: 95 / 43,566;
 - ProviderCapabilities: 16 / 549; Native conditional Copy: 16 / 328.
 
-Debug `UnitTests` and `WinCommander-Unsigned` arm64 builds pass. The Xcode project files pass `plutil`, and the final tree passes `git diff --check`.
+The final tree passes `git diff --check`.
 
 ## Remaining M3 gates
 
-- live application boundary tests for blocked, stale, cancelled and persistence-failure zero-enqueue behavior plus exact review/outcome UI dispatch;
-- dedicated internal/external physical-volume and power-loss fixtures;
+- execute the implemented internal/external physical-volume fixture and add the required power-loss checkpoint harness/evidence; see `Docs/Features/reviewed_copy_as_physical_volume_protocol.md`;
 - provider-owned bounded cross-volume staging;
-- Operation Center persistence and broader mutation consumers.
+- [`OperationCenterModel`/`OperationId` control projection and persistence](operation_center_model_and_control_projection.md), plus broader mutation consumers.

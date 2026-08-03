@@ -11,3 +11,4 @@ using NSImage = void *;
 using NSString = void *;
 using NSURL = void *;
 using NSWindow = void *;
+using NSModalResponse = long;

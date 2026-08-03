@@ -27,20 +27,20 @@ The common `Job`/`Operation`/`Pool` lifecycle retains the owning operation throu
 
 The isolated capsule remains a characterization and fault-injection foundation with a declared `FileSystemSyncOnly` promise and a named staging artifact. The production Native transaction is the authoritative same-volume path: it consumes unforgeable reviewed authority, applies the internal-writable-APFS capability policy, owns exact metadata seals, publishes only through `fclonefileat(..., CLONE_ACL)`, verifies the destination, and orders `fsync(destination) → fsync(parent) → F_FULLFSYNC(destination)`.
 
-The provider commit result is now losslessly mapped into journal evidence, owned by a typed operation product, constructed through the private reviewed factory, and submitted by the production `CopyOperationOrchestrator`. Restricted cold hooks, owning exact durable-terminal delivery, preallocated Pool finalization and `ReleaseWithoutCompletion` are implemented. Application adoption still requires typed review composition and an app durable-outcome presenter/coordinator. Cross-volume Copy still needs provider-owned bounded staging and descriptor-bound artifact recovery. Replacement, directories, symlinks, batches and remote providers remain separate later slices.
+The provider commit result is now losslessly mapped into journal evidence, owned by a typed operation product, constructed through the private reviewed factory, and submitted by the production `CopyOperationOrchestrator`. Restricted cold hooks, owning exact durable-terminal delivery, preallocated Pool finalization and `ReleaseWithoutCompletion` are implemented. The bounded `CopyAs` application seam composes typed review and dispatches the owning durable outcome before non-success Pool removal. Cross-volume reviewed Copy stays fail closed: ADR 0002 requires a separate helper-owned staging and recovery authority. Replacement, directories, symlinks, batches and remote providers remain separate later slices.
 
 ## Verified coverage
 
 - Native create-copy: 19 Debug cases / 924 assertions.
 - This 19 / 924 staged-capsule total is an earlier focused snapshot retained for that characterization boundary.
 - Provider conditional result mapper: 4 / 237; execution product: 9 / 188.
-- Reviewed factory: 8 / 225; orchestrator: 15 / 758, including production construction at 3 / 138.
+- Reviewed factory: 8 / 225; orchestrator: 17 / 806, including production construction at 3 / 138 and receipt-aware no-re-admission.
 - Job lifecycle and worker-launch hardening: 10 / 608; journal: 27 / 592.
 - Pool lifecycle/finalization: 17 / 219.
-- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics.
+- Historical foundation snapshot: Debug, Release ASAN and Release UBSAN `OperationsUT` passed 170 / 4,748 in each configuration, with sanitizer runtimes confirmed and no diagnostics; the current coordinator/control subset separately passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 - Current M0: unsigned Debug app plus 10 aggregate binaries, 897 cases / 132,011 assertions in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 cases / 89,392 assertions across Term, Operations, VFS and VFSIcon.
 
 ## Next slice
 
-Prove the live boundary and physical-volume behavior of the bounded reviewed `CopyAs::Perform` consumer. Cross-volume support remains a separate provider-owned bounded-staging slice.
+Run the implemented opt-in physical-volume fixture and record its hardware power-loss companion protocol for the bounded reviewed `CopyAs::Perform` consumer; `Docs/Features/reviewed_copy_as_physical_volume_protocol.md` defines the roots, evidence and remaining checkpoint harness. Cross-volume support remains a separate provider-owned bounded-staging slice.

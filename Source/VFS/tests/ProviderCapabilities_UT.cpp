@@ -3,6 +3,7 @@
 #include "TestEnv.h"
 #include <VFS/ProviderCapabilities.h>
 #include <VFS/Host.h>
+#include <VFS/NetFTP.h>
 #include <VFS/NetSFTP.h>
 #include <VFS/PS.h>
 #include "../source/ProviderCapabilitiesTesting.h"
@@ -836,7 +837,7 @@ TEST_CASE(PREFIX "requires provider confirmation before reporting an aborted tra
     }
 }
 
-TEST_CASE(PREFIX "classifies POSIX and SFTP errors for planning")
+TEST_CASE(PREFIX "classifies POSIX, FTP, and SFTP errors for planning")
 {
     Host &host = *Host::DummyHost();
     CHECK(host.ClassifyError(Error{Error::POSIX, ENOENT}) == HostErrorKind::Missing);
@@ -845,6 +846,15 @@ TEST_CASE(PREFIX "classifies POSIX and SFTP errors for planning")
     CHECK(host.ClassifyError(Error{Error::POSIX, ECANCELED}) == HostErrorKind::Cancelled);
     CHECK(host.ClassifyError(Error{Error::POSIX, ENETUNREACH}) == HostErrorKind::Unavailable);
     CHECK(host.ClassifyError(Error{Error::POSIX, EIO}) == HostErrorKind::Other);
+
+    using nc::vfs::ftp::Errors;
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::couldnt_resolve_proxy}) ==
+          HostErrorKind::Unavailable);
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::couldnt_resolve_host}) ==
+          HostErrorKind::Unavailable);
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::couldnt_connect}) ==
+          HostErrorKind::Unavailable);
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::login_denied}) == HostErrorKind::Other);
 
     using nc::vfs::sftp::ErrorDomain;
     using nc::vfs::sftp::Errors;

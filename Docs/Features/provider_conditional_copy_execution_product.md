@@ -61,18 +61,18 @@ Process-lifetime composition should own the active journal and `CopyOperationRun
 - Execution product and provider operation: 9 / 188.
 - Reviewed factory: 8 / 225.
 - Job lifecycle and worker-launch hardening: 10 / 608.
-- Copy orchestrator: 15 / 758, including the production factory path at 3 / 138.
+- Copy orchestrator: 17 / 806, including the production factory path at 3 / 138 and receipt-aware no-re-admission.
 - Pool: 17 / 219.
 - Journal: 27 / 592.
-- Full Debug `OperationsUT`: 170 cases / 4,748 assertions.
+- Historical foundation Debug `OperationsUT`: 170 cases / 4,748 assertions; the current model/coordinator batch is tracked separately in `Development-Plan.md`.
 
-Explicitly instrumented Release ASAN and UBSAN `OperationsUT` each pass 170 / 4,748 with confirmed runtime linkage and no diagnostics.
+At that foundation snapshot, explicitly instrumented Release ASAN and UBSAN `OperationsUT` each passed 170 / 4,748 with confirmed runtime linkage and no diagnostics; the current coordinator/control subset separately passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 
 Earlier Native staged-capsule, Pool, VFS, M0, and seeded integration snapshots remain recorded in their owning feature and plan documents.
 
 ## Remaining work
 
-Prove the live application boundary and physical-volume behavior for the bounded `CopyAs` consumer. Cross-volume Copy still requires provider-owned bounded staging; batches, replacement, directories, symlinks, remote providers and clipboard Paste remain separate gates.
+The opt-in `OperationsIT` physical-volume fixture is implemented, but the required internal/external physical run and hardware power-loss evidence are not yet recorded; see `Docs/Features/reviewed_copy_as_physical_volume_protocol.md`. Cross-volume Copy still requires provider-owned bounded staging; batches, replacement, directories, symlinks, remote providers and clipboard Paste remain separate gates.
 
 ## Related documents
 

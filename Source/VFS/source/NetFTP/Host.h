@@ -30,6 +30,8 @@ public:
     static const char *UniqueTag;
     static VFSMeta Meta();
     VFSConfiguration Configuration() const override;
+    HostErrorKind ClassifyError(const Error &_error) const noexcept override;
+    static HostErrorKind ClassifyFTPError(const Error &_error) noexcept;
 
     const std::string &ServerUrl() const noexcept;
     const std::string &User() const noexcept;

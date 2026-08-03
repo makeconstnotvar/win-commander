@@ -37,6 +37,7 @@ class ServicesHandler;
 namespace ops {
 class AggregateProgressTracker;
 class CopyOperationRunReceiptCustodian;
+class OperationCenterCoordinator;
 class OperationJournal;
 class PoolEnqueueFilter;
 } // namespace ops
@@ -157,6 +158,9 @@ class NativeHost;
 /** Process-owned Copy run-receipt custody. Empty when durable runtime initialization failed. */
 @property(nonatomic, readonly) std::shared_ptr<nc::ops::CopyOperationRunReceiptCustodian>
     copyOperationRunReceiptCustodian;
+
+/** Process-owned value-model admission/lifecycle coordinator for reviewed Copy. */
+@property(nonatomic, readonly) std::shared_ptr<nc::ops::OperationCenterCoordinator> operationCenterCoordinator;
 
 /** Query and explicit bounded recovery boundary for Copy journal history and retained receipts. */
 @property(nonatomic, readonly)

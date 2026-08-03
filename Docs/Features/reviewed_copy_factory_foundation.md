@@ -17,7 +17,7 @@ This slice keeps accepted planning, explicit review, journal admission, provider
 5. `ReviewedOperationFactory` validates one Native-to-Native, create-only regular-file Copy and consumes the reviewed preflight into a private-constructible `ProviderConditionalCopyReviewedAuthority`.
 6. The authority retains the moved reviewed preflight as a private seal and exposes immutable exact claims. `BeginConditionalCopyTransaction` consumes it once; a provider may then mint a move-only, single-use `ProviderConditionalCopyTransaction`.
 7. `ProviderConditionalCopyOperationFactory` consumes the transaction into a move-only cold operation plus exact terminal journal-result accessor.
-8. The production `CopyOperationOrchestrator` privately invokes that reviewed-factory path after durable admission, installs restricted lifecycle/item-status hooks while the product is cold, then orders Running, enqueue, exact durable-outcome delivery, terminal finalization, reconciliation, and Pool release; no application entry point uses it yet.
+8. The process-owned `OperationCenterCoordinator` stages durable admission for bounded `CopyAs`, then passes the exact receipt to the private `CopyOperationOrchestrator` path. It installs weak Start and durable-terminal model reducers while the product is cold; the common path orders Running, enqueue, exact durable-outcome delivery, terminal finalization, reconciliation, and Pool release.
 
 ## Provider transaction contract
 
@@ -38,8 +38,8 @@ The reviewed source version is the admission and immediate pre-publication fresh
 - Bounded `CopyAs::Perform` builds the exact preflight, shows its summary and issues reviewed authority only after explicit approval.
 - The app composes cold-operation hooks through process recovery and dispatches owning durable outcomes to the UI executor.
 - Completion presentation uses exact durable terminal, publication, sync, recovery, `Reconcile`, and `ReleaseReconciled` evidence.
-- Focused policy/gate and recovery tests pass; live zero-enqueue and UI-dispatch proof remains required.
-- Add provider-owned private/bounded staging for cross-volume data and metadata, with commit as the sole publish step.
+- Focused policy/gate and recovery tests pass; the app-owned boundary also proves zero enqueue, exact review projection and UI-dispatch scheduling before non-success Pool release (4 / 70).
+- Add provider-owned private/bounded staging for cross-volume data and metadata only through the isolated helper authority in `Docs/ADR/0002-cross-volume-staging-authority.md`; a named in-process stage cannot be connected to this reviewed factory.
 - Execute dedicated physical internal/external-volume and power-loss evidence in the required environments.
 
 Known unsupported scopes retain the established Copy path. Once an action selects the reviewed lifecycle, later failure remains in its typed journal/recovery path and cannot fall back to a second legacy mutation attempt.
@@ -52,10 +52,10 @@ Known unsupported scopes retain the established Copy path. Once an action select
 - Earlier staged Native create-copy snapshot: 19 / 924; provider result mapper: 4 / 237; execution product: 9 / 188; journal: 27 / 592; Pool: 17 / 219; orchestrator: 15 / 758, including production construction at 3 / 138.
 - Job lifecycle and worker-launch hardening: 10 / 608.
 - Previously recorded explicitly instrumented Release ASAN and UBSAN `VFSUT` snapshots pass ProviderCapabilities at 16 / 548 and Native conditional Copy at 15 / 312.
-- Full Debug, Release ASAN and Release UBSAN `OperationsUT`: 170 / 4,748 in each configuration, with both sanitizer runtimes confirmed and no diagnostics.
+- Historical foundation snapshot: Debug, Release ASAN and Release UBSAN `OperationsUT` passed 170 / 4,748 in each configuration, with both sanitizer runtimes confirmed and no diagnostics. The current coordinator/control subset separately passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 - Current M0: unsigned Debug app and 10 aggregate binaries, 897 / 132,011 in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 / 89,392; fixture cleanup completed.
 
 ## Next slice
 
-Add live application-boundary and physical-volume evidence for the bounded `CopyAs::Perform` consumer. Cross-volume staging follows as a separate provider-owned slice.
+Add physical-volume evidence for the bounded `CopyAs::Perform` consumer. Cross-volume staging follows only after the ADR 0002 helper boundary is available.

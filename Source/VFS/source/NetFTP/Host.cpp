@@ -107,6 +107,28 @@ VFSConfiguration FTPHost::Configuration() const
     return m_Configuration;
 }
 
+HostErrorKind FTPHost::ClassifyError(const Error &_error) const noexcept
+{
+    if( _error.Domain() != ftp::ErrorDomain )
+        return Host::ClassifyError(_error);
+
+    return ClassifyFTPError(_error);
+}
+
+HostErrorKind FTPHost::ClassifyFTPError(const Error &_error) noexcept
+{
+    if( _error.Domain() != ftp::ErrorDomain )
+        return HostErrorKind::Other;
+    switch( _error.Code() ) {
+        case ftp::Errors::couldnt_resolve_proxy:
+        case ftp::Errors::couldnt_resolve_host:
+        case ftp::Errors::couldnt_connect:
+            return HostErrorKind::Unavailable;
+        default:
+            return HostErrorKind::Other;
+    }
+}
+
 std::expected<void, Error> FTPHost::DoInit()
 {
     AddFeatures(DeclaredFeatures);

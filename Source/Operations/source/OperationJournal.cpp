@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <charconv>
 #include <cerrno>
 #include <cstdlib>
 #include <fcntl.h>
@@ -16,6 +17,7 @@
 #include <mutex>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <unordered_map>
 #include <unistd.h>
 #include <utility>
 
@@ -37,6 +39,20 @@ OperationJournalFailureResult OperationJournalCodecFailure(OperationPlanCodecErr
     return std::unexpected(OperationJournalError{.code = OperationJournalErrorCode::PlanCodecFailed,
                                                   .system_error = 0,
                                                   .plan_codec_error = std::move(_error)});
+}
+
+uint64_t OperationJournalOperationIdSequence(const OperationId &_operation_id) noexcept
+{
+    const auto serialized = _operation_id.ToString();
+    constexpr std::string_view prefix{"op-"};
+    uint64_t sequence = 0;
+    const auto [parsed_until, error] = std::from_chars(
+        serialized.data() + prefix.size(), serialized.data() + serialized.size(), sequence);
+    const bool valid = error == std::errc{} && parsed_until == serialized.data() + serialized.size() && sequence != 0;
+    assert(valid);
+    if( !valid )
+        return 0;
+    return sequence;
 }
 
 class OperationJournalDescriptor final
@@ -505,9 +521,9 @@ bool OperationJournalWriteToken(Writer &_writer, std::string_view _token)
 }
 
 std::expected<std::string, OperationJournalError>
-OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries)
+OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries, const uint64_t _next_operation_sequence)
 {
-    if( _entries.size() > OperationJournal::MaxEntries )
+    if( _entries.size() > OperationJournal::MaxEntries || _next_operation_sequence == 0 )
         return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
 
     rapidjson::StringBuffer buffer;
@@ -515,6 +531,8 @@ OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries)
     writer.StartObject();
     writer.Key("version");
     writer.Uint(OperationJournal::SchemaVersion);
+    writer.Key("next_operation_sequence");
+    writer.Uint64(_next_operation_sequence);
     writer.Key("entries");
     writer.StartArray();
     size_t total_item_results = 0;
@@ -539,6 +557,9 @@ OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries)
                               : std::unexpected(updated_at.error());
 
         writer.StartObject();
+        writer.Key("operation_id");
+        const auto operation_id = entry.operation_id.ToString();
+        OperationJournalWriteToken(writer, operation_id);
         writer.Key("plan");
         plan_document.Accept(writer);
         writer.Key("state");
@@ -595,7 +616,13 @@ OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries)
     return std::string{buffer.GetString(), buffer.GetSize()};
 }
 
-std::expected<std::vector<OperationJournalEntry>, OperationJournalError>
+struct OperationJournalDecoded final {
+    std::vector<OperationJournalEntry> entries;
+    uint64_t next_operation_sequence{1};
+    bool requires_migration{false};
+};
+
+std::expected<OperationJournalDecoded, OperationJournalError>
 OperationJournalDecode(std::string_view _json)
 {
     if( _json.size() > OperationJournal::MaxJournalBytes )
@@ -604,50 +631,106 @@ OperationJournalDecode(std::string_view _json)
     document.Parse<rapidjson::kParseValidateEncodingFlag>(_json.data(), _json.size());
     if( document.HasParseError() || !document.IsObject() )
         return OperationJournalFailure(OperationJournalErrorCode::MalformedJournal);
-    const auto root = OperationJournalMembers(document, std::array<std::string_view, 2>{"version", "entries"});
-    if( !root )
-        return std::unexpected(root.error());
-    if( !(*root)[0]->IsUint() )
+    const auto version_member = document.FindMember("version");
+    if( version_member == document.MemberEnd() || !version_member->value.IsUint() )
         return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
-    if( (*root)[0]->GetUint() != OperationJournal::SchemaVersion )
+    const auto version = version_member->value.GetUint();
+    if( version != 1 && version != 2 && version != OperationJournal::SchemaVersion )
         return OperationJournalFailure(OperationJournalErrorCode::UnsupportedSchemaVersion);
-    if( !(*root)[1]->IsArray() )
+    const OperationJournalJSONValue *entries_value = nullptr;
+    uint64_t next_operation_sequence = 1;
+    if( version == OperationJournal::SchemaVersion ) {
+        const auto root = OperationJournalMembers(
+            document, std::array<std::string_view, 3>{"version", "next_operation_sequence", "entries"});
+        if( !root )
+            return std::unexpected(root.error());
+        const auto *const high_water = (*root)[1];
+        if( !high_water->IsUint64() || high_water->GetUint64() == 0 )
+            return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
+        next_operation_sequence = high_water->GetUint64();
+        entries_value = (*root)[2];
+    }
+    else {
+        const auto root = OperationJournalMembers(document, std::array<std::string_view, 2>{"version", "entries"});
+        if( !root )
+            return std::unexpected(root.error());
+        entries_value = (*root)[1];
+    }
+    if( !entries_value->IsArray() )
         return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
-    if( (*root)[1]->Size() > OperationJournal::MaxEntries )
+    if( entries_value->Size() > OperationJournal::MaxEntries )
         return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
 
     std::vector<OperationJournalEntry> entries;
-    entries.reserve((*root)[1]->Size());
+    entries.reserve(entries_value->Size());
     size_t total_item_results = 0;
-    for( const auto &entry_value : (*root)[1]->GetArray() ) {
-        const auto members = OperationJournalMembers(
-            entry_value, std::array<std::string_view, 4>{"plan", "state", "updated_at_epoch_nanoseconds", "item_results"});
-        if( !members )
-            return std::unexpected(members.error());
+    for( const auto &entry_value : entries_value->GetArray() ) {
+        const OperationJournalJSONValue *operation_id_value = nullptr;
+        const OperationJournalJSONValue *plan_value = nullptr;
+        const OperationJournalJSONValue *state_value = nullptr;
+        const OperationJournalJSONValue *updated_at_value = nullptr;
+        const OperationJournalJSONValue *item_results_value = nullptr;
+        std::optional<OperationId> operation_id;
+        if( version == 1 ) {
+            const auto members = OperationJournalMembers(
+                entry_value,
+                std::array<std::string_view, 4>{"plan", "state", "updated_at_epoch_nanoseconds", "item_results"});
+            if( !members )
+                return std::unexpected(members.error());
+            plan_value = (*members)[0];
+            state_value = (*members)[1];
+            updated_at_value = (*members)[2];
+            item_results_value = (*members)[3];
+            operation_id = OperationId::Parse("op-" + std::to_string(entries.size() + 1));
+        }
+        else {
+            const auto members = OperationJournalMembers(
+                entry_value,
+                std::array<std::string_view, 5>{"operation_id",
+                                                 "plan",
+                                                 "state",
+                                                 "updated_at_epoch_nanoseconds",
+                                                 "item_results"});
+            if( !members )
+                return std::unexpected(members.error());
+            operation_id_value = (*members)[0];
+            plan_value = (*members)[1];
+            state_value = (*members)[2];
+            updated_at_value = (*members)[3];
+            item_results_value = (*members)[4];
+            if( !operation_id_value->IsString() )
+                return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
+            operation_id = OperationId::Parse(
+                {operation_id_value->GetString(), operation_id_value->GetStringLength()});
+        }
+        if( !operation_id )
+            return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
 
         rapidjson::StringBuffer plan_buffer;
         rapidjson::Writer<rapidjson::StringBuffer> plan_writer{plan_buffer};
-        (*members)[0]->Accept(plan_writer);
+        plan_value->Accept(plan_writer);
         const auto plan = OperationPlanCodec::Decode({plan_buffer.GetString(), plan_buffer.GetSize()});
         if( !plan )
             return OperationJournalCodecFailure(plan.error());
         if( std::ranges::any_of(entries, [&](const auto &existing) { return existing.plan.Id() == plan->Id(); }) )
             return OperationJournalFailure(OperationJournalErrorCode::DuplicatePlanId);
+        if( std::ranges::any_of(entries, [&](const auto &existing) { return existing.operation_id == *operation_id; }) )
+            return OperationJournalFailure(OperationJournalErrorCode::DuplicateOperationId);
 
-        const auto state = OperationJournalParseState(*(*members)[1]);
-        if( !state || !(*members)[2]->IsInt64() || !(*members)[3]->IsArray() )
+        const auto state = OperationJournalParseState(*state_value);
+        if( !state || !updated_at_value->IsInt64() || !item_results_value->IsArray() )
             return state ? OperationJournalFailure(OperationJournalErrorCode::CorruptJournal)
                          : std::unexpected(state.error());
-        const auto updated_at = OperationJournalTimePoint((*members)[2]->GetInt64());
+        const auto updated_at = OperationJournalTimePoint(updated_at_value->GetInt64());
         if( !updated_at )
             return std::unexpected(updated_at.error());
-        if( (*members)[3]->Size() > OperationJournal::MaxItemResults - total_item_results )
+        if( item_results_value->Size() > OperationJournal::MaxItemResults - total_item_results )
             return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
-        total_item_results += (*members)[3]->Size();
+        total_item_results += item_results_value->Size();
 
         std::vector<OperationJournalItemResult> item_results;
-        item_results.reserve((*members)[3]->Size());
-        for( const auto &item_value : (*members)[3]->GetArray() ) {
+        item_results.reserve(item_results_value->Size());
+        for( const auto &item_value : item_results_value->GetArray() ) {
             const auto item_members = OperationJournalMembers(
                 item_value,
                 std::array<std::string_view, 11>{"item_index",
@@ -693,7 +776,8 @@ OperationJournalDecode(std::string_view _json)
                 return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
             item_results.emplace_back(result);
         }
-        OperationJournalEntry entry{.plan = std::move(*plan),
+        OperationJournalEntry entry{.operation_id = std::move(*operation_id),
+                                    .plan = std::move(*plan),
                                     .state = *state,
                                     .updated_at = *updated_at,
                                     .item_results = std::move(item_results)};
@@ -701,7 +785,22 @@ OperationJournalDecode(std::string_view _json)
             return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
         entries.emplace_back(std::move(entry));
     }
-    return entries;
+    uint64_t maximum_operation_sequence = 0;
+    for( const auto &entry : entries )
+        maximum_operation_sequence = std::max(maximum_operation_sequence, OperationJournalOperationIdSequence(entry.operation_id));
+    if( maximum_operation_sequence == std::numeric_limits<uint64_t>::max() )
+        return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
+    const auto minimum_next_operation_sequence = maximum_operation_sequence + 1;
+    if( version == OperationJournal::SchemaVersion ) {
+        if( next_operation_sequence < minimum_next_operation_sequence )
+            return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
+    }
+    else {
+        next_operation_sequence = minimum_next_operation_sequence;
+    }
+    return OperationJournalDecoded{.entries = std::move(entries),
+                                   .next_operation_sequence = next_operation_sequence,
+                                   .requires_migration = version != OperationJournal::SchemaVersion};
 }
 
 bool OperationJournalValidParentPath(std::string_view _path)
@@ -802,11 +901,12 @@ OperationJournalRead(int _parent_fd, const OperationJournalSyscalls &_syscalls)
 std::expected<void, OperationJournalError>
 OperationJournalPersist(int _parent_fd,
                         const std::vector<OperationJournalEntry> &_entries,
+                        const uint64_t _next_operation_sequence,
                         const OperationJournalSyscalls &_syscalls,
                         bool &_rename_committed)
 {
     _rename_committed = false;
-    const auto encoded = OperationJournalEncode(_entries);
+    const auto encoded = OperationJournalEncode(_entries, _next_operation_sequence);
     if( !encoded )
         return std::unexpected(encoded.error());
     const std::string filename{OperationJournal::Filename};
@@ -921,21 +1021,75 @@ struct OperationJournal::Impl final {
     OperationJournalDescriptor lock_fd;
     mutable std::mutex mutex;
     std::vector<OperationJournalEntry> entries;
+    uint64_t next_operation_sequence{1};
+    uint64_t next_reservation_nonce{1};
+    std::unordered_map<uint64_t, uint64_t> reservations;
     uint64_t parent_device{0};
     uint64_t parent_inode{0};
     bool usable = true;
 };
 
+OperationJournal::AdmissionReservation::AdmissionReservation(nc::ops::OperationId _operation_id,
+                                                              const uint64_t _nonce,
+                                                              std::weak_ptr<Impl> _impl) noexcept
+    : m_OperationId{std::move(_operation_id)}, m_Nonce{_nonce}, m_Impl{std::move(_impl)}
+{
+}
+
+OperationJournal::AdmissionReservation::AdmissionReservation(AdmissionReservation &&_other) noexcept
+    : m_OperationId{std::move(_other.m_OperationId)},
+      m_Nonce{_other.m_Nonce},
+      m_Impl{std::move(_other.m_Impl)},
+      m_Consumed{std::exchange(_other.m_Consumed, true)}
+{
+}
+
+OperationJournal::AdmissionReservation &
+OperationJournal::AdmissionReservation::operator=(AdmissionReservation &&_other) noexcept
+{
+    if( this == &_other )
+        return *this;
+    Release();
+    m_OperationId = std::move(_other.m_OperationId);
+    m_Nonce = _other.m_Nonce;
+    m_Impl = std::move(_other.m_Impl);
+    m_Consumed = std::exchange(_other.m_Consumed, true);
+    return *this;
+}
+
+OperationJournal::AdmissionReservation::~AdmissionReservation()
+{
+    Release();
+}
+
+void OperationJournal::AdmissionReservation::Release() noexcept
+{
+    if( m_Consumed )
+        return;
+    if( const auto impl = m_Impl.lock() ) {
+        const auto guard = std::lock_guard{impl->mutex};
+        const auto found = impl->reservations.find(OperationJournalOperationIdSequence(m_OperationId));
+        if( found != impl->reservations.end() && found->second == m_Nonce )
+            impl->reservations.erase(found);
+    }
+    m_Consumed = true;
+    m_Impl.reset();
+}
+
 OperationJournalAdmissionReceipt::OperationJournalAdmissionReceipt(
     OperationJournalAdmissionReceipt &&_other) noexcept
-    : m_JournalInstance{std::move(_other.m_JournalInstance)}, m_Plan{std::move(_other.m_Plan)},
+    : m_JournalInstance{std::move(_other.m_JournalInstance)},
+      m_OperationId{std::move(_other.m_OperationId)},
+      m_Plan{std::move(_other.m_Plan)},
       m_Consumed{std::exchange(_other.m_Consumed, true)}
 {
     _other.m_JournalInstance.reset();
 }
 
 OperationJournalRunReceipt::OperationJournalRunReceipt(OperationJournalRunReceipt &&_other) noexcept
-    : m_JournalInstance{std::move(_other.m_JournalInstance)}, m_Plan{std::move(_other.m_Plan)},
+    : m_JournalInstance{std::move(_other.m_JournalInstance)},
+      m_OperationId{std::move(_other.m_OperationId)},
+      m_Plan{std::move(_other.m_Plan)},
       m_Consumed{std::exchange(_other.m_Consumed, true)}
 {
     _other.m_JournalInstance.reset();
@@ -961,15 +1115,29 @@ std::shared_ptr<OperationJournalSyscalls> OperationJournalTesting::DefaultSyscal
 }
 
 OperationJournalAdmissionReceipt
-OperationJournalTesting::ForgeAdmissionReceipt(const OperationJournal &_journal, OperationPlan _plan)
+OperationJournalTesting::ForgeAdmissionReceipt(const OperationJournal &_journal,
+                                               OperationId _operation_id,
+                                               OperationPlan _plan)
 {
-    return OperationJournalAdmissionReceipt{std::weak_ptr<const void>{_journal.m_Impl}, std::move(_plan)};
+    return OperationJournalAdmissionReceipt{
+        std::weak_ptr<const void>{_journal.m_Impl}, std::move(_operation_id), std::move(_plan)};
 }
 
 OperationJournalRunReceipt
-OperationJournalTesting::ForgeRunReceipt(const OperationJournal &_journal, OperationPlan _plan)
+OperationJournalTesting::ForgeRunReceipt(const OperationJournal &_journal,
+                                         OperationId _operation_id,
+                                         OperationPlan _plan)
 {
-    return OperationJournalRunReceipt{std::weak_ptr<const void>{_journal.m_Impl}, std::move(_plan)};
+    return OperationJournalRunReceipt{
+        std::weak_ptr<const void>{_journal.m_Impl}, std::move(_operation_id), std::move(_plan)};
+}
+
+std::expected<OperationJournalAdmissionReceipt, OperationJournalError>
+OperationJournalTesting::AdmitWithOperationId(OperationJournal &_journal,
+                                              OperationId _operation_id,
+                                              const OperationPlan &_plan)
+{
+    return _journal.AdmitWithOperationIdForTesting(std::move(_operation_id), _plan);
 }
 
 std::expected<void, OperationJournalError>
@@ -1031,6 +1199,7 @@ OperationJournalTesting::Open(std::string_view _absolute_existing_parent,
     if( impl->syscalls->flock(impl->lock_fd.Get(), LOCK_EX | LOCK_NB) != 0 )
         return OperationJournalFailure(OperationJournalErrorCode::JournalAlreadyOpen, errno);
 
+    bool requires_migration = false;
     const auto persisted = OperationJournalRead(impl->parent_fd.Get(), *impl->syscalls);
     if( !persisted )
         return std::unexpected(persisted.error());
@@ -1038,12 +1207,15 @@ OperationJournalTesting::Open(std::string_view _absolute_existing_parent,
         const auto decoded = OperationJournalDecode(**persisted);
         if( !decoded )
             return std::unexpected(decoded.error());
-        impl->entries = std::move(*decoded);
+        requires_migration = decoded->requires_migration;
+        impl->entries = std::move(decoded->entries);
+        impl->next_operation_sequence = decoded->next_operation_sequence;
     }
     else {
         bool rename_committed = false;
         const auto created =
-            OperationJournalPersist(impl->parent_fd.Get(), impl->entries, *impl->syscalls, rename_committed);
+            OperationJournalPersist(
+                impl->parent_fd.Get(), impl->entries, impl->next_operation_sequence, *impl->syscalls, rename_committed);
         if( !created )
             return std::unexpected(created.error());
     }
@@ -1058,10 +1230,14 @@ OperationJournalTesting::Open(std::string_view _absolute_existing_parent,
             changed = true;
         }
     }
-    if( changed ) {
+    if( requires_migration || changed ) {
         bool rename_committed = false;
         const auto stored =
-            OperationJournalPersist(impl->parent_fd.Get(), interrupted, *impl->syscalls, rename_committed);
+            OperationJournalPersist(impl->parent_fd.Get(),
+                                    interrupted,
+                                    impl->next_operation_sequence,
+                                    *impl->syscalls,
+                                    rename_committed);
         if( !stored )
             return std::unexpected(stored.error());
         impl->entries = std::move(interrupted);
@@ -1077,33 +1253,143 @@ OperationJournal::Open(std::string_view _absolute_existing_parent)
                                          [] { return OperationPlan::Clock::now(); });
 }
 
+std::expected<OperationJournal::AdmissionReservation, OperationJournalError> OperationJournal::ReserveOperationId()
+{
+    const auto guard = std::lock_guard{m_Impl->mutex};
+    if( !m_Impl->usable )
+        return OperationJournalFailure(OperationJournalErrorCode::JournalUnusable);
+    if( m_Impl->next_operation_sequence == 0 ||
+        m_Impl->next_operation_sequence == std::numeric_limits<uint64_t>::max() ||
+        m_Impl->next_reservation_nonce == 0 )
+        return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
+
+    const auto sequence = m_Impl->next_operation_sequence++;
+    const auto nonce = m_Impl->next_reservation_nonce++;
+    const auto [_, inserted] = m_Impl->reservations.emplace(sequence, nonce);
+    if( !inserted )
+        return OperationJournalFailure(OperationJournalErrorCode::JournalUnusable);
+    return AdmissionReservation{OperationId{sequence}, nonce, m_Impl};
+}
+
 std::expected<OperationJournalAdmissionReceipt, OperationJournalError>
 OperationJournal::Admit(const OperationPlan &_plan)
 {
+    auto reservation = ReserveOperationId();
+    if( !reservation )
+        return std::unexpected(reservation.error());
+    return Admit(std::move(*reservation), _plan);
+}
+
+std::expected<OperationJournalAdmissionReceipt, OperationJournalError>
+OperationJournal::Admit(AdmissionReservation &&_reservation, const OperationPlan &_plan)
+{
     std::lock_guard lock{m_Impl->mutex};
+    return AdmitLocked(_reservation, _plan);
+}
+
+std::expected<OperationJournalAdmissionReceipt, OperationJournalError>
+OperationJournal::AdmitLocked(AdmissionReservation &_reservation, const OperationPlan &_plan)
+{
     if( !m_Impl->usable )
         return OperationJournalFailure(OperationJournalErrorCode::JournalUnusable);
+    if( _reservation.m_Consumed )
+        return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
+    const auto reservation_impl = _reservation.m_Impl.lock();
+    if( !reservation_impl || reservation_impl.get() != m_Impl.get() )
+        return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
+    const auto reservation = m_Impl->reservations.find(_reservation.m_OperationId.m_Sequence);
+    if( reservation == m_Impl->reservations.end() || reservation->second != _reservation.m_Nonce )
+        return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
     if( m_Impl->entries.size() >= MaxEntries )
         return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
+    if( std::ranges::any_of(m_Impl->entries,
+                            [&](const auto &entry) { return entry.operation_id == _reservation.m_OperationId; }) )
+        return OperationJournalFailure(OperationJournalErrorCode::DuplicateOperationId);
     if( std::ranges::any_of(m_Impl->entries, [&](const auto &entry) { return entry.plan.Id() == _plan.Id(); }) )
         return OperationJournalFailure(OperationJournalErrorCode::PlanAlreadyAdmitted);
 
-    OperationJournalAdmissionReceipt receipt{std::weak_ptr<const void>{m_Impl}, _plan};
+    OperationJournalAdmissionReceipt receipt{std::weak_ptr<const void>{m_Impl}, _reservation.m_OperationId, _plan};
     auto candidate = m_Impl->entries;
-    candidate.emplace_back(OperationJournalEntry{.plan = _plan,
+    candidate.emplace_back(OperationJournalEntry{.operation_id = _reservation.m_OperationId,
+                                                 .plan = _plan,
                                                  .state = OperationJournalState::Admitted,
                                                  .updated_at = m_Impl->clock(),
                                                  .item_results = {}});
+    const auto durable_next_sequence = m_Impl->next_operation_sequence;
     bool rename_committed = false;
     const auto stored =
-        OperationJournalPersist(m_Impl->parent_fd.Get(), candidate, *m_Impl->syscalls, rename_committed);
+        OperationJournalPersist(m_Impl->parent_fd.Get(),
+                                candidate,
+                                durable_next_sequence,
+                                *m_Impl->syscalls,
+                                rename_committed);
     if( !stored ) {
         if( rename_committed )
             m_Impl->usable = false;
         return std::unexpected(stored.error());
     }
     m_Impl->entries = std::move(candidate);
+    m_Impl->reservations.erase(reservation);
+    _reservation.m_Consumed = true;
+    _reservation.m_Impl.reset();
     return receipt;
+}
+
+std::expected<OperationJournalAdmissionReceipt, OperationJournalError>
+OperationJournal::AdmitWithOperationIdForTesting(OperationId _operation_id, const OperationPlan &_plan)
+{
+    std::lock_guard lock{m_Impl->mutex};
+    if( !m_Impl->usable )
+        return OperationJournalFailure(OperationJournalErrorCode::JournalUnusable);
+    if( m_Impl->entries.size() >= MaxEntries )
+        return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
+    if( std::ranges::any_of(m_Impl->entries,
+                            [&](const auto &entry) { return entry.operation_id == _operation_id; }) )
+        return OperationJournalFailure(OperationJournalErrorCode::DuplicateOperationId);
+    if( std::ranges::any_of(m_Impl->entries, [&](const auto &entry) { return entry.plan.Id() == _plan.Id(); }) )
+        return OperationJournalFailure(OperationJournalErrorCode::PlanAlreadyAdmitted);
+    if( _operation_id.m_Sequence == std::numeric_limits<uint64_t>::max() )
+        return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
+
+    const auto durable_next_sequence = std::max(m_Impl->next_operation_sequence, _operation_id.m_Sequence + 1);
+    OperationJournalAdmissionReceipt receipt{std::weak_ptr<const void>{m_Impl}, _operation_id, _plan};
+    auto candidate = m_Impl->entries;
+    candidate.emplace_back(OperationJournalEntry{.operation_id = _operation_id,
+                                                 .plan = _plan,
+                                                 .state = OperationJournalState::Admitted,
+                                                 .updated_at = m_Impl->clock(),
+                                                 .item_results = {}});
+    bool rename_committed = false;
+    const auto stored = OperationJournalPersist(
+        m_Impl->parent_fd.Get(), candidate, durable_next_sequence, *m_Impl->syscalls, rename_committed);
+    if( !stored ) {
+        if( rename_committed )
+            m_Impl->usable = false;
+        return std::unexpected(stored.error());
+    }
+    m_Impl->entries = std::move(candidate);
+    m_Impl->next_operation_sequence = durable_next_sequence;
+    return receipt;
+}
+
+std::expected<void, OperationJournalError>
+OperationJournal::ValidateAdmissionReceiptForOrchestration(const OperationJournalAdmissionReceipt &_receipt) const
+{
+    const auto guard = std::lock_guard{m_Impl->mutex};
+    if( !m_Impl->usable )
+        return OperationJournalFailure(OperationJournalErrorCode::JournalUnusable);
+    if( _receipt.m_Consumed )
+        return OperationJournalFailure(OperationJournalErrorCode::AdmissionReceiptAlreadyConsumed);
+    const auto receipt_owner = _receipt.m_JournalInstance.lock();
+    if( !receipt_owner || receipt_owner.get() != static_cast<const void *>(m_Impl.get()) )
+        return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
+    const auto entry = std::ranges::find_if(m_Impl->entries, [&](const auto &value) {
+        return value.operation_id == _receipt.m_OperationId && value.plan.Id() == _receipt.m_Plan.Id();
+    });
+    if( entry == m_Impl->entries.end() || entry->state != OperationJournalState::Admitted ||
+        entry->operation_id != _receipt.m_OperationId || entry->plan != _receipt.m_Plan )
+        return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
+    return {};
 }
 
 std::expected<OperationJournalRunReceipt, OperationJournalError>
@@ -1121,18 +1407,20 @@ OperationJournal::TransitionToRunning(OperationJournalAdmissionReceipt &&_receip
 
     auto candidate = m_Impl->entries;
     const auto entry = std::ranges::find_if(candidate, [&](const auto &value) {
-        return value.plan.Id() == _receipt.m_Plan.Id();
+        return value.operation_id == _receipt.m_OperationId && value.plan.Id() == _receipt.m_Plan.Id();
     });
     if( entry == candidate.end() || entry->state != OperationJournalState::Admitted ||
-        entry->plan != _receipt.m_Plan )
+        entry->operation_id != _receipt.m_OperationId || entry->plan != _receipt.m_Plan )
         return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
-    OperationJournalRunReceipt run_receipt{std::weak_ptr<const void>{m_Impl}, _receipt.m_Plan};
+    OperationJournalRunReceipt run_receipt{
+        std::weak_ptr<const void>{m_Impl}, _receipt.m_OperationId, _receipt.m_Plan};
     entry->state = OperationJournalState::Running;
     entry->updated_at = m_Impl->clock();
 
     bool rename_committed = false;
     const auto stored =
-        OperationJournalPersist(m_Impl->parent_fd.Get(), candidate, *m_Impl->syscalls, rename_committed);
+        OperationJournalPersist(
+            m_Impl->parent_fd.Get(), candidate, m_Impl->next_operation_sequence, *m_Impl->syscalls, rename_committed);
     if( !stored ) {
         if( rename_committed ) {
             m_Impl->usable = false;
@@ -1163,10 +1451,10 @@ OperationJournal::FinalizeAdmission(OperationJournalAdmissionReceipt &&_receipt,
 
     auto candidate = m_Impl->entries;
     const auto entry = std::ranges::find_if(candidate, [&](const auto &value) {
-        return value.plan.Id() == _receipt.m_Plan.Id();
+        return value.operation_id == _receipt.m_OperationId && value.plan.Id() == _receipt.m_Plan.Id();
     });
     if( entry == candidate.end() || entry->state != OperationJournalState::Admitted ||
-        entry->plan != _receipt.m_Plan )
+        entry->operation_id != _receipt.m_OperationId || entry->plan != _receipt.m_Plan )
         return OperationJournalFailure(OperationJournalErrorCode::InvalidAdmissionReceipt);
     entry->state = _terminal_state;
     entry->updated_at = m_Impl->clock();
@@ -1175,7 +1463,8 @@ OperationJournal::FinalizeAdmission(OperationJournalAdmissionReceipt &&_receipt,
 
     bool rename_committed = false;
     const auto stored =
-        OperationJournalPersist(m_Impl->parent_fd.Get(), candidate, *m_Impl->syscalls, rename_committed);
+        OperationJournalPersist(
+            m_Impl->parent_fd.Get(), candidate, m_Impl->next_operation_sequence, *m_Impl->syscalls, rename_committed);
     if( !stored ) {
         if( rename_committed ) {
             m_Impl->usable = false;
@@ -1207,10 +1496,10 @@ OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
 
     auto candidate = m_Impl->entries;
     const auto entry = std::ranges::find_if(candidate, [&](const auto &value) {
-        return value.plan.Id() == _receipt.m_Plan.Id();
+        return value.operation_id == _receipt.m_OperationId && value.plan.Id() == _receipt.m_Plan.Id();
     });
     if( entry == candidate.end() || entry->state != OperationJournalState::Running ||
-        entry->plan != _receipt.m_Plan )
+        entry->operation_id != _receipt.m_OperationId || entry->plan != _receipt.m_Plan )
         return OperationJournalFailure(OperationJournalErrorCode::InvalidRunReceipt);
     if( !OperationJournalValidItemResult(entry->plan, _result) ||
         std::ranges::any_of(entry->item_results,
@@ -1232,7 +1521,8 @@ OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
 
     bool rename_committed = false;
     const auto stored =
-        OperationJournalPersist(m_Impl->parent_fd.Get(), candidate, *m_Impl->syscalls, rename_committed);
+        OperationJournalPersist(
+            m_Impl->parent_fd.Get(), candidate, m_Impl->next_operation_sequence, *m_Impl->syscalls, rename_committed);
     if( !stored ) {
         if( rename_committed ) {
             m_Impl->usable = false;
@@ -1264,7 +1554,8 @@ OperationJournal::Transition(std::string_view _plan_id, OperationJournalState _s
 
     bool rename_committed = false;
     const auto stored =
-        OperationJournalPersist(m_Impl->parent_fd.Get(), candidate, *m_Impl->syscalls, rename_committed);
+        OperationJournalPersist(
+            m_Impl->parent_fd.Get(), candidate, m_Impl->next_operation_sequence, *m_Impl->syscalls, rename_committed);
     if( !stored ) {
         if( rename_committed )
             m_Impl->usable = false;
@@ -1302,7 +1593,8 @@ OperationJournal::RecordItemResult(std::string_view _plan_id, OperationJournalIt
 
     bool rename_committed = false;
     const auto stored =
-        OperationJournalPersist(m_Impl->parent_fd.Get(), candidate, *m_Impl->syscalls, rename_committed);
+        OperationJournalPersist(
+            m_Impl->parent_fd.Get(), candidate, m_Impl->next_operation_sequence, *m_Impl->syscalls, rename_committed);
     if( !stored ) {
         if( rename_committed )
             m_Impl->usable = false;

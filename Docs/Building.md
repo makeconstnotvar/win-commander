@@ -32,6 +32,12 @@ Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-
 Win Commander employs two testing strategies: unit tests (`_UT` suffix) for individual components, and integration tests (`_IT` suffix) for checking how those components interact. Each type of test is easily identifiable by its unique filename suffix and corresponding build target. For example, `Term` represents the library, `TermUT` the unit tests for this library, and `TermIT` the integration tests.  
 Unit tests are quick and standalone, not requiring any external setups. In contrast, integration tests might need specific conditions, like running Docker VMs (detailed in `Source/VFS/tests/data/docker/[start|stop].sh`), to properly execute.  
 
+`IntegrationTests` also builds `WinCommanderIT`, the Docker-only application boundary target. Its FTP/SFTP/WebDAV cases drive a real `PanelController` through remote navigation and forced user refresh after a mutation from a distinct shadow host. The WebDAV fault case stops and restarts only `nc_webdav_alpine`, proves a typed network failure while the committed listing remains visible, and proves a fresh listing after the same controller and host reconnect through user Refresh; it is deliberately excluded from `UnitTests` and M0.
+
+### Physical Conditional Copy profile
+
+`OperationsIT` contains an opt-in `[reviewed-copy-as-physical]` profile for the bounded reviewed `CopyAs` production path. It skips unless both dedicated marker roots are supplied; set `WINCOMMANDER_OPERATIONS_IT_REQUIRE_VOLUMES=1` so absent or invalid roots fail the physical job. The exact root constraints, command and required evidence are in `Docs/Features/reviewed_copy_as_physical_volume_protocol.md`. Do not use a home directory, volume mount root, user data, disk image, or a non-APFS external root for this profile.
+
 Run the repository suites from the project root:
 
 ```sh

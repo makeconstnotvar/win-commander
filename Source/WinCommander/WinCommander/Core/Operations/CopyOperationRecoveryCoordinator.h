@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Operations/CopyOperationOrchestrator.h>
+#include <Operations/OperationCenterCoordinator.h>
 #include <Operations/OperationJournal.h>
 
 #include <expected>
@@ -49,6 +50,24 @@ struct CopyOperationRecoveryServiceResult final {
     std::optional<nc::ops::CopyOperationRunReceiptPoolReleaseStatus> release;
 
     bool operator==(const CopyOperationRecoveryServiceResult &) const = default;
+};
+
+enum class CopyOperationRecoveryHistoryRefreshStatus : uint8_t {
+    NotRequired,
+    CoordinatorUnavailable,
+    JournalUnavailable,
+    Refreshed,
+    Deferred
+};
+
+/**
+ * App-core composition result: durable custody recovery stays authoritative; history refresh is
+ * a separate cold value projection and never triggers a further recovery pass.
+ */
+struct CopyOperationRecoveryHistoryRefreshResult final {
+    CopyOperationRecoveryServiceResult recovery;
+    CopyOperationRecoveryHistoryRefreshStatus history_refresh{CopyOperationRecoveryHistoryRefreshStatus::NotRequired};
+    std::optional<nc::ops::OperationCenterCoordinatorError> history_refresh_error;
 };
 
 /**
@@ -108,5 +127,15 @@ private:
 
     friend class CopyOperationRecoveryCoordinatorTesting;
 };
+
+/**
+ * Runs one explicit custody service pass, then synchronously refreshes cold Operation Center
+ * history from the post-reopen journal only after confirmed reconciliation and required Pool release.
+ * Neither authority is retained beyond this call.
+ */
+[[nodiscard]] CopyOperationRecoveryHistoryRefreshResult
+ServiceCopyRecoveryAndRefreshHistory(const std::shared_ptr<CopyOperationRecoveryCoordinator> &_recovery_coordinator,
+                                     const std::shared_ptr<nc::ops::OperationCenterCoordinator> &_operation_center,
+                                     std::string_view _plan_id) noexcept;
 
 } // namespace nc::core

@@ -57,6 +57,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C0DE710031D6000000000013"
+               BuildableName = "WinCommanderIT"
+               BlueprintName = "WinCommanderIT"
+               ReferencedContainer = "container:WinCommander.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "CF38BEC12148AE5D005E336C"
                BuildableName = "VFSIconIT"
                BlueprintName = "VFSIconIT"

@@ -31,4 +31,4 @@ Full Debug, explicitly instrumented Release ASAN, and explicitly instrumented Re
 
 ## Remaining boundary
 
-Schema migration policy is required before introducing schema v2. Production execution consumes journal-bound admission authority, not codec output or a plan ID alone.
+Schema migration policy is required before introducing later journal schemas. Production execution consumes journal-bound admission authority, not codec output or a plan ID alone.

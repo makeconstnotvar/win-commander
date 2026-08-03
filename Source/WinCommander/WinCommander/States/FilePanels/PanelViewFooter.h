@@ -7,6 +7,10 @@
 #include <Panel/PanelDataStatistics.h>
 #include "PanelViewFooterTheme.h"
 
+namespace nc::core {
+struct PaneSnapshot;
+}
+
 typedef NS_ENUM(NSInteger, NCPanelViewFooterLayoutKind) {
     NCPanelViewFooterLayoutKindNone,
     NCPanelViewFooterLayoutKindDetails,
@@ -27,6 +31,8 @@ typedef NS_ENUM(NSInteger, NCPanelViewFooterLayoutKind) {
 - (void)updateFocusedItem:(const VFSListingItem &)_item VD:(nc::panel::data::ItemVolatileData)_vd; // may be empty
 - (void)updateStatistics:(const nc::panel::data::Statistics &)_stats;
 - (void)updateListing:(const VFSListingPtr &)_listing;
+// Explorer status ownership belongs to the matching PaneStore snapshot.
+- (void)applyExplorerPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;
 - (void)updateExplorerLayoutKind:(NCPanelViewFooterLayoutKind)_layout_kind;
 
 @property(nonatomic) bool active;

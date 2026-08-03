@@ -30,6 +30,10 @@ namespace nc::utility {
 class ActionsShortcutsManager;
 }
 
+namespace nc::core {
+struct PaneSnapshot;
+}
+
 namespace nc::panel {
 namespace data {
 struct ItemVolatileData;
@@ -92,6 +96,9 @@ struct PresentationFactory {
 - (void)dataSortingHasChanged;
 
 - (void)volatileDataChanged;
+
+// The owning Explorer state forwards only its PaneStore snapshots through this narrow footer seam.
+- (void)applyExplorerPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;
 
 - (void)savePathState;
 - (void)loadPathState;

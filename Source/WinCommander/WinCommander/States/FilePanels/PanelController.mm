@@ -189,11 +189,23 @@ struct WeakPanelControllerRef {
     return context;
 }
 
+[[nodiscard]] FileManagerError ApplyHostErrorPresentation(FileManagerError _mapped, const VFSHostPtr &_host)
+{
+    if( _mapped.category == FileManagerErrorCategory::UnknownError && _host &&
+        _host->ClassifyError(_mapped.original_error) == vfs::HostErrorKind::Unavailable ) {
+        _mapped.category = FileManagerErrorCategory::NetworkError;
+        _mapped.user_message_key = "errors.network";
+    }
+    return _mapped;
+}
+
 [[nodiscard]] FileManagerError MapNavigationError(
     Error _error,
     const std::shared_ptr<DirectoryChangeRequest> &_request = {})
 {
-    return FileManagerErrorAdapter::FromError(std::move(_error), NavigationErrorContext(_request));
+    return ApplyHostErrorPresentation(
+        FileManagerErrorAdapter::FromError(std::move(_error), NavigationErrorContext(_request)),
+        _request ? _request->VFS : nullptr);
 }
 
 [[nodiscard]] FileManagerError MapNavigationException(
@@ -221,7 +233,8 @@ struct WeakPanelControllerRef {
 
 [[nodiscard]] FileManagerError MapRefreshError(Error _error, const RefreshWorkRequest &_request)
 {
-    return FileManagerErrorAdapter::FromError(std::move(_error), _request.error_context);
+    return ApplyHostErrorPresentation(FileManagerErrorAdapter::FromError(std::move(_error), _request.error_context),
+                                      _request.host);
 }
 
 [[nodiscard]] FileManagerError MapRefreshException(std::exception_ptr _exception,
