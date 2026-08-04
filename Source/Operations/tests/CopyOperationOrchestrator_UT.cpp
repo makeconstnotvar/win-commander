@@ -172,7 +172,7 @@ CopyOrchestratorStrongConditionalCommitTransaction(std::atomic_int *_commit_call
         auto transaction = nc::vfs::ProviderConditionalCopyTransactionTestAccess::Mint(
             *destination_host,
             std::move(_authority),
-            [source, destination, _commit_calls] {
+            [source, destination, _commit_calls](const auto &) {
                 if( _commit_calls )
                     ++*_commit_calls;
                 std::error_code error;

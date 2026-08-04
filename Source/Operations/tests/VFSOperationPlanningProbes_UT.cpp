@@ -304,6 +304,7 @@ TEST_CASE(PREFIX "maps item, access, cancellation, and space evidence", "[vfs-op
     source->stats.emplace("/fifo", Stat(S_IFIFO | 0600));
     source->stats.emplace("/unknown-mode", VFSStat{});
     source->stat_errors.emplace("/denied", Error{Error::POSIX, EACCES});
+    source->stat_errors.emplace("/timeout", Error{Error::POSIX, ETIMEDOUT});
     source->statfs.avail_bytes = 1234;
     auto probes = MakeProbes({{"source", source}});
 
@@ -332,6 +333,9 @@ TEST_CASE(PREFIX "maps item, access, cancellation, and space evidence", "[vfs-op
     const auto denied = probes.ProbeItem({"source", "/denied"});
     REQUIRE_FALSE(denied);
     CHECK(denied.error() == OperationPlanningProbeError::PermissionDenied);
+    const auto timed_out = probes.ProbeItem({"source", "/timeout"});
+    REQUIRE_FALSE(timed_out);
+    CHECK(timed_out.error() == OperationPlanningProbeError::Unavailable);
     CHECK(probes.ProbeAccess({"source", "/file"}, OperationPlanningRequiredAccess::Read) ==
           OperationPlanningAccessEvidence{OperationPlanningAccessState::PermissionRequired});
     CHECK(probes.ProbeAccess({"source", "/file"}, OperationPlanningRequiredAccess::Write) ==

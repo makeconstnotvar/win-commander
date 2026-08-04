@@ -14,6 +14,10 @@
 #include <netdb.h>
 #include <thread>
 #include <Base/spinlock.h>
+#include <cerrno>
+#include <climits>
+#include <fcntl.h>
+#include <poll.h>
 #include <sys/dirent.h>
 
 // libssh2 is full of macros with C-style casts, hence disabling here
@@ -43,6 +47,9 @@ SFTPHost::Connection::~Connection()
 
 bool SFTPHost::Connection::Alive() const
 {
+    if( invalidated )
+        return false;
+
     const auto socket_ok = [&] {
         int error = 0;
         socklen_t len = sizeof(error);
@@ -145,9 +152,11 @@ SFTPHost::SFTPHost(const std::string &_serv_url,
                    const std::string &_passwd,
                    const std::string &_keypath,
                    long _port,
-                   const std::string &_home)
+                   const std::string &_home,
+                   const long _transport_timeout_ms)
     : Host(_serv_url, nullptr, UniqueTag),
-      m_Config(ComposeConfguration(_serv_url, _user, _passwd, _keypath, _port, _home))
+      m_Config(ComposeConfguration(_serv_url, _user, _passwd, _keypath, _port, _home)),
+      m_TransportTimeoutMs(std::max(1L, _transport_timeout_ms))
 {
     if( const std::expected<void, Error> rc = DoInit(); !rc )
         throw ErrorException(rc.error());
@@ -274,8 +283,34 @@ std::expected<std::unique_ptr<SFTPHost::Connection>, Error> SFTPHost::SpawnSSH2(
     sin.sin_family = AF_INET;
     sin.sin_port = htons(Config().port > 0 ? Config().port : 22);
     sin.sin_addr.s_addr = hostaddr;
-    if( connect(connection->socket, (struct sockaddr *)(&sin), sizeof(struct sockaddr_in)) != 0 )
+    const int socket_flags = fcntl(connection->socket, F_GETFL, 0);
+    if( socket_flags < 0 )
+        return std::unexpected(Error{Error::POSIX, errno});
+    if( fcntl(connection->socket, F_SETFL, socket_flags | O_NONBLOCK) != 0 )
+        return std::unexpected(Error{Error::POSIX, errno});
+
+    const int connect_rc = connect(connection->socket, reinterpret_cast<sockaddr *>(&sin), sizeof(sin));
+    if( connect_rc != 0 && errno != EINPROGRESS )
         return std::unexpected(Error{ErrorDomain, Errors::connect_failed});
+
+    if( connect_rc != 0 ) {
+        pollfd poll_fd{.fd = connection->socket, .events = POLLOUT, .revents = 0};
+        const int poll_rc = poll(&poll_fd, 1, static_cast<int>(std::min(m_TransportTimeoutMs, long{INT_MAX})));
+        if( poll_rc == 0 )
+            return std::unexpected(Error{ErrorDomain, Errors::timeout});
+        if( poll_rc < 0 )
+            return std::unexpected(Error{Error::POSIX, errno});
+
+        int connect_error = 0;
+        socklen_t connect_error_size = sizeof(connect_error);
+        if( getsockopt(connection->socket, SOL_SOCKET, SO_ERROR, &connect_error, &connect_error_size) != 0 )
+            return std::unexpected(Error{Error::POSIX, errno});
+        if( connect_error != 0 )
+            return std::unexpected(Error{ErrorDomain, Errors::connect_failed});
+    }
+
+    if( fcntl(connection->socket, F_SETFL, socket_flags) != 0 )
+        return std::unexpected(Error{Error::POSIX, errno});
 
     int optval = 1;
     setsockopt(connection->socket, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval));
@@ -288,6 +323,7 @@ std::expected<std::unique_ptr<SFTPHost::Connection>, Error> SFTPHost::SpawnSSH2(
     connection->ssh = libssh2_session_init_ex(nullptr, nullptr, nullptr, this);
     if( !connection->ssh )
         return std::unexpected(Error{Error::POSIX, ENOSYS});
+    libssh2_session_set_timeout(connection->ssh, m_TransportTimeoutMs);
 
     rc = libssh2_session_handshake(connection->ssh, connection->socket);
     if( rc )
@@ -422,7 +458,9 @@ SFTPHost::FetchDirectoryListing(std::string_view _path,
 
         char filename[MAXPATHLEN];
         LIBSSH2_SFTP_ATTRIBUTES attrs;
-        while( libssh2_sftp_readdir_ex(sftp_handle, filename, sizeof(filename), nullptr, 0, &attrs) > 0 ) {
+        int readdir_rc = 0;
+        while( (readdir_rc = libssh2_sftp_readdir_ex(sftp_handle, filename, sizeof(filename), nullptr, 0, &attrs)) >
+               0 ) {
             int index = 0;
             if( filename == std::string_view{"."} )
                 continue;                                   // do not process self entry
@@ -453,6 +491,8 @@ SFTPHost::FetchDirectoryListing(std::string_view _path,
             listing_source.btimes.insert(index, (attrs.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) ? attrs.mtime : 0);
             listing_source.ctimes.insert(index, (attrs.flags & LIBSSH2_SFTP_ATTR_ACMODTIME) ? attrs.mtime : 0);
         }
+        if( readdir_rc < 0 )
+            return std::unexpected(ErrorForConnection(conn));
     }
 
     // check for symlinks and read additional info
@@ -638,12 +678,13 @@ HostErrorKind SFTPHost::ClassifySFTPError(const Error &_error) noexcept
         case sftp::Errors::socket_none:
         case sftp::Errors::socket_send:
         case sftp::Errors::socket_disconnect:
-        case sftp::Errors::timeout:
-        case sftp::Errors::socket_timeout:
         case sftp::Errors::socket_recv:
         case sftp::Errors::bad_socket:
         case sftp::Errors::eagain:
             return HostErrorKind::Unavailable;
+        case sftp::Errors::timeout:
+        case sftp::Errors::socket_timeout:
+            return HostErrorKind::TimedOut;
         default:
             return HostErrorKind::Other;
     }
@@ -745,13 +786,18 @@ SFTPHost::CreateDirectory(std::string_view _path, int _mode, [[maybe_unused]] co
 
 Error SFTPHost::ErrorForConnection(Connection &_conn)
 {
+    Error result{sftp::ErrorDomain, sftp::Errors::sftp_protocol};
     if( const int sess_errno = libssh2_session_last_errno(_conn.ssh); sess_errno != 0 ) {
         if( sess_errno == LIBSSH2_ERROR_SFTP_PROTOCOL )
-            return Error{sftp::ErrorDomain, static_cast<int64_t>(libssh2_sftp_last_error(_conn.sftp))};
+            result = Error{sftp::ErrorDomain, static_cast<int64_t>(libssh2_sftp_last_error(_conn.sftp))};
         else
-            return Error{sftp::ErrorDomain, static_cast<int64_t>(sess_errno)};
+            result = Error{sftp::ErrorDomain, static_cast<int64_t>(sess_errno)};
     }
-    return Error{sftp::ErrorDomain, sftp::Errors::sftp_protocol};
+
+    const HostErrorKind kind = ClassifySFTPError(result);
+    if( kind == HostErrorKind::Unavailable || kind == HostErrorKind::TimedOut )
+        _conn.Invalidate();
+    return result;
 }
 
 const std::string &SFTPHost::ServerUrl() const noexcept

@@ -1371,6 +1371,37 @@ TEST_CASE("OperationJournal: startup durably classifies admitted and running pla
     CHECK(OperationJournalUTReadFile(directory).find("\"state\":\"running\"") == std::string::npos);
 }
 
+TEST_CASE("OperationJournal: descriptor-bound read-only inspection preserves unfinished persisted state",
+          "[operation-journal]")
+{
+    OperationJournalUTDirectory directory;
+    {
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        REQUIRE(journal->Admit(OperationJournalUTPlan("persisted-admitted")));
+        auto running = journal->Admit(OperationJournalUTPlan("persisted-running"));
+        REQUIRE(running);
+        REQUIRE(journal->TransitionToRunning(std::move(*running)));
+    }
+
+    const auto lock_path = std::filesystem::path{directory.path} / "operation-journal-v1.lock";
+    REQUIRE(::unlink(lock_path.c_str()) == 0);
+    const int parent_fd = ::open(directory.path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    REQUIRE(parent_fd >= 0);
+    const auto inspected = OperationJournalTesting::InspectPersistedReadOnly(parent_fd);
+    REQUIRE(::close(parent_fd) == 0);
+
+    REQUIRE(inspected);
+    REQUIRE(inspected->size() == 2);
+    CHECK((*inspected)[0].plan.Id().Value() == "persisted-admitted");
+    CHECK((*inspected)[0].state == OperationJournalState::Admitted);
+    CHECK((*inspected)[1].plan.Id().Value() == "persisted-running");
+    CHECK((*inspected)[1].state == OperationJournalState::Running);
+    CHECK_FALSE(std::filesystem::exists(lock_path));
+    CHECK(OperationJournalUTReadFile(directory).find("\"state\":\"admitted\"") != std::string::npos);
+    CHECK(OperationJournalUTReadFile(directory).find("\"state\":\"running\"") != std::string::npos);
+}
+
 TEST_CASE("OperationJournal: fails closed on corruption version mismatch and duplicate persisted plan IDs",
           "[operation-journal]")
 {

@@ -35,6 +35,9 @@
 		CFF762A52EDCB6EE002DD1EE /* OpenDirectory.h in Headers */ = {isa = PBXBuildFile; fileRef = CFF762A22EDCB6EE002DD1EE /* OpenDirectory.h */; };
 		CFF762A72EDCEDB0002DD1EE /* _VFS.mm in Sources */ = {isa = PBXBuildFile; fileRef = CFF762A62EDCEDB0002DD1EE /* _VFS.mm */; };
 		CFF762C12EDE0D52002DD1EE /* _VFSUT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CFF762C02EDE0D52002DD1EE /* _VFSUT.cpp */; };
+		01A4C0E00000000000000003 /* CrossVolumeStagingHelperLeaseStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0E00000000000000002 /* CrossVolumeStagingHelperLeaseStore.cpp */; };
+		01A4C0E10000000000000003 /* CrossVolumeStagingProtectedRootLedger.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0E10000000000000002 /* CrossVolumeStagingProtectedRootLedger.cpp */; };
+		01A4C0E20000000000000003 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0E20000000000000002 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -63,6 +66,16 @@
 		019FBA330000000000000002 /* ProviderCapabilities.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderCapabilities.cpp; path = source/ProviderCapabilities.cpp; sourceTree = "<group>"; };
 		019FBA330000000000000003 /* ProviderCapabilities_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderCapabilities_UT.cpp; path = tests/ProviderCapabilities_UT.cpp; sourceTree = SOURCE_ROOT; };
 		019FBA340000000000000001 /* NativeConditionalCopyTransaction_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = NativeConditionalCopyTransaction_UT.cpp; path = tests/NativeConditionalCopyTransaction_UT.cpp; sourceTree = SOURCE_ROOT; };
+		019FC48C0000000000000004 /* CrossVolumeStagingProtocol_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingProtocol_UT.cpp; path = tests/CrossVolumeStagingProtocol_UT.cpp; sourceTree = SOURCE_ROOT; };
+		019FC48C0000000000000008 /* CrossVolumeStagingXPCCodec_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingXPCCodec_UT.cpp; path = tests/CrossVolumeStagingXPCCodec_UT.cpp; sourceTree = SOURCE_ROOT; };
+		01A4C0E00000000000000001 /* CrossVolumeStagingHelperLeaseStore_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperLeaseStore_UT.cpp; path = tests/CrossVolumeStagingHelperLeaseStore_UT.cpp; sourceTree = SOURCE_ROOT; };
+		01A4C0E00000000000000002 /* CrossVolumeStagingHelperLeaseStore.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperLeaseStore.cpp; path = ../RoutedIO/source/CrossVolumeStagingHelperLeaseStore.cpp; sourceTree = SOURCE_ROOT; };
+		01A4C0E10000000000000001 /* CrossVolumeStagingProtectedRootLedger_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingProtectedRootLedger_UT.cpp; path = tests/CrossVolumeStagingProtectedRootLedger_UT.cpp; sourceTree = SOURCE_ROOT; };
+		01A4C0E10000000000000002 /* CrossVolumeStagingProtectedRootLedger.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingProtectedRootLedger.cpp; path = ../RoutedIO/source/CrossVolumeStagingProtectedRootLedger.cpp; sourceTree = SOURCE_ROOT; };
+		01A4C0E20000000000000001 /* CrossVolumeStagingHelperDescriptorSealValidator_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperDescriptorSealValidator_UT.cpp; path = tests/CrossVolumeStagingHelperDescriptorSealValidator_UT.cpp; sourceTree = SOURCE_ROOT; };
+		01A4C0E20000000000000002 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperDescriptorSealValidator.cpp; path = ../RoutedIO/source/CrossVolumeStagingHelperDescriptorSealValidator.cpp; sourceTree = SOURCE_ROOT; };
+		019FC48C0000000000000009 /* CrossVolumeStagingClient.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CrossVolumeStagingClient.h; path = source/Native/CrossVolumeStagingClient.h; sourceTree = SOURCE_ROOT; };
+		019FC48C000000000000000A /* CrossVolumeStagingClient.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingClient.cpp; path = source/Native/CrossVolumeStagingClient.cpp; sourceTree = SOURCE_ROOT; };
 		019FBA350000000000000001 /* ConditionalCopy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ConditionalCopy.h; path = source/Native/ConditionalCopy.h; sourceTree = "<group>"; };
 		019FBA350000000000000002 /* ConditionalCopy.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ConditionalCopy.cpp; path = source/Native/ConditionalCopy.cpp; sourceTree = "<group>"; };
 		CF18470A1E41C8A5008B7C9F /* VFSArchive_IT.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = VFSArchive_IT.mm; path = tests/VFSArchive_IT.mm; sourceTree = SOURCE_ROOT; };
@@ -285,6 +298,11 @@
 			children = (
 				CF35C5E52FBCF5A800370B89 /* data */,
 				CFF762C02EDE0D52002DD1EE /* _VFSUT.cpp */,
+				019FC48C0000000000000004 /* CrossVolumeStagingProtocol_UT.cpp */,
+				019FC48C0000000000000008 /* CrossVolumeStagingXPCCodec_UT.cpp */,
+				01A4C0E00000000000000001 /* CrossVolumeStagingHelperLeaseStore_UT.cpp */,
+				01A4C0E10000000000000001 /* CrossVolumeStagingProtectedRootLedger_UT.cpp */,
+				01A4C0E20000000000000001 /* CrossVolumeStagingHelperDescriptorSealValidator_UT.cpp */,
 				019FBA340000000000000001 /* NativeConditionalCopyTransaction_UT.cpp */,
 				019FBA330000000000000003 /* ProviderCapabilities_UT.cpp */,
 				CF3D24142D14B72B005C36F6 /* DisplayNamesCache_UT.mm */,
@@ -458,6 +476,8 @@
 			children = (
 				019FBA350000000000000001 /* ConditionalCopy.h */,
 				019FBA350000000000000002 /* ConditionalCopy.cpp */,
+				019FC48C0000000000000009 /* CrossVolumeStagingClient.h */,
+				019FC48C000000000000000A /* CrossVolumeStagingClient.cpp */,
 				CFF762A22EDCB6EE002DD1EE /* OpenDirectory.h */,
 				CFF762A32EDCB6EE002DD1EE /* OpenDirectory.mm */,
 				CF69D0231DA2305A00992B84 /* DisplayNamesCache.h */,
@@ -702,6 +722,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				CFF762C12EDE0D52002DD1EE /* _VFSUT.cpp in Sources */,
+				01A4C0E00000000000000003 /* CrossVolumeStagingHelperLeaseStore.cpp in Sources */,
+				01A4C0E10000000000000003 /* CrossVolumeStagingProtectedRootLedger.cpp in Sources */,
+				01A4C0E20000000000000003 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp in Sources */,
 				CF3D24152D14B72B005C36F6 /* DisplayNamesCache_UT.mm in Sources */,
 				CFE08AED23CFAFD8007E99B8 /* TestEnv.mm in Sources */,
 				CF24E1FF2290200800C166FA /* SearchForFiles_IT.cpp in Sources */,

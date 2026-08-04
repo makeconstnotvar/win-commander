@@ -47,6 +47,7 @@
 #include <WinCommander/Core/Commands/FileOpenCommand.h>
 #include <WinCommander/Core/Commands/FileRenameCommand.h>
 #include <WinCommander/Core/Commands/NavigationHistoryCommand.h>
+#include <WinCommander/Core/Commands/OperationCancelCommand.h>
 #include <WinCommander/Core/Commands/PaneNavigationCommand.h>
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
@@ -389,6 +390,18 @@ static NCAppDelegate *g_Me = nil;
         [[maybe_unused]] const auto navigation_refresh_result =
             m_CommandRegistry->Register(navigation_refresh_registration);
         assert(navigation_refresh_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const std::weak_ptr<nc::ops::OperationCenterCoordinator> operation_center = m_OperationCenterCoordinator;
+        const auto operation_cancel_registration = nc::core::MakeOperationCancelCommand(
+            [operation_center](const nc::ops::OperationId _operation_id, const uint64_t _expected_revision) {
+                const auto coordinator = operation_center.lock();
+                if( !coordinator ) {
+                    return nc::ops::OperationCenterCancelResult{
+                        .code = nc::ops::OperationCenterCancelResultCode::ResidencyUnavailable};
+                }
+                return coordinator->Cancel(_operation_id, _expected_revision);
+            });
+        [[maybe_unused]] const auto operation_cancel_result = m_CommandRegistry->Register(operation_cancel_registration);
+        assert(operation_cancel_result == nc::core::CommandRegistry::RegisterResult::Registered);
     }
     return self;
 }

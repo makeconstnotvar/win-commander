@@ -26,7 +26,8 @@ public:
                const std::string &_passwd,
                const std::string &_path,
                bool _https = false,
-               int _port = -1);
+               int _port = -1,
+               long _blocking_request_timeout_ms = 30'000);
     WebDAVHost(const VFSConfiguration &_config);
     ~WebDAVHost() override;
 
@@ -91,6 +92,7 @@ private:
     struct State;
     std::unique_ptr<State> I;
     VFSConfiguration m_Configuration;
+    long m_BlockingRequestTimeoutMs = 30'000;
 };
 
 } // namespace nc::vfs

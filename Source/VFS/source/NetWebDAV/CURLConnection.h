@@ -16,7 +16,7 @@ class HostConfiguration;
 class CURLConnection : public Connection
 {
 public:
-    CURLConnection(const HostConfiguration &_config);
+    CURLConnection(const HostConfiguration &_config, long _blocking_request_timeout_ms);
     CURLConnection(const CURLConnection &) = delete;
     ~CURLConnection() override;
     void operator=(const CURLConnection &) = delete;
@@ -58,6 +58,7 @@ private:
 
     CURL *const m_EasyHandle = nullptr;
     CURLM *m_MultiHandle = nullptr;
+    const long m_BlockingRequestTimeoutMs;
     bool m_MultiHandleAttached = false;
     bool m_Paused = false;
     ProgressCallback m_ProgressCallback;

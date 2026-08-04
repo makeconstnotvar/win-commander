@@ -10,6 +10,16 @@
 		CF4601D8256132110095FC73 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF4601D7256132110095FC73 /* Cocoa.framework */; };
 		CF4602372563125C0095FC73 /* RoutedIO.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF69CFA21DA200E300992B84 /* RoutedIO.cpp */; };
 		CF4602382563125C0095FC73 /* RoutedIOInterfaces.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF69CFA31DA200E300992B84 /* RoutedIOInterfaces.cpp */; };
+		019FC48C0000000000000003 /* CrossVolumeStagingProtocol.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 019FC48C0000000000000002 /* CrossVolumeStagingProtocol.cpp */; };
+		019FC48C0000000000000007 /* CrossVolumeStagingXPCCodec.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 019FC48C0000000000000006 /* CrossVolumeStagingXPCCodec.cpp */; };
+		01A4C0DE0000000000000011 /* CrossVolumeStagingHelperV1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0DE0000000000000001 /* CrossVolumeStagingHelperV1.cpp */; };
+		01A4C0DE0000000000000012 /* CrossVolumeStagingProtocol.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 019FC48C0000000000000002 /* CrossVolumeStagingProtocol.cpp */; };
+		01A4C0DE0000000000000013 /* CrossVolumeStagingXPCCodec.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 019FC48C0000000000000006 /* CrossVolumeStagingXPCCodec.cpp */; };
+		01A4C0DE0000000000000014 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF69CFBF1DA20B5500992B84 /* Security.framework */; };
+		01A4C0DE0000000000000015 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CFFA94A21F4541B00035E606 /* CoreFoundation.framework */; };
+		01A4C0E00000000000000003 /* CrossVolumeStagingHelperLeaseStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0E00000000000000002 /* CrossVolumeStagingHelperLeaseStore.cpp */; };
+		01A4C0E10000000000000003 /* CrossVolumeStagingProtectedRootLedger.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0E10000000000000002 /* CrossVolumeStagingProtectedRootLedger.cpp */; };
+		01A4C0E20000000000000003 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 01A4C0E20000000000000002 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp */; };
 		CF69CFBB1DA20A1E00992B84 /* PrivilegedIOHelper.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF69CFAC1DA2099C00992B84 /* PrivilegedIOHelper.cpp */; };
 		CF69CFBE1DA20B4F00992B84 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF69CFBD1DA20B4F00992B84 /* Foundation.framework */; };
 		CF69CFC01DA20B5500992B84 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF69CFBF1DA20B5500992B84 /* Security.framework */; };
@@ -40,6 +50,20 @@
 		CF46022F256312190095FC73 /* libRoutedIO.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libRoutedIO.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF69CFA21DA200E300992B84 /* RoutedIO.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = RoutedIO.cpp; path = source/RoutedIO.cpp; sourceTree = "<group>"; };
 		CF69CFA31DA200E300992B84 /* RoutedIOInterfaces.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = RoutedIOInterfaces.cpp; path = source/RoutedIOInterfaces.cpp; sourceTree = "<group>"; };
+		019FC48C0000000000000001 /* CrossVolumeStagingProtocol.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CrossVolumeStagingProtocol.h; path = include/RoutedIO/CrossVolumeStagingProtocol.h; sourceTree = "<group>"; };
+		019FC48C0000000000000002 /* CrossVolumeStagingProtocol.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingProtocol.cpp; path = source/CrossVolumeStagingProtocol.cpp; sourceTree = "<group>"; };
+		019FC48C0000000000000005 /* CrossVolumeStagingXPCCodec.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CrossVolumeStagingXPCCodec.h; path = source/CrossVolumeStagingXPCCodec.h; sourceTree = "<group>"; };
+		019FC48C0000000000000006 /* CrossVolumeStagingXPCCodec.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingXPCCodec.cpp; path = source/CrossVolumeStagingXPCCodec.cpp; sourceTree = "<group>"; };
+		01A4C0DE0000000000000001 /* CrossVolumeStagingHelperV1.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperV1.cpp; path = source/CrossVolumeStagingHelperV1.cpp; sourceTree = "<group>"; };
+		01A4C0DE0000000000000002 /* CrossVolumeStagingHelperV1-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "CrossVolumeStagingHelperV1-Info.plist"; path = "source/CrossVolumeStagingHelperV1-Info.plist"; sourceTree = "<group>"; };
+		01A4C0DE0000000000000003 /* CrossVolumeStagingHelperV1-Launchd.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "CrossVolumeStagingHelperV1-Launchd.plist"; path = "source/CrossVolumeStagingHelperV1-Launchd.plist"; sourceTree = "<group>"; };
+		01A4C0DE0000000000000004 /* com.wincommander.App.CrossVolumeStagingHelperV1 */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = com.wincommander.App.CrossVolumeStagingHelperV1; sourceTree = BUILT_PRODUCTS_DIR; };
+		01A4C0E00000000000000001 /* CrossVolumeStagingHelperLeaseStore.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CrossVolumeStagingHelperLeaseStore.h; path = source/CrossVolumeStagingHelperLeaseStore.h; sourceTree = "<group>"; };
+		01A4C0E00000000000000002 /* CrossVolumeStagingHelperLeaseStore.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperLeaseStore.cpp; path = source/CrossVolumeStagingHelperLeaseStore.cpp; sourceTree = "<group>"; };
+		01A4C0E10000000000000001 /* CrossVolumeStagingProtectedRootLedger.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CrossVolumeStagingProtectedRootLedger.h; path = source/CrossVolumeStagingProtectedRootLedger.h; sourceTree = "<group>"; };
+		01A4C0E10000000000000002 /* CrossVolumeStagingProtectedRootLedger.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingProtectedRootLedger.cpp; path = source/CrossVolumeStagingProtectedRootLedger.cpp; sourceTree = "<group>"; };
+		01A4C0E20000000000000001 /* CrossVolumeStagingHelperDescriptorSealValidator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CrossVolumeStagingHelperDescriptorSealValidator.h; path = source/CrossVolumeStagingHelperDescriptorSealValidator.h; sourceTree = "<group>"; };
+		01A4C0E20000000000000002 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = CrossVolumeStagingHelperDescriptorSealValidator.cpp; path = source/CrossVolumeStagingHelperDescriptorSealValidator.cpp; sourceTree = "<group>"; };
 		CF69CFA61DA200EC00992B84 /* RoutedIOInterfaces.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = RoutedIOInterfaces.h; path = source/RoutedIOInterfaces.h; sourceTree = "<group>"; };
 		CF69CFA81DA200FA00992B84 /* RoutedIO.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = RoutedIO.h; path = include/RoutedIO/RoutedIO.h; sourceTree = "<group>"; };
 		CF69CFAC1DA2099C00992B84 /* PrivilegedIOHelper.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = PrivilegedIOHelper.cpp; path = source/PrivilegedIOHelper.cpp; sourceTree = "<group>"; };
@@ -81,6 +105,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		01A4C0DE0000000000000021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A4C0DE0000000000000014 /* Security.framework in Frameworks */,
+				01A4C0DE0000000000000015 /* CoreFoundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CF9B081B2700650900D2842B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -102,6 +135,7 @@
 		CF69CF9F1DA2005100992B84 /* Headers */ = {
 			isa = PBXGroup;
 			children = (
+				019FC48C0000000000000001 /* CrossVolumeStagingProtocol.h */,
 				CF9B080126FF57A000D2842B /* Log.h */,
 				CF69CFA81DA200FA00992B84 /* RoutedIO.h */,
 				CF69CFA61DA200EC00992B84 /* RoutedIOInterfaces.h */,
@@ -112,6 +146,16 @@
 		CF69CFA11DA2006200992B84 /* Source */ = {
 			isa = PBXGroup;
 			children = (
+				01A4C0DE0000000000000001 /* CrossVolumeStagingHelperV1.cpp */,
+				01A4C0E00000000000000001 /* CrossVolumeStagingHelperLeaseStore.h */,
+				01A4C0E00000000000000002 /* CrossVolumeStagingHelperLeaseStore.cpp */,
+				01A4C0E10000000000000001 /* CrossVolumeStagingProtectedRootLedger.h */,
+				01A4C0E10000000000000002 /* CrossVolumeStagingProtectedRootLedger.cpp */,
+				01A4C0E20000000000000001 /* CrossVolumeStagingHelperDescriptorSealValidator.h */,
+				01A4C0E20000000000000002 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp */,
+				019FC48C0000000000000002 /* CrossVolumeStagingProtocol.cpp */,
+				019FC48C0000000000000005 /* CrossVolumeStagingXPCCodec.h */,
+				019FC48C0000000000000006 /* CrossVolumeStagingXPCCodec.cpp */,
 				CF9B084C270067CA00D2842B /* Internal.h */,
 				CF9B084B270067CA00D2842B /* Internal.mm */,
 				CF9B080226FF57F900D2842B /* Log.cpp */,
@@ -127,6 +171,8 @@
 		CF69CFAB1DA2098300992B84 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				01A4C0DE0000000000000002 /* CrossVolumeStagingHelperV1-Info.plist */,
+				01A4C0DE0000000000000003 /* CrossVolumeStagingHelperV1-Launchd.plist */,
 				CFC762C92D3D2A79000498AA /* Localizable.xcstrings */,
 				CF69CFAE1DA209A700992B84 /* PrivilegedIOHelper-Info.plist */,
 				CF69CFAF1DA209A700992B84 /* PrivilegedIOHelper-Launchd.plist */,
@@ -165,6 +211,7 @@
 		CF8D0D591D9E4D7400ADFF14 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				01A4C0DE0000000000000004 /* com.wincommander.App.CrossVolumeStagingHelperV1 */,
 				CF69CFB41DA209F000992B84 /* com.wincommander.App.PrivilegedIOHelperV2 */,
 				CF46022F256312190095FC73 /* libRoutedIO.a */,
 				CF9B081E2700650900D2842B /* RoutedIOResources.bundle */,
@@ -220,6 +267,22 @@
 			productReference = CF69CFB41DA209F000992B84 /* com.wincommander.App.PrivilegedIOHelperV2 */;
 			productType = "com.apple.product-type.tool";
 		};
+		01A4C0DE0000000000000031 /* com.wincommander.App.CrossVolumeStagingHelperV1 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01A4C0DE0000000000000043 /* Build configuration list for PBXNativeTarget "com.wincommander.App.CrossVolumeStagingHelperV1" */;
+			buildPhases = (
+				01A4C0DE0000000000000022 /* Sources */,
+				01A4C0DE0000000000000021 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = com.wincommander.App.CrossVolumeStagingHelperV1;
+			productName = "$(TARGET_NAME)";
+			productReference = 01A4C0DE0000000000000004 /* com.wincommander.App.CrossVolumeStagingHelperV1 */;
+			productType = "com.apple.product-type.tool";
+		};
 		CF9B081D2700650900D2842B /* RoutedIOResources */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CF9B08212700650A00D2842B /* Build configuration list for PBXNativeTarget "RoutedIOResources" */;
@@ -272,6 +335,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				01A4C0DE0000000000000031 /* com.wincommander.App.CrossVolumeStagingHelperV1 */,
 				CF69CFB31DA209F000992B84 /* com.wincommander.App.PrivilegedIOHelperV2 */,
 				CF46022E256312190095FC73 /* RoutedIO */,
 				CF9B081D2700650900D2842B /* RoutedIOResources */,
@@ -295,6 +359,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				019FC48C0000000000000003 /* CrossVolumeStagingProtocol.cpp in Sources */,
+				019FC48C0000000000000007 /* CrossVolumeStagingXPCCodec.cpp in Sources */,
 				CF8E4CCF25F441DF00F0881B /* Trash.mm in Sources */,
 				CF9B084D270067CA00D2842B /* Internal.mm in Sources */,
 				CF4602382563125C0095FC73 /* RoutedIOInterfaces.cpp in Sources */,
@@ -309,6 +375,19 @@
 			files = (
 				CF69CFBB1DA20A1E00992B84 /* PrivilegedIOHelper.cpp in Sources */,
 				CF8E4CC825F43A3800F0881B /* Trash.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		01A4C0DE0000000000000022 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01A4C0DE0000000000000011 /* CrossVolumeStagingHelperV1.cpp in Sources */,
+				01A4C0E00000000000000003 /* CrossVolumeStagingHelperLeaseStore.cpp in Sources */,
+				01A4C0E10000000000000003 /* CrossVolumeStagingProtectedRootLedger.cpp in Sources */,
+				01A4C0E20000000000000003 /* CrossVolumeStagingHelperDescriptorSealValidator.cpp in Sources */,
+				01A4C0DE0000000000000012 /* CrossVolumeStagingProtocol.cpp in Sources */,
+				01A4C0DE0000000000000013 /* CrossVolumeStagingXPCCodec.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -376,6 +455,50 @@
 			};
 			name = Release;
 		};
+		01A4C0DE0000000000000041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = AC5SJT236H;
+				ENABLE_HARDENED_RUNTIME = YES;
+				OTHER_LDFLAGS = (
+					"-sectcreate",
+					__TEXT,
+					__info_plist,
+					"source/CrossVolumeStagingHelperV1-Info.plist",
+					"-sectcreate",
+					__TEXT,
+					__launchd_plist,
+					"source/CrossVolumeStagingHelperV1-Launchd.plist",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		01A4C0DE0000000000000042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = AC5SJT236H;
+				ENABLE_HARDENED_RUNTIME = YES;
+				OTHER_LDFLAGS = (
+					"-sectcreate",
+					__TEXT,
+					__info_plist,
+					"source/CrossVolumeStagingHelperV1-Info.plist",
+					"-sectcreate",
+					__TEXT,
+					__launchd_plist,
+					"source/CrossVolumeStagingHelperV1-Launchd.plist",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		CF8D0D5F1D9E4D7400ADFF14 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CF2343E922C908AC00F516CB /* default.xcconfig */;
@@ -435,6 +558,15 @@
 			buildConfigurations = (
 				CF69CFB91DA209F000992B84 /* Debug */,
 				CF69CFBA1DA209F000992B84 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		01A4C0DE0000000000000043 /* Build configuration list for PBXNativeTarget "com.wincommander.App.CrossVolumeStagingHelperV1" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01A4C0DE0000000000000041 /* Debug */,
+				01A4C0DE0000000000000042 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

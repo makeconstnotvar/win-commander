@@ -611,12 +611,13 @@ HostErrorKind Host::ClassifyError(const Error &_error) const noexcept
             return HostErrorKind::Unsupported;
         case ECANCELED:
             return HostErrorKind::Cancelled;
+        case ETIMEDOUT:
+            return HostErrorKind::TimedOut;
         case ENETDOWN:
         case ENETUNREACH:
         case ECONNABORTED:
         case ECONNRESET:
         case ENOTCONN:
-        case ETIMEDOUT:
         case EHOSTDOWN:
         case EHOSTUNREACH:
             return HostErrorKind::Unavailable;

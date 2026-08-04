@@ -68,6 +68,15 @@ static std::string MakeRealPathWithoutTrailingSlash(std::string _path)
     return EnsureNoTrailingSlash(_path);
 }
 
+bool nc::sandbox::PathIsWithinScope(const std::string_view _path, const std::string_view _scope) noexcept
+{
+    if( _path.empty() || _scope.empty() || !_path.starts_with(_scope) )
+        return false;
+    if( _scope == "/" )
+        return _path.front() == '/';
+    return _path.size() == _scope.size() || _path[_scope.size()] == '/';
+}
+
 SandboxManager::SandboxManager()
 {
     LoadSecurityScopeBookmarks_Unlocked();
@@ -205,7 +214,7 @@ bool SandboxManager::HasAccessToFolder_Unlocked(const std::string &_p) const
 
     // look in our bookmarks user has given
     for( auto &i : m_Bookmarks )
-        if( p.starts_with(i.path) )
+        if( nc::sandbox::PathIsWithinScope(p, i.path) )
             return true;
 
     // look in built-in r/o access
@@ -221,7 +230,7 @@ bool SandboxManager::HasAccessToFolder_Unlocked(const std::string &_p) const
         EnsureNoTrailingSlash(NSTemporaryDirectory().fileSystemRepresentation),
         EnsureNoTrailingSlash(nc::base::CommonPaths::StartupCWD())};
     for( auto &s : granted_ro )
-        if( p.starts_with(s) )
+        if( nc::sandbox::PathIsWithinScope(p, s) )
             return true;
 
     // special treating for /Volumes dir - can browse it by default, but not dirs inside it

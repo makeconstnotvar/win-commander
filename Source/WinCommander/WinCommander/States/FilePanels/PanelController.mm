@@ -191,10 +191,19 @@ struct WeakPanelControllerRef {
 
 [[nodiscard]] FileManagerError ApplyHostErrorPresentation(FileManagerError _mapped, const VFSHostPtr &_host)
 {
-    if( _mapped.category == FileManagerErrorCategory::UnknownError && _host &&
-        _host->ClassifyError(_mapped.original_error) == vfs::HostErrorKind::Unavailable ) {
-        _mapped.category = FileManagerErrorCategory::NetworkError;
-        _mapped.user_message_key = "errors.network";
+    if( _mapped.category == FileManagerErrorCategory::UnknownError && _host ) {
+        switch( _host->ClassifyError(_mapped.original_error) ) {
+            case vfs::HostErrorKind::Unavailable:
+                _mapped.category = FileManagerErrorCategory::NetworkError;
+                _mapped.user_message_key = "errors.network";
+                break;
+            case vfs::HostErrorKind::TimedOut:
+                _mapped.category = FileManagerErrorCategory::TimeoutError;
+                _mapped.user_message_key = "errors.timeout";
+                break;
+            default:
+                break;
+        }
     }
     return _mapped;
 }
@@ -1878,9 +1887,9 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     auto synchronous_result = std::make_shared<std::expected<void, Error>>(
         std::unexpected(Error{Error::POSIX, ECANCELED}));
     auto admission_state = std::make_shared<NavigationAdmissionState>();
-    __weak PanelController *weakself = self;
-    const auto rejected_callback_is_current = [admission_callback_allowed, weakself] {
-        PanelController *const panel = weakself;
+    __weak PanelController *weak_panel_controller = self;
+    const auto rejected_callback_is_current = [admission_callback_allowed, weak_panel_controller] {
+        PanelController *const panel = weak_panel_controller;
         return panel && admission_callback_allowed->load(std::memory_order_acquire);
     };
     const auto report_rejection = [_request, rejected_callback_is_current](
@@ -1970,6 +1979,22 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                         *synchronous_result = std::unexpected(access_error);
                     [[maybe_unused]] const auto result =
                         m_PaneLifecycle->Fail(_request_id, MapNavigationError(access_error, _request));
+                    if( _request->LoadingResultCallback ) {
+                        const auto callback_is_current =
+                            [worker_callback_allowed, content_generation, weak_panel_controller] {
+                                PanelController *const panel = weak_panel_controller;
+                                return panel && worker_callback_allowed->load(std::memory_order_acquire) &&
+                                       content_generation ==
+                                           panel->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                            };
+                        try {
+                            _request->LoadingResultCallback(std::unexpected(access_error),
+                                                            DirectoryChangeResultSource::Admission,
+                                                            callback_is_current);
+                        } catch( ... ) {
+                            PresentNavigationException(std::current_exception());
+                        }
+                    }
                     if( m_NavigationWorker && m_NavigationWorker->request_id == _request_id )
                         m_NavigationWorker.reset();
                     return;

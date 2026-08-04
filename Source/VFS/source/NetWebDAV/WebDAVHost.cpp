@@ -19,7 +19,10 @@ namespace nc::vfs {
 const char *WebDAVHost::UniqueTag = "net_webdav";
 
 struct WebDAVHost::State {
-    State(const webdav::HostConfiguration &_config) : m_Pool{_config} {}
+    State(const webdav::HostConfiguration &_config, const long _blocking_request_timeout_ms)
+        : m_Pool{_config, _blocking_request_timeout_ms}
+    {
+    }
 
     webdav::ConnectionsPool m_Pool;
     webdav::Cache m_Cache;
@@ -30,9 +33,11 @@ WebDAVHost::WebDAVHost(const std::string &_serv_url,
                        const std::string &_passwd,
                        const std::string &_path,
                        bool _https,
-                       int _port)
+                       int _port,
+                       long _blocking_request_timeout_ms)
     : VFSHost(_serv_url, nullptr, UniqueTag),
-      m_Configuration(ComposeConfiguration(_serv_url, _user, _passwd, _path, _https, _port))
+      m_Configuration(ComposeConfiguration(_serv_url, _user, _passwd, _path, _https, _port)),
+      m_BlockingRequestTimeoutMs(std::max(1L, _blocking_request_timeout_ms))
 {
     Init();
 }
@@ -48,7 +53,7 @@ WebDAVHost::~WebDAVHost() = default;
 void WebDAVHost::Init()
 {
     using namespace webdav;
-    I = std::make_unique<State>(Config());
+    I = std::make_unique<State>(Config(), m_BlockingRequestTimeoutMs);
 
     auto ar = I->m_Pool.Get();
     const std::expected<HTTPRequests::Mask, Error> requests = RequestServerOptions(Config(), *ar.connection);

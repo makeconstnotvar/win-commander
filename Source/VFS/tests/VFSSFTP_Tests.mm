@@ -6,8 +6,16 @@
 #include <Base/dispatch_cpp.h>
 #include <Base/DispatchGroup.h>
 #include <Base/WriteAtomically.h>
+#include <chrono>
+#include <mutex>
 #include <set>
+#include <stdexcept>
+#include <thread>
 #include <dirent.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 using namespace nc;
 using namespace nc::vfs;
@@ -20,6 +28,67 @@ using namespace std::string_literals;
 // so DSA-based authentication tests are not included.
 static const auto g_Alpine_Address = "127.0.0.1";
 static const auto g_Alpine_Port = 9022;
+
+class SSHHandshakeBlackhole final
+{
+public:
+    SSHHandshakeBlackhole()
+    {
+        m_Listener = socket(AF_INET, SOCK_STREAM, 0);
+        if( m_Listener < 0 )
+            throw std::runtime_error{"cannot create SSH blackhole listener"};
+
+        const int reuse_address = 1;
+        if( setsockopt(m_Listener, SOL_SOCKET, SO_REUSEADDR, &reuse_address, sizeof(reuse_address)) != 0 )
+            throw std::runtime_error{"cannot configure SSH blackhole listener"};
+
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        address.sin_port = 0;
+        if( bind(m_Listener, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) != 0 ||
+            listen(m_Listener, 1) != 0 )
+            throw std::runtime_error{"cannot start SSH blackhole listener"};
+
+        socklen_t address_size = sizeof(address);
+        if( getsockname(m_Listener, reinterpret_cast<sockaddr *>(&address), &address_size) != 0 )
+            throw std::runtime_error{"cannot inspect SSH blackhole listener"};
+        m_Port = ntohs(address.sin_port);
+        m_Worker = std::jthread{[this](const std::stop_token _stop) {
+            while( !_stop.stop_requested() ) {
+                pollfd listener_poll{.fd = m_Listener, .events = POLLIN, .revents = 0};
+                if( poll(&listener_poll, 1, 10) <= 0 )
+                    continue;
+                const int client = accept(m_Listener, nullptr, nullptr);
+                if( client < 0 )
+                    continue;
+                const std::lock_guard lock{m_ClientsLock};
+                m_Clients.emplace_back(client);
+            }
+        }};
+    }
+
+    ~SSHHandshakeBlackhole()
+    {
+        m_Worker.request_stop();
+        m_Worker.join();
+        for( const int client : m_Clients )
+            close(client);
+        close(m_Listener);
+    }
+
+    SSHHandshakeBlackhole(const SSHHandshakeBlackhole &) = delete;
+    SSHHandshakeBlackhole &operator=(const SSHHandshakeBlackhole &) = delete;
+
+    long Port() const noexcept { return m_Port; }
+
+private:
+    int m_Listener = -1;
+    long m_Port = 0;
+    std::jthread m_Worker;
+    std::mutex m_ClientsLock;
+    std::vector<int> m_Clients;
+};
 
 // User1: password only
 static const auto g_Alpine_User1 = "user1";
@@ -175,6 +244,20 @@ static const std::string_view g_Alpine_RootED25519 = g_Alpine_User4ED25519;
 static std::shared_ptr<SFTPHost> hostForAlpine_User1_Pwd()
 {
     return std::make_shared<SFTPHost>(g_Alpine_Address, g_Alpine_User1, g_Alpine_User1Passwd, "", g_Alpine_Port);
+}
+
+TEST_CASE(PREFIX "bounds a nonresponsive SSH handshake by the configured transport deadline")
+{
+    SSHHandshakeBlackhole blackhole;
+    const auto started_at = std::chrono::steady_clock::now();
+    try {
+        std::ignore = std::make_shared<SFTPHost>(
+            "127.0.0.1", g_Alpine_User1, g_Alpine_User1Passwd, "", blackhole.Port(), "", 150);
+        FAIL("the nonresponsive SSH endpoint unexpectedly completed initialization");
+    } catch( const ErrorException &_error ) {
+        CHECK(_error.error() == Error{nc::vfs::sftp::ErrorDomain, nc::vfs::sftp::Errors::timeout});
+    }
+    CHECK(std::chrono::steady_clock::now() - started_at < std::chrono::seconds{2});
 }
 
 static std::shared_ptr<SFTPHost> hostForAlpine_User2_RSA()

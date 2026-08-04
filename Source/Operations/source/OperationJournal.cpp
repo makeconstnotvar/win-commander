@@ -1156,6 +1156,29 @@ OperationJournalTesting::RecordItemResult(OperationJournal &_journal,
     return _journal.RecordItemResult(_plan_id, std::move(_result));
 }
 
+std::expected<std::vector<OperationJournalEntry>, OperationJournalError>
+OperationJournalTesting::InspectPersistedReadOnly(const int _parent_directory_fd)
+{
+    const auto syscalls = DefaultSyscalls();
+    struct stat parent_state{};
+    if( _parent_directory_fd < 0 )
+        return OperationJournalFailure(OperationJournalErrorCode::ParentOpenFailed, EBADF);
+    if( syscalls->fstat(_parent_directory_fd, &parent_state) != 0 )
+        return OperationJournalFailure(OperationJournalErrorCode::ParentOpenFailed, errno);
+    if( !S_ISDIR(parent_state.st_mode) || parent_state.st_uid != ::geteuid() || (parent_state.st_mode & 0022) != 0 )
+        return OperationJournalFailure(OperationJournalErrorCode::ParentOpenFailed, EPERM);
+
+    const auto persisted = OperationJournalRead(_parent_directory_fd, *syscalls);
+    if( !persisted )
+        return std::unexpected(persisted.error());
+    if( !*persisted )
+        return OperationJournalFailure(OperationJournalErrorCode::JournalOpenFailed, ENOENT);
+    const auto decoded = OperationJournalDecode(**persisted);
+    if( !decoded )
+        return std::unexpected(decoded.error());
+    return std::move(decoded->entries);
+}
+
 std::expected<OperationJournal, OperationJournalError>
 OperationJournalTesting::Open(std::string_view _absolute_existing_parent,
                               std::shared_ptr<OperationJournalSyscalls> _syscalls,

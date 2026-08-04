@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "Tests.h"
 #include <WinCommander/Core/Commands/CommandIds.h>
+#include <WinCommander/Core/Commands/OperationCancelCommand.h>
 #include <WinCommander/Core/Commands/CommandRegistry.h>
 #include <array>
 #include <set>
@@ -12,6 +13,14 @@ using nc::core::CommandInvocationSource;
 using nc::core::CommandRegistry;
 using nc::core::CommandState;
 using nc::core::DisabledReason;
+using nc::core::OperationCancelTarget;
+using nc::core::OperationCancelExecutor;
+using nc::core::OperationCancelContextFromRecord;
+using nc::core::OperationCancelPresentationState;
+using nc::core::MakeOperationCancelCommand;
+using nc::ops::OperationCenterCancelResult;
+using nc::ops::OperationCenterCancelResultCode;
+using nc::ops::OperationId;
 
 #define PREFIX "nc::core::CommandRegistry "
 
@@ -41,6 +50,45 @@ DisabledReason TestDisabledReason()
         .user_message_key = "commands.disabled.selectionEmpty",
         .technical_message = "No selected items.",
         .suggested_action = std::nullopt,
+    };
+}
+
+CommandContext OperationCancelContext(const bool _can_cancel = true, const uint64_t _revision = 7)
+{
+    const auto operation_id = OperationId::Parse("op-41");
+    REQUIRE(operation_id);
+    CommandContext context;
+    context.operation_cancel_target = OperationCancelTarget{
+        .operation_id = *operation_id,
+        .expected_revision = _revision,
+        .can_cancel = _can_cancel,
+    };
+    return context;
+}
+
+nc::ops::OperationRecord OperationCancelRecord(const bool _can_cancel = true, const uint64_t _revision = 7)
+{
+    const auto operation_id = OperationId::Parse("op-41");
+    REQUIRE(operation_id);
+    auto plan = nc::ops::OperationPlan::Create({
+        .plan_id = "command-registry-operation-cancel",
+        .type = nc::ops::OperationPlanType::Copy,
+        .sources = {nc::ops::OperationPlanSourceInput{"native", "/source"}},
+        .destination = nc::ops::OperationPlanDestinationInput{
+            "native", "/destination", nc::ops::OperationPlanDestinationKind::Directory},
+        .conflict_policy = nc::ops::OperationPlanConflictPolicy{nc::ops::OperationPlanConflictDecision::Ask,
+                                                                 nc::ops::OperationPlanConflictScope::ThisItem},
+        .created_at = nc::ops::OperationPlan::TimePoint{},
+    });
+    REQUIRE(plan);
+    return {
+        .operation_id = *operation_id,
+        .plan_id = (*plan).Id(),
+        .operation_type = nc::ops::OperationPlanType::Copy,
+        .state = nc::ops::OperationRecordState::Running,
+        .revision = _revision,
+        .created_at = nc::ops::OperationPlan::TimePoint{},
+        .controls = {.can_cancel = _can_cancel},
     };
 }
 
@@ -75,6 +123,33 @@ TEST_CASE(PREFIX "stable command ids")
         OperationCancel,
         OperationCenterOpen};
     CHECK(ids.size() == 11);
+}
+
+TEST_CASE(PREFIX "operation.cancel context is a value-only projection of one immutable record")
+{
+    const auto record = OperationCancelRecord(true, 9);
+    const auto context = OperationCancelContextFromRecord(record, CommandInvocationSource::Menu);
+
+    CHECK(context.source == CommandInvocationSource::Menu);
+    REQUIRE(context.operation_cancel_target);
+    CHECK(context.operation_cancel_target->operation_id == record.operation_id);
+    CHECK(context.operation_cancel_target->expected_revision == record.revision);
+    CHECK(context.operation_cancel_target->can_cancel == record.controls.can_cancel);
+}
+
+TEST_CASE(PREFIX "operation.cancel missing Registry definition is visibly disabled with a typed reason")
+{
+    CommandRegistry registry;
+    const auto context = OperationCancelContextFromRecord(OperationCancelRecord(), CommandInvocationSource::Menu);
+    const auto missing = registry.QueryState(CommandId{nc::core::command_ids::OperationCancel}, context);
+
+    CHECK(missing.status == CommandRegistry::LookupStatus::UnknownCommand);
+    const auto presentation = OperationCancelPresentationState(missing);
+    CHECK(presentation.visible);
+    CHECK_FALSE(presentation.enabled);
+    REQUIRE(presentation.disabled_reason);
+    CHECK(presentation.disabled_reason->code == "operation.controlUnavailable");
+    CHECK(presentation.disabled_reason->user_message_key == "commands.operation.cancel.disabled.controlUnavailable");
 }
 
 TEST_CASE(PREFIX "rejects invalid ids and missing handlers")
@@ -237,4 +312,81 @@ TEST_CASE(PREFIX "executes exactly once with the supplied context")
     CHECK(calls == 1);
     CHECK(observed_source == CommandInvocationSource::Shortcut);
     CHECK(observed_sender == &sender);
+}
+
+TEST_CASE(PREFIX "result handlers reject after live execution revalidation")
+{
+    CommandRegistry registry;
+    bool ordinary_handler_called = false;
+    auto registration = Registration("operation.cancel", [&](const CommandContext &) { ordinary_handler_called = true; });
+    registration.result_handler = [](const CommandContext &) -> std::optional<DisabledReason> {
+        return DisabledReason{
+            .code = "operation.staleRevision",
+            .user_message_key = "commands.operation.cancel.disabled.staleRevision",
+            .technical_message = "The operation changed.",
+        };
+    };
+    CHECK(registry.Register(std::move(registration)) == CommandRegistry::RegisterResult::ConflictingHandlers);
+    CHECK_FALSE(ordinary_handler_called);
+}
+
+TEST_CASE(PREFIX "operation.cancel accepts only an enabled value target and maps live rejection")
+{
+    int executor_calls = 0;
+    std::optional<OperationId> observed_id;
+    uint64_t observed_revision = 0;
+    OperationCenterCancelResultCode next_result = OperationCenterCancelResultCode::Accepted;
+    OperationCancelExecutor executor = [&](const OperationId _operation_id, const uint64_t _expected_revision) {
+        ++executor_calls;
+        observed_id = _operation_id;
+        observed_revision = _expected_revision;
+        return OperationCenterCancelResult{.code = next_result};
+    };
+
+    CommandRegistry registry;
+    REQUIRE(registry.Register(MakeOperationCancelCommand(std::move(executor))) ==
+            CommandRegistry::RegisterResult::Registered);
+
+    const auto missing_target = registry.QueryState(CommandId{nc::core::command_ids::OperationCancel}, {});
+    CHECK_FALSE(missing_target.state.enabled);
+    REQUIRE(missing_target.state.disabled_reason);
+    CHECK(missing_target.state.disabled_reason->code == "context.operationCancelTargetRequired");
+
+    const auto unavailable_context = OperationCancelContext(false);
+    const auto unavailable = registry.Execute(CommandId{nc::core::command_ids::OperationCancel}, unavailable_context);
+    CHECK(unavailable.status == CommandRegistry::ExecutionStatus::Disabled);
+    REQUIRE(unavailable.disabled_reason);
+    CHECK(unavailable.disabled_reason->code == "operation.cancelUnavailable");
+    CHECK(executor_calls == 0);
+
+    const auto record = OperationCancelRecord(true, 17);
+    const auto context = OperationCancelContextFromRecord(record, CommandInvocationSource::Menu);
+    CHECK(context.source == CommandInvocationSource::Menu);
+    const auto accepted = registry.Execute(CommandId{nc::core::command_ids::OperationCancel}, context);
+    CHECK(accepted.status == CommandRegistry::ExecutionStatus::Executed);
+    CHECK(executor_calls == 1);
+    REQUIRE(observed_id);
+    CHECK(*observed_id == record.operation_id);
+    CHECK(observed_revision == record.revision);
+
+    struct RejectionCase {
+        OperationCenterCancelResultCode code;
+        std::string_view disabled_code;
+    };
+    const std::array rejection_cases{
+        RejectionCase{OperationCenterCancelResultCode::OperationNotFound, "operation.notFound"},
+        RejectionCase{OperationCenterCancelResultCode::StaleRevision, "operation.staleRevision"},
+        RejectionCase{OperationCenterCancelResultCode::CancelUnavailable, "operation.cancelUnavailable"},
+        RejectionCase{OperationCenterCancelResultCode::ResidencyUnavailable, "operation.residencyUnavailable"},
+        RejectionCase{OperationCenterCancelResultCode::CancelInProgress, "operation.cancelInProgress"},
+        RejectionCase{OperationCenterCancelResultCode::StopRejected, "operation.stopRejected"},
+    };
+    for( const auto rejection : rejection_cases ) {
+        next_result = rejection.code;
+        const auto rejected = registry.Execute(CommandId{nc::core::command_ids::OperationCancel}, context);
+        CHECK(rejected.status == CommandRegistry::ExecutionStatus::Rejected);
+        REQUIRE(rejected.disabled_reason);
+        CHECK(rejected.disabled_reason->code == rejection.disabled_code);
+    }
+    CHECK(executor_calls == 1 + static_cast<int>(rejection_cases.size()));
 }

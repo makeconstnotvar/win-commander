@@ -12,6 +12,7 @@
 #include "../MainWindowController.h"
 #include "../../Bootstrap/AppDelegate.h"
 #include "../../Bootstrap/AppDelegate+MainWindowCreation.h"
+#include <WinCommander/Core/Commands/CommandRegistry.h>
 
 static const CGFloat g_SidebarWidth = 220.0;
 static const CGFloat g_CommandBarHeight = 36.0;
@@ -236,7 +237,12 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
 - (void)buildLayout
 {
     m_Sidebar = [[NCExplorerSidebarView alloc] initWithFrame:NSRect() panelController:m_Panel];
-    m_CommandBar = [[NCExplorerCommandBarView alloc] initWithFrame:NSRect() panelController:m_Panel];
+    NCAppDelegate *const app = NCAppDelegate.me;
+    nc::core::CommandRegistry &command_registry = app.commandRegistry;
+    m_CommandBar = [[NCExplorerCommandBarView alloc] initWithFrame:NSRect()
+                                                    panelController:m_Panel
+                                          operationCenterCoordinator:app.operationCenterCoordinator
+                                                     commandRegistry:&command_registry];
     m_QuickSearchOverlay = [[NCExplorerQuickSearchOverlayView alloc] initWithFrame:NSZeroRect];
 
     m_Sidebar.translatesAutoresizingMaskIntoConstraints = false;

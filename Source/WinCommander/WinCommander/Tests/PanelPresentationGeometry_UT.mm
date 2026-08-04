@@ -7,10 +7,12 @@
 #include <Utility/ByteCountFormatter.h>
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/FileCutCommand.h>
+#include <WinCommander/Core/Commands/OperationCancelCommand.h>
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
 #include <WinCommander/Core/Errors/FileManagerErrorAdapter.h>
 #include <WinCommander/Core/Pane/PaneSnapshot.h>
 #include <WinCommander/States/Explorer/NCExplorerBreadcrumbControl.h>
+#include <WinCommander/States/Explorer/NCExplorerCommandBarView.h>
 #include <WinCommander/States/Explorer/NCExplorerPanePresentationModel.h>
 #include <WinCommander/States/Explorer/NCExplorerToolbarDelegate.h>
 #include <WinCommander/States/FilePanels/PanelController.h>
@@ -21,10 +23,14 @@
 #include <WinCommander/States/FilePanels/List/PanelListViewGeometry.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewProjection.h>
 #include <array>
-#include <memory>
 #include <chrono>
+#include <filesystem>
+#include <memory>
+#include <Operations/OperationCenterCoordinator.h>
+#include <Operations/OperationJournal.h>
 #include <sys/dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 using nc::panel::PanelListViewGeometry;
 using nc::panel::PanelListViewGroupKey;
@@ -366,9 +372,96 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 
 @end
 
+@interface ExplorerOperationMenuTestActionsDispatcher : NCPanelControllerActionsDispatcher
+@end
+
+@implementation ExplorerOperationMenuTestActionsDispatcher
+
+- (nc::core::CommandState)fileCopyCommandStateFromSource:
+    (nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileCutCommandStateFromSource:
+    (nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileRenameCommandStateFromSource:
+    (nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (bool)validateActionBySelector:(SEL) [[maybe_unused]] _selector
+{
+    return false;
+}
+
+@end
+
+// The command bar only needs this `actionsDispatcher` surface during construction. This fixture
+// never becomes a PanelView or attaches to an NSWindow, keeping menu checks non-modal.
+@interface ExplorerOperationMenuTestPanelView : NSObject
+@property(nonatomic, strong) NCPanelControllerActionsDispatcher *actionsDispatcher;
+@end
+
+@implementation ExplorerOperationMenuTestPanelView {
+    NCPanelControllerActionsDispatcher *m_ActionsDispatcher;
+}
+
+@synthesize actionsDispatcher = m_ActionsDispatcher;
+@end
+
+@interface ExplorerOperationMenuTestPanelController : PanelController
+- (instancetype)initWithActionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher;
+@end
+
+@implementation ExplorerOperationMenuTestPanelController {
+    ExplorerOperationMenuTestPanelView *m_TestView;
+}
+
+- (instancetype)initWithActionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher
+{
+    self = [super init];
+    if( self ) {
+        m_TestView = [ExplorerOperationMenuTestPanelView new];
+        m_TestView.actionsDispatcher = _dispatcher;
+    }
+    return self;
+}
+
+- (nc::core::PaneId)paneId
+{
+    return nc::core::PaneId{92};
+}
+
+- (PanelView *)view
+{
+    return static_cast<PanelView *>(m_TestView);
+}
+
+- (std::vector<VFSListingItem>)selectedEntriesOrFocusedEntry
+{
+    return {};
+}
+
+@end
+
 @interface NCExplorerBreadcrumbControl (ExplorerPresentationTests)
 - (void)navigateToPath:(const std::string &)_path host:(const VFSHostPtr &)_host;
 - (void)onPathEditorCommit:(id)_sender;
+@end
+
+@interface NCExplorerCommandBarView (ExplorerOperationMenuTests)
+- (NSMenu *)buildMoreMenu;
+- (void)performOperationCancel:(id)_sender;
+@end
+
+@interface NCExplorerOperationCancelMenuTarget : NSObject
+- (const nc::core::CommandContext &)context;
 @end
 
 namespace {
@@ -410,6 +503,107 @@ nc::core::FileManagerError ExplorerFailure()
         .technical_message = "INTERNAL EXPLORER TEST DETAIL",
         .original_error = nc::Error{nc::Error::POSIX, ENOENT},
     };
+}
+
+struct ExplorerOperationMenuTestDirectory final {
+    ExplorerOperationMenuTestDirectory()
+    {
+        std::string pattern =
+            (std::filesystem::temp_directory_path() / "explorer-operation-menu-ut-XXXXXX").string();
+        REQUIRE(::mkdtemp(pattern.data()) != nullptr);
+        path = std::filesystem::canonical(pattern).string();
+    }
+
+    ~ExplorerOperationMenuTestDirectory() { std::filesystem::remove_all(path); }
+
+    std::string path;
+};
+
+nc::ops::OperationPlan ExplorerOperationMenuPlan(std::string _plan_id)
+{
+    auto plan = nc::ops::OperationPlan::Create(
+        {.plan_id = std::move(_plan_id),
+         .type = nc::ops::OperationPlanType::Copy,
+         .sources = {nc::ops::OperationPlanSourceInput{"native", "/source"}},
+         .destination = nc::ops::OperationPlanDestinationInput{
+             "native", "/destination", nc::ops::OperationPlanDestinationKind::Directory},
+         .conflict_policy = nc::ops::OperationPlanConflictPolicy{nc::ops::OperationPlanConflictDecision::Ask,
+                                                                  nc::ops::OperationPlanConflictScope::ThisItem},
+         .created_at = nc::ops::OperationPlan::TimePoint{std::chrono::seconds{1'700'000'000}}});
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+nc::ops::OperationJournalItemResult ExplorerOperationMenuSuccess()
+{
+    return {.item_index = 0,
+            .status = nc::ops::OperationJournalItemStatus::Succeeded,
+            .error = nc::ops::OperationJournalItemError::None,
+            .system_error = 0,
+            .prior_error = nc::ops::OperationJournalItemError::None,
+            .prior_system_error = 0,
+            .bytes = 42,
+            .destination_publication = nc::ops::OperationJournalPublicationState::Published,
+            .filesystem_sync_status = nc::ops::OperationJournalFilesystemSyncStatus::Confirmed,
+            .filesystem_sync_system_error = 0,
+            .recovery_action = nc::ops::OperationJournalRecoveryAction::None};
+}
+
+std::shared_ptr<nc::ops::OperationCenterCoordinator>
+ExplorerOperationMenuCoordinatorWithTerminalRecord(ExplorerOperationMenuTestDirectory &_directory)
+{
+    auto journal = nc::ops::OperationJournal::Open(_directory.path);
+    REQUIRE(journal);
+    auto admission = journal->Admit(ExplorerOperationMenuPlan("terminal"));
+    REQUIRE(admission);
+    auto running = journal->TransitionToRunning(std::move(*admission));
+    REQUIRE(running);
+    REQUIRE(journal->Finalize(std::move(*running), ExplorerOperationMenuSuccess(), nc::ops::OperationJournalState::Completed));
+
+    auto coordinator = nc::ops::OperationCenterCoordinator::Create(*journal);
+    REQUIRE(coordinator);
+    return std::move(*coordinator);
+}
+
+std::shared_ptr<nc::ops::OperationCenterCoordinator>
+ExplorerOperationMenuCoordinatorWithQueuedRecord(ExplorerOperationMenuTestDirectory &_directory)
+{
+    auto journal = nc::ops::OperationJournal::Open(_directory.path);
+    REQUIRE(journal);
+    auto coordinator = nc::ops::OperationCenterCoordinator::Create(*journal);
+    REQUIRE(coordinator);
+
+    auto staging = (*coordinator)->StageAdmission(*journal, ExplorerOperationMenuPlan("queued"));
+    REQUIRE(staging);
+    const auto committed = (*coordinator)->CommitAdmission(*journal, std::move(*staging));
+    REQUIRE(committed);
+    return std::move(*coordinator);
+}
+
+NSMenuItem *ExplorerOperationsMenuSection(NSMenu *_menu)
+{
+    NSString *const title = NSLocalizedString(@"explorer.operations.title", "Explorer operation menu");
+    for( NSMenuItem *const item in _menu.itemArray )
+        if( [item.title isEqual:title] )
+            return item;
+    return nil;
+}
+
+NSMenuItem *ExplorerOperationsMenuItemAfter(NSMenu *_menu, NSMenuItem *_item)
+{
+    const NSInteger index = [_menu indexOfItem:_item];
+    if( index == -1 || index + 1 >= static_cast<NSInteger>(_menu.numberOfItems) )
+        return nil;
+    return [_menu itemAtIndex:index + 1];
+}
+
+NSMenuItem *ExplorerOperationsMenuRecordItem(NSMenu *_menu, const nc::ops::OperationRecord &_record)
+{
+    NSString *const operation_id = [NSString stringWithUTF8String:_record.operation_id.ToString().c_str()];
+    for( NSMenuItem *const item in _menu.itemArray )
+        if( [item.title rangeOfString:operation_id].location != NSNotFound )
+            return item;
+    return nil;
 }
 
 } // namespace
@@ -871,6 +1065,137 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     CHECK(dispatcher.forwardExecutionCount == 1);
     CHECK(dispatcher.upExecutionCount == 1);
     CHECK(dispatcher.refreshExecutionCount == 1);
+}
+
+TEST_CASE(PREFIX "compact Operations menu fails closed when its services are absent")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                            panelController:panel];
+
+    NSMenu *const menu = [bar buildMoreMenu];
+    NSMenuItem *const section = ExplorerOperationsMenuSection(menu);
+    REQUIRE(section);
+    NSMenuItem *const unavailable = ExplorerOperationsMenuItemAfter(menu, section);
+    REQUIRE(unavailable);
+    CHECK_FALSE(unavailable.enabled);
+    CHECK_FALSE(unavailable.hidden);
+    CHECK(unavailable.toolTip.length > 0);
+    CHECK([unavailable.accessibilityHelp isEqual:unavailable.toolTip]);
+}
+
+TEST_CASE(PREFIX "compact Operations menu omits terminal records and reports no active operations")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerOperationMenuTestDirectory directory;
+    const auto coordinator = ExplorerOperationMenuCoordinatorWithTerminalRecord(directory);
+    REQUIRE(coordinator);
+    const auto records = coordinator->Model().Snapshot();
+    REQUIRE(records.size() == 1);
+    REQUIRE(records.front().state == nc::ops::OperationRecordState::Completed);
+
+    nc::core::CommandRegistry registry;
+    ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                            panelController:panel
+                                                                  operationCenterCoordinator:coordinator
+                                                                             commandRegistry:&registry];
+
+    NSMenu *const menu = [bar buildMoreMenu];
+    NSMenuItem *const section = ExplorerOperationsMenuSection(menu);
+    REQUIRE(section);
+    NSMenuItem *const empty = ExplorerOperationsMenuItemAfter(menu, section);
+    REQUIRE(empty);
+    CHECK_FALSE(empty.enabled);
+    CHECK_FALSE(empty.hidden);
+    for( NSMenuItem *const item in menu.itemArray )
+        CHECK([item.title rangeOfString:@"op-1"].location == NSNotFound);
+}
+
+TEST_CASE(PREFIX "compact Operations menu keeps an unknown cancel command visibly disabled")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerOperationMenuTestDirectory directory;
+    const auto coordinator = ExplorerOperationMenuCoordinatorWithQueuedRecord(directory);
+    REQUIRE(coordinator);
+    const auto records = coordinator->Model().Snapshot();
+    REQUIRE(records.size() == 1);
+    REQUIRE(records.front().state == nc::ops::OperationRecordState::Queued);
+    REQUIRE(records.front().controls.can_cancel);
+
+    nc::core::CommandRegistry registry;
+    ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                            panelController:panel
+                                                                  operationCenterCoordinator:coordinator
+                                                                             commandRegistry:&registry];
+
+    NSMenu *const menu = [bar buildMoreMenu];
+    NSMenuItem *const record_item = ExplorerOperationsMenuRecordItem(menu, records.front());
+    REQUIRE(record_item);
+    NSMenuItem *const cancel = ExplorerOperationsMenuItemAfter(menu, record_item);
+    REQUIRE(cancel);
+    CHECK_FALSE(cancel.enabled);
+    CHECK_FALSE(cancel.hidden);
+    CHECK(cancel.target == nil);
+    CHECK(cancel.action == nil);
+    NSString *const key = @"commands.operation.cancel.disabled.controlUnavailable";
+    NSString *const localized = [NSBundle.mainBundle localizedStringForKey:key value:nil table:nil];
+    NSString *const expected = localized.length && ![localized isEqual:key] ? localized
+                                                                              : @"This command is currently unavailable";
+    CHECK([cancel.toolTip isEqual:expected]);
+    CHECK([cancel.accessibilityHelp isEqual:cancel.toolTip]);
+}
+
+TEST_CASE(PREFIX "compact Operations menu binds Cancel to an immutable Menu value target")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerOperationMenuTestDirectory directory;
+    const auto coordinator = ExplorerOperationMenuCoordinatorWithQueuedRecord(directory);
+    REQUIRE(coordinator);
+    const auto records = coordinator->Model().Snapshot();
+    REQUIRE(records.size() == 1);
+    const nc::ops::OperationRecord record = records.front();
+
+    nc::core::CommandRegistry registry;
+    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand(
+                         [](nc::ops::OperationId, uint64_t) {
+                             return nc::ops::OperationCenterCancelResult{
+                                 .code = nc::ops::OperationCenterCancelResultCode::Accepted};
+                         })) == nc::core::CommandRegistry::RegisterResult::Registered);
+    ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                            panelController:panel
+                                                                  operationCenterCoordinator:coordinator
+                                                                             commandRegistry:&registry];
+
+    NSMenu *const menu = [bar buildMoreMenu];
+    NSMenuItem *const record_item = ExplorerOperationsMenuRecordItem(menu, record);
+    REQUIRE(record_item);
+    NSMenuItem *const cancel = ExplorerOperationsMenuItemAfter(menu, record_item);
+    REQUIRE(cancel);
+    REQUIRE(cancel.enabled);
+    REQUIRE_FALSE(cancel.hidden);
+    CHECK(cancel.target == bar);
+    CHECK(cancel.action == @selector(performOperationCancel:));
+    REQUIRE([cancel.representedObject isKindOfClass:NCExplorerOperationCancelMenuTarget.class]);
+    NCExplorerOperationCancelMenuTarget *const target =
+        static_cast<NCExplorerOperationCancelMenuTarget *>(cancel.representedObject);
+    const nc::core::CommandContext &context = target.context;
+    REQUIRE(context.operation_cancel_target);
+    CHECK(context.source == nc::core::CommandInvocationSource::Menu);
+    CHECK(context.operation_cancel_target->operation_id == record.operation_id);
+    CHECK(context.operation_cancel_target->expected_revision == record.revision);
+    CHECK(context.operation_cancel_target->can_cancel == record.controls.can_cancel);
 }
 
 TEST_CASE(PREFIX "Details identity projection keeps model indices unchanged")

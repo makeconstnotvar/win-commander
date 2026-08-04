@@ -116,7 +116,8 @@ ConditionalCopyReadExtendedAttributes(int _fd) noexcept
 
 } // namespace
 
-ConditionalCopyVolumeDecision EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
+static ConditionalCopyVolumeDecision
+EvaluateConditionalCopyVolumeImpl(const nc::utility::NativeFileSystemInfo &_volume, const bool _requires_clone) noexcept
 {
     const auto media =
         _volume.mount_flags.internal ? ConditionalCopyVolumeMedia::Internal : ConditionalCopyVolumeMedia::External;
@@ -132,12 +133,23 @@ ConditionalCopyVolumeDecision EvaluateConditionalCopyVolume(const nc::utility::N
         return {.disposition = ConditionalCopyVolumeDisposition::ReadOnly, .media = media};
     if( _volume.mount_flags.unknown_permissions || _volume.format.no_permissions )
         return {.disposition = ConditionalCopyVolumeDisposition::UnknownPermissions, .media = media};
-    if( !_volume.interfaces.clone )
+    if( _requires_clone && !_volume.interfaces.clone )
         return {.disposition = ConditionalCopyVolumeDisposition::CloneUnavailable, .media = media};
     if( !_volume.interfaces.attr_list || !_volume.interfaces.extended_attr || !_volume.interfaces.extended_security ) {
         return {.disposition = ConditionalCopyVolumeDisposition::MetadataUnavailable, .media = media};
     }
     return {.disposition = ConditionalCopyVolumeDisposition::Supported, .media = media};
+}
+
+ConditionalCopyVolumeDecision EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
+{
+    return EvaluateConditionalCopyVolumeImpl(_volume, true);
+}
+
+ConditionalCopyVolumeDecision
+EvaluateConditionalCopyStagingVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
+{
+    return EvaluateConditionalCopyVolumeImpl(_volume, false);
 }
 
 bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,

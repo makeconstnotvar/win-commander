@@ -5,9 +5,13 @@
 #include "../FilePanels/PanelView.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
 #include "../FilePanels/Helpers/Pasteboard.h"
+#include <WinCommander/Core/Commands/CommandIds.h>
+#include <WinCommander/Core/Commands/CommandRegistry.h>
+#include <WinCommander/Core/Commands/OperationCancelCommand.h>
 #include <WinCommander/Core/Pane/PaneSnapshot.h>
 #include <WinCommander/States/CommandPresentationAdapter.h>
 #include <CUI/CommandPopover.h>
+#include <Operations/OperationCenterCoordinator.h>
 #include <Panel/PanelData.h>
 #include <Panel/PanelDataSortMode.h>
 #include <Utility/ObjCpp.h>
@@ -17,6 +21,118 @@
 
 @interface NCExplorerCommandBarView () <NCCommandPopoverDelegate, NSSharingServicePickerDelegate>
 @end
+
+@interface NCExplorerOperationCancelMenuTarget : NSObject
+- (instancetype)initWithContext:(nc::core::CommandContext)_context;
+- (const nc::core::CommandContext &)context;
+@end
+
+@implementation NCExplorerOperationCancelMenuTarget {
+    nc::core::CommandContext m_Context;
+}
+
+- (instancetype)initWithContext:(nc::core::CommandContext)_context
+{
+    self = [super init];
+    if( self )
+        m_Context = std::move(_context);
+    return self;
+}
+
+- (const nc::core::CommandContext &)context
+{
+    return m_Context;
+}
+
+@end
+
+namespace {
+
+NSString *StringFromUTF8(const std::string_view _value)
+{
+    return [[NSString alloc] initWithBytes:_value.data() length:_value.size() encoding:NSUTF8StringEncoding];
+}
+
+NSString *UserFacingDisabledReason(const nc::core::DisabledReason &_reason)
+{
+    NSString *const key = StringFromUTF8(_reason.user_message_key);
+    if( key.length ) {
+        NSString *const localized = [NSBundle.mainBundle localizedStringForKey:key value:nil table:nil];
+        if( localized.length && ![localized isEqualToString:key] )
+            return localized;
+    }
+    return [NSBundle.mainBundle localizedStringForKey:@"commands.disabled.generic"
+                                                 value:@"This command is currently unavailable"
+                                                 table:nil];
+}
+
+NSString *OperationTypeTitle(const nc::ops::OperationPlanType _type)
+{
+    using enum nc::ops::OperationPlanType;
+    switch( _type ) {
+        case Copy:
+            return NSLocalizedString(@"explorer.operations.type.copy", "Explorer operation menu type");
+        case Move:
+            return NSLocalizedString(@"explorer.operations.type.move", "Explorer operation menu type");
+        case Rename:
+            return NSLocalizedString(@"explorer.operations.type.rename", "Explorer operation menu type");
+        case Trash:
+            return NSLocalizedString(@"explorer.operations.type.trash", "Explorer operation menu type");
+        case PermanentDelete:
+            return NSLocalizedString(@"explorer.operations.type.delete", "Explorer operation menu type");
+    }
+    return NSLocalizedString(@"explorer.operations.type.operation", "Explorer operation menu type");
+}
+
+NSString *OperationStateTitle(const nc::ops::OperationRecordState _state)
+{
+    using enum nc::ops::OperationRecordState;
+    switch( _state ) {
+        case Queued:
+            return NSLocalizedString(@"explorer.operations.state.queued", "Explorer operation menu state");
+        case Running:
+            return NSLocalizedString(@"explorer.operations.state.running", "Explorer operation menu state");
+        case Paused:
+            return NSLocalizedString(@"explorer.operations.state.paused", "Explorer operation menu state");
+        case Cancelling:
+            return NSLocalizedString(@"explorer.operations.state.cancelling", "Explorer operation menu state");
+        case Finalizing:
+            return NSLocalizedString(@"explorer.operations.state.finalizing", "Explorer operation menu state");
+        case Interrupted:
+            return NSLocalizedString(@"explorer.operations.state.interrupted", "Explorer operation menu state");
+        case Cancelled:
+            return NSLocalizedString(@"explorer.operations.state.cancelled", "Explorer operation menu state");
+        case Failed:
+            return NSLocalizedString(@"explorer.operations.state.failed", "Explorer operation menu state");
+        case Completed:
+            return NSLocalizedString(@"explorer.operations.state.completed", "Explorer operation menu state");
+        case CompletedWithWarnings:
+            return NSLocalizedString(@"explorer.operations.state.completedWithWarnings", "Explorer operation menu state");
+    }
+    return NSLocalizedString(@"explorer.operations.state.unknown", "Explorer operation menu state");
+}
+
+bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
+{
+    using enum nc::ops::OperationRecordState;
+    switch( _state ) {
+        case Queued:
+        case Running:
+        case Paused:
+        case Cancelling:
+        case Finalizing:
+            return true;
+        case Interrupted:
+        case Cancelled:
+        case Failed:
+        case Completed:
+        case CompletedWithWarnings:
+            return false;
+    }
+    return false;
+}
+
+} // namespace
 
 @implementation NCExplorerCommandBarView {
     PanelController *m_Panel;
@@ -31,13 +147,28 @@
     NSTimer *m_PasteboardMonitor;
     NSInteger m_LastPasteboardChangeCount;
     std::optional<nc::explorer::PanePresentationModel> m_PanePresentation;
+    std::weak_ptr<nc::ops::OperationCenterCoordinator> m_OperationCenter;
+    nc::core::CommandRegistry *m_CommandRegistry;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
 {
+    return [self initWithFrame:frameRect
+                panelController:_panel
+      operationCenterCoordinator:std::weak_ptr<nc::ops::OperationCenterCoordinator>{}
+                 commandRegistry:nullptr];
+}
+
+- (instancetype)initWithFrame:(NSRect)frameRect
+              panelController:(PanelController *)_panel
+    operationCenterCoordinator:(std::weak_ptr<nc::ops::OperationCenterCoordinator>)_operation_center
+               commandRegistry:(nc::core::CommandRegistry *)_command_registry
+{
     self = [super initWithFrame:frameRect];
     if( self ) {
         m_Panel = _panel;
+        m_OperationCenter = std::move(_operation_center);
+        m_CommandRegistry = _command_registry;
         m_PanePresentation.emplace(_panel.paneId);
         m_LastPasteboardChangeCount = NSPasteboard.generalPasteboard.changeCount;
         [self buildLayout];
@@ -158,7 +289,7 @@
     NSButton *const more_button = [self makeButtonWithTitle:NSLocalizedString(@"More", "Explorer command bar button")
                                                        symbol:@"ellipsis.circle"
                                                        target:self
-                                                       action:@selector(showMorePopover:)];
+                                                       action:@selector(showMoreMenu:)];
 
     NSStackView *const stack = [NSStackView stackViewWithViews:@[
         new_button,
@@ -542,47 +673,149 @@
     [self presentPopover:popover relativeToButton:button];
 }
 
-#pragma mark - More (placeholder)
+#pragma mark - More
 
-- (void)showMorePopover:(id)sender
+- (NSMenu *)buildMoreMenu
+{
+    NSMenu *const menu = [[NSMenu alloc] initWithTitle:NSLocalizedString(@"More", "Explorer command bar - More menu title")];
+
+    const auto add_action = [&](NSString *const title, const SEL selector) {
+        NSMenuItem *const item = [[NSMenuItem alloc] initWithTitle:title
+                                                             action:@selector(performMoreMenuAction:)
+                                                      keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = NSStringFromSelector(selector);
+        [menu addItem:item];
+    };
+    add_action(NSLocalizedString(@"Get Info", "Explorer command bar - More menu item"), @selector(OnFileAttributes:));
+    add_action(NSLocalizedString(@"Compress", "Explorer command bar - More menu item"), @selector(onCompressItems:));
+    add_action(NSLocalizedString(@"Copy Path", "Explorer command bar - More menu item"), @selector(OnCopyCurrentFilePath:));
+
+    [menu addItem:NSMenuItem.separatorItem];
+    NSMenuItem *const operations_header =
+        [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.title", "Explorer operation menu")
+                                    action:nil
+                             keyEquivalent:@""];
+    operations_header.enabled = false;
+    [menu addItem:operations_header];
+
+    const auto operation_center = m_OperationCenter.lock();
+    if( !operation_center || !m_CommandRegistry ) {
+        NSMenuItem *const unavailable =
+            [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.unavailable", "Explorer operation menu")
+                                        action:nil
+                                 keyEquivalent:@""];
+        unavailable.enabled = false;
+        unavailable.toolTip = NSLocalizedString(@"explorer.operations.unavailable.detail", "Explorer operation menu");
+        unavailable.accessibilityHelp = unavailable.toolTip;
+        [menu addItem:unavailable];
+    }
+    else {
+        const auto records = operation_center->Model().Snapshot();
+        bool has_active_record = false;
+        for( const nc::ops::OperationRecord &record : records ) {
+            if( IsActiveOperationState(record.state) ) {
+                has_active_record = true;
+                break;
+            }
+        }
+        if( !has_active_record ) {
+            NSMenuItem *const empty =
+                [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.noActive", "Explorer operation menu")
+                                            action:nil
+                                     keyEquivalent:@""];
+            empty.enabled = false;
+            [menu addItem:empty];
+        }
+        else {
+            for( const nc::ops::OperationRecord &record : records ) {
+                if( !IsActiveOperationState(record.state) )
+                    continue;
+                const std::string operation_id = record.operation_id.ToString();
+                NSMenuItem *const record_item = [[NSMenuItem alloc]
+                    initWithTitle:[NSString stringWithFormat:@"%@ — %@ (%@)",
+                                                              OperationTypeTitle(record.operation_type),
+                                                              OperationStateTitle(record.state),
+                                                              StringFromUTF8(operation_id)]
+                         action:nil
+                  keyEquivalent:@""];
+                record_item.enabled = false;
+                [menu addItem:record_item];
+
+                const nc::core::CommandContext context = nc::core::OperationCancelContextFromRecord(
+                    record, nc::core::CommandInvocationSource::Menu);
+                NSMenuItem *const cancel = [[NSMenuItem alloc]
+                    initWithTitle:[NSString stringWithFormat:NSLocalizedString(@"explorer.operations.cancel", "Explorer operation menu"),
+                                                              StringFromUTF8(operation_id)]
+                         action:nil
+                  keyEquivalent:@""];
+                const auto state = m_CommandRegistry->QueryState(
+                    nc::core::CommandId{nc::core::command_ids::OperationCancel}, context);
+                const nc::core::CommandState presentation_state = nc::core::OperationCancelPresentationState(state);
+                const bool enabled = nc::presentation::CommandPresentationAdapter::Apply(presentation_state, cancel);
+                cancel.enabled = enabled;
+                if( enabled ) {
+                    cancel.target = self;
+                    cancel.action = @selector(performOperationCancel:);
+                    cancel.representedObject = [[NCExplorerOperationCancelMenuTarget alloc] initWithContext:context];
+                }
+                [menu addItem:cancel];
+            }
+        }
+    }
+
+    return menu;
+}
+
+- (void)showMoreMenu:(id)sender
 {
     NSButton *const button = nc::objc_cast<NSButton>(sender);
     if( !button )
         return;
 
-    NCCommandPopover *const popover =
-        [[NCCommandPopover alloc] initWithTitle:NSLocalizedString(@"More", "Explorer command bar - More popover title")];
+    NSMenu *const menu = [self buildMoreMenu];
+    [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(0.0, NSHeight(button.bounds)) inView:button];
+}
 
-    // A handful of already-existing dispatcher actions that don't have a dedicated button of
-    // their own - a real overflow menu is out of scope for this pass.
-    NCCommandPopoverItem *const get_info = [[NCCommandPopoverItem alloc] init];
-    get_info.title = NSLocalizedString(@"Get Info", "Explorer command bar - More popover item");
-    get_info.target = self;
-    get_info.action = @selector(performPopoverAction:);
-    get_info.representedObject = NSStringFromSelector(@selector(OnFileAttributes:));
-    [popover addItem:get_info];
+- (void)performMoreMenuAction:(id)_sender
+{
+    NSMenuItem *const item = nc::objc_cast<NSMenuItem>(_sender);
+    if( !item || ![item.representedObject isKindOfClass:NSString.class] ) {
+        NSBeep();
+        return;
+    }
+    [self performAction:NSSelectorFromString(static_cast<NSString *>(item.representedObject)) sender:item];
+}
 
-    NCCommandPopoverItem *const compress = [[NCCommandPopoverItem alloc] init];
-    compress.title = NSLocalizedString(@"Compress", "Explorer command bar - More popover item");
-    compress.target = self;
-    compress.action = @selector(performPopoverAction:);
-    compress.representedObject = NSStringFromSelector(@selector(onCompressItems:));
-    [popover addItem:compress];
+- (void)performOperationCancel:(id)_sender
+{
+    NSMenuItem *const item = nc::objc_cast<NSMenuItem>(_sender);
+    NCExplorerOperationCancelMenuTarget *const target =
+        item ? nc::objc_cast<NCExplorerOperationCancelMenuTarget>(item.representedObject) : nil;
+    if( !target || !m_CommandRegistry ) {
+        NSBeep();
+        return;
+    }
 
-    NCCommandPopoverItem *const copy_path = [[NCCommandPopoverItem alloc] init];
-    copy_path.title = NSLocalizedString(@"Copy Path", "Explorer command bar - More popover item");
-    copy_path.target = self;
-    copy_path.action = @selector(performPopoverAction:);
-    copy_path.representedObject = NSStringFromSelector(@selector(OnCopyCurrentFilePath:));
-    [popover addItem:copy_path];
+    const auto result = m_CommandRegistry->Execute(
+        nc::core::CommandId{nc::core::command_ids::OperationCancel}, [target context]);
+    if( result.status == nc::core::CommandRegistry::ExecutionStatus::Executed )
+        return;
 
-    [popover addItem:NCCommandPopoverItem.separatorItem];
-    [popover
-        addItem:[NCCommandPopoverItem sectionHeaderWithTitle:NSLocalizedString(
-                                                                   @"More commands are coming soon",
-                                                                   "Explorer command bar - More popover placeholder")]];
-
-    [self presentPopover:popover relativeToButton:button];
+    NSAlert *const alert = [NSAlert new];
+    alert.messageText = NSLocalizedString(@"explorer.operations.cancel.failureTitle", "Explorer operation cancel failure");
+    if( result.disabled_reason ) {
+        NSLog(@"Operation cancellation rejected: %@", StringFromUTF8(result.disabled_reason->technical_message));
+        alert.informativeText = UserFacingDisabledReason(*result.disabled_reason);
+    }
+    else {
+        alert.informativeText = NSLocalizedString(@"explorer.operations.cancel.failureFallback",
+                                                  "Explorer operation cancel failure");
+    }
+    if( m_Panel.window )
+        [alert beginSheetModalForWindow:m_Panel.window completionHandler:nil];
+    else
+        [alert runModal];
 }
 
 #pragma mark - Popover plumbing

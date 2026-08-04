@@ -69,7 +69,7 @@ Current Debug evidence for this snapshot:
 - production orchestrator subset: 3 / 138;
 - reviewed CopyAs policy and app boundary: 10 / 98, including the app-boundary subset at 4 / 70.
 
-The fresh full Debug `OperationsUT` run reproduces one existing host-specific set-ID metadata failure (169 / 170 cases and 4,744 / 4,748 assertions pass). Aggregate ASAN/UBSAN reruns stop at the independent AppKit pasteboard baseline; the changed app-boundary filter passes under both sanitizers without diagnostics.
+The historical full Debug `OperationsUT` run reproduced one existing host-specific set-ID metadata failure (169 / 170 cases and 4,744 / 4,748 assertions pass). Current full Debug `OperationsUT` evidence is 197 / 5,295. Aggregate ASAN/UBSAN reruns stop at the independent AppKit pasteboard baseline; the changed app-boundary filter passes under both sanitizers without diagnostics.
 
 ## Related documents
 

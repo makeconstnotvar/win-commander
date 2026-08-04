@@ -3,6 +3,7 @@
 #include "TestEnv.h"
 
 #include "../source/CopyOperationOrchestrator.h"
+#include "../source/OperationJournalTesting.h"
 #include "../source/VFSOperationPlanningProbes.h"
 #include "../../VFS/source/Native/ConditionalCopy.h"
 
@@ -14,20 +15,26 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <charconv>
 #include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <cstdio>
 #include <dirent.h>
 #include <expected>
 #include <filesystem>
 #include <fcntl.h>
 #include <fstream>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 namespace nc::ops {
 namespace {
@@ -39,11 +46,72 @@ constexpr std::string_view g_MarkerContents = "wincommander-operations-it-root\n
 constexpr std::string_view g_InternalRootEnvironment = "WINCOMMANDER_OPERATIONS_IT_INTERNAL_ROOT";
 constexpr std::string_view g_ExternalRootEnvironment = "WINCOMMANDER_OPERATIONS_IT_EXTERNAL_ROOT";
 constexpr std::string_view g_RequireRootsEnvironment = "WINCOMMANDER_OPERATIONS_IT_REQUIRE_VOLUMES";
+constexpr std::string_view g_PowerLossPhaseEnvironment = "WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_PHASE";
+constexpr std::string_view g_PowerLossBlockEnvironment = "WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_BLOCK";
+constexpr std::string_view g_PowerLossRecoveryWorkspaceEnvironment =
+    "WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_RECOVERY_WORKSPACE";
+constexpr std::string_view g_PowerLossManifestName = "power-loss-checkpoint.manifest";
+constexpr size_t g_PowerLossManifestMaxBytes = 64 * 1024;
 
 enum class PhysicalVolumeRole : uint8_t {
     Internal,
     External
 };
+
+enum class PowerLossCheckpointPhase : uint8_t {
+    BeforePublish,
+    AfterPublishBeforeFullFSync
+};
+
+struct PowerLossCheckpointConfiguration final {
+    PowerLossCheckpointPhase phase;
+    bool block_for_operator{false};
+};
+
+std::expected<std::optional<PowerLossCheckpointConfiguration>, std::string> PowerLossCheckpointConfigurationFromEnvironment()
+{
+    const char *const phase = std::getenv(g_PowerLossPhaseEnvironment.data());
+    if( phase == nullptr || phase[0] == '\0' )
+        return std::optional<PowerLossCheckpointConfiguration>{};
+
+    PowerLossCheckpointPhase parsed_phase;
+    if( std::strcmp(phase, "before-publish") == 0 )
+        parsed_phase = PowerLossCheckpointPhase::BeforePublish;
+    else if( std::strcmp(phase, "after-publish-before-full-fsync") == 0 )
+        parsed_phase = PowerLossCheckpointPhase::AfterPublishBeforeFullFSync;
+    else
+        return std::unexpected(std::string{g_PowerLossPhaseEnvironment} +
+                               " must be before-publish or after-publish-before-full-fsync");
+
+    const char *const block = std::getenv(g_PowerLossBlockEnvironment.data());
+    if( block == nullptr || block[0] == '\0' )
+        return PowerLossCheckpointConfiguration{parsed_phase, false};
+    if( std::strcmp(block, "1") != 0 )
+        return std::unexpected(std::string{g_PowerLossBlockEnvironment} + " must be 1 when set");
+    return PowerLossCheckpointConfiguration{parsed_phase, true};
+}
+
+nc::vfs::native::ConditionalCopyCheckpoint NativeCheckpoint(const PowerLossCheckpointPhase _phase) noexcept
+{
+    switch( _phase ) {
+        case PowerLossCheckpointPhase::BeforePublish:
+            return nc::vfs::native::ConditionalCopyCheckpoint::BeforePublish;
+        case PowerLossCheckpointPhase::AfterPublishBeforeFullFSync:
+            return nc::vfs::native::ConditionalCopyCheckpoint::AfterPublishBeforeFullFSync;
+    }
+    return nc::vfs::native::ConditionalCopyCheckpoint::BeforePublish;
+}
+
+std::string_view PowerLossCheckpointPhaseName(const PowerLossCheckpointPhase _phase) noexcept
+{
+    switch( _phase ) {
+        case PowerLossCheckpointPhase::BeforePublish:
+            return "before-publish";
+        case PowerLossCheckpointPhase::AfterPublishBeforeFullFSync:
+            return "after-publish-before-full-fsync";
+    }
+    return "unknown";
+}
 
 bool PhysicalVolumeRootsRequired() noexcept
 {
@@ -57,6 +125,230 @@ bool PhysicalVolumeRootsRequired() noexcept
     if( PhysicalVolumeRootsRequired() )
         FAIL(message);
     SKIP(message);
+}
+
+bool ValidPhysicalWorkspaceChildName(const std::string_view _name) noexcept
+{
+    return !_name.empty() && _name != "." && _name != ".." && _name.find('/') == std::string_view::npos;
+}
+
+struct PowerLossManifestStat final {
+    uint64_t device{0};
+    uint64_t inode{0};
+    uint64_t size{0};
+    uint32_t mode{0};
+    int64_t mtime_seconds{0};
+    int64_t mtime_nanoseconds{0};
+};
+
+struct PowerLossCheckpointManifest final {
+    std::string workspace_name;
+    PowerLossCheckpointPhase phase{PowerLossCheckpointPhase::BeforePublish};
+    std::string journal_filename;
+    PowerLossManifestStat journal;
+    std::string journal_parent_filename;
+    PowerLossManifestStat journal_parent;
+};
+
+std::expected<std::string_view, std::string>
+TakePowerLossManifestField(const std::vector<std::string_view> &_lines, size_t &_index, const std::string_view _name)
+{
+    if( _index >= _lines.size() )
+        return std::unexpected("manifest ends before " + std::string{_name});
+    const auto line = _lines[_index++];
+    if( line.size() <= _name.size() || !line.starts_with(_name) || line[_name.size()] != '=' )
+        return std::unexpected("manifest field is not " + std::string{_name});
+    const auto value = line.substr(_name.size() + 1);
+    if( value.empty() )
+        return std::unexpected("manifest field is empty: " + std::string{_name});
+    return value;
+}
+
+template <class T>
+std::expected<T, std::string> ParsePowerLossManifestInteger(const std::string_view _value, const std::string_view _name)
+{
+    T parsed{};
+    const auto [parsed_until, error] = std::from_chars(_value.data(), _value.data() + _value.size(), parsed);
+    if( error != std::errc{} || parsed_until != _value.data() + _value.size() )
+        return std::unexpected("manifest field is not an integer: " + std::string{_name});
+    return parsed;
+}
+
+std::expected<PowerLossManifestStat, std::string>
+ReadPowerLossManifestStat(const std::vector<std::string_view> &_lines, size_t &_index, const std::string_view _prefix)
+{
+    const auto read_integer = [&]<class T>(const std::string_view _field) -> std::expected<T, std::string> {
+        const auto value = TakePowerLossManifestField(_lines, _index, std::string{_prefix} + "_" + std::string{_field});
+        if( !value )
+            return std::unexpected(value.error());
+        return ParsePowerLossManifestInteger<T>(*value, std::string{_prefix} + "_" + std::string{_field});
+    };
+    auto device = read_integer.template operator()<uint64_t>("device");
+    auto inode = read_integer.template operator()<uint64_t>("inode");
+    auto size = read_integer.template operator()<uint64_t>("size");
+    auto mode = read_integer.template operator()<uint32_t>("mode");
+    auto mtime_seconds = read_integer.template operator()<int64_t>("mtime_seconds");
+    auto mtime_nanoseconds = read_integer.template operator()<int64_t>("mtime_nanoseconds");
+    if( !device )
+        return std::unexpected(device.error());
+    if( !inode )
+        return std::unexpected(inode.error());
+    if( !size )
+        return std::unexpected(size.error());
+    if( !mode )
+        return std::unexpected(mode.error());
+    if( !mtime_seconds )
+        return std::unexpected(mtime_seconds.error());
+    if( !mtime_nanoseconds )
+        return std::unexpected(mtime_nanoseconds.error());
+    if( *device == 0 || *inode == 0 || *mtime_nanoseconds < 0 || *mtime_nanoseconds >= 1'000'000'000 )
+        return std::unexpected("manifest stat values are invalid: " + std::string{_prefix});
+    return PowerLossManifestStat{*device, *inode, *size, *mode, *mtime_seconds, *mtime_nanoseconds};
+}
+
+std::expected<PowerLossCheckpointManifest, std::string>
+ParsePowerLossCheckpointManifest(const std::string_view _contents)
+{
+    if( _contents.empty() || _contents.back() != '\n' )
+        return std::unexpected("manifest must be non-empty and newline-terminated");
+    std::vector<std::string_view> lines;
+    for( size_t begin = 0; begin < _contents.size(); ) {
+        const size_t end = _contents.find('\n', begin);
+        if( end == std::string_view::npos || end == begin )
+            return std::unexpected("manifest contains an empty or unterminated field");
+        lines.emplace_back(_contents.substr(begin, end - begin));
+        begin = end + 1;
+    }
+
+    size_t index = 0;
+    const auto schema = TakePowerLossManifestField(lines, index, "schema");
+    if( !schema || *schema != "wincommander-power-loss-checkpoint-v1" )
+        return std::unexpected(schema ? "unsupported power-loss manifest schema" : schema.error());
+    const auto run_id = TakePowerLossManifestField(lines, index, "run_id");
+    if( !run_id )
+        return std::unexpected(run_id.error());
+    const auto workspace_name = TakePowerLossManifestField(lines, index, "workspace_name");
+    if( !workspace_name || !ValidPhysicalWorkspaceChildName(*workspace_name) )
+        return std::unexpected(workspace_name ? "manifest workspace name is invalid" : workspace_name.error());
+    const auto phase = TakePowerLossManifestField(lines, index, "phase");
+    if( !phase )
+        return std::unexpected(phase.error());
+    PowerLossCheckpointPhase parsed_phase;
+    if( *phase == "before-publish" )
+        parsed_phase = PowerLossCheckpointPhase::BeforePublish;
+    else if( *phase == "after-publish-before-full-fsync" )
+        parsed_phase = PowerLossCheckpointPhase::AfterPublishBeforeFullFSync;
+    else
+        return std::unexpected("manifest checkpoint phase is invalid");
+    const auto captured_seconds = TakePowerLossManifestField(lines, index, "captured_at_seconds");
+    const auto captured_nanoseconds = TakePowerLossManifestField(lines, index, "captured_at_nanoseconds");
+    if( !captured_seconds || !captured_nanoseconds )
+        return std::unexpected(captured_seconds ? captured_nanoseconds.error() : captured_seconds.error());
+    const auto parsed_seconds = ParsePowerLossManifestInteger<int64_t>(*captured_seconds, "captured_at_seconds");
+    const auto parsed_nanoseconds =
+        ParsePowerLossManifestInteger<int64_t>(*captured_nanoseconds, "captured_at_nanoseconds");
+    if( !parsed_seconds || !parsed_nanoseconds || *parsed_nanoseconds < 0 || *parsed_nanoseconds >= 1'000'000'000 )
+        return std::unexpected("manifest capture timestamp is invalid");
+    const auto journal_filename = TakePowerLossManifestField(lines, index, "journal_filename");
+    if( !journal_filename || *journal_filename != OperationJournal::Filename )
+        return std::unexpected(journal_filename ? "manifest journal filename is invalid" : journal_filename.error());
+    const auto journal = ReadPowerLossManifestStat(lines, index, "journal");
+    if( !journal )
+        return std::unexpected(journal.error());
+    const auto journal_parent_filename = TakePowerLossManifestField(lines, index, "journal_parent_filename");
+    if( !journal_parent_filename || !ValidPhysicalWorkspaceChildName(*journal_parent_filename) ) {
+        return std::unexpected(journal_parent_filename ? "manifest journal parent filename is invalid"
+                                                        : journal_parent_filename.error());
+    }
+    const auto journal_parent = ReadPowerLossManifestStat(lines, index, "journal_parent");
+    if( !journal_parent )
+        return std::unexpected(journal_parent.error());
+
+    const auto source_filename = TakePowerLossManifestField(lines, index, "source_filename");
+    if( !source_filename || !ValidPhysicalWorkspaceChildName(*source_filename) )
+        return std::unexpected(source_filename ? "manifest source filename is invalid" : source_filename.error());
+    const auto source = ReadPowerLossManifestStat(lines, index, "source");
+    if( !source )
+        return std::unexpected(source.error());
+    const auto destination_parent_filename = TakePowerLossManifestField(lines, index, "destination_parent_filename");
+    if( !destination_parent_filename || !ValidPhysicalWorkspaceChildName(*destination_parent_filename) ) {
+        return std::unexpected(destination_parent_filename ? "manifest destination parent filename is invalid"
+                                                            : destination_parent_filename.error());
+    }
+    const auto destination_parent = ReadPowerLossManifestStat(lines, index, "destination_parent");
+    if( !destination_parent )
+        return std::unexpected(destination_parent.error());
+    const auto destination_filename = TakePowerLossManifestField(lines, index, "destination_filename");
+    if( !destination_filename || !ValidPhysicalWorkspaceChildName(*destination_filename) ) {
+        return std::unexpected(destination_filename ? "manifest destination filename is invalid"
+                                                    : destination_filename.error());
+    }
+    const auto destination_exists = TakePowerLossManifestField(lines, index, "destination_exists");
+    if( !destination_exists || (*destination_exists != "0" && *destination_exists != "1") ) {
+        return std::unexpected(destination_exists ? "manifest destination existence is invalid" : destination_exists.error());
+    }
+    if( *destination_exists == "1" ) {
+        const auto destination = ReadPowerLossManifestStat(lines, index, "destination");
+        if( !destination )
+            return std::unexpected(destination.error());
+    }
+    if( index != lines.size() )
+        return std::unexpected("manifest contains unexpected trailing fields");
+
+    return PowerLossCheckpointManifest{std::string{*workspace_name},
+                                       parsed_phase,
+                                       std::string{*journal_filename},
+                                       *journal,
+                                       std::string{*journal_parent_filename},
+                                       *journal_parent};
+}
+
+std::expected<PowerLossCheckpointManifest, std::string> ReadPowerLossCheckpointManifest(const int _workspace_fd)
+{
+    const int manifest_fd =
+        ::openat(_workspace_fd, g_PowerLossManifestName.data(), O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+    if( manifest_fd < 0 )
+        return std::unexpected("cannot open checkpoint manifest without following links: " + std::string{std::strerror(errno)});
+    struct stat manifest_status{};
+    const int manifest_stat_result = ::fstat(manifest_fd, &manifest_status);
+    if( manifest_stat_result != 0 || !S_ISREG(manifest_status.st_mode) || manifest_status.st_nlink != 1 ||
+        manifest_status.st_uid != ::geteuid() || (manifest_status.st_mode & 077) != 0 || manifest_status.st_size <= 0 ||
+        static_cast<uint64_t>(manifest_status.st_size) > g_PowerLossManifestMaxBytes ) {
+        const int saved_error = manifest_stat_result == 0 ? EPERM : errno;
+        ::close(manifest_fd);
+        return std::unexpected("checkpoint manifest attributes are invalid: " + std::string{std::strerror(saved_error)});
+    }
+
+    std::string contents;
+    contents.reserve(static_cast<size_t>(manifest_status.st_size));
+    std::array<char, 4096> buffer{};
+    while( true ) {
+        const ssize_t count = ::read(manifest_fd, buffer.data(), buffer.size());
+        if( count > 0 ) {
+            if( contents.size() + static_cast<size_t>(count) > g_PowerLossManifestMaxBytes ) {
+                ::close(manifest_fd);
+                return std::unexpected("checkpoint manifest exceeds size limit");
+            }
+            contents.append(buffer.data(), static_cast<size_t>(count));
+            continue;
+        }
+        if( count == 0 )
+            break;
+        if( errno == EINTR )
+            continue;
+        const int saved_error = errno;
+        ::close(manifest_fd);
+        return std::unexpected("cannot read checkpoint manifest: " + std::string{std::strerror(saved_error)});
+    }
+    if( ::close(manifest_fd) != 0 )
+        return std::unexpected("cannot close checkpoint manifest: " + std::string{std::strerror(errno)});
+    return ParsePowerLossCheckpointManifest(contents);
+}
+
+bool PowerLossManifestIdentityMatches(const PowerLossManifestStat &_manifest, const struct stat &_current) noexcept
+{
+    return _manifest.device == static_cast<uint64_t>(_current.st_dev) &&
+           _manifest.inode == static_cast<uint64_t>(_current.st_ino);
 }
 
 std::expected<int, std::string> OpenAbsoluteDirectoryWithoutSymlinks(const std::string_view _path)
@@ -219,6 +511,50 @@ private:
     ino_t m_Inode{};
 };
 
+struct RecoveredPowerLossWorkspace final {
+    int fd{-1};
+    std::string name;
+    std::string canonical_path;
+    struct stat status{};
+};
+
+std::expected<RecoveredPowerLossWorkspace, std::string>
+OpenRecoveredPowerLossWorkspace(const PhysicalVolumeRoot &_root, const std::string_view _configured_path)
+{
+    if( _configured_path.empty() || _configured_path.front() != '/' )
+        return std::unexpected(std::string{g_PowerLossRecoveryWorkspaceEnvironment} + " must be an absolute path");
+    const std::filesystem::path configured{_configured_path};
+    std::error_code canonical_error;
+    const auto canonical = std::filesystem::canonical(configured, canonical_error);
+    if( canonical_error || canonical.generic_string() != _configured_path ) {
+        return std::unexpected(std::string{g_PowerLossRecoveryWorkspaceEnvironment} +
+                               " must already be canonical and contain no aliases");
+    }
+    if( canonical.parent_path() != _root.Path() || !ValidPhysicalWorkspaceChildName(canonical.filename().string()) ) {
+        return std::unexpected(std::string{g_PowerLossRecoveryWorkspaceEnvironment} +
+                               " must name a direct child of the configured internal fixture root");
+    }
+
+    const auto name = canonical.filename().string();
+    struct stat anchored{};
+    if( ::fstatat(_root.Fd(), name.c_str(), &anchored, AT_SYMLINK_NOFOLLOW) != 0 ) {
+        return std::unexpected("cannot stat recovery workspace through fixture root: " + std::string{std::strerror(errno)});
+    }
+    const int workspace_fd = ::openat(_root.Fd(), name.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if( workspace_fd < 0 ) {
+        return std::unexpected("cannot open recovery workspace through fixture root: " + std::string{std::strerror(errno)});
+    }
+    struct stat opened{};
+    const int opened_stat_result = ::fstat(workspace_fd, &opened);
+    if( opened_stat_result != 0 || !S_ISDIR(anchored.st_mode) || anchored.st_dev != opened.st_dev ||
+        anchored.st_ino != opened.st_ino || opened.st_uid != ::geteuid() || (opened.st_mode & 0022) != 0 ) {
+        const int saved_error = opened_stat_result == 0 ? EPERM : errno;
+        ::close(workspace_fd);
+        return std::unexpected("recovery workspace identity is invalid: " + std::string{std::strerror(saved_error)});
+    }
+    return RecoveredPowerLossWorkspace{workspace_fd, name, canonical.string(), opened};
+}
+
 std::string PhysicalWorkspaceName()
 {
     std::array<unsigned char, 16> bytes{};
@@ -274,13 +610,14 @@ public:
         : m_Root{_other.m_Root}, m_RootFd{std::exchange(_other.m_RootFd, -1)},
           m_WorkspaceFd{std::exchange(_other.m_WorkspaceFd, -1)}, m_Name{std::move(_other.m_Name)},
           m_Path{std::move(_other.m_Path)}, m_Device{_other.m_Device}, m_Inode{_other.m_Inode},
-          m_Cleaned{std::exchange(_other.m_Cleaned, true)}
+          m_Cleaned{std::exchange(_other.m_Cleaned, true)},
+          m_PreservedForPostInterruptionInspection{std::exchange(_other.m_PreservedForPostInterruptionInspection, true)}
     {
     }
     PhysicalWorkspace &operator=(PhysicalWorkspace &&) = delete;
     ~PhysicalWorkspace()
     {
-        if( !m_Cleaned )
+        if( !m_Cleaned && !m_PreservedForPostInterruptionInspection )
             static_cast<void>(Cleanup());
         if( m_WorkspaceFd >= 0 )
             ::close(m_WorkspaceFd);
@@ -329,6 +666,18 @@ public:
 
     [[nodiscard]] int Fd() const noexcept { return m_WorkspaceFd; }
     [[nodiscard]] const std::filesystem::path &Path() const noexcept { return m_Path; }
+
+    /**
+     * Suppresses destructor cleanup so a checkpoint-driven interruption can be inspected after process restart.
+     * An explicit Cleanup() remains available to the supervising fixture after inspection.
+     */
+    [[nodiscard]] bool PreserveForPostInterruptionInspection() noexcept
+    {
+        if( m_Cleaned || m_WorkspaceFd < 0 || !m_Root || !m_Root->MarkerStillValid() )
+            return false;
+        m_PreservedForPostInterruptionInspection = true;
+        return true;
+    }
 
     [[nodiscard]] std::expected<std::filesystem::path, std::string> WriteNewFile(const std::string_view _name,
                                                                                  const std::string_view _contents) const
@@ -381,6 +730,7 @@ public:
         if( !RemoveChildrenAt(m_WorkspaceFd) || ::unlinkat(m_RootFd, m_Name.c_str(), AT_REMOVEDIR) != 0 )
             return false;
         m_Cleaned = true;
+        m_PreservedForPostInterruptionInspection = false;
         return true;
     }
 
@@ -410,6 +760,261 @@ private:
     dev_t m_Device{};
     ino_t m_Inode{};
     bool m_Cleaned{false};
+    bool m_PreservedForPostInterruptionInspection{false};
+};
+
+class PowerLossCheckpointIO final : public nc::vfs::native::ConditionalCopyIO
+{
+public:
+    PowerLossCheckpointIO(PowerLossCheckpointConfiguration _configuration,
+                          std::string _run_id,
+                          const int _workspace_fd,
+                          std::string _workspace_name,
+                          std::string _workspace_path,
+                          std::string _source_name,
+                          std::string _destination_parent_name,
+                          std::string _destination_name,
+                          std::function<bool()> _preserve_workspace)
+        : m_Configuration{_configuration}, m_RunId{std::move(_run_id)}, m_WorkspaceFd{::dup(_workspace_fd)},
+          m_WorkspaceName{std::move(_workspace_name)}, m_WorkspacePath{std::move(_workspace_path)},
+          m_SourceName{std::move(_source_name)},
+          m_DestinationParentName{std::move(_destination_parent_name)},
+          m_DestinationName{std::move(_destination_name)}, m_PreserveWorkspace{std::move(_preserve_workspace)}
+    {
+        if( m_WorkspaceFd < 0 )
+            m_CheckpointError.store(errno == 0 ? EIO : errno);
+    }
+
+    ~PowerLossCheckpointIO() override
+    {
+        if( m_WorkspaceFd >= 0 )
+            ::close(m_WorkspaceFd);
+    }
+
+    void Checkpoint(const nc::vfs::native::ConditionalCopyCheckpoint _checkpoint) noexcept override
+    {
+        if( _checkpoint != NativeCheckpoint(m_Configuration.phase) )
+            return;
+
+        bool expected = false;
+        if( !m_Reached.compare_exchange_strong(expected, true) )
+            return;
+
+        const int manifest_error = WriteManifest();
+        if( manifest_error != 0 ) {
+            m_CheckpointError.store(manifest_error);
+            return;
+        }
+        m_ManifestWritten.store(true);
+
+        if( !m_Configuration.block_for_operator )
+            return;
+
+        try {
+            if( !m_PreserveWorkspace || !m_PreserveWorkspace() ) {
+                m_CheckpointError.store(EPERM);
+                return;
+            }
+        }
+        catch( ... ) {
+            m_CheckpointError.store(EIO);
+            return;
+        }
+
+        std::fprintf(stderr,
+                     "power-loss checkpoint %s reached for run %s; workspace %s preserves durable %s; await operator interruption\n",
+                     PowerLossCheckpointPhaseName(m_Configuration.phase).data(),
+                     m_RunId.c_str(),
+                     m_WorkspacePath.c_str(),
+                     g_PowerLossManifestName.data());
+        std::fflush(stderr);
+        auto lock = std::unique_lock{m_BlockMutex};
+        m_BlockCondition.wait(lock, [] { return false; });
+    }
+
+    int Clone(const int _source_fd, const int _destination_parent_fd, const char *_name, const uint32_t _flags) noexcept override
+    {
+        if( const int checkpoint_error = m_CheckpointError.load(); checkpoint_error != 0 ) {
+            errno = checkpoint_error;
+            return -1;
+        }
+        return ConditionalCopyIO::Clone(_source_fd, _destination_parent_fd, _name, _flags);
+    }
+
+    int FullFSync(const int _fd) noexcept override
+    {
+        if( const int checkpoint_error = m_CheckpointError.load(); checkpoint_error != 0 ) {
+            errno = checkpoint_error;
+            return -1;
+        }
+        return ConditionalCopyIO::FullFSync(_fd);
+    }
+
+    [[nodiscard]] bool Reached() const noexcept { return m_Reached.load(); }
+    [[nodiscard]] bool ManifestWritten() const noexcept { return m_ManifestWritten.load(); }
+    [[nodiscard]] int CheckpointError() const noexcept { return m_CheckpointError.load(); }
+
+private:
+    static void AppendStat(std::string &_contents, const std::string_view _prefix, const struct stat &_status)
+    {
+        const auto append = [&_contents, _prefix](const std::string_view _field, const auto _value) {
+            _contents.append(_prefix);
+            _contents.push_back('_');
+            _contents.append(_field);
+            _contents.push_back('=');
+            _contents.append(std::to_string(_value));
+            _contents.push_back('\n');
+        };
+        append("device", static_cast<uint64_t>(_status.st_dev));
+        append("inode", static_cast<uint64_t>(_status.st_ino));
+        append("size", static_cast<uint64_t>(_status.st_size));
+        append("mode", static_cast<uint32_t>(_status.st_mode));
+        append("mtime_seconds", static_cast<int64_t>(_status.st_mtimespec.tv_sec));
+        append("mtime_nanoseconds", static_cast<int64_t>(_status.st_mtimespec.tv_nsec));
+    }
+
+    [[nodiscard]] int WriteManifest() noexcept
+    {
+        try {
+            if( m_WorkspaceFd < 0 )
+                return m_CheckpointError.load() == 0 ? EBADF : m_CheckpointError.load();
+
+            struct stat journal_parent_status{};
+            if( ::fstat(m_WorkspaceFd, &journal_parent_status) != 0 )
+                return errno == 0 ? EIO : errno;
+            struct stat journal_status{};
+            if( ::fstatat(m_WorkspaceFd,
+                          OperationJournal::Filename.data(),
+                          &journal_status,
+                          AT_SYMLINK_NOFOLLOW) != 0 )
+                return errno == 0 ? EIO : errno;
+
+            struct stat source_status{};
+            if( ::fstatat(m_WorkspaceFd, m_SourceName.c_str(), &source_status, AT_SYMLINK_NOFOLLOW) != 0 )
+                return errno == 0 ? EIO : errno;
+
+            const int destination_parent_fd =
+                ::openat(m_WorkspaceFd,
+                         m_DestinationParentName.c_str(),
+                         O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+            if( destination_parent_fd < 0 )
+                return errno == 0 ? EIO : errno;
+
+            struct stat destination_parent_status{};
+            struct stat destination_status{};
+            bool destination_exists = false;
+            int result = 0;
+            if( ::fstat(destination_parent_fd, &destination_parent_status) != 0 ) {
+                result = errno == 0 ? EIO : errno;
+            }
+            else if( ::fstatat(destination_parent_fd,
+                               m_DestinationName.c_str(),
+                               &destination_status,
+                               AT_SYMLINK_NOFOLLOW) == 0 ) {
+                destination_exists = true;
+            }
+            else if( errno != ENOENT ) {
+                result = errno == 0 ? EIO : errno;
+            }
+            if( ::close(destination_parent_fd) != 0 && result == 0 )
+                result = errno == 0 ? EIO : errno;
+            if( result != 0 )
+                return result;
+
+            timespec captured_at{};
+            if( ::clock_gettime(CLOCK_REALTIME, &captured_at) != 0 )
+                return errno == 0 ? EIO : errno;
+
+            std::string contents;
+            contents.reserve(1024);
+            contents.append("schema=wincommander-power-loss-checkpoint-v1\n");
+            contents.append("run_id=");
+            contents.append(m_RunId);
+            contents.push_back('\n');
+            contents.append("workspace_name=");
+            contents.append(m_WorkspaceName);
+            contents.push_back('\n');
+            contents.append("phase=");
+            contents.append(PowerLossCheckpointPhaseName(m_Configuration.phase));
+            contents.push_back('\n');
+            contents.append("captured_at_seconds=");
+            contents.append(std::to_string(static_cast<int64_t>(captured_at.tv_sec)));
+            contents.push_back('\n');
+            contents.append("captured_at_nanoseconds=");
+            contents.append(std::to_string(static_cast<int64_t>(captured_at.tv_nsec)));
+            contents.push_back('\n');
+            contents.append("journal_filename=");
+            contents.append(OperationJournal::Filename);
+            contents.push_back('\n');
+            AppendStat(contents, "journal", journal_status);
+            contents.append("journal_parent_filename=");
+            contents.append(m_WorkspaceName);
+            contents.push_back('\n');
+            AppendStat(contents, "journal_parent", journal_parent_status);
+            contents.append("source_filename=");
+            contents.append(m_SourceName);
+            contents.push_back('\n');
+            AppendStat(contents, "source", source_status);
+            contents.append("destination_parent_filename=");
+            contents.append(m_DestinationParentName);
+            contents.push_back('\n');
+            AppendStat(contents, "destination_parent", destination_parent_status);
+            contents.append("destination_filename=");
+            contents.append(m_DestinationName);
+            contents.push_back('\n');
+            contents.append("destination_exists=");
+            contents.append(destination_exists ? "1\n" : "0\n");
+            if( destination_exists )
+                AppendStat(contents, "destination", destination_status);
+
+            const int manifest_fd = ::openat(m_WorkspaceFd,
+                                              g_PowerLossManifestName.data(),
+                                              O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+                                              0600);
+            if( manifest_fd < 0 )
+                return errno == 0 ? EIO : errno;
+
+            size_t offset = 0;
+            while( offset < contents.size() ) {
+                const ssize_t written = ::write(manifest_fd, contents.data() + offset, contents.size() - offset);
+                if( written > 0 ) {
+                    offset += static_cast<size_t>(written);
+                    continue;
+                }
+                if( written < 0 && errno == EINTR )
+                    continue;
+                result = errno == 0 ? EIO : errno;
+                break;
+            }
+            if( result == 0 && ::fsync(manifest_fd) != 0 )
+                result = errno == 0 ? EIO : errno;
+            if( ::close(manifest_fd) != 0 && result == 0 )
+                result = errno == 0 ? EIO : errno;
+            if( result != 0 )
+                return result;
+            if( ::fsync(m_WorkspaceFd) != 0 )
+                return errno == 0 ? EIO : errno;
+            return 0;
+        }
+        catch( ... ) {
+            return ENOMEM;
+        }
+    }
+
+    const PowerLossCheckpointConfiguration m_Configuration;
+    const std::string m_RunId;
+    int m_WorkspaceFd{-1};
+    const std::string m_WorkspaceName;
+    const std::string m_WorkspacePath;
+    const std::string m_SourceName;
+    const std::string m_DestinationParentName;
+    const std::string m_DestinationName;
+    const std::function<bool()> m_PreserveWorkspace;
+    std::atomic_bool m_Reached{false};
+    std::atomic_bool m_ManifestWritten{false};
+    std::atomic_int m_CheckpointError{0};
+    std::mutex m_BlockMutex;
+    std::condition_variable m_BlockCondition;
 };
 
 OperationPlan
@@ -431,9 +1036,10 @@ PhysicalCopyPlan(const std::string _id, const std::filesystem::path &_source, co
 
 ReviewedVFSOperationPreflight PhysicalCopyReview(const std::string _id,
                                                  const std::filesystem::path &_source,
-                                                 const std::filesystem::path &_destination)
+                                                 const std::filesystem::path &_destination,
+                                                 std::shared_ptr<nc::vfs::Host> _native_host)
 {
-    auto bindings = VFSOperationPlanningBindings::Create({{"local", TestEnv().vfs_native}});
+    auto bindings = VFSOperationPlanningBindings::Create({{"local", std::move(_native_host)}});
     REQUIRE(bindings);
     auto probes = VFSOperationPlanningProbes::Create(
         *bindings,
@@ -484,7 +1090,7 @@ TEST_CASE("CopyAs physical volumes: internal APFS publication reaches durable co
     const auto destination = destination_directory / source.filename();
 
     REQUIRE(TestEnv().vfs_native->ConditionalCopyPathSupport(source.string(), destination_directory.string()) ==
-            nc::vfs::ProviderConditionalCopyPathSupport::Supported);
+            nc::vfs::ProviderConditionalCopyPathSupport::SameVolumeClone);
     const auto journal_result = OperationJournal::Open(workspace.Path().string());
     REQUIRE(journal_result);
     auto journal = std::make_shared<OperationJournal>(std::move(*journal_result));
@@ -506,7 +1112,7 @@ TEST_CASE("CopyAs physical volumes: internal APFS publication reaches durable co
 
     CopyOperationOrchestrator orchestrator{journal, pool, custodian};
     auto submitted = orchestrator.Submit(
-        PhysicalCopyReview("physical-internal-copy", source, destination_directory), {}, std::move(hooks));
+        PhysicalCopyReview("physical-internal-copy", source, destination_directory, TestEnv().vfs_native), {}, std::move(hooks));
     REQUIRE(submitted);
     REQUIRE((*submitted)->Wait(10s));
     REQUIRE(pool->Empty());
@@ -580,7 +1186,8 @@ TEST_CASE("CopyAs physical volumes: external APFS scope fails before Pool admiss
 
     CopyOperationOrchestrator orchestrator{journal, pool, custodian};
     auto submitted =
-        orchestrator.Submit(PhysicalCopyReview("physical-external-rejection", source, destination_directory));
+        orchestrator.Submit(
+            PhysicalCopyReview("physical-external-rejection", source, destination_directory, TestEnv().vfs_native));
     REQUIRE_FALSE(submitted);
     CHECK(submitted.error().code == CopyOperationOrchestratorErrorCode::ExecutionFactoryFailed);
     REQUIRE(submitted.error().reviewed_factory_error);
@@ -598,6 +1205,134 @@ TEST_CASE("CopyAs physical volumes: external APFS scope fails before Pool admiss
     pool->StopAndWaitForShutdown();
     REQUIRE(external_workspace.Cleanup());
     REQUIRE(journal_workspace.Cleanup());
+}
+
+TEST_CASE("CopyAs physical power-loss checkpoint harness records a durable manifest before optional operator wait",
+          "[.reviewed-copy-as-power-loss-checkpoint][operations-it]")
+{
+    const auto configuration_result = PowerLossCheckpointConfigurationFromEnvironment();
+    REQUIRE(configuration_result);
+    if( !*configuration_result )
+        SKIP(std::string{g_PowerLossPhaseEnvironment} + " must select an explicit checkpoint phase");
+    const auto configuration = **configuration_result;
+
+    auto root_result = PhysicalVolumeRoot::Open(g_InternalRootEnvironment, PhysicalVolumeRole::Internal);
+    if( !root_result )
+        SkipOrFailPhysicalFixture(root_result.error());
+    auto root = std::move(*root_result);
+
+    auto workspace_result = PhysicalWorkspace::Create(root);
+    REQUIRE(workspace_result);
+    auto workspace = std::move(*workspace_result);
+    auto source_result = workspace.WriteNewFile("source.txt", "physical-power-loss-checkpoint\n");
+    auto destination_result = workspace.CreateDirectory("destination");
+    REQUIRE(source_result);
+    REQUIRE(destination_result);
+    const auto source = *source_result;
+    const auto destination_directory = *destination_result;
+    const auto destination = destination_directory / source.filename();
+
+    const auto journal_result = OperationJournal::Open(workspace.Path().string());
+    REQUIRE(journal_result);
+    auto journal = std::make_shared<OperationJournal>(std::move(*journal_result));
+    const auto run_id = PhysicalWorkspaceName();
+    auto checkpoint_io = std::make_shared<PowerLossCheckpointIO>(configuration,
+                                                                  run_id,
+                                                                  workspace.Fd(),
+                                                                  workspace.Path().filename().string(),
+                                                                  workspace.Path().string(),
+                                                                  source.filename().string(),
+                                                                  destination_directory.filename().string(),
+                                                                  destination.filename().string(),
+                                                                  [&workspace] {
+                                                                      return workspace.PreserveForPostInterruptionInspection();
+                                                                  });
+    auto host = std::make_shared<nc::vfs::NativeHost>(
+        *TestEnv().native_fs_man, *TestEnv().fsevents_file_update, checkpoint_io);
+    REQUIRE(host->ConditionalCopyPathSupport(source.string(), destination_directory.string()) ==
+            nc::vfs::ProviderConditionalCopyPathSupport::SameVolumeClone);
+
+    auto pool = Pool::Make();
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    CopyOperationOrchestrator orchestrator{journal, pool, custodian};
+    auto submitted = orchestrator.Submit(
+        PhysicalCopyReview("physical-power-loss-checkpoint", source, destination_directory, host));
+    REQUIRE(submitted);
+
+    // With WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_BLOCK=1 the worker remains here after fsyncing the manifest,
+    // leaving the operator to interrupt power. The non-blocking mode validates setup without emulating a reboot.
+    if( configuration.block_for_operator ) {
+        (*submitted)->Wait();
+        FAIL("power-loss checkpoint worker returned without an operator interruption");
+    }
+    REQUIRE((*submitted)->Wait(10s));
+    pool->StopAndWaitForShutdown();
+
+    CHECK(checkpoint_io->Reached());
+    CHECK(checkpoint_io->ManifestWritten());
+    CHECK(checkpoint_io->CheckpointError() == 0);
+    CHECK(std::filesystem::exists(workspace.Path() / g_PowerLossManifestName));
+    CHECK(std::filesystem::exists(destination));
+    CHECK(custodian->PendingCount() == 0);
+    REQUIRE(workspace.Cleanup());
+}
+
+TEST_CASE("CopyAs physical power-loss recovery profile classifies a retained unfinished checkpoint without execution",
+          "[.reviewed-copy-as-power-loss-recovery][operations-it]")
+{
+    const char *const configured_workspace = std::getenv(g_PowerLossRecoveryWorkspaceEnvironment.data());
+    if( configured_workspace == nullptr || configured_workspace[0] == '\0' )
+        SKIP(std::string{g_PowerLossRecoveryWorkspaceEnvironment} + " must name an explicit retained workspace");
+
+    auto root_result = PhysicalVolumeRoot::Open(g_InternalRootEnvironment, PhysicalVolumeRole::Internal);
+    if( !root_result )
+        SkipOrFailPhysicalFixture(root_result.error());
+    auto root = std::move(*root_result);
+    auto workspace_result = OpenRecoveredPowerLossWorkspace(root, configured_workspace);
+    if( !workspace_result )
+        FAIL(workspace_result.error());
+    auto workspace = std::move(*workspace_result);
+
+    const auto manifest = ReadPowerLossCheckpointManifest(workspace.fd);
+    if( !manifest )
+        FAIL(manifest.error());
+    REQUIRE(manifest->workspace_name == workspace.name);
+    REQUIRE(manifest->journal_parent_filename == workspace.name);
+    REQUIRE(PowerLossManifestIdentityMatches(manifest->journal_parent, workspace.status));
+    REQUIRE(manifest->journal_filename == OperationJournal::Filename);
+
+    struct stat journal_status{};
+    REQUIRE(::fstatat(workspace.fd,
+                      OperationJournal::Filename.data(),
+                      &journal_status,
+                      AT_SYMLINK_NOFOLLOW) == 0);
+    REQUIRE(S_ISREG(journal_status.st_mode));
+    REQUIRE(journal_status.st_nlink == 1);
+    REQUIRE(journal_status.st_uid == ::geteuid());
+    REQUIRE((journal_status.st_mode & 077) == 0);
+    REQUIRE(PowerLossManifestIdentityMatches(manifest->journal, journal_status));
+
+    // This is deliberately the first journal API call: it cannot create a lock, migrate the schema, or alter state.
+    const auto before_recovery = OperationJournalTesting::InspectPersistedReadOnly(workspace.fd);
+    if( !before_recovery )
+        FAIL("read-only checkpoint inspection failed with journal error " + std::to_string(static_cast<int>(before_recovery.error().code)));
+    REQUIRE(before_recovery->size() == 1);
+    CHECK((*before_recovery)[0].plan.Id().Value() == "physical-power-loss-checkpoint");
+    CHECK((*before_recovery)[0].state == OperationJournalState::Running);
+    CHECK((*before_recovery)[0].item_results.empty());
+
+    {
+        auto journal = OperationJournal::Open(workspace.canonical_path);
+        REQUIRE(journal);
+        const auto recovered = journal->Snapshot();
+        REQUIRE(recovered.size() == 1);
+        CHECK(recovered[0].plan.Id().Value() == "physical-power-loss-checkpoint");
+        CHECK(recovered[0].state == OperationJournalState::Interrupted);
+        CHECK(recovered[0].item_results.empty());
+    }
+    CHECK(std::filesystem::exists(std::filesystem::path{workspace.canonical_path} / g_PowerLossManifestName));
+    CHECK(std::filesystem::exists(std::filesystem::path{workspace.canonical_path} / OperationJournal::Filename));
+    CHECK(::close(workspace.fd) == 0);
 }
 
 } // namespace nc::ops

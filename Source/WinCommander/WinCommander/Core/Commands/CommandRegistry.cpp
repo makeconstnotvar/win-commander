@@ -32,8 +32,10 @@ CommandRegistry::RegisterResult CommandRegistry::Register(Registration _registra
 {
     if( !_registration.descriptor.id.IsValid() )
         return RegisterResult::InvalidCommandId;
-    if( !_registration.handler )
+    if( !_registration.handler && !_registration.result_handler )
         return RegisterResult::MissingHandler;
+    if( _registration.handler && _registration.result_handler )
+        return RegisterResult::ConflictingHandlers;
 
     const std::string id{_registration.descriptor.id.Value()};
     if( m_Index.contains(id) )
@@ -43,6 +45,7 @@ CommandRegistry::RegisterResult CommandRegistry::Register(Registration _registra
     m_Descriptors.emplace_back(std::move(_registration.descriptor));
     m_StateProviders.emplace_back(std::move(_registration.state_provider));
     m_Handlers.emplace_back(std::move(_registration.handler));
+    m_ResultHandlers.emplace_back(std::move(_registration.result_handler));
     m_Index.emplace(id, index);
     return RegisterResult::Registered;
 }
@@ -76,7 +79,13 @@ CommandRegistry::ExecutionResult CommandRegistry::Execute(const CommandId &_id,
     if( !state.enabled )
         return ExecutionResult{.status = ExecutionStatus::Disabled, .disabled_reason = std::move(state.disabled_reason)};
 
-    m_Handlers[*index](_context);
+    if( const auto &result_handler = m_ResultHandlers[*index] ) {
+        if( auto reason = result_handler(_context) )
+            return ExecutionResult{.status = ExecutionStatus::Rejected, .disabled_reason = std::move(reason)};
+    }
+    else {
+        m_Handlers[*index](_context);
+    }
     return ExecutionResult{.status = ExecutionStatus::Executed};
 }
 

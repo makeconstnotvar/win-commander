@@ -87,6 +87,8 @@ All rights reserved.</string>
 	<dict>
 		<key>com.wincommander.App.PrivilegedIOHelperV2</key>
 		<string>identifier com.wincommander.App.PrivilegedIOHelperV2 and certificate leaf[subject.CN] = &quot;Developer ID Application: Mikhail Kazakov (AC5SJT236H)&quot;</string>
+		<key>com.wincommander.App.CrossVolumeStagingHelperV1</key>
+		<string>identifier com.wincommander.App.CrossVolumeStagingHelperV1 and anchor apple generic and certificate leaf[subject.OU] = &quot;AC5SJT236H&quot;</string>
 	</dict>
 </dict>
 </plist>

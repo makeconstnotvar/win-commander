@@ -93,11 +93,10 @@ Selection Select(const VFSListingItem &_item,
             return Selection::Legacy;
 
         const auto destination_parent = std::filesystem::path{_destination}.parent_path().native();
-        if( !IsSameLexicalPath(destination_parent, _item.Directory()) )
-            return Selection::Legacy;
-
         switch( _destination_host->ConditionalCopyPathSupport(_item.Path(), destination_parent) ) {
-            case nc::vfs::ProviderConditionalCopyPathSupport::Supported:
+            case nc::vfs::ProviderConditionalCopyPathSupport::SameVolumeClone:
+                return IsSameLexicalPath(destination_parent, _item.Directory()) ? Selection::Reviewed : Selection::Legacy;
+            case nc::vfs::ProviderConditionalCopyPathSupport::CrossVolumeStaged:
                 return Selection::Reviewed;
             case nc::vfs::ProviderConditionalCopyPathSupport::Unsupported:
                 return Selection::Legacy;

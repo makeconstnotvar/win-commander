@@ -70,6 +70,7 @@ ditto "$SOURCE_APP_PATH" "$STAGING_APP_PATH"
 # helper from this local build instead of shipping a helper that cannot satisfy
 # SMJobBless's mutual requirements.
 rm -f "$STAGING_APP_PATH/Contents/Library/LaunchServices/com.wincommander.App.PrivilegedIOHelperV2"
+rm -f "$STAGING_APP_PATH/Contents/Library/LaunchServices/com.wincommander.App.CrossVolumeStagingHelperV1"
 /usr/libexec/PlistBuddy -c "Delete :SMPrivilegedExecutables" \
   "$STAGING_APP_PATH/Contents/Info.plist" 2>/dev/null || true
 

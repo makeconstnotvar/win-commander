@@ -19,18 +19,23 @@ public:
     // intentionally provides no internal synchronization.
     using StateProvider = std::function<CommandState(const CommandContext &)>;
     using Handler = std::function<void(const CommandContext &)>;
+    // A result handler can reject an already-admitted command after its live execution port
+    // revalidates a value target. This is distinct from a stale presentation snapshot.
+    using ResultHandler = std::function<std::optional<DisabledReason>(const CommandContext &)>;
 
     struct Registration {
         CommandDescriptor descriptor;
         StateProvider state_provider;
         Handler handler;
+        ResultHandler result_handler;
     };
 
     enum class RegisterResult {
         Registered,
         InvalidCommandId,
         DuplicateCommandId,
-        MissingHandler
+        MissingHandler,
+        ConflictingHandlers
     };
 
     enum class LookupStatus {
@@ -47,7 +52,8 @@ public:
         Executed,
         UnknownCommand,
         Hidden,
-        Disabled
+        Disabled,
+        Rejected
     };
 
     struct ExecutionResult {
@@ -72,6 +78,7 @@ private:
     std::vector<CommandDescriptor> m_Descriptors;
     std::vector<StateProvider> m_StateProviders;
     std::vector<Handler> m_Handlers;
+    std::vector<ResultHandler> m_ResultHandlers;
     std::unordered_map<std::string, std::size_t> m_Index;
 };
 

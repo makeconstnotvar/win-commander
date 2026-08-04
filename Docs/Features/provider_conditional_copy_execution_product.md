@@ -45,7 +45,7 @@ Accepted Pool admission preallocates the terminal-finalization wrapper and trans
 
 ## Application integration boundary
 
-`CopyAs::Perform` in `States/FilePanels/Actions/CopyFile.mm` submits this product for one regular Native item copied create-only within the same source directory when path eligibility is explicitly `Supported`. That route matches the implemented single-item, same-`NativeHost`, internal writable APFS scope.
+`CopyAs::Perform` in `States/FilePanels/Actions/CopyFile.mm` submits this product for one regular Native item copied create-only within the same source directory when path eligibility is explicitly `SameVolumeClone`. That route matches the implemented single-item, same-`NativeHost`, internal writable APFS scope.
 
 The application boundary still requires three explicit contracts:
 

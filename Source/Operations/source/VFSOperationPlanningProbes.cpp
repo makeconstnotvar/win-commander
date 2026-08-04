@@ -25,6 +25,7 @@ OperationPlanningProbeError MapError(const nc::vfs::Host &_host, const Error &_e
         case nc::vfs::HostErrorKind::Unsupported:
             return OperationPlanningProbeError::Unsupported;
         case nc::vfs::HostErrorKind::Unavailable:
+        case nc::vfs::HostErrorKind::TimedOut:
             return OperationPlanningProbeError::Unavailable;
         case nc::vfs::HostErrorKind::Missing:
         case nc::vfs::HostErrorKind::Other:

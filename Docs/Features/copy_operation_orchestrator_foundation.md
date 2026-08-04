@@ -62,9 +62,9 @@ Current recorded Debug evidence for the tree containing this foundation:
 - focused Debug journal: 33 / 752; focused Debug coordinator/orchestrator/control integration: 28 / 999, including production construction at 3 / 138, receipt-aware no-re-admission, `Queued` before Pool addition, private pre-enqueue failure, Start/durable-terminal reduction, exact cancellation and reentrant cancellation rejection;
 - focused Debug Pool: 17 / 219;
 - provider result mapper: 4 / 237; execution product: 9 / 188; reviewed factory: 8 / 225; Job lifecycle: 10 / 608;
-- full Debug `OperationsUT`: 192 / 193 passing cases and 5,209 / 5,213 passing assertions; the sole set-ID metadata failure is the existing host-specific NativeCreateCopy baseline.
+- historical full Debug `OperationsUT` snapshot: 192 / 193 passing cases and 5,209 / 5,213 passing assertions; the sole set-ID metadata failure is the existing host-specific NativeCreateCopy baseline. Current full Debug `OperationsUT` evidence is 197 / 5,295.
 
-Separate evidence is the latest full Debug `VFSUT` run at 95 / 43,566, recorded M0 at 897 / 132,011 across ten aggregate unit-test binaries, and seeded ASAN integration at 163 / 89,392.
+Separate historical evidence is a full Debug `VFSUT` run at 95 / 43,566; current full Debug `VFSUT` evidence is 96 / 43,606. Recorded M0 remains 897 / 132,011 across ten aggregate unit-test binaries, and seeded ASAN integration remains 163 / 89,392.
 
 At the previous foundation snapshot, full `OperationsUT` passed 170 / 4,748 in Debug and explicitly instrumented Release ASAN/UBSAN. The current coordinator/control subset passes Release ASAN and UBSAN at 28 / 999 with no diagnostics. App policy/gate and recovery coordination pass 6 / 28 and 6 / 67.
 

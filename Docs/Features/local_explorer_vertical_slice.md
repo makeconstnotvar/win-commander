@@ -90,13 +90,13 @@ The slice introduces canonical definitions for:
 | `file.cut` | local selection contains movable items | existing cut-token action |
 | `file.paste` | clipboard has supported items and destination can accept them | reviewed plan → durable journal admission → production orchestrator/private factory → `Pool` |
 | `operationCenter.open` | unavailable: the stable ID is declared, while the presentation port and Registry definition are pending | `OperationCenterModel` presentation surface |
-| `operation.cancel` | unavailable: the stable ID is declared, while a Registry definition and operation control projection are pending | `OperationCenterModel` resolves `OperationId` plus expected revision through a sealed control port |
+| `operation.cancel` | value-only Registry adapter is implemented; Operation Center presentation remains pending | `OperationCenterCoordinator` revalidates `OperationId` plus expected revision through its sealed control port |
 | `operation.retry` | final error is retryable | recreate execution from persisted plan/result |
 | navigation commands | derived from pane history/location state | existing panel action dispatcher |
 
 Every entry point resolves `CommandState` from the same `CommandContext`. Existing selectors remain adapter details during migration.
 
-`Operation::Stop()` and `Job::Stop()` remain engine lifecycle primitives. They become an application command bridge only after `OperationCenterModel` publishes a live `OperationId` and revision, and its control port owns the corresponding Pool/operation reference.
+`Operation::Stop()` and `Job::Stop()` remain engine lifecycle primitives. The production `operation.cancel` adapter accepts only the published value `{OperationId, revision, can-cancel}` and calls the control port; it never receives the corresponding Pool/operation reference. An Operation Center surface remains the future presentation consumer.
 
 ## Data model
 

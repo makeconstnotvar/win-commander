@@ -7,6 +7,7 @@
 #include <memory>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <vector>
 
 namespace nc::ops {
 
@@ -51,6 +52,13 @@ public:
     RecordItemResult(OperationJournal &_journal,
                      std::string_view _plan_id,
                      OperationJournalItemResult _result);
+
+    /**
+     * Reads one persisted snapshot through an already-open parent-directory descriptor without creating a lock,
+     * migrating the schema, or classifying unfinished entries as interrupted. The descriptor remains caller-owned.
+     */
+    [[nodiscard]] static std::expected<std::vector<OperationJournalEntry>, OperationJournalError>
+    InspectPersistedReadOnly(int _parent_directory_fd);
 };
 
 } // namespace nc::ops

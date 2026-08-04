@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "Tests.h"
+#include <WinCommander/Core/SandboxManager.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <Config/ConfigImpl.h>
@@ -248,8 +249,26 @@ public:
 class TestDirectoryAccessProvider final : public nc::panel::DirectoryAccessProvider
 {
 public:
-    bool HasAccess(PanelController *, const std::string &, VFSHost &) override { return true; }
-    bool RequestAccessSync(PanelController *, const std::string &, VFSHost &) override { return true; }
+    bool HasAccess(PanelController *, const std::string &_directory, VFSHost &) override
+    {
+        ++has_access_calls;
+        checked_directories.emplace_back(_directory);
+        return has_access;
+    }
+
+    bool RequestAccessSync(PanelController *, const std::string &_directory, VFSHost &) override
+    {
+        ++request_access_calls;
+        requested_directories.emplace_back(_directory);
+        return grants_access;
+    }
+
+    bool has_access{true};
+    bool grants_access{true};
+    int has_access_calls{0};
+    int request_access_calls{0};
+    std::vector<std::string> checked_directories;
+    std::vector<std::string> requested_directories;
 };
 
 class ControllableNavigationHost final : public nc::vfs::Host
@@ -274,6 +293,13 @@ public:
     }
 
     bool IsWritableAtPath(std::string_view _path) const override { return _path == "/seed/"; }
+
+    nc::vfs::HostErrorKind ClassifyError(const nc::Error &_error) const noexcept override
+    {
+        if( _error.Domain() == "panel_controller_navigation_timeout" )
+            return nc::vfs::HostErrorKind::TimedOut;
+        return Host::ClassifyError(_error);
+    }
 
     std::shared_ptr<Plan> ScriptSuccess(std::string _path,
                                         VFSListingPtr _listing,
@@ -813,13 +839,16 @@ public:
     }
 
     std::shared_ptr<DirectoryChangeRequest>
-    Request(std::string _path, const bool _asynchronous, const std::shared_ptr<CallbackRecorder> &_callback = {})
+    Request(std::string _path,
+            const bool _asynchronous,
+            const std::shared_ptr<CallbackRecorder> &_callback = {},
+            const bool _initiated_by_user = true)
     {
         auto request = std::make_shared<DirectoryChangeRequest>();
         request->RequestedDirectory = std::move(_path);
         request->VFS = m_Host;
         request->PerformAsynchronous = _asynchronous;
-        request->InitiatedByUser = true;
+        request->InitiatedByUser = _initiated_by_user;
         if( _callback ) {
             request->LoadingResultCallback =
                 [_callback](const std::expected<void, nc::Error> &_result,
@@ -834,6 +863,7 @@ public:
     PanelController *const &Controller() const { return m_Controller; }
     PanelControllerNavigationTestView *const &View() const { return m_View; }
     const std::shared_ptr<ControllableNavigationHost> &Host() const { return m_Host; }
+    TestDirectoryAccessProvider &AccessProvider() { return m_AccessProvider; }
     const std::shared_ptr<nc::vfs::NativeHost> &NativeHost() const { return m_NativeHost; }
     const VFSListingPtr &SeedListing() const { return m_SeedListing; }
     void ReleaseControllerWithoutCancelling()
@@ -879,6 +909,21 @@ private:
 } // namespace
 
 #define PREFIX "PanelController production navigation "
+
+TEST_CASE(PREFIX "security-scope containment requires an exact path boundary")
+{
+    using nc::sandbox::PathIsWithinScope;
+
+    CHECK(PathIsWithinScope("/scope", "/scope"));
+    CHECK(PathIsWithinScope("/scope/child", "/scope"));
+    CHECK(PathIsWithinScope("/scope/child/grandchild", "/scope"));
+    CHECK_FALSE(PathIsWithinScope("/scope-other", "/scope"));
+    CHECK_FALSE(PathIsWithinScope("/scopex", "/scope"));
+    CHECK_FALSE(PathIsWithinScope("/scope", "/scope/child"));
+    CHECK(PathIsWithinScope("/private/tmp", "/"));
+    CHECK_FALSE(PathIsWithinScope("relative/path", "/"));
+    CHECK_FALSE(PathIsWithinScope("/scope", ""));
+}
 
 TEST_CASE(PREFIX "forwards only its matching Store snapshot to the Explorer footer")
 {
@@ -1099,6 +1144,105 @@ TEST_CASE(PREFIX "publishes typed permission failure from a real local NativeHos
     CHECK(*calls.front().error == nc::Error{nc::Error::POSIX, EACCES});
     CHECK(calls.front().source == DirectoryChangeResultSource::Fetch);
     CHECK(calls.front().current);
+}
+
+TEST_CASE(PREFIX "fails closed when a user denies requested directory access before fetch")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.AccessProvider().has_access = false;
+    fixture.AccessProvider().grants_access = false;
+    const auto callback = std::make_shared<CallbackRecorder>();
+    const auto initial_listing = fixture.Controller().data.ListingPtr();
+    const auto initial_generation = fixture.Controller().dataGeneration;
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+
+    REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/access-denied/", true, callback)].has_value());
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 2 && std::holds_alternative<PaneLifecycleFailed>(events.back().payload) &&
+               callback->Calls().size() == 1;
+    }));
+
+    REQUIRE(std::holds_alternative<PaneLifecycleFailed>(events.back().payload));
+    const auto &failure = std::get<PaneLifecycleFailed>(events.back().payload).error;
+    CHECK(failure.original_error == nc::Error{nc::Error::POSIX, EPERM});
+    CHECK(failure.category == nc::core::FileManagerErrorCategory::PermissionError);
+    CHECK(failure.user_message_key == "errors.permission");
+    CHECK(fixture.AccessProvider().has_access_calls == 1);
+    CHECK(fixture.AccessProvider().request_access_calls == 1);
+    CHECK(fixture.AccessProvider().checked_directories == std::vector<std::string>{"/access-denied/"});
+    CHECK(fixture.AccessProvider().requested_directories == std::vector<std::string>{"/access-denied/"});
+    CHECK(fixture.Host()->FetchCount() == 0);
+    CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
+    CHECK(fixture.Controller().dataGeneration == initial_generation);
+    const auto calls = callback->Calls();
+    REQUIRE(calls.size() == 1);
+    REQUIRE(calls.front().error);
+    CHECK(*calls.front().error == nc::Error{nc::Error::POSIX, EPERM});
+    CHECK(calls.front().source == DirectoryChangeResultSource::Admission);
+    CHECK(calls.front().current);
+}
+
+TEST_CASE(PREFIX "does not prompt for an automatic navigation without directory access")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.AccessProvider().has_access = false;
+    fixture.AccessProvider().grants_access = true;
+    const auto callback = std::make_shared<CallbackRecorder>();
+    const auto initial_listing = fixture.Controller().data.ListingPtr();
+    const auto initial_generation = fixture.Controller().dataGeneration;
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+
+    REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/automatic-denied/", true, callback, false)]
+                .has_value());
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 2 && std::holds_alternative<PaneLifecycleFailed>(events.back().payload) &&
+               callback->Calls().size() == 1;
+    }));
+
+    REQUIRE(std::holds_alternative<PaneLifecycleStarted>(events.front().payload));
+    CHECK_FALSE(events.front().descriptor.initiated_by_user);
+    REQUIRE(std::holds_alternative<PaneLifecycleFailed>(events.back().payload));
+    const auto &failure = std::get<PaneLifecycleFailed>(events.back().payload).error;
+    CHECK(failure.original_error == nc::Error{nc::Error::POSIX, EPERM});
+    CHECK(failure.category == nc::core::FileManagerErrorCategory::PermissionError);
+    CHECK(fixture.AccessProvider().has_access_calls == 1);
+    CHECK(fixture.AccessProvider().request_access_calls == 0);
+    CHECK(fixture.Host()->FetchCount() == 0);
+    CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
+    CHECK(fixture.Controller().dataGeneration == initial_generation);
+}
+
+TEST_CASE(PREFIX "continues user navigation after one granted directory-access prompt")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.AccessProvider().has_access = false;
+    fixture.AccessProvider().grants_access = true;
+    const auto target = UniformListing(fixture.Host(), "/access-granted/", "granted.txt");
+    const auto plan = fixture.Host()->ScriptSuccess("/access-granted/", target, true);
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+
+    REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/access-granted/", true)].has_value());
+    REQUIRE(events.size() == 1);
+    REQUIRE(std::holds_alternative<PaneLifecycleStarted>(events.front().payload));
+    REQUIRE(ControllableNavigationHost::WaitEntered(plan));
+    CHECK(fixture.AccessProvider().has_access_calls == 1);
+    CHECK(fixture.AccessProvider().request_access_calls == 1);
+    CHECK(fixture.Host()->FetchCount() == 1);
+
+    ControllableNavigationHost::Release(plan);
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 2 && std::holds_alternative<PaneLifecycleCommitted>(events.back().payload);
+    }));
+    CHECK(fixture.Controller().data.ListingPtr() == target);
 }
 
 TEST_CASE(PREFIX "explicit Up submits one uniform parent request and preserves the departed focus")
@@ -1506,6 +1650,33 @@ TEST_CASE(PREFIX "retains committed content and publishes Failed when the provid
     CHECK(fixture.Controller().dataGeneration == initial_generation);
     CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
     CHECK(fixture.View().dataUpdateCount == initial_data_updates);
+}
+
+TEST_CASE(PREFIX "presents a provider timeout without losing the committed refresh state")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.Host()->ScriptError("/seed/", nc::Error{"panel_controller_navigation_timeout", 1});
+    const auto initial_generation = fixture.Controller().dataGeneration;
+    const auto initial_listing = fixture.Controller().data.ListingPtr();
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+
+    [fixture.Controller() forceRefreshPanel];
+    REQUIRE(RunMainLoopUntil([&] {
+        return events.size() == 2 && std::holds_alternative<PaneLifecycleFailed>(events.back().payload);
+    }));
+
+    const auto &failed = std::get<PaneLifecycleFailed>(events.back().payload);
+    CHECK(failed.error.original_error == nc::Error{"panel_controller_navigation_timeout", 1});
+    CHECK(failed.error.category == nc::core::FileManagerErrorCategory::TimeoutError);
+    CHECK(failed.error.user_message_key == "errors.timeout");
+    CHECK(failed.error.affected_items == std::vector<std::string>{"/seed/"});
+    REQUIRE(failed.error.provider_id);
+    CHECK(*failed.error.provider_id == fixture.Host()->Tag());
+    CHECK(fixture.Controller().dataGeneration == initial_generation);
+    CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
 }
 
 TEST_CASE(PREFIX "publishes an invalid-location failure before lifecycle navigation recovers the pane")

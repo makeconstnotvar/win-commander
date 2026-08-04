@@ -80,6 +80,7 @@ enum class HostErrorKind : uint8_t {
     PermissionDenied,
     Unsupported,
     Cancelled,
+    TimedOut,
     Unavailable,
     Other
 };

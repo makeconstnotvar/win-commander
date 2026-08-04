@@ -71,6 +71,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "01A4C0DE0000000000000031"
+               BuildableName = "com.wincommander.App.CrossVolumeStagingHelperV1"
+               BlueprintName = "com.wincommander.App.CrossVolumeStagingHelperV1"
+               ReferencedContainer = "container:../RoutedIO/RoutedIO.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "CF2C101022A072BE00A5359D"
                BuildableName = "OperationsIT"
                BlueprintName = "OperationsIT"

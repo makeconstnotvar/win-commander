@@ -44,6 +44,10 @@ struct ConditionalCopyVolumeDecision final {
 [[nodiscard]] ConditionalCopyVolumeDecision
 EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
 
+/** The cross-volume helper keeps the same durability/metadata restrictions but does not require clone support. */
+[[nodiscard]] ConditionalCopyVolumeDecision
+EvaluateConditionalCopyStagingVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
+
 [[nodiscard]] bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
                                                const nc::utility::NativeFileSystemInfo &_destination) noexcept;
 
@@ -87,6 +91,12 @@ ValidateConditionalCopyMetadataPolicy(const ConditionalCopyMetadataSnapshot &_so
 [[nodiscard]] bool ConditionalCopyMetadataMatchesClone(const ConditionalCopyMetadataSnapshot &_source,
                                                        const ConditionalCopyMetadataSnapshot &_destination) noexcept;
 
+// Test-only instrumentation for the physical power-loss harness. Production IO leaves these checkpoints inert.
+enum class ConditionalCopyCheckpoint : uint8_t {
+    BeforePublish,
+    AfterPublishBeforeFullFSync
+};
+
 class ConditionalCopyIO
 {
 public:
@@ -104,6 +114,7 @@ public:
     virtual int FSync(int _fd) noexcept;
     virtual int FullFSync(int _fd) noexcept;
     virtual int Close(int _fd) noexcept;
+    virtual void Checkpoint(ConditionalCopyCheckpoint _checkpoint) noexcept { (void)_checkpoint; }
 
     [[nodiscard]] virtual std::expected<ConditionalCopyMetadataSnapshot, int> CaptureMetadata(int _fd) noexcept;
 };

@@ -2,6 +2,8 @@
 #include "Tests.h"
 #include "TestEnv.h"
 #include "../source/Native/ConditionalCopy.h"
+#include "../source/Native/CrossVolumeStagingAuthority.h"
+#include "../source/Native/CrossVolumeStagingClient.h"
 #include "../source/ProviderCapabilitiesTesting.h"
 #include <VFS/Native.h>
 #include <Utility/NativeFSManager.h>
@@ -232,6 +234,199 @@ private:
     mutable size_t m_VolumeFromPathCalls{0};
 };
 
+class RecordingCrossVolumeStagingAuthority final : public native::CrossVolumeStagingAuthority
+{
+public:
+    class Transaction final : public native::CrossVolumeStagingTransaction
+    {
+    public:
+        Transaction(size_t &_commit_calls, bool &_cancellation_observed) noexcept
+            : m_CommitCalls{_commit_calls}, m_CancellationObserved{_cancellation_observed}
+        {
+        }
+
+        [[nodiscard]] ProviderConditionalCopyCommitResult
+        Commit(const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) noexcept override
+        {
+            ++m_CommitCalls;
+            try {
+                m_CancellationObserved = _cancel_checker && _cancel_checker();
+            } catch( ... ) {
+                m_CancellationObserved = true;
+            }
+            if( m_CancellationObserved ) {
+                return ProviderConditionalCopyCommitResult{
+                    .publication = ProviderConditionalCopyPublicationState::NotPublished,
+                    .failure = ProviderConditionalCopyCommitFailure::Cancelled,
+                };
+            }
+            return ProviderConditionalCopyCommitResult{
+                .publication = ProviderConditionalCopyPublicationState::NotPublished,
+                .failure = ProviderConditionalCopyCommitFailure::ProviderFailure,
+                .system_error = EIO,
+            };
+        }
+
+        [[nodiscard]] ProviderConditionalCopyPublicationState Abort() noexcept override
+        {
+            return ProviderConditionalCopyPublicationState::NotPublished;
+        }
+
+    private:
+        size_t &m_CommitCalls;
+        bool &m_CancellationObserved;
+    };
+
+    [[nodiscard]] bool IsAvailable() const noexcept override { return available; }
+
+    [[nodiscard]] std::expected<std::unique_ptr<native::CrossVolumeStagingTransaction>,
+                                ProviderConditionalCopyTransactionBeginError>
+    Begin(native::CrossVolumeStagingRequest _request,
+          const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) override
+    {
+        ++begin_calls;
+        destination_name = _request.DestinationName();
+        source_seal = _request.SourceSeal();
+        destination_parent_seal = _request.DestinationParentSeal();
+        struct stat source_stat{};
+        struct stat destination_parent_stat{};
+        descriptor_seals_match = fstat(_request.SourceFD(), &source_stat) == 0 &&
+                                 fstat(_request.DestinationParentFD(), &destination_parent_stat) == 0 &&
+                                 static_cast<uint64_t>(source_stat.st_dev) == source_seal.device &&
+                                 static_cast<uint64_t>(source_stat.st_ino) == source_seal.inode &&
+                                 static_cast<uint64_t>(destination_parent_stat.st_dev) == destination_parent_seal.device &&
+                                 static_cast<uint64_t>(destination_parent_stat.st_ino) == destination_parent_seal.inode;
+        try {
+            if( _cancel_checker && _cancel_checker() )
+                return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
+        } catch( ... ) {
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
+        }
+        if( fail_begin )
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+        return std::make_unique<Transaction>(commit_calls, cancellation_observed);
+    }
+
+    bool available{true};
+    bool fail_begin{false};
+    size_t begin_calls{0};
+    size_t commit_calls{0};
+    bool cancellation_observed{false};
+    bool descriptor_seals_match{false};
+    std::string destination_name;
+    native::CrossVolumeStagingObjectSeal source_seal;
+    native::CrossVolumeStagingObjectSeal destination_parent_seal;
+};
+
+namespace staging_protocol = nc::routedio::cross_volume_staging;
+
+class RecordingCrossVolumeStagingTransport final : public native::CrossVolumeStagingTransport
+{
+public:
+    enum class BeginReply : uint8_t {
+        Granted,
+        RejectedSourceStale,
+        MismatchedCorrelation
+    };
+
+    enum class CommitReply : uint8_t {
+        Published,
+        SourceStale,
+        TransportFailure,
+        MismatchedCorrelation
+    };
+
+    [[nodiscard]] bool IsAvailable() const noexcept override { return available; }
+
+    [[nodiscard]] std::expected<staging_protocol::BeginResult, native::CrossVolumeStagingTransportError>
+    Begin(native::CrossVolumeStagingTransportBegin _begin) override
+    {
+        ++begin_calls;
+        begin_request = _begin.Request();
+        source_fd = _begin.SourceFD();
+        destination_parent_fd = _begin.DestinationParentFD();
+        source_descriptor_valid = fstat(source_fd, &source_stat) == 0;
+        destination_parent_descriptor_valid = fstat(destination_parent_fd, &destination_parent_stat) == 0;
+        source_descriptor_cloexec = (fcntl(source_fd, F_GETFD) & FD_CLOEXEC) != 0;
+        destination_parent_descriptor_cloexec = (fcntl(destination_parent_fd, F_GETFD) & FD_CLOEXEC) != 0;
+
+        if( begin_reply == BeginReply::RejectedSourceStale ) {
+            return staging_protocol::BeginResult{
+                .header = begin_request->header,
+                .disposition = staging_protocol::BeginDisposition::Rejected,
+                .failure = staging_protocol::BeginFailure::SourceStale,
+            };
+        }
+
+        staging_protocol::Lease lease{.header = begin_request->header};
+        lease.token.bytes[0] = 1;
+        staging_protocol::BeginResult result{
+            .header = begin_request->header,
+            .disposition = staging_protocol::BeginDisposition::Granted,
+            .failure = staging_protocol::BeginFailure::None,
+            .lease = lease,
+        };
+        if( begin_reply == BeginReply::MismatchedCorrelation )
+            result.header.correlation[0] ^= 1;
+        return result;
+    }
+
+    [[nodiscard]] std::expected<staging_protocol::CompletionResult, native::CrossVolumeStagingTransportError>
+    Commit(const staging_protocol::CommitRequest &_request) override
+    {
+        ++commit_calls;
+        commit_request = _request;
+        if( commit_reply == CommitReply::TransportFailure )
+            return std::unexpected{native::CrossVolumeStagingTransportError::Failure};
+
+        staging_protocol::CompletionResult result{
+            .header = _request.header,
+            .publication = staging_protocol::Publication::Published,
+            .failure = staging_protocol::CompletionFailure::None,
+            .filesystem_sync = staging_protocol::FilesystemSync::Confirmed,
+        };
+        if( commit_reply == CommitReply::SourceStale ) {
+            result.publication = staging_protocol::Publication::NotPublished;
+            result.failure = staging_protocol::CompletionFailure::SourceStale;
+            result.system_error = ESTALE;
+            result.filesystem_sync = staging_protocol::FilesystemSync::NotAttempted;
+        }
+        if( commit_reply == CommitReply::MismatchedCorrelation )
+            result.header.correlation[0] ^= 1;
+        return result;
+    }
+
+    [[nodiscard]] std::expected<staging_protocol::CompletionResult, native::CrossVolumeStagingTransportError>
+    Abort(const staging_protocol::AbortRequest &_request) override
+    {
+        ++abort_calls;
+        abort_request = _request;
+        return staging_protocol::CompletionResult{
+            .header = _request.header,
+            .publication = staging_protocol::Publication::NotPublished,
+            .failure = staging_protocol::CompletionFailure::Aborted,
+        };
+    }
+
+    bool available{true};
+    BeginReply begin_reply{BeginReply::Granted};
+    CommitReply commit_reply{CommitReply::Published};
+    size_t begin_calls{0};
+    size_t commit_calls{0};
+    size_t abort_calls{0};
+    int source_fd{-1};
+    int destination_parent_fd{-1};
+    bool source_descriptor_valid{false};
+    bool destination_parent_descriptor_valid{false};
+    bool source_descriptor_cloexec{false};
+    bool destination_parent_descriptor_cloexec{false};
+    struct stat source_stat{};
+    struct stat destination_parent_stat{};
+    std::optional<staging_protocol::BeginRequest> begin_request;
+    std::optional<staging_protocol::CommitRequest> commit_request;
+    std::optional<staging_protocol::AbortRequest> abort_request;
+};
+
 class FaultConditionalCopyIO final : public native::ConditionalCopyIO
 {
 public:
@@ -341,6 +536,15 @@ public:
         return ConditionalCopyIO::FullFSync(_fd);
     }
 
+    void Checkpoint(native::ConditionalCopyCheckpoint _checkpoint) noexcept override
+    {
+        if( checkpoint_count < checkpoints.size() ) {
+            checkpoints[checkpoint_count] = _checkpoint;
+            checkpoint_step_counts[checkpoint_count] = step_count;
+            ++checkpoint_count;
+        }
+    }
+
     std::expected<native::ConditionalCopyMetadataSnapshot, int> CaptureMetadata(int _fd) noexcept override
     {
         auto metadata = ConditionalCopyIO::CaptureMetadata(_fd);
@@ -363,6 +567,9 @@ public:
     size_t full_fsync_calls{0};
     std::array<Step, 8> steps{};
     size_t step_count{0};
+    std::array<native::ConditionalCopyCheckpoint, 2> checkpoints{};
+    std::array<size_t, 2> checkpoint_step_counts{};
+    size_t checkpoint_count{0};
 
 private:
     void Record(Step _step) noexcept
@@ -578,6 +785,17 @@ TEST_CASE(PREFIX "abort and cancellation leave the namespace unchanged")
     REQUIRE_FALSE(cancelled);
     CHECK(cancelled.error() == ProviderConditionalCopyTransactionBeginError::Cancelled);
     CHECK_FALSE(std::filesystem::exists(paths.destination));
+
+    auto late_cancelled = TestEnv().vfs_native->BeginConditionalCopyTransaction(
+        Authority(Claims(TestEnv().vfs_native, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(late_cancelled);
+    REQUIRE(*late_cancelled);
+    int cancellation_checks = 0;
+    CHECK(((*late_cancelled)->Commit([&] { return ++cancellation_checks >= 2; }) ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::Cancelled}));
+    CHECK(cancellation_checks == 2);
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
 }
 
 TEST_CASE(PREFIX "requires same-volume clone capability from NativeFSManager")
@@ -609,7 +827,7 @@ TEST_CASE(PREFIX "probes path-specific conditional Copy support conservatively")
 {
     const ConditionalCopyPaths paths;
     auto mode = GateNativeFSManager::Mode::Supported;
-    auto expected = ProviderConditionalCopyPathSupport::Supported;
+    auto expected = ProviderConditionalCopyPathSupport::SameVolumeClone;
 
     SECTION("supported internal APFS volume")
     {
@@ -635,6 +853,341 @@ TEST_CASE(PREFIX "probes path-specific conditional Copy support conservatively")
     CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) == expected);
     CHECK(host->ConditionalCopyPathSupport("relative-source", paths.destination_parent) ==
           ProviderConditionalCopyPathSupport::Unavailable);
+}
+
+TEST_CASE(PREFIX "keeps staged cross-volume eligibility behind its distinct helper authority")
+{
+    const ConditionalCopyPaths paths;
+    GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+
+    SECTION("no staged authority preserves the legacy unsupported route")
+    {
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::Unsupported);
+    }
+
+    SECTION("unavailable installed authority fails closed before reviewed selection")
+    {
+        auto authority = std::make_shared<RecordingCrossVolumeStagingAuthority>();
+        authority->available = false;
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       authority);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::Unavailable);
+    }
+
+    SECTION("available authority advertises the separate staged scope")
+    {
+        auto authority = std::make_shared<RecordingCrossVolumeStagingAuthority>();
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       authority);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::CrossVolumeStaged);
+    }
+}
+
+TEST_CASE(PREFIX "passes only anchored descriptors and scalar seals to cross-volume staging")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+    auto authority = std::make_shared<RecordingCrossVolumeStagingAuthority>();
+    const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                   *TestEnv().fsevents_file_update,
+                                                   std::make_shared<native::ConditionalCopyIO>(),
+                                                   authority);
+    const auto claims = Claims(host, paths.source, paths.destination_parent, paths.destination);
+
+    auto transaction = host->BeginConditionalCopyTransaction(Authority(claims));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    CHECK(authority->begin_calls == 1);
+    CHECK(authority->descriptor_seals_match);
+    CHECK(authority->destination_name == "destination.txt");
+    CHECK(authority->source_seal.device == static_cast<uint64_t>(claims.source.device));
+    CHECK(authority->source_seal.inode == claims.source.inode);
+    CHECK(authority->destination_parent_seal.device == static_cast<uint64_t>(claims.destination_parent.device));
+    CHECK(authority->destination_parent_seal.inode == claims.destination_parent.inode);
+    struct stat source_stat{};
+    struct stat destination_parent_stat{};
+    REQUIRE(stat(paths.source.c_str(), &source_stat) == 0);
+    REQUIRE(stat(paths.destination_parent.c_str(), &destination_parent_stat) == 0);
+    CHECK(authority->source_seal.uid == static_cast<uint32_t>(source_stat.st_uid));
+    CHECK(authority->source_seal.gid == static_cast<uint32_t>(source_stat.st_gid));
+    CHECK(authority->source_seal.mode == static_cast<uint32_t>(source_stat.st_mode));
+    CHECK(authority->source_seal.flags == static_cast<uint32_t>(source_stat.st_flags));
+    CHECK(authority->source_seal.link_count == static_cast<uint64_t>(source_stat.st_nlink));
+    CHECK(authority->destination_parent_seal.uid == static_cast<uint32_t>(destination_parent_stat.st_uid));
+    CHECK(authority->destination_parent_seal.gid == static_cast<uint32_t>(destination_parent_stat.st_gid));
+    CHECK((*transaction)->Abort() ==
+          ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                              ProviderConditionalCopyCommitFailure::Aborted});
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+}
+
+TEST_CASE(PREFIX "forwards late cancellation to the cross-volume helper before publication")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+    auto authority = std::make_shared<RecordingCrossVolumeStagingAuthority>();
+    const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                   *TestEnv().fsevents_file_update,
+                                                   std::make_shared<native::ConditionalCopyIO>(),
+                                                   authority);
+    auto transaction = host->BeginConditionalCopyTransaction(
+        Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    int cancellation_checks = 0;
+    CHECK(((*transaction)->Commit([&] { return ++cancellation_checks >= 2; }) ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::Cancelled}));
+    CHECK(cancellation_checks == 2);
+    CHECK(authority->commit_calls == 1);
+    CHECK(authority->cancellation_observed);
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+}
+
+TEST_CASE(PREFIX "never invokes cross-volume staging before exact Native validation")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+    auto authority = std::make_shared<RecordingCrossVolumeStagingAuthority>();
+    const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                   *TestEnv().fsevents_file_update,
+                                                   std::make_shared<native::ConditionalCopyIO>(),
+                                                   authority);
+
+    SECTION("existing destination")
+    {
+        Write(paths.destination, "existing");
+        const auto transaction = host->BeginConditionalCopyTransaction(
+            Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+        REQUIRE_FALSE(transaction);
+        CHECK(transaction.error() == ProviderConditionalCopyTransactionBeginError::DestinationExists);
+        CHECK(authority->begin_calls == 0);
+        CHECK(std::filesystem::exists(paths.destination));
+    }
+
+    SECTION("authority loss after reviewed selection")
+    {
+        authority->fail_begin = true;
+        const auto transaction = host->BeginConditionalCopyTransaction(
+            Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+        REQUIRE_FALSE(transaction);
+        CHECK(transaction.error() == ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+        CHECK(authority->begin_calls == 1);
+        CHECK_FALSE(std::filesystem::exists(paths.destination));
+    }
+}
+
+TEST_CASE(PREFIX "staging client transfers two anchored descriptors and scalar V1 claims")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+    auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+    auto io = std::make_shared<FaultConditionalCopyIO>(FaultConditionalCopyIO::Fault::None);
+    auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+    const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update, io, client);
+    const auto claims = Claims(host, paths.source, paths.destination_parent, paths.destination);
+
+    auto transaction = host->BeginConditionalCopyTransaction(Authority(claims));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    REQUIRE(transport->begin_request);
+    CHECK(transport->begin_calls == 1);
+    CHECK(transport->source_descriptor_valid);
+    CHECK(transport->destination_parent_descriptor_valid);
+    CHECK(transport->source_descriptor_cloexec);
+    CHECK(transport->destination_parent_descriptor_cloexec);
+    CHECK(transport->source_fd != io->source_fd);
+    CHECK(transport->destination_parent_fd != io->destination_parent_fd);
+    CHECK(transport->source_stat.st_dev == transport->destination_parent_stat.st_dev);
+    CHECK(transport->begin_request->header.version == staging_protocol::kProtocolVersion);
+    CHECK(transport->begin_request->header.correlation != staging_protocol::CorrelationID{});
+    CHECK(transport->begin_request->source.device == static_cast<uint64_t>(transport->source_stat.st_dev));
+    CHECK(transport->begin_request->source.inode == static_cast<uint64_t>(transport->source_stat.st_ino));
+    CHECK(transport->begin_request->destination_parent.device ==
+          static_cast<uint64_t>(transport->destination_parent_stat.st_dev));
+    CHECK(transport->begin_request->destination_parent.inode ==
+          static_cast<uint64_t>(transport->destination_parent_stat.st_ino));
+    const auto name = transport->begin_request->destination_name.Bytes();
+    CHECK(std::string{reinterpret_cast<const char *>(name.data()), name.size()} == "destination.txt");
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+
+    CHECK(((*transaction)->Abort() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::Aborted}));
+    CHECK(transport->abort_calls == 1);
+    REQUIRE(transport->abort_request);
+    CHECK(transport->abort_request->header == transport->begin_request->header);
+}
+
+TEST_CASE(PREFIX "staging client binds one granted lease to exactly one terminal commit")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+    auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+    auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+    const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                   *TestEnv().fsevents_file_update,
+                                                   std::make_shared<native::ConditionalCopyIO>(),
+                                                   client);
+
+    auto transaction = host->BeginConditionalCopyTransaction(
+        Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    CHECK((*transaction)->Commit() == PublishedSuccess());
+    CHECK((*transaction)->Commit() == PublishedSuccess());
+    CHECK(transport->commit_calls == 1);
+    CHECK(transport->abort_calls == 0);
+    REQUIRE(transport->begin_request);
+    REQUIRE(transport->commit_request);
+    CHECK(transport->commit_request->header == transport->begin_request->header);
+    CHECK(transport->commit_request->lease.header == transport->begin_request->header);
+    CHECK(transport->commit_request->lease.token.bytes[0] == 1);
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+}
+
+TEST_CASE(PREFIX "staging client preserves exact begin failures and fails closed after dispatch")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+
+    SECTION("an unavailable transport leaves staged support unavailable")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+        transport->available = false;
+        auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       client);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::Unavailable);
+        CHECK(transport->begin_calls == 0);
+    }
+
+    SECTION("a valid helper rejection retains its exact stale-source result")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+        transport->begin_reply = RecordingCrossVolumeStagingTransport::BeginReply::RejectedSourceStale;
+        auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       client);
+        const auto transaction = host->BeginConditionalCopyTransaction(
+            Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+        REQUIRE_FALSE(transaction);
+        CHECK(transaction.error() == ProviderConditionalCopyTransactionBeginError::SourceStale);
+        CHECK(transport->begin_calls == 1);
+        CHECK(transport->abort_calls == 0);
+    }
+
+    SECTION("a lost completion after Commit has unknown publication and no second terminal request")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+        transport->commit_reply = RecordingCrossVolumeStagingTransport::CommitReply::TransportFailure;
+        auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       client);
+        auto transaction = host->BeginConditionalCopyTransaction(
+            Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+        REQUIRE(transaction);
+        REQUIRE(*transaction);
+        CHECK(((*transaction)->Commit() ==
+               ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::Unknown,
+                                                   ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                   EIO}));
+        CHECK(transport->commit_calls == 1);
+        CHECK(transport->abort_calls == 0);
+    }
+
+    SECTION("a terminal not-published Commit is not followed by an illegal Abort")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+        transport->commit_reply = RecordingCrossVolumeStagingTransport::CommitReply::SourceStale;
+        auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       client);
+        auto transaction = host->BeginConditionalCopyTransaction(
+            Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+        REQUIRE(transaction);
+        REQUIRE(*transaction);
+        CHECK(((*transaction)->Commit() ==
+               ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                   ProviderConditionalCopyCommitFailure::SourceStale,
+                                                   ESTALE}));
+        CHECK(transport->commit_calls == 1);
+        CHECK(transport->abort_calls == 0);
+    }
+}
+
+TEST_CASE(PREFIX "staging client aborts a granted lease on cancellation and abandoned ownership")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+
+    SECTION("cancellation after Granted Begin consumes the lease through Abort")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+        auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       client);
+        int cancellation_checks = 0;
+        const auto transaction = host->BeginConditionalCopyTransaction(
+            Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)),
+            [&] { return ++cancellation_checks >= 4; });
+        REQUIRE_FALSE(transaction);
+        CHECK(transaction.error() == ProviderConditionalCopyTransactionBeginError::Cancelled);
+        CHECK(cancellation_checks >= 4);
+        CHECK(transport->begin_calls == 1);
+        CHECK(transport->commit_calls == 0);
+        CHECK(transport->abort_calls == 1);
+    }
+
+    SECTION("generic transaction destruction aborts an uncommitted granted lease")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        auto transport = std::make_shared<RecordingCrossVolumeStagingTransport>();
+        auto client = std::make_shared<native::CrossVolumeStagingClient>(transport);
+        const auto host = std::make_shared<NativeHost>(native_fs_manager,
+                                                       *TestEnv().fsevents_file_update,
+                                                       std::make_shared<native::ConditionalCopyIO>(),
+                                                       client);
+        {
+            auto transaction = host->BeginConditionalCopyTransaction(
+                Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+            REQUIRE(transaction);
+            REQUIRE(*transaction);
+        }
+        CHECK(transport->begin_calls == 1);
+        CHECK(transport->commit_calls == 0);
+        CHECK(transport->abort_calls == 1);
+    }
 }
 
 TEST_CASE(PREFIX "classifies the internal APFS durability policy explicitly")
@@ -816,6 +1369,29 @@ TEST_CASE(PREFIX "preserves published evidence for every durability barrier fail
     CHECK(io->steps[3] == FaultConditionalCopyIO::Step::FullFSync);
 }
 
+TEST_CASE(PREFIX "exposes power-loss checkpoints around publication and the final durability barrier")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto io = std::make_shared<FaultConditionalCopyIO>(FaultConditionalCopyIO::Fault::None);
+    auto host = std::make_shared<NativeHost>(*TestEnv().native_fs_man, *TestEnv().fsevents_file_update, io);
+    auto transaction = host->BeginConditionalCopyTransaction(
+        Authority(Claims(host, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+
+    CHECK((*transaction)->Commit() == PublishedSuccess());
+    REQUIRE(io->checkpoint_count == 2);
+    CHECK(io->checkpoints[0] == native::ConditionalCopyCheckpoint::BeforePublish);
+    CHECK(io->checkpoint_step_counts[0] == 0);
+    CHECK(io->checkpoints[1] == native::ConditionalCopyCheckpoint::AfterPublishBeforeFullFSync);
+    CHECK(io->checkpoint_step_counts[1] == 3);
+    REQUIRE(io->step_count == 4);
+    CHECK(io->steps[0] == FaultConditionalCopyIO::Step::Clone);
+    CHECK(io->steps[3] == FaultConditionalCopyIO::Step::FullFSync);
+}
+
 TEST_CASE(PREFIX "retries an interrupted full filesystem sync")
 {
     const ConditionalCopyPaths paths;
@@ -867,6 +1443,10 @@ TEST_CASE(PREFIX "probes ambiguous clone errors before classifying publication")
     REQUIRE(transaction);
 
     CHECK((*transaction)->Commit() == expected);
+    if( fault == FaultConditionalCopyIO::Fault::CloneErrorWithoutPublication ) {
+        REQUIRE(io->checkpoint_count == 1);
+        CHECK(io->checkpoints[0] == native::ConditionalCopyCheckpoint::BeforePublish);
+    }
     CHECK(std::filesystem::exists(paths.destination) == destination_exists);
 }
 

@@ -132,7 +132,7 @@ ReviewedStrongConditionalCommitTransaction(
         return nc::vfs::ProviderConditionalCopyTransactionTestAccess::Mint(
             *destination,
             std::move(_authority),
-            [] {
+            [](const auto &) {
                 return nc::vfs::ProviderConditionalCopyCommitResult{
                     .publication = nc::vfs::ProviderConditionalCopyPublicationState::Published,
                     .failure = nc::vfs::ProviderConditionalCopyCommitFailure::None,

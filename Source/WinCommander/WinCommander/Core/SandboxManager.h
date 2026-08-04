@@ -2,9 +2,20 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <Base/spinlock.h>
 #include <Cocoa/Cocoa.h>
+
+namespace nc::sandbox {
+
+/**
+ * Checks a normalized absolute path against a normalized security-scope root at a path-component
+ * boundary. It is intentionally pure so bookmark and built-in access grants use the same rule.
+ */
+[[nodiscard]] bool PathIsWithinScope(std::string_view _path, std::string_view _scope) noexcept;
+
+} // namespace nc::sandbox
 
 /**
  * SandboxManager has tread-safe public interface.

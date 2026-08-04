@@ -14,6 +14,7 @@
 #include "DisplayNamesCache.h"
 #include "File.h"
 #include "ConditionalCopy.h"
+#include "CrossVolumeStagingAuthority.h"
 #include <VFS/Log.h>
 #include "../ListingInput.h"
 #include "Fetching.h"
@@ -99,6 +100,8 @@ ProviderConditionalCopyCommitResult NativeConditionalCopyPublished(int _metadata
     };
 }
 
+bool NativeConditionalCopyCancelled(const VFSCancelChecker &_cancel_checker) noexcept;
+
 class NativeConditionalCopyState final
 {
 public:
@@ -124,7 +127,8 @@ public:
 
     ~NativeConditionalCopyState() { Close(); }
 
-    [[nodiscard]] ProviderConditionalCopyCommitResult Commit() noexcept;
+    [[nodiscard]] ProviderConditionalCopyCommitResult
+    Commit(const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) noexcept;
 
     [[nodiscard]] ProviderConditionalCopyPublicationState Abort() noexcept
     {
@@ -161,6 +165,58 @@ private:
     nc::utility::NativeFSManager &m_NativeFSManager;
     std::shared_ptr<native::ConditionalCopyIO> m_IO;
     std::mutex m_Mutex;
+};
+
+/** Owns a granted one-use helper lease until the generic provider transaction takes over. */
+class NativeCrossVolumeStagingState final
+{
+public:
+    explicit NativeCrossVolumeStagingState(std::unique_ptr<native::CrossVolumeStagingTransaction> _transaction) noexcept
+        : m_Transaction{std::move(_transaction)}
+    {
+    }
+
+    NativeCrossVolumeStagingState(const NativeCrossVolumeStagingState &) = delete;
+    NativeCrossVolumeStagingState &operator=(const NativeCrossVolumeStagingState &) = delete;
+
+    ~NativeCrossVolumeStagingState() { (void)Abort(); }
+
+    [[nodiscard]] ProviderConditionalCopyCommitResult
+    Commit(const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) noexcept
+    {
+        const auto lock = std::lock_guard{m_Mutex};
+        if( m_CommitResult )
+            return *m_CommitResult;
+        if( m_AbortPublication )
+            return NativeConditionalCopyUnknown(EIO);
+        if( !m_Transaction )
+            return NativeConditionalCopyUnknown(EBADF);
+        m_CommitResult = m_Transaction->Commit(_cancel_checker);
+        return *m_CommitResult;
+    }
+
+    [[nodiscard]] ProviderConditionalCopyPublicationState Abort() noexcept
+    {
+        const auto lock = std::lock_guard{m_Mutex};
+        if( m_AbortPublication )
+            return *m_AbortPublication;
+        if( m_CommitResult ) {
+            m_AbortPublication = m_CommitResult->publication;
+            return *m_AbortPublication;
+        }
+        if( !m_Transaction ) {
+            m_AbortPublication = ProviderConditionalCopyPublicationState::Unknown;
+            return *m_AbortPublication;
+        }
+        m_AbortPublication = m_Transaction->Abort();
+        return *m_AbortPublication;
+    }
+
+private:
+    std::unique_ptr<native::CrossVolumeStagingTransaction> m_Transaction;
+    std::mutex m_Mutex;
+    std::optional<ProviderConditionalCopyCommitResult> m_CommitResult;
+    std::optional<ProviderConditionalCopyPublicationState> m_AbortPublication;
 };
 
 bool NativeConditionalCopyTimestampMatches(const timespec &_actual,
@@ -201,7 +257,28 @@ bool NativeConditionalCopyMetadataMatchesExpectation(
            _actual.change_time.nanoseconds == _expected.status_change_time.nanoseconds;
 }
 
-ProviderConditionalCopyCommitResult NativeConditionalCopyState::Commit() noexcept
+native::CrossVolumeStagingObjectSeal
+NativeCrossVolumeStagingSeal(const native::ConditionalCopyMetadataSnapshot &_metadata) noexcept
+{
+    return native::CrossVolumeStagingObjectSeal{
+        .device = _metadata.device,
+        .inode = _metadata.inode,
+        .birth_time = {.seconds = _metadata.birth_time.seconds, .nanoseconds = _metadata.birth_time.nanoseconds},
+        .uid = _metadata.uid,
+        .gid = _metadata.gid,
+        .mode = _metadata.mode,
+        .flags = _metadata.flags,
+        .link_count = _metadata.link_count,
+        .byte_size = _metadata.size,
+        .modification_time = {.seconds = _metadata.modification_time.seconds,
+                              .nanoseconds = _metadata.modification_time.nanoseconds},
+        .status_change_time = {.seconds = _metadata.change_time.seconds,
+                               .nanoseconds = _metadata.change_time.nanoseconds},
+    };
+}
+
+ProviderConditionalCopyCommitResult
+NativeConditionalCopyState::Commit(const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) noexcept
 {
     const auto lock = std::lock_guard{m_Mutex};
     if( m_SourceFD < 0 || m_DestinationParentFD < 0 ) {
@@ -271,6 +348,13 @@ ProviderConditionalCopyCommitResult NativeConditionalCopyState::Commit() noexcep
         return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, ENOTSUP);
     }
 
+    // This is the last cancellation point.  After Clone the result must retain the observed publication state.
+    if( NativeConditionalCopyCancelled(_cancel_checker) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::Cancelled);
+    }
+
+    m_IO->Checkpoint(native::ConditionalCopyCheckpoint::BeforePublish);
     if( m_IO->Clone(m_SourceFD, m_DestinationParentFD, m_DestinationName.c_str(), CLONE_ACL) != 0 ) {
         const int clone_error = NativeConditionalCopyErrno();
         if( clone_error == EEXIST ) {
@@ -349,6 +433,7 @@ ProviderConditionalCopyCommitResult NativeConditionalCopyState::Commit() noexcep
         remember_sync_error(NativeConditionalCopyErrno());
 
     if( destination_fd >= 0 ) {
+        m_IO->Checkpoint(native::ConditionalCopyCheckpoint::AfterPublishBeforeFullFSync);
         if( NativeConditionalCopyRetryInterrupted([&] { return m_IO->FullFSync(destination_fd); }) != 0 )
             remember_sync_error(NativeConditionalCopyErrno());
 
@@ -435,10 +520,12 @@ NativeHost::NativeHost(nc::utility::NativeFSManager &_native_fs_man,
 
 NativeHost::NativeHost(nc::utility::NativeFSManager &_native_fs_man,
                        nc::utility::FSEventsFileUpdate &_fsevents_file_update,
-                       std::shared_ptr<native::ConditionalCopyIO> _conditional_copy_io)
+                       std::shared_ptr<native::ConditionalCopyIO> _conditional_copy_io,
+                       std::shared_ptr<native::CrossVolumeStagingAuthority> _cross_volume_staging_authority)
     : Host("", nullptr, UniqueTag), m_NativeFSManager(_native_fs_man), m_FSEventsFileUpdate(_fsevents_file_update),
       m_ConditionalCopyIO(_conditional_copy_io ? std::move(_conditional_copy_io)
-                                               : std::make_shared<native::ConditionalCopyIO>())
+                                               : std::make_shared<native::ConditionalCopyIO>()),
+      m_CrossVolumeStagingAuthority(std::move(_cross_volume_staging_authority))
 {
     AddFeatures(HostFeatures::FetchUsers | HostFeatures::FetchGroups | HostFeatures::SetOwnership |
                 HostFeatures::SetFlags | HostFeatures::SetPermissions | HostFeatures::SetTimes | HostFeatures::Read |
@@ -1252,11 +1339,21 @@ NativeHost::ConditionalCopyPathSupport(const std::string_view _source_path,
     const auto destination_volume = m_NativeFSManager.VolumeFromPath(_destination_parent_path);
     if( !source_volume || !destination_volume )
         return ProviderConditionalCopyPathSupport::Unavailable;
-    if( !native::ConditionalCopyVolumesMatch(*source_volume, *destination_volume) ||
-        !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
-        !native::EvaluateConditionalCopyVolume(*destination_volume).IsSupported() )
+    if( native::ConditionalCopyVolumesMatch(*source_volume, *destination_volume) ) {
+        if( !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
+            !native::EvaluateConditionalCopyVolume(*destination_volume).IsSupported() )
+            return ProviderConditionalCopyPathSupport::Unsupported;
+        return ProviderConditionalCopyPathSupport::SameVolumeClone;
+    }
+
+    if( !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
+        !native::EvaluateConditionalCopyStagingVolume(*destination_volume).IsSupported() )
         return ProviderConditionalCopyPathSupport::Unsupported;
-    return ProviderConditionalCopyPathSupport::Supported;
+    if( !m_CrossVolumeStagingAuthority )
+        return ProviderConditionalCopyPathSupport::Unsupported;
+    if( !m_CrossVolumeStagingAuthority->IsAvailable() )
+        return ProviderConditionalCopyPathSupport::Unavailable;
+    return ProviderConditionalCopyPathSupport::CrossVolumeStaged;
 }
 
 std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
@@ -1319,10 +1416,17 @@ NativeHost::BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAutho
     const auto destination_volume = m_NativeFSManager.VolumeFromFD(destination_parent_fd);
     if( !source_volume || !destination_volume )
         return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
-    if( source_stat.st_dev != destination_parent_stat.st_dev ||
-        !native::ConditionalCopyVolumesMatch(*source_volume, *destination_volume) ||
-        !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
-        !native::EvaluateConditionalCopyVolume(*destination_volume).IsSupported() ) {
+    const bool same_volume = source_stat.st_dev == destination_parent_stat.st_dev &&
+                             native::ConditionalCopyVolumesMatch(*source_volume, *destination_volume);
+    if( same_volume ) {
+        if( !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
+            !native::EvaluateConditionalCopyVolume(*destination_volume).IsSupported() )
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::Unsupported);
+    }
+    else if( native::ConditionalCopyVolumesMatch(*source_volume, *destination_volume) ||
+             !native::EvaluateConditionalCopyVolume(*source_volume).IsSupported() ||
+             !native::EvaluateConditionalCopyStagingVolume(*destination_volume).IsSupported() ||
+             !m_CrossVolumeStagingAuthority || !m_CrossVolumeStagingAuthority->IsAvailable() ) {
         return std::unexpected(ProviderConditionalCopyTransactionBeginError::Unsupported);
     }
 
@@ -1343,6 +1447,44 @@ NativeHost::BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAutho
     if( NativeConditionalCopyCancelled(_cancel_checker) )
         return std::unexpected(ProviderConditionalCopyTransactionBeginError::Cancelled);
 
+    if( !same_volume ) {
+        std::expected<std::unique_ptr<native::CrossVolumeStagingTransaction>,
+                      ProviderConditionalCopyTransactionBeginError>
+            staging = std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+        try {
+            staging = m_CrossVolumeStagingAuthority->Begin(
+                native::CrossVolumeStagingRequest{source_fd,
+                                                   destination_parent_fd,
+                                                   *destination_name,
+                                                   NativeCrossVolumeStagingSeal(*source_metadata),
+                                                   NativeCrossVolumeStagingSeal(*destination_parent_metadata)},
+                _cancel_checker);
+        } catch( ... ) {
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+        }
+        if( !staging || !*staging )
+            return std::unexpected(staging ? ProviderConditionalCopyTransactionBeginError::ProviderFailure
+                                            : staging.error());
+        std::shared_ptr<NativeCrossVolumeStagingState> state;
+        try {
+            state = std::shared_ptr<NativeCrossVolumeStagingState>{
+                new NativeCrossVolumeStagingState{std::move(*staging)}};
+        } catch( ... ) {
+            if( *staging )
+                (void)(*staging)->Abort();
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+        }
+        auto transaction = MintConditionalCopyTransaction(
+            std::move(_authority),
+            [state](const auto &_commit_cancel_checker) { return state->Commit(_commit_cancel_checker); },
+            [state] { return state->Abort(); });
+        if( transaction )
+            return transaction;
+        if( state->Abort() != ProviderConditionalCopyPublicationState::NotPublished )
+            return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+        return std::unexpected(transaction.error());
+    }
+
     std::shared_ptr<NativeConditionalCopyState> state;
     try {
         state = std::make_shared<NativeConditionalCopyState>(source_fd,
@@ -1360,7 +1502,9 @@ NativeHost::BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAutho
     close_source.disengage();
     close_destination_parent.disengage();
     return MintConditionalCopyTransaction(
-        std::move(_authority), [state] { return state->Commit(); }, [state] { return state->Abort(); });
+        std::move(_authority),
+        [state](const auto &_commit_cancel_checker) { return state->Commit(_commit_cancel_checker); },
+        [state] { return state->Abort(); });
 }
 
 nc::utility::NativeFSManager &NativeHost::NativeFSManager() const noexcept

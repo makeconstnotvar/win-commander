@@ -31,6 +31,7 @@
 		BACC000131C2000000000001 /* NavigationHistoryCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BACC000131C2000000000012 /* NavigationHistoryCommand.cpp */; };
 		BACC000131C2000000000002 /* NavigationHistoryCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BACC000131C2000000000013 /* NavigationHistoryCommand_UT.cpp */; };
 		BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */; };
+		C0CA000131D7000000000001 /* OperationCancelCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C0CA000131D7000000000012 /* OperationCancelCommand.cpp */; };
 		BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */; };
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
@@ -397,6 +398,7 @@
 		CFC706622B49831B0045D2C9 /* Sparkle.framework in Copy Files */ = {isa = PBXBuildFile; fileRef = CFC706462B497F5C0045D2C9 /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CFC7066A2B4986080045D2C9 /* com.wincommander.App.PrivilegedIOHelperV2 in CopyFiles */ = {isa = PBXBuildFile; fileRef = CFC705DF2B497D1A0045D2C9 /* com.wincommander.App.PrivilegedIOHelperV2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		CFC7066B2B4986150045D2C9 /* com.wincommander.App.PrivilegedIOHelperV2 in CopyFiles */ = {isa = PBXBuildFile; fileRef = CFC705DF2B497D1A0045D2C9 /* com.wincommander.App.PrivilegedIOHelperV2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		01A4C0DF0000000000000014 /* com.wincommander.App.CrossVolumeStagingHelperV1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = 01A4C0DF0000000000000013 /* com.wincommander.App.CrossVolumeStagingHelperV1 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		CFC7066D2B49AF480045D2C9 /* LetsMove.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CFC706482B497F6A0045D2C9 /* LetsMove.framework */; };
 		CFC7066E2B49AF6D0045D2C9 /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CFC706462B497F5C0045D2C9 /* Sparkle.framework */; };
 		CFC762782D3C53B6000498AA /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CFC762772D3C53B6000498AA /* Localizable.xcstrings */; };
@@ -486,6 +488,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = CF69CFB31DA209F000992B84;
 			remoteInfo = com.wincommander.App.PrivilegedIOHelperV2;
+		};
+		01A4C0DF0000000000000011 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CF69CF961DA2003C00992B84 /* RoutedIO.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = 01A4C0DE0000000000000031;
+			remoteInfo = com.wincommander.App.CrossVolumeStagingHelperV1;
 		};
 		CF5BF7132BF2B3330057C92E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -612,6 +621,13 @@
 			proxyType = 2;
 			remoteGlobalIDString = CF69CFB41DA209F000992B84;
 			remoteInfo = com.wincommander.App.PrivilegedIOHelperV2;
+		};
+		01A4C0DF0000000000000012 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CF69CF961DA2003C00992B84 /* RoutedIO.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 01A4C0DE0000000000000004;
+			remoteInfo = com.wincommander.App.CrossVolumeStagingHelperV1;
 		};
 		CFC705E02B497D1A0045D2C9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -905,6 +921,7 @@
 			dstSubfolderSpec = 1;
 			files = (
 				CFC7066A2B4986080045D2C9 /* com.wincommander.App.PrivilegedIOHelperV2 in CopyFiles */,
+				01A4C0DF0000000000000014 /* com.wincommander.App.CrossVolumeStagingHelperV1 in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -954,6 +971,8 @@
 		BACC000131C2000000000013 /* NavigationHistoryCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NavigationHistoryCommand_UT.cpp; path = WinCommander/Tests/NavigationHistoryCommand_UT.cpp; sourceTree = "<group>"; };
 		BAEC000241D3000000000011 /* PaneNavigationCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationCommand.h; path = WinCommander/Core/Commands/PaneNavigationCommand.h; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationCommand.cpp; path = WinCommander/Core/Commands/PaneNavigationCommand.cpp; sourceTree = SOURCE_ROOT; };
+		C0CA000131D7000000000011 /* OperationCancelCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationCancelCommand.h; path = WinCommander/Core/Commands/OperationCancelCommand.h; sourceTree = SOURCE_ROOT; };
+		C0CA000131D7000000000012 /* OperationCancelCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationCancelCommand.cpp; path = WinCommander/Core/Commands/OperationCancelCommand.cpp; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationCommand_UT.cpp; path = WinCommander/Tests/PaneNavigationCommand_UT.cpp; sourceTree = "<group>"; };
 		BAEC000241D3000000000014 /* PaneNavigationAvailability.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationAvailability.h; path = WinCommander/Core/Pane/PaneNavigationAvailability.h; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability_UT.cpp; path = WinCommander/Tests/PaneNavigationAvailability_UT.cpp; sourceTree = "<group>"; };
@@ -1225,6 +1244,7 @@
 		CF6BFAE42D2C645200257029 /* Actions.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = Actions.h; path = WinCommander/Bootstrap/Actions.h; sourceTree = "<group>"; };
 		CF6D997D196675290077B146 /* Win Commander.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Win Commander.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF6D9D2B1966A56E0077B146 /* WinCommander-NonMAS-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "WinCommander-NonMAS-Info.plist"; path = "WinCommander/Resources/WinCommander-NonMAS-Info.plist"; sourceTree = SOURCE_ROOT; };
+		01A4C0DF0000000000000001 /* WinCommander-Unsigned-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "WinCommander-Unsigned-Info.plist"; path = "WinCommander/Resources/WinCommander-Unsigned-Info.plist"; sourceTree = SOURCE_ROOT; };
 		CF6D9D2D1966A57B0077B146 /* WinCommander-MAS-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "WinCommander-MAS-Info.plist"; path = "WinCommander/Resources/WinCommander-MAS-Info.plist"; sourceTree = SOURCE_ROOT; };
 		CF6D9D301966A5E10077B146 /* WinCommander-MAS.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; name = "WinCommander-MAS.entitlements"; path = "WinCommander/Resources/WinCommander-MAS.entitlements"; sourceTree = SOURCE_ROOT; };
 		CF6E44871CCE390A009F45B0 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
@@ -1609,6 +1629,8 @@
 				BACC000131C2000000000012 /* NavigationHistoryCommand.cpp */,
 				BAEC000241D3000000000011 /* PaneNavigationCommand.h */,
 				BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */,
+				C0CA000131D7000000000011 /* OperationCancelCommand.h */,
+				C0CA000131D7000000000012 /* OperationCancelCommand.cpp */,
 				9342789A6E594D8392A98057 /* LegacyShortcutBindingAdapter.h */,
 				0E465329C92C49B8A22E62BC /* LegacyShortcutBindingAdapter.cpp */,
 			);
@@ -2442,6 +2464,7 @@
 				CF6D9D2D1966A57B0077B146 /* WinCommander-MAS-Info.plist */,
 				CF6D9D301966A5E10077B146 /* WinCommander-MAS.entitlements */,
 				CF6D9D2B1966A56E0077B146 /* WinCommander-NonMAS-Info.plist */,
+				01A4C0DF0000000000000001 /* WinCommander-Unsigned-Info.plist */,
 				CF52C3CB22BE5B2D0043E825 /* WinCommander-NonMAS.entitlements */,
 			);
 			name = "Supporting Files";
@@ -2500,6 +2523,7 @@
 			isa = PBXGroup;
 			children = (
 				CFC705DF2B497D1A0045D2C9 /* com.wincommander.App.PrivilegedIOHelperV2 */,
+				01A4C0DF0000000000000013 /* com.wincommander.App.CrossVolumeStagingHelperV1 */,
 				CFC705E12B497D1A0045D2C9 /* libRoutedIO.a */,
 				CFC705E32B497D1A0045D2C9 /* RoutedIOResources.bundle */,
 			);
@@ -2732,6 +2756,7 @@
 				CF4AC4F02C10F8A100475EDC /* PBXTargetDependency */,
 				CF5BF7102BF2B32A0057C92E /* PBXTargetDependency */,
 				CF5BF7122BF2B32A0057C92E /* PBXTargetDependency */,
+				01A4C0DF0000000000000015 /* PBXTargetDependency */,
 			);
 			name = "WinCommander-NonMAS";
 			productName = Directories;
@@ -2965,6 +2990,13 @@
 			fileType = "compiled.mach-o.executable";
 			path = com.wincommander.App.PrivilegedIOHelperV2;
 			remoteRef = CFC705DE2B497D1A0045D2C9 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		01A4C0DF0000000000000013 /* com.wincommander.App.CrossVolumeStagingHelperV1 */ = {
+			isa = PBXReferenceProxy;
+			fileType = "compiled.mach-o.executable";
+			path = com.wincommander.App.CrossVolumeStagingHelperV1;
+			remoteRef = 01A4C0DF0000000000000012 /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 		CFC705E12B497D1A0045D2C9 /* libRoutedIO.a */ = {
@@ -3327,6 +3359,7 @@
 				7EAD000131BA000000000001 /* ToggleHiddenFilesCommand.cpp in Sources */,
 				BACC000131C2000000000001 /* NavigationHistoryCommand.cpp in Sources */,
 				BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */,
+				C0CA000131D7000000000001 /* OperationCancelCommand.cpp in Sources */,
 				BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */,
 				9A10A00131B0000000000001 /* VisualStateMapper.cpp in Sources */,
 				B71A000131B1000000000001 /* CommandPresentationAdapter.mm in Sources */,
@@ -3652,6 +3685,11 @@
 			isa = PBXTargetDependency;
 			name = com.wincommander.App.PrivilegedIOHelperV2;
 			targetProxy = CF5BF7112BF2B32A0057C92E /* PBXContainerItemProxy */;
+		};
+		01A4C0DF0000000000000015 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = com.wincommander.App.CrossVolumeStagingHelperV1;
+			targetProxy = 01A4C0DF0000000000000011 /* PBXContainerItemProxy */;
 		};
 		CF5BF7142BF2B3330057C92E /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -4141,7 +4179,7 @@
 					"$(inherited)",
 					"__NC_VERSION_NONMAS__=1",
 				);
-				INFOPLIST_FILE = "WinCommander/Resources/WinCommander-NonMAS-Info.plist";
+				INFOPLIST_FILE = "WinCommander/Resources/WinCommander-Unsigned-Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.App;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -4156,7 +4194,7 @@
 					"$(inherited)",
 					"__NC_VERSION_NONMAS__=1",
 				);
-				INFOPLIST_FILE = "WinCommander/Resources/WinCommander-NonMAS-Info.plist";
+				INFOPLIST_FILE = "WinCommander/Resources/WinCommander-Unsigned-Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = com.wincommander.App;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

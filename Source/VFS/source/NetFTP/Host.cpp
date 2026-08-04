@@ -67,8 +67,10 @@ FTPHost::FTPHost(const std::string &_serv_url,
                  const std::string &_passwd,
                  const std::string &_start_dir,
                  long _port,
-                 bool _active)
+                 bool _active,
+                 long _listing_timeout_ms)
     : Host(_serv_url, nullptr, UniqueTag), m_Cache(std::make_unique<ftp::Cache>()),
+      m_ListingTimeoutMs(std::max(1L, _listing_timeout_ms)),
       m_Configuration(ComposeConfiguration(_serv_url, _user, _passwd, _start_dir, _port, _active))
 {
     if( const std::expected<void, Error> rc = DoInit(); !rc )
@@ -120,6 +122,9 @@ HostErrorKind FTPHost::ClassifyFTPError(const Error &_error) noexcept
     if( _error.Domain() != ftp::ErrorDomain )
         return HostErrorKind::Other;
     switch( _error.Code() ) {
+        case ftp::Errors::operation_timeout:
+        case ftp::Errors::accept_timeout:
+            return HostErrorKind::TimedOut;
         case ftp::Errors::couldnt_resolve_proxy:
         case ftp::Errors::couldnt_resolve_host:
         case ftp::Errors::couldnt_connect:
@@ -192,6 +197,8 @@ FTPHost::DownloadListing(ftp::CURLInstance *_inst, const char *_path, const VFSC
     _inst->EasySetOpt(CURLOPT_URL, request.c_str());
     _inst->EasySetOpt(CURLOPT_WRITEFUNCTION, CURLWriteDataIntoString);
     _inst->EasySetOpt(CURLOPT_WRITEDATA, &response);
+    _inst->EasySetOpt(CURLOPT_CONNECTTIMEOUT_MS, m_ListingTimeoutMs);
+    _inst->EasySetOpt(CURLOPT_TIMEOUT_MS, m_ListingTimeoutMs);
     _inst->EasySetupProgFunc();
     _inst->prog_func = [=](curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
         if( !_cancel_checker )

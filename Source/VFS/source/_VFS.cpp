@@ -20,6 +20,7 @@
 #include "ArcLARaw/Host.cpp"
 #include "Native/Fetching.cpp"
 #include "Native/ConditionalCopy.cpp"
+#include "Native/CrossVolumeStagingClient.cpp"
 #include "Native/File.cpp"
 #include "Native/Host.cpp"
 #include "Native/SpecialDirectories.cpp"

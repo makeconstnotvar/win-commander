@@ -3,6 +3,8 @@
 
 #include "CommandId.h"
 #include "../Pane/PaneNavigationAvailability.h"
+#include <Operations/OperationId.h>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string>
@@ -63,6 +65,18 @@ struct CommandState {
     CommandCheckState check_state = CommandCheckState::Off;
 };
 
+/**
+ * Exact value target borrowed from an immutable OperationCenter snapshot. It deliberately carries
+ * neither a model reference nor an executor; the command control port repeats all live checks.
+ */
+struct OperationCancelTarget final {
+    ops::OperationId operation_id;
+    uint64_t expected_revision;
+    bool can_cancel;
+
+    bool operator==(const OperationCancelTarget &) const = default;
+};
+
 struct CommandContext {
     CommandInvocationSource source = CommandInvocationSource::Programmatic;
 
@@ -86,6 +100,11 @@ struct CommandContext {
     // execution ports must still validate live controller state immediately before acting.
     std::optional<NavigationUpAvailability> navigation_up_availability;
     std::optional<NavigationRefreshAvailability> navigation_refresh_availability;
+
+    // Value-only operation target produced from one immutable OperationCenter record. It must be
+    // refreshed for every QueryState()/Execute(); command execution still revalidates it through
+    // the sealed coordinator control port.
+    std::optional<OperationCancelTarget> operation_cancel_target;
 
     // Typed borrowed file-item context. The caller keeps the items alive for the duration of the
     // synchronous QueryState()/Execute() call; handlers must not retain this span.

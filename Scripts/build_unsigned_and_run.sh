@@ -1,14 +1,17 @@
 #!/bin/sh
+set -eu
 set -o pipefail
 
-XC="xcodebuild \
-    -project ../Source/WinCommander/WinCommander.xcodeproj \
-    -scheme WinCommander-Unsigned \
-    -configuration Debug"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT="$SCRIPT_DIR/../Source/WinCommander/WinCommander.xcodeproj"
 
-APP_DIR=$($XC -showBuildSettings | grep " BUILT_PRODUCTS_DIR =" | sed -e 's/.*= *//' )
-APP_NAME=$($XC -showBuildSettings | grep " FULL_PRODUCT_NAME =" | sed -e 's/.*= *//' )
-APP_PATH=$APP_DIR/$APP_NAME
+build() {
+    xcodebuild -project "$PROJECT" -scheme WinCommander-Unsigned -configuration Debug "$@"
+}
 
-$XC build
-open -a $APP_PATH
+APP_DIR=$(build -showBuildSettings | sed -n 's/^ *BUILT_PRODUCTS_DIR = //p')
+APP_NAME=$(build -showBuildSettings | sed -n 's/^ *FULL_PRODUCT_NAME = //p')
+APP_PATH="$APP_DIR/$APP_NAME"
+
+build build
+open "$APP_PATH"

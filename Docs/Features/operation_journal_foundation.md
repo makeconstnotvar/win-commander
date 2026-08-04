@@ -54,6 +54,6 @@ Temporary artifacts remain manual evidence until provider-owned bounded staging 
 - Pool: 17 / 219, including preallocated terminal transition, `ReleaseWithoutCompletion`, next-start/removal semantics and fail-closed unknown finalizer decisions.
 - Provider result mapper: 4 / 237; transaction-backed execution product: 9 / 188; reviewed factory: 8 / 225; Job lifecycle: 10 / 608.
 - Production CopyAs policy and app-boundary seam: 10 / 98; the 4 / 70 app-boundary subset proves exact review projection, zero enqueue on blocked/stale/unpersisted/cancelled paths and owning durable failure dispatch before `ReleaseWithoutCompletion` removes the operation.
-- Full Debug `OperationsUT`: 192 / 193 cases and 5,209 / 5,213 assertions in isolated `TMPDIR`; the only failure remains the host-specific NativeCreateCopy set-ID metadata baseline. The current coordinator/control subset passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
+- Historical isolated Debug `OperationsUT` snapshot: 192 / 193 cases and 5,209 / 5,213 assertions; the only failure remains the host-specific NativeCreateCopy set-ID metadata baseline. Current full Debug `OperationsUT` evidence is 197 / 5,295. The current coordinator/control subset passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 - Current M0: 897 / 132,011 in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 / 89,392.

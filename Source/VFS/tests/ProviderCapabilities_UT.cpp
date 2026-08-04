@@ -77,7 +77,7 @@ ConditionalCopyTransaction(ProviderConditionalCopyReviewedClaims _claims,
     auto transaction = ProviderConditionalCopyTransactionTestAccess::Mint(
         *destination,
         ProviderConditionalCopyTransactionTestAccess::MakeAuthority(std::move(_claims)),
-        [_result, &_commit_calls] {
+        [_result, &_commit_calls](const auto &) {
             ++_commit_calls;
             return _result;
         },
@@ -173,7 +173,7 @@ TEST_CASE(PREFIX "keeps conditional Copy authority provider-minted and base host
     const auto invalid = ProviderConditionalCopyTransactionTestAccess::Mint(
         *wrong_provider,
         ProviderConditionalCopyTransactionTestAccess::MakeAuthority(ConditionalCopyClaims(source, destination)),
-        [] { return ConditionalCopyPublishedResult(); },
+        [](const auto &) { return ConditionalCopyPublishedResult(); },
         [] { return ProviderConditionalCopyPublicationState::NotPublished; });
     REQUIRE_FALSE(invalid);
     CHECK(invalid.error() == ProviderConditionalCopyTransactionBeginError::InvalidRequest);
@@ -181,7 +181,7 @@ TEST_CASE(PREFIX "keeps conditional Copy authority provider-minted and base host
     const auto unsealed = ProviderConditionalCopyTransactionTestAccess::Mint(
         *destination,
         ProviderConditionalCopyTransactionTestAccess::MakeUnsealedAuthority(ConditionalCopyClaims(source, destination)),
-        [] { return ConditionalCopyPublishedResult(); },
+        [](const auto &) { return ConditionalCopyPublishedResult(); },
         [] { return ProviderConditionalCopyPublicationState::NotPublished; });
     REQUIRE_FALSE(unsealed);
     CHECK(unsealed.error() == ProviderConditionalCopyTransactionBeginError::InvalidRequest);
@@ -196,7 +196,7 @@ TEST_CASE(PREFIX "rejects structurally inconsistent conditional Copy requests")
         return ProviderConditionalCopyTransactionTestAccess::Mint(
             *destination,
             ProviderConditionalCopyTransactionTestAccess::MakeAuthority(std::move(_claims)),
-            [] { return ConditionalCopyPublishedResult(); },
+            [](const auto &) { return ConditionalCopyPublishedResult(); },
             [] { return ProviderConditionalCopyPublicationState::NotPublished; });
     };
     const auto check_invalid = [&](ProviderConditionalCopyReviewedClaims _claims) {
@@ -370,6 +370,38 @@ TEST_CASE(PREFIX "consumes conditional Copy transactions exactly once and fails 
                ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
                                                    ProviderConditionalCopyCommitFailure::Cancelled}));
         CHECK(commits == 0);
+        CHECK(aborts == 1);
+    }
+
+    SECTION("forwards a late cancellation check to the provider before publication")
+    {
+        int checks = 0;
+        int commits = 0;
+        int aborts = 0;
+        auto transaction_result = ProviderConditionalCopyTransactionTestAccess::Mint(
+            *destination,
+            ProviderConditionalCopyTransactionTestAccess::MakeAuthority(claims),
+            [&](const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) {
+                ++commits;
+                REQUIRE(_cancel_checker);
+                CHECK(_cancel_checker());
+                return ProviderConditionalCopyCommitResult{
+                    .publication = ProviderConditionalCopyPublicationState::NotPublished,
+                    .failure = ProviderConditionalCopyCommitFailure::Cancelled,
+                };
+            },
+            [&] {
+                ++aborts;
+                return ProviderConditionalCopyPublicationState::NotPublished;
+            });
+        REQUIRE(transaction_result);
+        REQUIRE(*transaction_result);
+
+        const auto result = (*transaction_result)->Commit([&] { return ++checks >= 2; });
+        CHECK((result == ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                                             ProviderConditionalCopyCommitFailure::Cancelled}));
+        CHECK(checks == 2);
+        CHECK(commits == 1);
         CHECK(aborts == 1);
     }
 
@@ -737,7 +769,7 @@ TEST_CASE(PREFIX "reports concurrent and moved-from transaction state conservati
         auto transaction_result = ProviderConditionalCopyTransactionTestAccess::Mint(
             *destination,
             ProviderConditionalCopyTransactionTestAccess::MakeAuthority(claims),
-            [&] {
+            [&](const auto &) {
                 auto lock = std::unique_lock{mutex};
                 commit_entered = true;
                 condition.notify_all();
@@ -809,7 +841,7 @@ TEST_CASE(PREFIX "requires provider confirmation before reporting an aborted tra
 
     SECTION("explicit abort throws")
     {
-        auto transaction = mint([] { return ConditionalCopyPublishedResult(); },
+        auto transaction = mint([](const auto &) { return ConditionalCopyPublishedResult(); },
                                 []() -> ProviderConditionalCopyPublicationState { throw 1; });
         CHECK(transaction->Abort() == unknown);
         CHECK(transaction->Abort() == unknown);
@@ -817,7 +849,7 @@ TEST_CASE(PREFIX "requires provider confirmation before reporting an aborted tra
 
     SECTION("cancellation abort reports Published")
     {
-        auto transaction = mint([] { return ConditionalCopyPublishedResult(); },
+        auto transaction = mint([](const auto &) { return ConditionalCopyPublishedResult(); },
                                 [] { return ProviderConditionalCopyPublicationState::Published; });
         CHECK(transaction->Commit([] { return true; }) == unknown);
         CHECK(transaction->Commit() == unknown);
@@ -826,7 +858,7 @@ TEST_CASE(PREFIX "requires provider confirmation before reporting an aborted tra
     SECTION("NotPublished commit cannot outrun an unconfirmed abort")
     {
         auto transaction = mint(
-            [] {
+            [](const auto &) {
                 return ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
                                                            ProviderConditionalCopyCommitFailure::SourceStale,
                                                            ESTALE};
@@ -844,32 +876,45 @@ TEST_CASE(PREFIX "classifies POSIX, FTP, and SFTP errors for planning")
     CHECK(host.ClassifyError(Error{Error::POSIX, EACCES}) == HostErrorKind::PermissionDenied);
     CHECK(host.ClassifyError(Error{Error::POSIX, ENOTSUP}) == HostErrorKind::Unsupported);
     CHECK(host.ClassifyError(Error{Error::POSIX, ECANCELED}) == HostErrorKind::Cancelled);
+    CHECK(host.ClassifyError(Error{Error::POSIX, ETIMEDOUT}) == HostErrorKind::TimedOut);
     CHECK(host.ClassifyError(Error{Error::POSIX, ENETUNREACH}) == HostErrorKind::Unavailable);
     CHECK(host.ClassifyError(Error{Error::POSIX, EIO}) == HostErrorKind::Other);
 
-    using nc::vfs::ftp::Errors;
-    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::couldnt_resolve_proxy}) ==
+    using FTPError = nc::vfs::ftp::Errors;
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, FTPError::couldnt_resolve_proxy}) ==
           HostErrorKind::Unavailable);
-    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::couldnt_resolve_host}) ==
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, FTPError::couldnt_resolve_host}) ==
           HostErrorKind::Unavailable);
-    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::couldnt_connect}) ==
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, FTPError::couldnt_connect}) ==
           HostErrorKind::Unavailable);
-    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, Errors::login_denied}) == HostErrorKind::Other);
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, FTPError::operation_timeout}) ==
+          HostErrorKind::TimedOut);
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, FTPError::accept_timeout}) ==
+          HostErrorKind::TimedOut);
+    CHECK(FTPHost::ClassifyFTPError(Error{nc::vfs::ftp::ErrorDomain, FTPError::login_denied}) ==
+          HostErrorKind::Other);
 
-    using nc::vfs::sftp::ErrorDomain;
-    using nc::vfs::sftp::Errors;
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_no_such_file}) == HostErrorKind::Missing);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_no_such_path}) == HostErrorKind::Missing);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_permission_denied}) ==
+    using SFTPError = nc::vfs::sftp::Errors;
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::fx_no_such_file}) ==
+          HostErrorKind::Missing);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::fx_no_such_path}) ==
+          HostErrorKind::Missing);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::fx_permission_denied}) ==
           HostErrorKind::PermissionDenied);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_op_unsupported}) == HostErrorKind::Unsupported);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_connection_lost}) == HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_send}) == HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_recv}) == HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_disconnect}) == HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::timeout}) == HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::socket_timeout}) == HostErrorKind::Unavailable);
-    CHECK(SFTPHost::ClassifySFTPError(Error{ErrorDomain, Errors::fx_failure}) == HostErrorKind::Other);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::fx_op_unsupported}) ==
+          HostErrorKind::Unsupported);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::fx_connection_lost}) ==
+          HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::socket_send}) ==
+          HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::socket_recv}) ==
+          HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::socket_disconnect}) ==
+          HostErrorKind::Unavailable);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::timeout}) == HostErrorKind::TimedOut);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::socket_timeout}) ==
+          HostErrorKind::TimedOut);
+    CHECK(SFTPHost::ClassifySFTPError(Error{nc::vfs::sftp::ErrorDomain, SFTPError::fx_failure}) == HostErrorKind::Other);
 }
 
 TEST_CASE(PREFIX "keeps observation independent from writability")

@@ -251,8 +251,30 @@ public:
         return true;
     }
 
+    [[nodiscard]] bool Pause()
+    {
+        if( m_RestartRequired || m_PauseRequired )
+            return false;
+        if( std::system(("docker pause " + m_ContainerName + " >/dev/null").c_str()) != 0 )
+            return false;
+        m_PauseRequired = true;
+        return true;
+    }
+
+    [[nodiscard]] bool Unpause()
+    {
+        if( !m_PauseRequired )
+            return true;
+        if( std::system(("docker unpause " + m_ContainerName + " >/dev/null").c_str()) != 0 )
+            return false;
+        m_PauseRequired = false;
+        return true;
+    }
+
     ~ScopedRemoteFixtureRestart()
     {
+        if( m_PauseRequired )
+            (void)std::system(("docker unpause " + m_ContainerName + " >/dev/null").c_str());
         if( m_RestartRequired )
             (void)std::system(("docker start " + m_ContainerName + " >/dev/null").c_str());
     }
@@ -260,6 +282,7 @@ public:
 private:
     std::string m_ContainerName;
     bool m_RestartRequired = false;
+    bool m_PauseRequired = false;
 };
 
 } // namespace
@@ -424,6 +447,11 @@ enum class RemoteRefreshLifecycle : uint8_t {
     UserRefreshWithSoftSuccessor
 };
 
+enum class RemoteEndpointFault : uint8_t {
+    Stopped,
+    Paused
+};
+
 static void VerifyRemoteNavigationAndForcedRefresh(const VFSHostPtr &_controller_host,
                                                    const VFSHostPtr &_shadow_host,
                                                    const std::string_view _parent_directory,
@@ -557,6 +585,9 @@ static void VerifyRemoteEndpointOutageAndReconnect(
     const std::string_view _provider_name,
     const std::string_view _container_name,
     const RemoteRefreshLifecycle _recovery_lifecycle,
+    const RemoteEndpointFault _endpoint_fault,
+    const nc::core::FileManagerErrorCategory _expected_error_category,
+    const std::string_view _expected_user_message_key,
     const std::function<VFSHostPtr()> &_make_readiness_probe,
     const std::function<void(const nc::core::FileManagerError &)> &_verify_outage_error)
 {
@@ -587,7 +618,8 @@ static void VerifyRemoteEndpointOutageAndReconnect(
     const unsigned long initial_generation = fixture.Controller().dataGeneration;
     const size_t outage_event_begin = events.size();
     ScopedRemoteFixtureRestart endpoint{std::string{_container_name}};
-    REQUIRE(endpoint.Stop());
+    const bool fault_started = _endpoint_fault == RemoteEndpointFault::Stopped ? endpoint.Stop() : endpoint.Pause();
+    REQUIRE(fault_started);
 
     REQUIRE([fixture.Controller() submitUserRefresh]);
     REQUIRE(RunMainLoopUntil([&] {
@@ -601,8 +633,8 @@ static void VerifyRemoteEndpointOutageAndReconnect(
     CHECK(events[outage_event_begin + 1].request_id == events[outage_event_begin].request_id);
     const auto &outage = std::get<PaneLifecycleFailed>(events[outage_event_begin + 1].payload).error;
     _verify_outage_error(outage);
-    CHECK(outage.category == nc::core::FileManagerErrorCategory::NetworkError);
-    CHECK(outage.user_message_key == "errors.network");
+    CHECK(outage.category == _expected_error_category);
+    CHECK(outage.user_message_key == _expected_user_message_key);
     CHECK(outage.affected_items == std::vector<std::string>{remote_path});
     REQUIRE(outage.provider_id);
     REQUIRE(_controller_host->Tag());
@@ -610,7 +642,8 @@ static void VerifyRemoteEndpointOutageAndReconnect(
     CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
     CHECK(fixture.Controller().dataGeneration == initial_generation);
 
-    REQUIRE(endpoint.Start());
+    const bool fault_ended = _endpoint_fault == RemoteEndpointFault::Stopped ? endpoint.Start() : endpoint.Unpause();
+    REQUIRE(fault_ended);
     VFSHostPtr readiness_probe;
     REQUIRE(RunMainLoopUntil([&] {
         try {
@@ -711,6 +744,9 @@ TEST_CASE(PREFIX "retains WebDAV content through endpoint outage and reconnects 
         "WebDAV",
         "nc_webdav_alpine",
         RemoteRefreshLifecycle::UserRefreshWithSoftSuccessor,
+        RemoteEndpointFault::Stopped,
+        nc::core::FileManagerErrorCategory::NetworkError,
+        "errors.network",
         [] {
             return std::make_shared<nc::vfs::WebDAVHost>(
                 g_FtpAddress, g_WebDAVUser, g_WebDAVPassword, "webdav", false, g_WebDAVPort);
@@ -735,9 +771,114 @@ TEST_CASE(PREFIX "retains FTP content through endpoint outage and reconnects on 
         "FTP",
         "nc_ftp_alpine",
         RemoteRefreshLifecycle::UserRefreshWithSoftSuccessor,
+        RemoteEndpointFault::Stopped,
+        nc::core::FileManagerErrorCategory::NetworkError,
+        "errors.network",
         [] { return std::make_shared<nc::vfs::FTPHost>(g_FtpAddress, g_FtpUser, g_FtpPassword, "/", g_FtpPort); },
         [&controller_host](const nc::core::FileManagerError &_outage) {
             CHECK(_outage.original_error == nc::Error{nc::vfs::ftp::ErrorDomain, nc::vfs::ftp::Errors::couldnt_connect});
             CHECK(controller_host->ClassifyError(_outage.original_error) == nc::vfs::HostErrorKind::Unavailable);
+        });
+}
+
+TEST_CASE(PREFIX "retains SFTP content through endpoint outage and reconnects on user refresh",
+          "[integration][docker][sftp][fault]")
+{
+    const auto controller_host =
+        std::make_shared<nc::vfs::SFTPHost>(g_FtpAddress, g_SftpUser, g_SftpPassword, "", g_SftpPort);
+    const auto shadow_host =
+        std::make_shared<nc::vfs::SFTPHost>(g_FtpAddress, g_SftpUser, g_SftpPassword, "", g_SftpPort);
+    const std::string home_directory = controller_host->HomeDir();
+    VerifyRemoteEndpointOutageAndReconnect(
+        controller_host,
+        shadow_host,
+        home_directory,
+        "SFTP",
+        "nc_sftp_alpine",
+        RemoteRefreshLifecycle::DirectUserRefresh,
+        RemoteEndpointFault::Stopped,
+        nc::core::FileManagerErrorCategory::NetworkError,
+        "errors.network",
+        [] { return std::make_shared<nc::vfs::SFTPHost>(g_FtpAddress, g_SftpUser, g_SftpPassword, "", g_SftpPort); },
+        [&controller_host](const nc::core::FileManagerError &_outage) {
+            CHECK(_outage.original_error.Domain() == nc::vfs::sftp::ErrorDomain);
+            CHECK(controller_host->ClassifyError(_outage.original_error) == nc::vfs::HostErrorKind::Unavailable);
+        });
+}
+
+TEST_CASE(PREFIX "retains FTP content through a transport timeout and reconnects on user refresh",
+          "[integration][docker][ftp][timeout]")
+{
+    const VFSHostPtr controller_host =
+        std::make_shared<nc::vfs::FTPHost>(g_FtpAddress, g_FtpUser, g_FtpPassword, "/", g_FtpPort, false, 500);
+    const VFSHostPtr shadow_host =
+        std::make_shared<nc::vfs::FTPHost>(g_FtpAddress, g_FtpUser, g_FtpPassword, "/", g_FtpPort);
+    VerifyRemoteEndpointOutageAndReconnect(
+        controller_host,
+        shadow_host,
+        "/",
+        "FTP-Timeout",
+        "nc_ftp_alpine",
+        RemoteRefreshLifecycle::UserRefreshWithSoftSuccessor,
+        RemoteEndpointFault::Paused,
+        nc::core::FileManagerErrorCategory::TimeoutError,
+        "errors.timeout",
+        [] { return std::make_shared<nc::vfs::FTPHost>(g_FtpAddress, g_FtpUser, g_FtpPassword, "/", g_FtpPort); },
+        [&controller_host](const nc::core::FileManagerError &_outage) {
+            CHECK(_outage.original_error ==
+                  nc::Error{nc::vfs::ftp::ErrorDomain, nc::vfs::ftp::Errors::operation_timeout});
+            CHECK(controller_host->ClassifyError(_outage.original_error) == nc::vfs::HostErrorKind::TimedOut);
+        });
+}
+
+TEST_CASE(PREFIX "retains SFTP content through a transport timeout and reconnects on user refresh",
+          "[integration][docker][sftp][timeout]")
+{
+    const auto controller_host =
+        std::make_shared<nc::vfs::SFTPHost>(g_FtpAddress, g_SftpUser, g_SftpPassword, "", g_SftpPort, "", 500);
+    const auto shadow_host =
+        std::make_shared<nc::vfs::SFTPHost>(g_FtpAddress, g_SftpUser, g_SftpPassword, "", g_SftpPort);
+    const std::string home_directory = controller_host->HomeDir();
+    VerifyRemoteEndpointOutageAndReconnect(
+        controller_host,
+        shadow_host,
+        home_directory,
+        "SFTP-Timeout",
+        "nc_sftp_alpine",
+        RemoteRefreshLifecycle::DirectUserRefresh,
+        RemoteEndpointFault::Paused,
+        nc::core::FileManagerErrorCategory::TimeoutError,
+        "errors.timeout",
+        [] { return std::make_shared<nc::vfs::SFTPHost>(g_FtpAddress, g_SftpUser, g_SftpPassword, "", g_SftpPort); },
+        [&controller_host](const nc::core::FileManagerError &_outage) {
+            CHECK(_outage.original_error == nc::Error{nc::vfs::sftp::ErrorDomain, nc::vfs::sftp::Errors::timeout});
+            CHECK(controller_host->ClassifyError(_outage.original_error) == nc::vfs::HostErrorKind::TimedOut);
+        });
+}
+
+TEST_CASE(PREFIX "retains WebDAV content through a transport timeout and reconnects on user refresh",
+          "[integration][docker][webdav][timeout]")
+{
+    const VFSHostPtr controller_host = std::make_shared<nc::vfs::WebDAVHost>(
+        g_FtpAddress, g_WebDAVUser, g_WebDAVPassword, "webdav", false, g_WebDAVPort, 500);
+    const VFSHostPtr shadow_host =
+        std::make_shared<nc::vfs::WebDAVHost>(g_FtpAddress, g_WebDAVUser, g_WebDAVPassword, "webdav", false, g_WebDAVPort);
+    VerifyRemoteEndpointOutageAndReconnect(
+        controller_host,
+        shadow_host,
+        "/",
+        "WebDAV-Timeout",
+        "nc_webdav_alpine",
+        RemoteRefreshLifecycle::UserRefreshWithSoftSuccessor,
+        RemoteEndpointFault::Paused,
+        nc::core::FileManagerErrorCategory::TimeoutError,
+        "errors.timeout",
+        [] {
+            return std::make_shared<nc::vfs::WebDAVHost>(
+                g_FtpAddress, g_WebDAVUser, g_WebDAVPassword, "webdav", false, g_WebDAVPort);
+        },
+        [&controller_host](const nc::core::FileManagerError &_outage) {
+            CHECK(_outage.original_error == nc::Error{nc::Error::POSIX, ETIMEDOUT});
+            CHECK(controller_host->ClassifyError(_outage.original_error) == nc::vfs::HostErrorKind::TimedOut);
         });
 }

@@ -18,7 +18,7 @@ class HostConfiguration;
 class ConnectionsPool
 {
 public:
-    ConnectionsPool(const HostConfiguration &_config);
+    ConnectionsPool(const HostConfiguration &_config, long _blocking_request_timeout_ms);
     ~ConnectionsPool();
 
     struct AR;
@@ -29,6 +29,7 @@ public:
 private:
     std::vector<std::unique_ptr<Connection>> m_Connections;
     const HostConfiguration &m_Config;
+    const long m_BlockingRequestTimeoutMs;
 };
 
 struct ConnectionsPool::AR {

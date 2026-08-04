@@ -23,7 +23,8 @@ public:
             const std::string &_passwd,
             const std::string &_start_dir,
             long _port = 21,
-            bool _active = false);
+            bool _active = false,
+            long _listing_timeout_ms = 30'000);
     FTPHost(const VFSConfiguration &_config); // should be of type VFSNetFTPHostConfiguration
     ~FTPHost() override;
 
@@ -125,6 +126,7 @@ private:
     std::vector<UpdateHandler> m_UpdateHandlers;
     std::mutex m_UpdateHandlersLock;
     unsigned long m_LastUpdateTicket = 1;
+    long m_ListingTimeoutMs = 30'000;
     VFSConfiguration m_Configuration;
 };
 

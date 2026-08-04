@@ -5,7 +5,8 @@
 
 namespace nc::vfs::webdav {
 
-ConnectionsPool::ConnectionsPool(const HostConfiguration &_config) : m_Config(_config)
+ConnectionsPool::ConnectionsPool(const HostConfiguration &_config, const long _blocking_request_timeout_ms)
+    : m_Config(_config), m_BlockingRequestTimeoutMs(_blocking_request_timeout_ms)
 {
 }
 
@@ -14,7 +15,7 @@ ConnectionsPool::~ConnectionsPool() = default;
 ConnectionsPool::AR ConnectionsPool::Get()
 {
     if( m_Connections.empty() ) {
-        return AR{std::make_unique<CURLConnection>(m_Config), *this};
+        return AR{std::make_unique<CURLConnection>(m_Config, m_BlockingRequestTimeoutMs), *this};
     }
     else {
         std::unique_ptr<Connection> c = std::move(m_Connections.back());

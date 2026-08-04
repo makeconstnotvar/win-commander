@@ -58,7 +58,8 @@ enum class ProviderConditionalCopyExpectedKind : uint8_t {
 
 /** Preliminary, read-only provider eligibility for an exact source and destination parent. */
 enum class ProviderConditionalCopyPathSupport : uint8_t {
-    Supported,
+    SameVolumeClone,
+    CrossVolumeStaged,
     Unsupported,
     Unavailable
 };
@@ -188,7 +189,9 @@ class ProviderConditionalCopyTransaction final
 {
 public:
     using CancelChecker = std::function<bool()>;
-    using CommitHandler = std::function<ProviderConditionalCopyCommitResult()>;
+    // The checker is borrowed for this synchronous invocation only.  A provider must sample it before its
+    // publication barrier and must not retain it.
+    using CommitHandler = std::function<ProviderConditionalCopyCommitResult(const CancelChecker &)>;
     using AbortHandler = std::function<ProviderConditionalCopyPublicationState()>;
 
     ProviderConditionalCopyTransaction() = delete;

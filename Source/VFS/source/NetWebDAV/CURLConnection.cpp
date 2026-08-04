@@ -2,6 +2,7 @@
 #include "CURLConnection.h"
 #include "Internal.h"
 #include <Base/StackAllocator.h>
+#include <algorithm>
 #include <cassert>
 
 // CURL is full of macros with C-style casts
@@ -54,8 +55,9 @@ static std::optional<Error> ErrorIfAny(CURLM *_multi)
     return {};
 }
 
-CURLConnection::CURLConnection(const HostConfiguration &_config)
-    : m_EasyHandle(SpawnOrThrow()), m_RequestHeader(nullptr, &curl_slist_free_all)
+CURLConnection::CURLConnection(const HostConfiguration &_config, const long _blocking_request_timeout_ms)
+    : m_EasyHandle(SpawnOrThrow()), m_BlockingRequestTimeoutMs(std::max(1L, _blocking_request_timeout_ms)),
+      m_RequestHeader(nullptr, &curl_slist_free_all)
 {
     const auto auth_methods = CURLAUTH_BASIC | CURLAUTH_DIGEST;
     const auto ua = "Win Commander";
@@ -225,7 +227,9 @@ std::string_view CURLConnection::ResponseHeader()
 
 std::expected<int, Error> CURLConnection::PerformBlockingRequest()
 {
+    curl_easy_setopt(m_EasyHandle, CURLOPT_TIMEOUT_MS, m_BlockingRequestTimeoutMs);
     const auto curl_rc = curl_easy_perform(m_EasyHandle);
+    curl_easy_setopt(m_EasyHandle, CURLOPT_TIMEOUT_MS, 0L);
     if( auto err = CurlRCToError(curl_rc) )
         return std::unexpected(*err);
 

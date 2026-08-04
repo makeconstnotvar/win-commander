@@ -12,6 +12,7 @@ namespace nc::vfs {
 
 namespace native {
 class ConditionalCopyIO;
+class CrossVolumeStagingAuthority;
 }
 
 class NativeHost : public Host
@@ -20,7 +21,8 @@ public:
     NativeHost(nc::utility::NativeFSManager &_native_fs_man, nc::utility::FSEventsFileUpdate &_fsevents_file_update);
     NativeHost(nc::utility::NativeFSManager &_native_fs_man,
                nc::utility::FSEventsFileUpdate &_fsevents_file_update,
-               std::shared_ptr<native::ConditionalCopyIO> _conditional_copy_io);
+               std::shared_ptr<native::ConditionalCopyIO> _conditional_copy_io,
+               std::shared_ptr<native::CrossVolumeStagingAuthority> _cross_volume_staging_authority = {});
 
     static const char *UniqueTag;
     VFSConfiguration Configuration() const override;
@@ -137,6 +139,7 @@ private:
     nc::utility::NativeFSManager &m_NativeFSManager;
     [[maybe_unused]] nc::utility::FSEventsFileUpdate &m_FSEventsFileUpdate;
     std::shared_ptr<native::ConditionalCopyIO> m_ConditionalCopyIO;
+    std::shared_ptr<native::CrossVolumeStagingAuthority> m_CrossVolumeStagingAuthority;
 };
 
 } // namespace nc::vfs

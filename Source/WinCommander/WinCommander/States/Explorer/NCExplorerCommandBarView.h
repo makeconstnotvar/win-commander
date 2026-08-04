@@ -6,8 +6,15 @@
 @class PanelController;
 
 #ifdef __cplusplus
+#include <memory>
+
 namespace nc::core {
+class CommandRegistry;
 struct PaneSnapshot;
+}
+
+namespace nc::ops {
+class OperationCenterCoordinator;
 }
 #endif
 
@@ -20,13 +27,22 @@ struct PaneSnapshot;
  * Back/Forward/Up/Refresh buttons. Share is self-contained, built on NSSharingServicePicker over
  * the panel's currently selected items. Sort/View/More each show a CUI NCCommandPopover: Sort
  * lists the existing sort-mode toggle actions (see ToggleSort.h), View includes the Store-backed
- * hidden-files command, and More remains a minimal overflow placeholder.
+ * hidden-files command, and More also exposes a compact value-only operation control list.
  */
 @interface NCExplorerCommandBarView : NSView
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel;
 
 #ifdef __cplusplus
+/**
+ * Injects the app-owned value-model coordinator and Registry for the compact Operations menu.
+ * The coordinator is weak; each cancel invocation contains only an immutable ID/revision target.
+ */
+- (instancetype)initWithFrame:(NSRect)frameRect
+              panelController:(PanelController *)_panel
+    operationCenterCoordinator:(std::weak_ptr<nc::ops::OperationCenterCoordinator>)_operation_center
+               commandRegistry:(nc::core::CommandRegistry *)_command_registry;
+
 /** Updates Store-backed command presentation state. Must be called on the main queue. */
 - (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;
 #endif

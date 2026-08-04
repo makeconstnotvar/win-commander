@@ -36,7 +36,7 @@ cp -f "${SCRIPTS_DIR}/build_help.tmp/Help.pdf" "${ROOT_DIR}/Source/WinCommander/
 
 XC="xcodebuild \
  -project ${XCODEPROJ} \
- -scheme WinCommander-NonMAS \
+ -scheme WinCommander-Unsigned \
  -configuration Release \
  CODE_SIGNING_ALLOWED=NO \
  CODE_SIGN_IDENTITY= \

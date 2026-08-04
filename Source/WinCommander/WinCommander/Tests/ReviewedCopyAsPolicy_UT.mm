@@ -56,7 +56,7 @@ class ReviewedCopyAsTestHost final : public nc::vfs::Host
 public:
     explicit ReviewedCopyAsTestHost(const bool _native,
                                     const nc::vfs::ProviderConditionalCopyPathSupport _path_support =
-                                        nc::vfs::ProviderConditionalCopyPathSupport::Supported)
+                                        nc::vfs::ProviderConditionalCopyPathSupport::SameVolumeClone)
         : Host("/", nullptr, _native ? "reviewed_copy_as_native" : "reviewed_copy_as_remote"), m_Native(_native),
           m_PathSupport(_path_support)
     {
@@ -236,6 +236,20 @@ TEST_CASE(PREFIX "distinguishes known unsupported storage from unavailable eligi
 
     CHECK(Select(Item(unsupported), "/source/copy.txt", unsupported, options) == Selection::Legacy);
     CHECK(Select(Item(unavailable), "/source/copy.txt", unavailable, options) == Selection::Reject);
+}
+
+TEST_CASE(PREFIX "keeps clone and staged reviewed Copy scopes distinct")
+{
+    using nc::vfs::ProviderConditionalCopyPathSupport;
+    const auto clone =
+        std::make_shared<ReviewedCopyAsTestHost>(true, ProviderConditionalCopyPathSupport::SameVolumeClone);
+    const auto staged =
+        std::make_shared<ReviewedCopyAsTestHost>(true, ProviderConditionalCopyPathSupport::CrossVolumeStaged);
+    CopyingOptions options;
+
+    CHECK(Select(Item(clone), "/source/copy.txt", clone, options) == Selection::Reviewed);
+    CHECK(Select(Item(clone), "/different-volume/copy.txt", clone, options) == Selection::Legacy);
+    CHECK(Select(Item(staged), "/different-volume/copy.txt", staged, options) == Selection::Reviewed);
 }
 
 TEST_CASE(PREFIX "submission gate accounts for every admission ticket")

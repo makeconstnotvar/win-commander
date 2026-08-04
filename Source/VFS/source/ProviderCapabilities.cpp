@@ -330,7 +330,7 @@ ProviderConditionalCopyCommitResult ProviderConditionalCopyTransaction::Commit(
     }
 
     try {
-        auto result = commit();
+        auto result = commit(_cancel_checker);
         if( !ProviderConditionalCopyResultIsValid(result) )
             return finish(ProviderConditionalCopyUnknown());
         if( result.publication == ProviderConditionalCopyPublicationState::NotPublished &&

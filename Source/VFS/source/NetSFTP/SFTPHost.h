@@ -38,7 +38,8 @@ public:
                                           // keyphrase for decrypting private key
              const std::string &_keypath, // full path to private key
              long _port = 22,
-             const std::string &_home = "");
+             const std::string &_home = "",
+             long _transport_timeout_ms = 30'000);
 
     SFTPHost(const VFSConfiguration &_config); // should be of type VFSNetSFTPHostConfiguration
 
@@ -114,9 +115,11 @@ public:
     struct Connection {
         ~Connection();
         [[nodiscard]] bool Alive() const;
+        void Invalidate() noexcept { invalidated = true; }
         LIBSSH2_SFTP *sftp = nullptr;
         LIBSSH2_SESSION *ssh = nullptr;
         int socket = -1;
+        bool invalidated = false;
     };
 
     static Error ErrorForConnection(Connection &_conn);
@@ -156,6 +159,7 @@ private:
     VFSConfiguration m_Config;
     std::string m_HomeDir;
     in_addr_t m_HostAddr = 0;
+    long m_TransportTimeoutMs = 30'000;
     bool m_ReversedSymlinkParameters = false;
     sftp::OSType m_OSType = sftp::OSType::Unknown;
 };

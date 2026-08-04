@@ -272,7 +272,7 @@ TEST_CASE(PREFIX "commits once and publishes exact success before worker complet
     auto presentation = ProviderConditionalCopyOperationUTPresentation();
     auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
         presentation,
-        [probe] {
+        [probe](const auto &) {
             ++probe->commit_calls;
             return ProviderConditionalCopyOperationUTSuccess();
         },
@@ -316,7 +316,7 @@ TEST_CASE(PREFIX "publishes one skipped source report and closes item statistics
     auto presentation = ProviderConditionalCopyOperationUTPresentation();
     auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
         presentation,
-        [probe] {
+        [probe](const auto &) {
             ++probe->commit_calls;
             return ProviderConditionalCopyOperationUTFailure();
         },
@@ -357,7 +357,7 @@ TEST_CASE(PREFIX "cold stop owns cancellation and leaves an exact cached termina
         {
             auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
             auto transaction = ProviderConditionalCopyOperationUTTransaction(
-                [probe] {
+                [probe](const auto &) {
                     ++probe->commit_calls;
                     return ProviderConditionalCopyOperationUTSuccess();
                 },
@@ -401,7 +401,7 @@ TEST_CASE(PREFIX "worker launch failure terminalizes provider authority before S
         {
             auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
             auto transaction = ProviderConditionalCopyOperationUTTransaction(
-                [probe] {
+                [probe](const auto &) {
                     ++probe->commit_calls;
                     return ProviderConditionalCopyOperationUTSuccess();
                 },
@@ -455,7 +455,7 @@ TEST_CASE(PREFIX "linearizes stop and worker commit with either gate winner",
         bool worker_at_gate = false;
         bool release_worker = false;
         auto transaction = ProviderConditionalCopyOperationUTTransaction(
-            [probe] {
+            [probe](const auto &) {
                 ++probe->commit_calls;
                 return ProviderConditionalCopyOperationUTSuccess();
             },
@@ -505,7 +505,7 @@ TEST_CASE(PREFIX "linearizes stop and worker commit with either gate winner",
         bool commit_entered = false;
         bool release_commit = false;
         auto transaction = ProviderConditionalCopyOperationUTTransaction(
-            [&, probe] {
+            [&, probe](const auto &) {
                 ++probe->commit_calls;
                 auto lock = std::unique_lock{mutex};
                 commit_entered = true;
@@ -569,7 +569,7 @@ TEST_CASE(PREFIX "retains and sanitizes the normal cancel checker until worker c
             auto presentation = ProviderConditionalCopyOperationUTPresentation();
             auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
                 presentation,
-                [probe] {
+                [probe](const auto &) {
                     ++probe->commit_calls;
                     return ProviderConditionalCopyOperationUTSuccess();
                 },
@@ -625,7 +625,7 @@ TEST_CASE(PREFIX "accessor owns terminal state without retaining the Operation",
 {
     auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
     auto transaction = ProviderConditionalCopyOperationUTTransaction(
-        [probe] {
+        [probe](const auto &) {
             ++probe->commit_calls;
             return ProviderConditionalCopyOperationUTSuccess();
         },
@@ -660,7 +660,7 @@ TEST_CASE(PREFIX "dropping a cold product aborts provider authority exactly once
     auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
     {
         auto transaction = ProviderConditionalCopyOperationUTTransaction(
-            [probe] {
+            [probe](const auto &) {
                 ++probe->commit_calls;
                 return ProviderConditionalCopyOperationUTSuccess();
             },
@@ -686,7 +686,7 @@ TEST_CASE(PREFIX "maps a pre-consumed aborted transaction as submitted-path inco
 {
     auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
     auto transaction = ProviderConditionalCopyOperationUTTransaction(
-        [probe] {
+        [probe](const auto &) {
             ++probe->commit_calls;
             return ProviderConditionalCopyOperationUTSuccess();
         },
@@ -716,7 +716,7 @@ TEST_CASE(PREFIX "keeps destruction behind the completion callback lifetime",
 {
     auto probe = std::make_shared<ProviderConditionalCopyOperationUTProbe>();
     auto transaction = ProviderConditionalCopyOperationUTTransaction(
-        [probe] {
+        [probe](const auto &) {
             ++probe->commit_calls;
             return ProviderConditionalCopyOperationUTSuccess();
         },
