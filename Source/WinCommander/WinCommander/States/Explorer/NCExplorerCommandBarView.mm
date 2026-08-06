@@ -8,6 +8,7 @@
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/CommandRegistry.h>
 #include <WinCommander/Core/Commands/OperationCancelCommand.h>
+#include <WinCommander/Core/Commands/OperationCenterOpenCommand.h>
 #include <WinCommander/Core/Pane/PaneSnapshot.h>
 #include <WinCommander/States/CommandPresentationAdapter.h>
 #include <CUI/CommandPopover.h>
@@ -17,6 +18,7 @@
 #include <Utility/ObjCpp.h>
 #include <Utility/StringExtras.h>
 #include <VFS/VFS.h>
+#include <chrono>
 #include <optional>
 
 @interface NCExplorerCommandBarView () <NCCommandPopoverDelegate, NSSharingServicePickerDelegate>
@@ -34,6 +36,31 @@
 - (instancetype)initWithContext:(nc::core::CommandContext)_context
 {
     self = [super init];
+    if( self )
+        m_Context = std::move(_context);
+    return self;
+}
+
+- (const nc::core::CommandContext &)context
+{
+    return m_Context;
+}
+
+@end
+
+/** A snapshot-panel Cancel button owns the exact immutable Registry target that created it. */
+@interface NCExplorerOperationCancelSnapshotControl : NSButton
+- (instancetype)initWithContext:(nc::core::CommandContext)_context;
+- (const nc::core::CommandContext &)context;
+@end
+
+@implementation NCExplorerOperationCancelSnapshotControl {
+    nc::core::CommandContext m_Context;
+}
+
+- (instancetype)initWithContext:(nc::core::CommandContext)_context
+{
+    self = [super initWithFrame:NSZeroRect];
     if( self )
         m_Context = std::move(_context);
     return self;
@@ -132,6 +159,65 @@ bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
     return false;
 }
 
+NSString *OperationTimestampTitle(const nc::ops::OperationPlan::TimePoint _time)
+{
+    const auto seconds = std::chrono::duration<double>(_time.time_since_epoch()).count();
+    NSDateFormatter *const formatter = [NSDateFormatter new];
+    formatter.dateStyle = NSDateFormatterMediumStyle;
+    formatter.timeStyle = NSDateFormatterMediumStyle;
+    return [formatter stringFromDate:[NSDate dateWithTimeIntervalSince1970:seconds]];
+}
+
+NSString *OperationSnapshotText(const std::vector<nc::ops::OperationRecord> &_records)
+{
+    if( _records.empty() )
+        return NSLocalizedString(@"explorer.operationCenter.snapshot.empty", "Operation Center snapshot");
+
+    NSMutableString *const text = [NSMutableString new];
+    for( const nc::ops::OperationRecord &record : _records ) {
+        const std::string operation_id = record.operation_id.ToString();
+        [text appendFormat:@"%@ — %@\n",
+                           OperationTypeTitle(record.operation_type),
+                           OperationStateTitle(record.state)];
+        [text appendFormat:@"%@ %@    %@ %@\n",
+                           NSLocalizedString(@"explorer.operationCenter.snapshot.operationId", "Operation Center snapshot"),
+                           StringFromUTF8(operation_id),
+                           NSLocalizedString(@"explorer.operationCenter.snapshot.planId", "Operation Center snapshot"),
+                           StringFromUTF8(record.plan_id.Value())];
+        [text appendFormat:@"%@ %@\n",
+                           NSLocalizedString(@"explorer.operationCenter.snapshot.created", "Operation Center snapshot"),
+                           OperationTimestampTitle(record.created_at)];
+        if( record.started_at )
+            [text appendFormat:@"%@ %@\n",
+                               NSLocalizedString(@"explorer.operationCenter.snapshot.started", "Operation Center snapshot"),
+                               OperationTimestampTitle(*record.started_at)];
+        if( record.finished_at )
+            [text appendFormat:@"%@ %@\n",
+                               NSLocalizedString(@"explorer.operationCenter.snapshot.finished", "Operation Center snapshot"),
+                               OperationTimestampTitle(*record.finished_at)];
+        [text appendString:@"\n"];
+    }
+    return text;
+}
+
+void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandRegistry::ExecutionResult &_result)
+{
+    NSAlert *const alert = [NSAlert new];
+    alert.messageText = NSLocalizedString(@"explorer.operations.cancel.failureTitle", "Explorer operation cancel failure");
+    if( _result.disabled_reason ) {
+        NSLog(@"Operation cancellation rejected: %@", StringFromUTF8(_result.disabled_reason->technical_message));
+        alert.informativeText = UserFacingDisabledReason(*_result.disabled_reason);
+    }
+    else {
+        alert.informativeText = NSLocalizedString(@"explorer.operations.cancel.failureFallback",
+                                                  "Explorer operation cancel failure");
+    }
+    if( _window )
+        [alert beginSheetModalForWindow:_window completionHandler:nil];
+    else
+        [alert runModal];
+}
+
 } // namespace
 
 @implementation NCExplorerCommandBarView {
@@ -149,6 +235,10 @@ bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
     std::optional<nc::explorer::PanePresentationModel> m_PanePresentation;
     std::weak_ptr<nc::ops::OperationCenterCoordinator> m_OperationCenter;
     nc::core::CommandRegistry *m_CommandRegistry;
+    NSPanel *m_OperationCenterSnapshotPanel;
+    NSTextView *m_OperationCenterSnapshotText;
+    NSStackView *m_OperationCenterSnapshotControls;
+    std::vector<nc::ops::OperationRecord> m_OperationCenterSnapshotRecords;
 }
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
@@ -198,6 +288,7 @@ bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
 - (void)dealloc
 {
     [m_PasteboardMonitor invalidate];
+    [m_OperationCenterSnapshotPanel orderOut:nil];
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
@@ -700,7 +791,7 @@ bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
     [menu addItem:operations_header];
 
     const auto operation_center = m_OperationCenter.lock();
-    if( !operation_center || !m_CommandRegistry ) {
+    if( !m_CommandRegistry ) {
         NSMenuItem *const unavailable =
             [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.unavailable", "Explorer operation menu")
                                         action:nil
@@ -711,55 +802,85 @@ bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
         [menu addItem:unavailable];
     }
     else {
-        const auto records = operation_center->Model().Snapshot();
-        bool has_active_record = false;
-        for( const nc::ops::OperationRecord &record : records ) {
-            if( IsActiveOperationState(record.state) ) {
-                has_active_record = true;
-                break;
-            }
+        nc::core::CommandContext open_context;
+        open_context.source = nc::core::CommandInvocationSource::Menu;
+        open_context.native_target = (__bridge void *)self;
+        NSMenuItem *const open_center =
+            [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.openCenter", "Explorer operation menu")
+                                        action:nil
+                                 keyEquivalent:@""];
+        const auto open_state = m_CommandRegistry->QueryState(
+            nc::core::CommandId{nc::core::command_ids::OperationCenterOpen}, open_context);
+        const nc::core::CommandState open_presentation = nc::core::OperationCenterOpenPresentationState(open_state);
+        const bool open_enabled = nc::presentation::CommandPresentationAdapter::Apply(open_presentation, open_center);
+        open_center.enabled = open_enabled;
+        if( open_enabled ) {
+            open_center.target = self;
+            open_center.action = @selector(performOperationCenterOpen:);
         }
-        if( !has_active_record ) {
-            NSMenuItem *const empty =
-                [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.noActive", "Explorer operation menu")
+        [menu addItem:open_center];
+
+        if( !operation_center ) {
+            NSMenuItem *const unavailable =
+                [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.unavailable", "Explorer operation menu")
                                             action:nil
                                      keyEquivalent:@""];
-            empty.enabled = false;
-            [menu addItem:empty];
+            unavailable.enabled = false;
+            unavailable.toolTip = NSLocalizedString(@"explorer.operations.unavailable.detail", "Explorer operation menu");
+            unavailable.accessibilityHelp = unavailable.toolTip;
+            [menu addItem:unavailable];
         }
         else {
+            const auto records = operation_center->Model().Snapshot();
+            bool has_active_record = false;
             for( const nc::ops::OperationRecord &record : records ) {
-                if( !IsActiveOperationState(record.state) )
-                    continue;
-                const std::string operation_id = record.operation_id.ToString();
-                NSMenuItem *const record_item = [[NSMenuItem alloc]
-                    initWithTitle:[NSString stringWithFormat:@"%@ — %@ (%@)",
-                                                              OperationTypeTitle(record.operation_type),
-                                                              OperationStateTitle(record.state),
-                                                              StringFromUTF8(operation_id)]
-                         action:nil
-                  keyEquivalent:@""];
-                record_item.enabled = false;
-                [menu addItem:record_item];
-
-                const nc::core::CommandContext context = nc::core::OperationCancelContextFromRecord(
-                    record, nc::core::CommandInvocationSource::Menu);
-                NSMenuItem *const cancel = [[NSMenuItem alloc]
-                    initWithTitle:[NSString stringWithFormat:NSLocalizedString(@"explorer.operations.cancel", "Explorer operation menu"),
-                                                              StringFromUTF8(operation_id)]
-                         action:nil
-                  keyEquivalent:@""];
-                const auto state = m_CommandRegistry->QueryState(
-                    nc::core::CommandId{nc::core::command_ids::OperationCancel}, context);
-                const nc::core::CommandState presentation_state = nc::core::OperationCancelPresentationState(state);
-                const bool enabled = nc::presentation::CommandPresentationAdapter::Apply(presentation_state, cancel);
-                cancel.enabled = enabled;
-                if( enabled ) {
-                    cancel.target = self;
-                    cancel.action = @selector(performOperationCancel:);
-                    cancel.representedObject = [[NCExplorerOperationCancelMenuTarget alloc] initWithContext:context];
+                if( IsActiveOperationState(record.state) ) {
+                    has_active_record = true;
+                    break;
                 }
-                [menu addItem:cancel];
+            }
+            if( !has_active_record ) {
+                NSMenuItem *const empty =
+                    [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"explorer.operations.noActive", "Explorer operation menu")
+                                                action:nil
+                                         keyEquivalent:@""];
+                empty.enabled = false;
+                [menu addItem:empty];
+            }
+            else {
+                for( const nc::ops::OperationRecord &record : records ) {
+                    if( !IsActiveOperationState(record.state) )
+                        continue;
+                    const std::string operation_id = record.operation_id.ToString();
+                    NSMenuItem *const record_item = [[NSMenuItem alloc]
+                        initWithTitle:[NSString stringWithFormat:@"%@ — %@ (%@)",
+                                                                  OperationTypeTitle(record.operation_type),
+                                                                  OperationStateTitle(record.state),
+                                                                  StringFromUTF8(operation_id)]
+                             action:nil
+                      keyEquivalent:@""];
+                    record_item.enabled = false;
+                    [menu addItem:record_item];
+
+                    const nc::core::CommandContext context = nc::core::OperationCancelContextFromRecord(
+                        record, nc::core::CommandInvocationSource::Menu);
+                    NSMenuItem *const cancel = [[NSMenuItem alloc]
+                        initWithTitle:[NSString stringWithFormat:NSLocalizedString(@"explorer.operations.cancel", "Explorer operation menu"),
+                                                                  StringFromUTF8(operation_id)]
+                             action:nil
+                      keyEquivalent:@""];
+                    const auto state = m_CommandRegistry->QueryState(
+                        nc::core::CommandId{nc::core::command_ids::OperationCancel}, context);
+                    const nc::core::CommandState presentation_state = nc::core::OperationCancelPresentationState(state);
+                    const bool enabled = nc::presentation::CommandPresentationAdapter::Apply(presentation_state, cancel);
+                    cancel.enabled = enabled;
+                    if( enabled ) {
+                        cancel.target = self;
+                        cancel.action = @selector(performOperationCancel:);
+                        cancel.representedObject = [[NCExplorerOperationCancelMenuTarget alloc] initWithContext:context];
+                    }
+                    [menu addItem:cancel];
+                }
             }
         }
     }
@@ -802,20 +923,177 @@ bool IsActiveOperationState(const nc::ops::OperationRecordState _state) noexcept
     if( result.status == nc::core::CommandRegistry::ExecutionStatus::Executed )
         return;
 
+    PresentOperationCancelFailure(m_Panel.window, result);
+}
+
+- (void)performOperationCenterOpen:(id) [[maybe_unused]] _sender
+{
+    if( !m_CommandRegistry ) {
+        NSBeep();
+        return;
+    }
+
+    nc::core::CommandContext context;
+    context.source = nc::core::CommandInvocationSource::Menu;
+    context.native_target = (__bridge void *)self;
+    const auto result = m_CommandRegistry->Execute(
+        nc::core::CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    if( result.status == nc::core::CommandRegistry::ExecutionStatus::Executed )
+        return;
+
     NSAlert *const alert = [NSAlert new];
-    alert.messageText = NSLocalizedString(@"explorer.operations.cancel.failureTitle", "Explorer operation cancel failure");
+    alert.messageText = NSLocalizedString(@"explorer.operations.openCenter.failureTitle", "Explorer operation menu");
     if( result.disabled_reason ) {
-        NSLog(@"Operation cancellation rejected: %@", StringFromUTF8(result.disabled_reason->technical_message));
+        NSLog(@"Operation Center snapshot presentation rejected: %@", StringFromUTF8(result.disabled_reason->technical_message));
         alert.informativeText = UserFacingDisabledReason(*result.disabled_reason);
     }
     else {
-        alert.informativeText = NSLocalizedString(@"explorer.operations.cancel.failureFallback",
-                                                  "Explorer operation cancel failure");
+        alert.informativeText = NSLocalizedString(@"explorer.operations.openCenter.failureFallback", "Explorer operation menu");
     }
     if( m_Panel.window )
         [alert beginSheetModalForWindow:m_Panel.window completionHandler:nil];
     else
         [alert runModal];
+}
+
+- (void)ensureOperationCenterSnapshotPanel
+{
+    if( m_OperationCenterSnapshotPanel )
+        return;
+
+    NSPanel *const panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 680.0, 460.0)
+                                                       styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+                                                                  NSWindowStyleMaskResizable | NSWindowStyleMaskUtilityWindow)
+                                                         backing:NSBackingStoreBuffered
+                                                           defer:NO];
+    panel.title = NSLocalizedString(@"explorer.operationCenter.snapshot.title", "Operation Center snapshot");
+    panel.minSize = NSMakeSize(480.0, 260.0);
+
+    NSView *const content = [NSView new];
+    panel.contentView = content;
+
+    NSTextField *const caption = [NSTextField labelWithString:NSLocalizedString(
+        @"explorer.operationCenter.snapshot.caption", "Operation Center snapshot")];
+    caption.translatesAutoresizingMaskIntoConstraints = false;
+    caption.textColor = NSColor.secondaryLabelColor;
+
+    NSScrollView *const scroll = [NSScrollView new];
+    scroll.translatesAutoresizingMaskIntoConstraints = false;
+    scroll.hasVerticalScroller = true;
+    scroll.borderType = NSBezelBorder;
+
+    NSTextView *const text = [NSTextView new];
+    text.editable = false;
+    text.selectable = true;
+    text.drawsBackground = false;
+    text.font = [NSFont monospacedSystemFontOfSize:12.0 weight:NSFontWeightRegular];
+    text.textContainerInset = NSMakeSize(12.0, 12.0);
+    text.minSize = NSMakeSize(0.0, 0.0);
+    text.maxSize = NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX);
+    text.verticallyResizable = true;
+    text.horizontallyResizable = false;
+    text.textContainer.widthTracksTextView = true;
+    scroll.documentView = text;
+
+    NSStackView *const controls = [NSStackView stackViewWithViews:@[]];
+    controls.translatesAutoresizingMaskIntoConstraints = false;
+    controls.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+    controls.alignment = NSLayoutAttributeLeading;
+    controls.spacing = 8.0;
+
+    [content addSubview:caption];
+    [content addSubview:scroll];
+    [content addSubview:controls];
+    [NSLayoutConstraint activateConstraints:@[
+        [caption.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16.0],
+        [caption.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16.0],
+        [caption.topAnchor constraintEqualToAnchor:content.topAnchor constant:14.0],
+        [scroll.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16.0],
+        [scroll.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16.0],
+        [scroll.topAnchor constraintEqualToAnchor:caption.bottomAnchor constant:10.0],
+        [controls.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16.0],
+        [controls.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16.0],
+        [controls.topAnchor constraintEqualToAnchor:scroll.bottomAnchor constant:10.0],
+        [controls.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-14.0]
+    ]];
+
+    m_OperationCenterSnapshotPanel = panel;
+    m_OperationCenterSnapshotText = text;
+    m_OperationCenterSnapshotControls = controls;
+}
+
+- (BOOL)presentOperationCenterSnapshot:(std::vector<nc::ops::OperationRecord>)_snapshot
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    if( !m_CommandRegistry )
+        return NO;
+
+    [self ensureOperationCenterSnapshotPanel];
+    m_OperationCenterSnapshotRecords = std::move(_snapshot);
+    m_OperationCenterSnapshotText.string = OperationSnapshotText(m_OperationCenterSnapshotRecords);
+
+    for( NSView *const view in m_OperationCenterSnapshotControls.arrangedSubviews ) {
+        [m_OperationCenterSnapshotControls removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+
+    bool has_cancel_control = false;
+    for( std::size_t index = 0; index < m_OperationCenterSnapshotRecords.size(); ++index ) {
+        const nc::ops::OperationRecord &record = m_OperationCenterSnapshotRecords[index];
+        if( !record.controls.can_cancel )
+            continue;
+
+        const nc::core::CommandContext context = nc::core::OperationCancelContextFromRecord(
+            record, nc::core::CommandInvocationSource::Toolbar);
+        const std::string operation_id = record.operation_id.ToString();
+        NCExplorerOperationCancelSnapshotControl *const cancel =
+            [[NCExplorerOperationCancelSnapshotControl alloc] initWithContext:context];
+        cancel.title = [NSString stringWithFormat:NSLocalizedString(@"explorer.operations.cancel", "Explorer operation menu"),
+                                                   StringFromUTF8(operation_id)];
+        cancel.bezelStyle = NSBezelStyleRounded;
+        const auto state = m_CommandRegistry->QueryState(
+            nc::core::CommandId{nc::core::command_ids::OperationCancel}, context);
+        const nc::core::CommandState presentation_state = nc::core::OperationCancelPresentationState(state);
+        nc::presentation::CommandPresentationAdapter::Apply(presentation_state, cancel);
+        const bool enabled = cancel.enabled;
+        cancel.enabled = enabled;
+        if( enabled ) {
+            cancel.target = self;
+            cancel.action = @selector(performOperationCenterSnapshotCancel:);
+        }
+        [m_OperationCenterSnapshotControls addArrangedSubview:cancel];
+        has_cancel_control = true;
+    }
+    m_OperationCenterSnapshotControls.hidden = !has_cancel_control;
+
+    [m_OperationCenterSnapshotPanel center];
+    [m_OperationCenterSnapshotPanel makeKeyAndOrderFront:self];
+    return YES;
+}
+
+- (void)performOperationCenterSnapshotCancel:(id)_sender
+{
+    NCExplorerOperationCancelSnapshotControl *const button =
+        nc::objc_cast<NCExplorerOperationCancelSnapshotControl>(_sender);
+    if( !button || !m_CommandRegistry ) {
+        NSBeep();
+        return;
+    }
+
+    const auto result = m_CommandRegistry->Execute(
+        nc::core::CommandId{nc::core::command_ids::OperationCancel}, [button context]);
+    if( result.status == nc::core::CommandRegistry::ExecutionStatus::Executed ) {
+        NSString *const in_progress = NSLocalizedString(
+            @"commands.operation.cancel.disabled.inProgress", "Operation Center snapshot Cancel accepted");
+        button.enabled = false;
+        button.target = nil;
+        button.action = nil;
+        button.toolTip = in_progress;
+        button.accessibilityHelp = in_progress;
+        return;
+    }
+
+    PresentOperationCancelFailure(m_OperationCenterSnapshotPanel, result);
 }
 
 #pragma mark - Popover plumbing

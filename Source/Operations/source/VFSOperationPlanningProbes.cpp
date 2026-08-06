@@ -220,6 +220,8 @@ ReviewedVFSOperationPreflight::Review(VFSBoundOperationPreflight _preflight,
     const auto *accepted = std::get_if<AcceptedOperationPlan>(&_preflight.Result());
     if( !accepted )
         return std::unexpected(VFSOperationPreflightReviewError::Blocked);
+    if( accepted->Plan().Type() != OperationPlanType::Copy )
+        return std::unexpected(VFSOperationPreflightReviewError::UnsupportedPlanType);
     const bool destructive_authority_required =
         accepted->Report().requires_confirmation ||
         accepted->Plan().ConflictPolicy()->Decision() == OperationPlanConflictDecision::Replace;
@@ -301,6 +303,7 @@ VFSOperationPlanningProbes::ProbeProviderImpl(const OperationPlanningPath &_path
         .can_replace_file = capabilities.can_delete_permanently,
         .can_replace_directory = capabilities.can_delete_permanently,
         .can_copy_symlink_to = capabilities.can_create_symlink,
+        .can_rename = capabilities.can_rename,
     };
 }
 
@@ -404,6 +407,9 @@ VFSOperationPlanningProbes::ProbeAccessImpl(const OperationPlanningPath &_path,
             break;
         case OperationPlanningRequiredAccess::Write:
             provider_grants_access = capabilities.can_create_file && capabilities.can_create_folder;
+            break;
+        case OperationPlanningRequiredAccess::Rename:
+            provider_grants_access = capabilities.can_rename;
             break;
         case OperationPlanningRequiredAccess::ReplaceFile:
         case OperationPlanningRequiredAccess::ReplaceDirectory:

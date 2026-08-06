@@ -846,6 +846,194 @@ TEST_CASE("OperationJournal: atomic finalization preserves receipts across retry
     }
 }
 
+TEST_CASE("OperationJournal: batch durable terminal evidence is canonical and atomic",
+          "[operation-journal][batch-durable-terminal]")
+{
+    SECTION("a canonical complete vector finalizes and round-trips")
+    {
+        OperationJournalUTDirectory directory;
+        const std::vector expected{OperationJournalUTSuccess(0),
+                                   OperationJournalUTSkipped(1),
+                                   OperationJournalUTSuccess(2)};
+        {
+            auto journal = OperationJournal::Open(directory.path);
+            REQUIRE(journal);
+            auto admission = journal->Admit(OperationJournalUTPlan("batch-completed", 3));
+            REQUIRE(admission);
+            auto run = journal->TransitionToRunning(std::move(*admission));
+            REQUIRE(run);
+
+            REQUIRE(journal->Finalize(std::move(*run), expected, OperationJournalState::Completed));
+            const auto snapshot = journal->Snapshot();
+            REQUIRE(snapshot.size() == 1);
+            CHECK(snapshot[0].state == OperationJournalState::Completed);
+            CHECK(snapshot[0].item_results == expected);
+        }
+
+        const auto reopened = OperationJournal::Open(directory.path);
+        REQUIRE(reopened);
+        const auto snapshot = reopened->Snapshot();
+        REQUIRE(snapshot.size() == 1);
+        CHECK(snapshot[0].state == OperationJournalState::Completed);
+        CHECK(snapshot[0].item_results == expected);
+    }
+
+    SECTION("rejects invalid terminal evidence without consuming the receipt")
+    {
+        const auto exercise = [](const std::vector<OperationJournalItemResult> &rejected_evidence,
+                                 const OperationJournalState rejected_state,
+                                 const OperationJournalErrorCode expected_error) {
+            OperationJournalUTDirectory directory;
+            auto journal = OperationJournal::Open(directory.path);
+            REQUIRE(journal);
+            auto admission = journal->Admit(OperationJournalUTPlan("batch-rejected", 3));
+            REQUIRE(admission);
+            auto run = journal->TransitionToRunning(std::move(*admission));
+            REQUIRE(run);
+            const auto persisted_running = OperationJournalUTReadFile(directory);
+
+            const auto rejected = journal->Finalize(std::move(*run), rejected_evidence, rejected_state);
+            REQUIRE_FALSE(rejected);
+            CHECK(rejected.error().code == expected_error);
+            const auto running = journal->Snapshot();
+            REQUIRE(running.size() == 1);
+            CHECK(running[0].state == OperationJournalState::Running);
+            CHECK(running[0].item_results.empty());
+            CHECK(OperationJournalUTReadFile(directory) == persisted_running);
+
+            const std::vector complete{OperationJournalUTSuccess(0),
+                                       OperationJournalUTSkipped(1),
+                                       OperationJournalUTSuccess(2)};
+            REQUIRE(journal->Finalize(std::move(*run), complete, OperationJournalState::Completed));
+        };
+
+        SECTION("out of order")
+        {
+            exercise({OperationJournalUTSuccess(1), OperationJournalUTSkipped(0), OperationJournalUTSuccess(2)},
+                     OperationJournalState::Completed,
+                     OperationJournalErrorCode::InvalidItemResult);
+        }
+        SECTION("duplicate")
+        {
+            exercise({OperationJournalUTSuccess(0), OperationJournalUTSkipped(0), OperationJournalUTSuccess(2)},
+                     OperationJournalState::Completed,
+                     OperationJournalErrorCode::InvalidItemResult);
+        }
+        SECTION("invalid source index")
+        {
+            exercise({OperationJournalUTSuccess(0), OperationJournalUTSkipped(1), OperationJournalUTSuccess(3)},
+                     OperationJournalState::Completed,
+                     OperationJournalErrorCode::InvalidItemResult);
+        }
+        SECTION("incomplete completion")
+        {
+            exercise({OperationJournalUTSuccess(0), OperationJournalUTSkipped(1)},
+                     OperationJournalState::Completed,
+                     OperationJournalErrorCode::InvalidTransition);
+        }
+        SECTION("failed state without failed item")
+        {
+            exercise({OperationJournalUTSuccess(0), OperationJournalUTSkipped(1), OperationJournalUTSuccess(2)},
+                     OperationJournalState::Failed,
+                     OperationJournalErrorCode::InvalidTransition);
+        }
+        SECTION("completed state with failed item")
+        {
+            exercise({OperationJournalUTFailure(0), OperationJournalUTSkipped(1), OperationJournalUTSuccess(2)},
+                     OperationJournalState::Completed,
+                     OperationJournalErrorCode::InvalidTransition);
+        }
+    }
+
+    SECTION("bulk finalization does not merge test-only incremental evidence")
+    {
+        OperationJournalUTDirectory directory;
+        auto journal = OperationJournal::Open(directory.path);
+        REQUIRE(journal);
+        auto admission = journal->Admit(OperationJournalUTPlan("batch-no-merge", 3));
+        REQUIRE(admission);
+        auto run = journal->TransitionToRunning(std::move(*admission));
+        REQUIRE(run);
+        REQUIRE(OperationJournalTesting::RecordItemResult(*journal, "batch-no-merge", OperationJournalUTSuccess(0)));
+
+        const std::vector remaining{OperationJournalUTSkipped(1), OperationJournalUTSuccess(2)};
+        const auto rejected = journal->Finalize(std::move(*run), remaining, OperationJournalState::Completed);
+        REQUIRE_FALSE(rejected);
+        CHECK(rejected.error().code == OperationJournalErrorCode::InvalidTransition);
+        REQUIRE(OperationJournalTesting::RecordItemResult(*journal, "batch-no-merge", OperationJournalUTSkipped(1)));
+        REQUIRE(OperationJournalTesting::RecordItemResult(*journal, "batch-no-merge", OperationJournalUTSuccess(2)));
+        REQUIRE(OperationJournalTesting::Transition(*journal, "batch-no-merge", OperationJournalState::Completed));
+    }
+
+    SECTION("failed and cancelled may durably finalize with empty evidence")
+    {
+        const auto finalize_empty = [](std::string_view plan_id, const OperationJournalState terminal_state) {
+            OperationJournalUTDirectory directory;
+            auto journal = OperationJournal::Open(directory.path);
+            REQUIRE(journal);
+            auto admission = journal->Admit(OperationJournalUTPlan(std::string{plan_id}, 3));
+            REQUIRE(admission);
+            auto run = journal->TransitionToRunning(std::move(*admission));
+            REQUIRE(run);
+
+            const std::vector<OperationJournalItemResult> empty;
+            REQUIRE(journal->Finalize(std::move(*run), empty, terminal_state));
+            const auto snapshot = journal->Snapshot();
+            REQUIRE(snapshot.size() == 1);
+            CHECK(snapshot[0].state == terminal_state);
+            CHECK(snapshot[0].item_results.empty());
+        };
+
+        finalize_empty("batch-failed-empty", OperationJournalState::Failed);
+        finalize_empty("batch-cancelled-empty", OperationJournalState::Cancelled);
+    }
+
+    SECTION("pre-rename persist failure keeps the vector evidence and receipt retryable")
+    {
+        OperationJournalUTDirectory directory;
+        auto syscalls = OperationJournalTesting::DefaultSyscalls();
+        auto journal = OperationJournalUTOpen(directory, syscalls);
+        REQUIRE(journal);
+        auto admission = journal->Admit(OperationJournalUTPlan("batch-retry", 3));
+        REQUIRE(admission);
+        auto run = journal->TransitionToRunning(std::move(*admission));
+        REQUIRE(run);
+        const auto persisted_running = OperationJournalUTReadFile(directory);
+        const std::vector evidence{OperationJournalUTSuccess(0),
+                                   OperationJournalUTSkipped(1),
+                                   OperationJournalUTSuccess(2)};
+
+        const auto real_open_at = syscalls->open_at;
+        bool fail_once = true;
+        syscalls->open_at = [real_open_at, &fail_once](int _directory,
+                                                       const char *_path,
+                                                       int _flags,
+                                                       mode_t _mode) {
+            if( fail_once && std::string_view{_path}.starts_with(".operation-journal-v1.json.tmp.") ) {
+                fail_once = false;
+                errno = EACCES;
+                return -1;
+            }
+            return real_open_at(_directory, _path, _flags, _mode);
+        };
+
+        const auto failed = journal->Finalize(std::move(*run), evidence, OperationJournalState::Completed);
+        REQUIRE_FALSE(failed);
+        CHECK(failed.error().code == OperationJournalErrorCode::TemporaryCreateFailed);
+        const auto running = journal->Snapshot();
+        REQUIRE(running.size() == 1);
+        CHECK(running[0].state == OperationJournalState::Running);
+        CHECK(running[0].item_results.empty());
+        CHECK(OperationJournalUTReadFile(directory) == persisted_running);
+
+        REQUIRE(journal->Finalize(std::move(*run), evidence, OperationJournalState::Completed));
+        const auto completed = journal->Snapshot();
+        REQUIRE(completed.size() == 1);
+        CHECK(completed[0].state == OperationJournalState::Completed);
+        CHECK(completed[0].item_results == evidence);
+    }
+}
+
 TEST_CASE("OperationJournal: requires an absolute private journal parent", "[operation-journal]")
 {
     const auto relative = OperationJournal::Open("relative/journal");

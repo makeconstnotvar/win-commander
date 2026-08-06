@@ -454,8 +454,24 @@ bool OperationJournalValidItemResult(const OperationPlan &_plan, const Operation
     return false;
 }
 
+bool OperationJournalValidOrderedItemResults(const OperationPlan &_plan,
+                                             const std::span<const OperationJournalItemResult> _results)
+{
+    std::optional<size_t> previous_item_index;
+    for( const auto &result : _results ) {
+        if( !OperationJournalValidItemResult(_plan, result) ||
+            (previous_item_index && *previous_item_index >= result.item_index) )
+            return false;
+        previous_item_index = result.item_index;
+    }
+    return true;
+}
+
 bool OperationJournalValidEntryLifecycle(const OperationJournalEntry &_entry)
 {
+    if( !OperationJournalValidOrderedItemResults(_entry.plan, _entry.item_results) )
+        return false;
+
     const auto complete = _entry.item_results.size() == _entry.plan.Sources().size();
     const auto has_status = [&](OperationJournalItemStatus _status) {
         return std::ranges::any_of(_entry.item_results,
@@ -1502,7 +1518,7 @@ OperationJournal::FinalizeAdmission(OperationJournalAdmissionReceipt &&_receipt,
 
 std::expected<void, OperationJournalError>
 OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
-                           OperationJournalItemResult _result,
+                           const std::span<const OperationJournalItemResult> _results,
                            OperationJournalState _terminal_state)
 {
     std::lock_guard lock{m_Impl->mutex};
@@ -1524,19 +1540,17 @@ OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
     if( entry == candidate.end() || entry->state != OperationJournalState::Running ||
         entry->operation_id != _receipt.m_OperationId || entry->plan != _receipt.m_Plan )
         return OperationJournalFailure(OperationJournalErrorCode::InvalidRunReceipt);
-    if( !OperationJournalValidItemResult(entry->plan, _result) ||
-        std::ranges::any_of(entry->item_results,
-                            [&](const auto &existing) { return existing.item_index == _result.item_index; }) )
+    if( !entry->item_results.empty() )
+        return OperationJournalFailure(OperationJournalErrorCode::InvalidTransition);
+    if( !OperationJournalValidOrderedItemResults(entry->plan, _results) )
         return OperationJournalFailure(OperationJournalErrorCode::InvalidItemResult);
     size_t total_results = 0;
     for( const auto &value : candidate )
         total_results += value.item_results.size();
-    if( total_results >= MaxItemResults )
+    if( _results.size() > MaxItemResults - total_results )
         return OperationJournalFailure(OperationJournalErrorCode::ResourceLimitExceeded);
 
-    const auto insertion = std::ranges::lower_bound(
-        entry->item_results, _result.item_index, {}, &OperationJournalItemResult::item_index);
-    entry->item_results.insert(insertion, _result);
+    entry->item_results.assign(_results.begin(), _results.end());
     entry->state = _terminal_state;
     entry->updated_at = m_Impl->clock();
     if( !OperationJournalValidEntryLifecycle(*entry) )
@@ -1556,6 +1570,23 @@ OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
     m_Impl->entries = std::move(candidate);
     _receipt.m_Consumed = true;
     return {};
+}
+
+std::expected<void, OperationJournalError>
+OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
+                           const std::vector<OperationJournalItemResult> &_results,
+                           const OperationJournalState _terminal_state)
+{
+    return Finalize(std::move(_receipt), std::span<const OperationJournalItemResult>{_results}, _terminal_state);
+}
+
+std::expected<void, OperationJournalError>
+OperationJournal::Finalize(OperationJournalRunReceipt &&_receipt,
+                           OperationJournalItemResult _result,
+                           const OperationJournalState _terminal_state)
+{
+    const std::array results{std::move(_result)};
+    return Finalize(std::move(_receipt), std::span<const OperationJournalItemResult>{results}, _terminal_state);
 }
 
 std::expected<void, OperationJournalError>

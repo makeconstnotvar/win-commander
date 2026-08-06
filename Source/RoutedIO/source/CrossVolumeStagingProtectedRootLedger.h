@@ -10,8 +10,15 @@
 #include <mutex>
 #include <optional>
 #include <string_view>
+#include <utility>
 
 namespace nc::routedio::cross_volume_staging::helper {
+
+class SourceSnapshotWriter;
+class DestinationStageWriter;
+class StagingRootAuthority;
+class StagingPublicationBarrier;
+class StagingPublicationLifecycle;
 
 /** A helper-owned identifier.  It never crosses the V1 XPC boundary. */
 struct ArtifactID final {
@@ -39,6 +46,8 @@ public:
         InvalidRoot,
         RootBusy,
         RootRegistryFull,
+        ForkedProcess,
+        RootLockFailed,
         InvalidHeader,
         InvalidRole,
         CapacityExceeded,
@@ -79,8 +88,12 @@ public:
     public:
         Reservation(const Reservation &) = delete;
         Reservation &operator=(const Reservation &) = delete;
-        Reservation(Reservation &&) noexcept = default;
-        Reservation &operator=(Reservation &&) noexcept = default;
+        Reservation(Reservation &&_other) noexcept
+            : m_Header{_other.m_Header}, m_Role{_other.m_Role}, m_ID{_other.m_ID},
+              m_Valid{std::exchange(_other.m_Valid, false)}
+        {
+        }
+        Reservation &operator=(Reservation &&) = delete;
         ~Reservation() noexcept = default;
 
         [[nodiscard]] const Header &Correlation() const noexcept { return m_Header; }
@@ -96,8 +109,11 @@ public:
         Header m_Header;
         ArtifactRole m_Role;
         ArtifactID m_ID;
+        bool m_Valid{true};
 
         friend class ProtectedRootLedger;
+        friend class SourceSnapshotWriter;
+        friend class DestinationStageWriter;
     };
 
     [[nodiscard]] static std::expected<ProtectedRootLedger, Error> Open(int _borrowed_root_fd) noexcept;
@@ -111,9 +127,10 @@ public:
     [[nodiscard]] std::expected<Reservation, Error> Reserve(const Header &_header, ArtifactRole _role) noexcept;
 
     /**
-     * Creates exactly one empty root-private `0600` artifact from a live reservation, durably seals it and appends a
-     * separate sealed companion manifest.  The reservation remains occupied until a later explicitly authorized
-     * cleanup authority exists.  Every interrupted or failed state stays retained for read-only reconciliation.
+     * Consumes one live DestinationStage reservation to create exactly one empty root-private `0600` artifact,
+     * durably seals it and appends a separate sealed companion manifest.  The reservation remains occupied until a
+     * later explicitly authorized cleanup authority exists.  Every interrupted or failed state stays retained for
+     * read-only reconciliation.
      */
     [[nodiscard]] std::expected<void, Error> MaterializeEmptyAndSeal(Reservation &&_reservation) noexcept;
 
@@ -129,9 +146,14 @@ public:
     [[nodiscard]] size_t ActiveReservationCount() const noexcept;
 
 private:
-    ProtectedRootLedger(int _root_fd, uint64_t _device, uint64_t _inode, bool _registered_root) noexcept;
+    ProtectedRootLedger(int _root_fd,
+                        uint64_t _device,
+                        uint64_t _inode,
+                        bool _registered_root,
+                        int _owner_pid) noexcept;
 
     [[nodiscard]] bool HasValidRootUnlocked() const noexcept;
+    [[nodiscard]] bool MatchesRootIdentity(uint64_t _device, uint64_t _inode) const noexcept;
     [[nodiscard]] size_t ActiveReservationCountUnlocked() const noexcept;
 
     struct ActiveReservation final {
@@ -142,10 +164,19 @@ private:
 
     mutable std::mutex m_Mutex;
     int m_RootFD{-1};
+    /** The exact protected root FD itself retains the advisory flock for this ledger lifetime. */
     uint64_t m_RootDevice{0};
     uint64_t m_RootInode{0};
     bool m_RegisteredRoot{false};
+    /** A forked child inherits flock references, but never inherits authority to use this ledger. */
+    int m_OwnerPID{-1};
     std::array<std::optional<ActiveReservation>, kMaximumReservations> m_ActiveReservations;
+
+    friend class SourceSnapshotWriter;
+    friend class DestinationStageWriter;
+    friend class StagingRootAuthority;
+    friend class StagingPublicationBarrier;
+    friend class StagingPublicationLifecycle;
 };
 
 } // namespace nc::routedio::cross_volume_staging::helper

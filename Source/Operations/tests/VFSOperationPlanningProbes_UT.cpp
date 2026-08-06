@@ -174,7 +174,8 @@ WriteHost(bool _case_sensitive = true, bool _native = false, std::string _namesp
     return std::make_shared<PlanningHost>(
         nc::vfs::HostFeatures::Read | nc::vfs::HostFeatures::CreateFile |
             nc::vfs::HostFeatures::CreateDirectory | nc::vfs::HostFeatures::Unlink |
-            nc::vfs::HostFeatures::RemoveDirectory | nc::vfs::HostFeatures::CreateSymlink,
+            nc::vfs::HostFeatures::RemoveDirectory | nc::vfs::HostFeatures::CreateSymlink |
+            nc::vfs::HostFeatures::Rename,
         true,
         _case_sensitive,
         _native,
@@ -203,6 +204,23 @@ OperationPlan CopyDirectoryPlan()
             "destination-instance", "/dst", OperationPlanDestinationKind::Directory},
         .conflict_policy = OperationPlanConflictPolicy{
             OperationPlanConflictDecision::Ask, OperationPlanConflictScope::AllItems},
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    };
+    auto plan = OperationPlan::Create(std::move(input));
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+OperationPlan MoveFilePlan()
+{
+    OperationPlanInput input{
+        .plan_id = "move-file",
+        .type = OperationPlanType::Move,
+        .sources = {{"local", "/src/a.txt"}},
+        .destination =
+            OperationPlanDestinationInput{"local", "/dst/moved.txt", OperationPlanDestinationKind::ExactItem},
+        .conflict_policy =
+            OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
         .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
     };
     auto plan = OperationPlan::Create(std::move(input));
@@ -276,12 +294,14 @@ TEST_CASE(PREFIX "projects VFS capabilities and path identity conservatively",
     REQUIRE(source_evidence);
     CHECK(source_evidence->can_copy_from);
     CHECK_FALSE(source_evidence->can_copy_to);
+    CHECK_FALSE(source_evidence->can_rename);
     CHECK(source_evidence->path_identity == OperationPlanningPathIdentitySemantics::ASCIICaseSensitive);
 
     const auto destination_evidence = probes.ProbeProvider({"destination", "/dst"});
     REQUIRE(destination_evidence);
     CHECK(destination_evidence->can_copy_from);
     CHECK(destination_evidence->can_copy_to);
+    CHECK(destination_evidence->can_rename);
     CHECK(destination_evidence->path_identity ==
           OperationPlanningPathIdentitySemantics::ASCIICaseInsensitive);
 
@@ -444,8 +464,43 @@ TEST_CASE(PREFIX "maps item, access, cancellation, and space evidence", "[vfs-op
     CHECK(remote_estimate.error() == OperationPlanningProbeError::Unsupported);
 }
 
-TEST_CASE(PREFIX "emits complete native object identity and version evidence",
-          "[vfs-operation-planning-probes]")
+TEST_CASE(PREFIX "maps rename access independently from creation access", "[vfs-operation-planning-probes]")
+{
+    const auto rename_only =
+        std::make_shared<PlanningHost>(nc::vfs::HostFeatures::Read | nc::vfs::HostFeatures::Rename, true, true, false);
+    auto probes = MakeProbes({{"rename-only", rename_only}},
+                             [](const OperationPlanningPath &,
+                                OperationPlanningRequiredAccess,
+                                nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+                                 return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+                             });
+
+    CHECK(probes.ProbeAccess({"rename-only", "/parent"}, OperationPlanningRequiredAccess::Rename) ==
+          OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted});
+    CHECK(probes.ProbeAccess({"rename-only", "/parent"}, OperationPlanningRequiredAccess::Write) ==
+          OperationPlanningAccessEvidence{OperationPlanningAccessState::Denied});
+}
+
+TEST_CASE(PREFIX "does not issue a generic review token for an accepted Move", "[vfs-operation-planning-probes]")
+{
+    const auto local = WriteHost(true, true);
+    local->stats.emplace("/src", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/dst", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/src/a.txt", Stat(S_IFREG | 0644, 10));
+    auto probes = MakeProbes({{"local", local}},
+                             [](const OperationPlanningPath &,
+                                OperationPlanningRequiredAccess,
+                                nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+                                 return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+                             });
+
+    const auto reviewed = ReviewedVFSOperationPreflight::Review(probes.Preflight(MoveFilePlan()),
+                                                                VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE_FALSE(reviewed);
+    CHECK(reviewed.error() == VFSOperationPreflightReviewError::UnsupportedPlanType);
+}
+
+TEST_CASE(PREFIX "emits complete native object identity and version evidence", "[vfs-operation-planning-probes]")
 {
     SECTION("real native host")
     {

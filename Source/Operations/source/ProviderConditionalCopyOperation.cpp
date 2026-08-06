@@ -24,6 +24,34 @@ public:
         return std::unexpected(CopyOperationTerminalResultError::Pending);
     }
 
+    [[nodiscard]] std::expected<CopyOperationTerminalEvidence, CopyOperationTerminalResultError>
+    ReadEvidence() const
+    {
+        auto item_result = Read();
+        if( !item_result )
+            return std::unexpected(item_result.error());
+
+        std::optional<OperationJournalState> state;
+        switch( item_result->status ) {
+            case OperationJournalItemStatus::Succeeded:
+            case OperationJournalItemStatus::Skipped:
+                state = OperationJournalState::Completed;
+                break;
+            case OperationJournalItemStatus::Failed:
+                state = OperationJournalState::Failed;
+                break;
+            case OperationJournalItemStatus::Cancelled:
+                state = OperationJournalState::Cancelled;
+                break;
+        }
+        if( !state )
+            return std::unexpected(CopyOperationTerminalResultError::Inconsistent);
+        return CopyOperationTerminalEvidence{
+            .state = *state,
+            .item_results = {std::move(*item_result)},
+        };
+    }
+
     [[nodiscard]] bool Publish(const vfs::ProviderConditionalCopyCommitResult &_provider_result,
                                ProviderConditionalCopyJournalContext _journal_context) noexcept
     {
@@ -279,8 +307,9 @@ ProviderConditionalCopyOperationFactory::CreateForTesting(
             ProviderConditionalCopyOperationSanitizeCancelChecker(std::move(_cancel_checker)),
             terminal_state,
             std::move(_hooks));
-        auto accessor = [terminal_state = std::move(terminal_state)] { return terminal_state->Read(); };
-        return CopyOperationExecutionProduct{std::move(operation), std::move(accessor)};
+        auto terminal_evidence =
+            [terminal_state = std::move(terminal_state)] { return terminal_state->ReadEvidence(); };
+        return CopyOperationExecutionProduct{std::move(operation), std::move(terminal_evidence)};
     } catch( ... ) {
         return std::unexpected(ProviderConditionalCopyOperationConstructionError::AllocationFailed);
     }
@@ -310,6 +339,12 @@ CopyOperationExecutionProduct::TerminalItemResultAccessor &
 ProviderConditionalCopyOperationTesting::TerminalItemResult(CopyOperationExecutionProduct &_product) noexcept
 {
     return _product.m_TerminalItemResult;
+}
+
+CopyOperationExecutionProduct::TerminalEvidenceAccessor &
+ProviderConditionalCopyOperationTesting::TerminalEvidence(CopyOperationExecutionProduct &_product) noexcept
+{
+    return _product.m_TerminalEvidence;
 }
 
 } // namespace nc::ops

@@ -2,7 +2,7 @@
 
 ## Status
 
-`CopyOperationOrchestrator` is the implemented and unit-tested production composition boundary for one-item reviewed Copy lifecycle orchestration. Its public constructor uses the private reviewed-factory execution-product authority; the injected factory constructor is test-only. Restricted cold-operation submission hooks and exact durable terminal delivery are implemented. Bounded `CopyAs::Perform` is its first application caller.
+`CopyOperationOrchestrator` is the implemented and unit-tested production composition boundary for one-item reviewed Copy lifecycle orchestration. Its public constructor uses the private reviewed-factory execution-product authority; the injected factory constructor is test-only. Restricted cold-operation submission hooks and exact durable terminal delivery are implemented. Terminal evidence is retained as an immutable vector internally, while production factory, orchestrator, coordinator and `CopyAs` admission remain one-item. Bounded `CopyAs::Perform` is its first application caller.
 
 This foundation implements the lifecycle ordering required by the canonical specification: intent is durably admitted before execution construction, execution enters `Pool` only after the journal reaches Running, and terminal evidence is durably finalized before the operation is released from the pool lifecycle.
 
@@ -13,8 +13,8 @@ For a structurally valid single-item Copy plan, public compatibility `Submit` du
 1. requests a transaction-owning execution product through the private `ReviewedOperationFactory` path;
 2. converts cancellation or construction rejection before Running into a durable terminal journal record;
 3. transitions the admitted entry to Running before enqueue;
-4. enqueues the operation with a terminal finalizer that reads the typed item result;
-5. persists the item result and terminal state before allowing `Pool` to release the operation;
+4. enqueues the operation with a terminal finalizer that reads the typed terminal-evidence snapshot;
+5. persists that snapshot and terminal state before allowing `Pool` to release the operation;
 6. retains operations whose result is unavailable, inconsistent, or cannot be persisted, allowing finalization to be retried;
 7. transfers the same preallocated exact run-receipt slot from pre-enqueue custody to the Pool finalizer only after accepted enqueue;
 8. installs validated lifecycle observations and the item-status callback while the product is cold, before Running and Pool admission;
@@ -28,13 +28,13 @@ The public lifecycle hook surface accepts only Start, Pause, Resume, Stop and Ti
 
 ## Run-receipt custody and recovery
 
-The orchestrator reserves a bounded custodian slot for the exact immutable plan, originating journal storage identity and terminal accessor before the Running transition. The returned run receipt is armed into that existing slot without allocation. Cancellation, enqueue exceptions and enqueue rejection record immutable terminal evidence in the slot before finalization.
+The orchestrator reserves a bounded custodian slot for the exact immutable plan, originating journal storage identity and terminal-evidence accessor before the Running transition. The returned run receipt is armed into that existing slot without allocation. Cancellation, enqueue exceptions and enqueue rejection record immutable terminal evidence in the slot before finalization.
 
 A pre-rename persistence fault returns `RetryRequired`; `Retry(plan_id)` can invoke only `OperationJournal::Finalize` with the retained exact receipt and cached evidence. Post-rename uncertainty returns `ReconcileRequired`, releases the poisoned journal and live receipt, and requires an independently reopened journal whose parent directory has the exact original device/inode identity. `Reconcile` is read-only and confirms either the exact terminal snapshot or startup-produced `Interrupted`; it never writes a terminal state or re-enqueues work.
 
 Accepted operations keep the slot in `PoolOwned`, where external retry/reconcile calls return `Busy`. A post-rename finalization fault moves that same slot to `ReconcileRequired` while the operation remains in `Pool::Finalizing`. `Reconcile` reports `pool_release_required` when the exact operation is still retained. The separate `ReleaseReconciled(plan_id)` handshake invokes `Pool::RetryFinalization` for that exact operation and removes custody only after the Pool callback latches the matching release. Concurrent release attempts report `InProgress` or remain retained; an expired Pool can release only the already reconciled slot. Terminal evidence, once acquired, is never resampled after a journal rejection.
 
-The terminal observer receives an owning `CopyOperationDurableTerminalOutcome`: exact plan ID, journal terminal state, optional exact item result and the `Finalized`, `ReconciledTerminal` or `ReconciledInterrupted` confirmation. Delivery is synchronous on whichever Submit, Pool-finalizer, retry or recovery caller establishes the terminal fact. UI consumers copy or move the owning outcome to their executor. The slot serializes delivery and consumes the observer before invocation, so retry, reconciliation and concurrent release cannot deliver it twice; observer exceptions are contained.
+The terminal observer receives an owning `CopyOperationDurableTerminalOutcome`: exact plan ID, journal terminal state, exact ordered terminal-evidence vector and the `Finalized`, `ReconciledTerminal` or `ReconciledInterrupted` confirmation. `SingleItemResult()` is a compatibility projection only when that vector has exactly one item. Delivery is synchronous on whichever Submit, Pool-finalizer, retry or recovery caller establishes the terminal fact. UI consumers copy or move the owning outcome to their executor. The slot serializes delivery and consumes the observer before invocation, so retry, reconciliation and concurrent release cannot deliver it twice; observer exceptions are contained.
 
 `Pool` preallocates the accepted operation's terminal-finalization wrapper and the capacity required to transfer it into `Finalizing`. Durable `Completed` releases use the normal completion route. Failed, cancelled and reconciled `Interrupted` outcomes use `ReleaseWithoutCompletion`: the operation is removed and pending work can start, while the generic success callback remains suppressed.
 
@@ -55,9 +55,13 @@ The Native provider owns a bounded same-host internal-APFS transaction with priv
 
 The application supplies an exact bound-plan review, process-owned recovery coordinator, process-owned `OperationCenterCoordinator`, window submission gate and UI dispatch of item status plus owning durable outcomes for one create-only regular Native item through `CopyAs::Perform`. The coordinator owns the exact receipt handoff, preallocates and registers exact live residency before Pool admission, observes `Queued → Running` and durable terminal reduction before forwarding application hooks, and preserves the full typed orchestrator error for UI recovery presentation. The app-boundary seam proves zero enqueue for blocked, stale, unpersisted and cancelled intent, exact review projection and durable dispatch before `ReleaseWithoutCompletion` removes the operation. An opt-in physical-volume fixture is implemented; its physical execution/power-loss evidence and cross-volume bounded staging remain later gates.
 
+The test-only custodian entry point can exercise exact multi-item terminal evidence only after an exact Running receipt exists. No production path reaches it: batch reviewed plans remain rejected before execution-product construction, journal admission through the production orchestrator, coordinator publication, or `CopyAs` submission. This tests durable terminal-evidence custody, not production batch Copy execution.
+
 ## Verification snapshot
 
 Current recorded Debug evidence for the tree containing this foundation:
+
+- Current-worktree vector terminal-evidence coverage passes `[batch-durable-terminal]` at 6 Debug cases / 251 assertions; fresh Release ASAN and UBSAN each pass the same filter without diagnostics. It covers empty cancellation, three-item retry, exact post-rename reconciliation/release and production batch zero-admission gates.
 
 - focused Debug journal: 33 / 752; focused Debug coordinator/orchestrator/control integration: 28 / 999, including production construction at 3 / 138, receipt-aware no-re-admission, `Queued` before Pool addition, private pre-enqueue failure, Start/durable-terminal reduction, exact cancellation and reentrant cancellation rejection;
 - focused Debug Pool: 17 / 219;
@@ -70,7 +74,7 @@ At the previous foundation snapshot, full `OperationsUT` passed 170 / 4,748 in D
 
 ## Next development slice
 
-Run the physical-volume protocol for the bounded `CopyAs::Perform` consumer. Cross-volume support requires a separate provider-owned staging authority.
+Close the focused vector-evidence gate, then extend reviewed-factory/orchestrator/coordinator/`CopyAs` batch authority as a separately reviewed execution slice. The physical-volume protocol for the bounded one-item `CopyAs::Perform` consumer and a separate provider-owned cross-volume staging authority remain independent gates.
 
 ## Related documents
 

@@ -11,6 +11,7 @@
 #include <expected>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -287,7 +288,25 @@ public:
     [[nodiscard]] std::expected<void, OperationJournalError>
     FinalizeAdmission(OperationJournalAdmissionReceipt &&_receipt, OperationJournalState _terminal_state);
 
-    /** Atomically persists one item result and its matching terminal state. */
+    /**
+     * Atomically persists one complete canonical terminal evidence snapshot and its matching terminal state.
+     *
+     * The supplied results must be strictly ordered by source index. Completed requires one valid result for every
+     * source; Failed and Cancelled may carry an empty snapshot. This authority finalizes only a previously
+     * evidence-empty running entry.
+     */
+    [[nodiscard]] std::expected<void, OperationJournalError>
+    Finalize(OperationJournalRunReceipt &&_receipt,
+             std::span<const OperationJournalItemResult> _results,
+             OperationJournalState _terminal_state);
+
+    /** Convenience overload for an owning terminal evidence snapshot. */
+    [[nodiscard]] std::expected<void, OperationJournalError>
+    Finalize(OperationJournalRunReceipt &&_receipt,
+             const std::vector<OperationJournalItemResult> &_results,
+             OperationJournalState _terminal_state);
+
+    /** Compatibility wrapper for a one-item terminal evidence snapshot. */
     [[nodiscard]] std::expected<void, OperationJournalError>
     Finalize(OperationJournalRunReceipt &&_receipt,
              OperationJournalItemResult _result,

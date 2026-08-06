@@ -17,6 +17,7 @@
 namespace nc::core {
 
 class CopyOperationRecoveryCoordinatorTesting;
+class CopyOperationRecoveryDeferredHistoryProjection;
 
 enum class CopyOperationRecoveryServiceStep : uint8_t {
     None,
@@ -57,7 +58,12 @@ enum class CopyOperationRecoveryHistoryRefreshStatus : uint8_t {
     CoordinatorUnavailable,
     JournalUnavailable,
     Refreshed,
-    Deferred
+    /** The exact cold projection is busy; one explicit projection-only retry is available. */
+    Deferred,
+    /** A non-busy projection error is terminal for this recovery pass. */
+    ProjectionFailed,
+    /** The one explicit projection-only retry was used or found the center still busy. */
+    RetryExhausted
 };
 
 /**
@@ -68,6 +74,14 @@ struct CopyOperationRecoveryHistoryRefreshResult final {
     CopyOperationRecoveryServiceResult recovery;
     CopyOperationRecoveryHistoryRefreshStatus history_refresh{CopyOperationRecoveryHistoryRefreshStatus::NotRequired};
     std::optional<nc::ops::OperationCenterCoordinatorError> history_refresh_error;
+
+    /**
+     * Opaque single-use projection-only retry state. It is minted only after confirmed custody recovery and an
+     * exact ColdHistoryBusy result. The state contains no journal, executor, Pool, callback or coordinator.
+     */
+    std::shared_ptr<CopyOperationRecoveryDeferredHistoryProjection> deferred_history_projection;
+
+    [[nodiscard]] bool HasDeferredHistoryProjection() const noexcept;
 };
 
 /**
@@ -137,5 +151,15 @@ private:
 ServiceCopyRecoveryAndRefreshHistory(const std::shared_ptr<CopyOperationRecoveryCoordinator> &_recovery_coordinator,
                                      const std::shared_ptr<nc::ops::OperationCenterCoordinator> &_operation_center,
                                      std::string_view _plan_id) noexcept;
+
+/**
+ * Consumes the one deferred cold-history projection state from a confirmed recovery result. This performs only a
+ * fresh current-journal identity check and `RefreshColdHistory`; it never invokes custody retry, reopen,
+ * reconciliation or Pool release.
+ */
+[[nodiscard]] CopyOperationRecoveryHistoryRefreshResult
+RetryDeferredHistoryProjection(const std::shared_ptr<CopyOperationRecoveryCoordinator> &_recovery_coordinator,
+                               const std::shared_ptr<nc::ops::OperationCenterCoordinator> &_operation_center,
+                               const CopyOperationRecoveryHistoryRefreshResult &_prior) noexcept;
 
 } // namespace nc::core

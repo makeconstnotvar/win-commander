@@ -1,6 +1,6 @@
 # Feature: structural `OperationPlan` foundation
 
-> Status: structural intent, Copy preflight/review, durable codec/journal, anchored Native Copy capsule, typed outcome mapping and bounded `CopyAs` consumer implemented
+> Status: structural intent, Copy preflight/review, narrow Move intent preflight, durable codec/journal, anchored Native Copy capsule, typed outcome mapping and bounded `CopyAs` consumer implemented
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` section 14.1
 > Execution tracker: M3 in `Docs/Development-Plan.md`, R5 in `Docs/refactor_plan.md`
 
@@ -8,7 +8,7 @@
 
 `nc::ops::OperationPlan` is the owning immutable value for a structurally valid filesystem-mutation intent. The foundation establishes one exact vocabulary for Copy, Move, Rename, Trash, and Permanent Delete before provider-dependent preflight or execution begins.
 
-The canonical UI-visible Operation Plan in the ideal specification is the composed review model: this structural intent plus the preflight report and its provider, access, conflict, estimate, space, warning, blocker, and confirmation evidence. The C++ `OperationPlan` deliberately represents the structural portion of that canonical model; `AcceptedOperationPlan` and `BlockedOperationPlan` provide the current Copy preflight projection.
+The canonical UI-visible Operation Plan in the ideal specification is the composed review model: this structural intent plus the preflight report and its provider, access, conflict, estimate, space, warning, blocker, and confirmation evidence. The C++ `OperationPlan` deliberately represents the structural portion of that canonical model; `AcceptedOperationPlan` and `BlockedOperationPlan` provide the current Copy and narrow Move preflight projections.
 
 Creation is pure and deterministic. Callers provide every identity and the creation timestamp; the plan performs no filesystem, provider, clock, UI, persistence, or queue access.
 
@@ -39,7 +39,7 @@ The public value stores its own strings and source collection. It has no default
 - Rename requires one source, an exact-item destination on the same provider, and a conflict policy.
 - Trash and Permanent Delete have no destination or conflict policy.
 
-The conflict policy records requested structural intent. Collision discovery, provider support, policy applicability to a concrete item type, generated names, destructive confirmation, and the final resolved action belong to preflight. The companion copy planner now resolves the supported Copy subset into an owning review-ready report.
+The conflict policy records requested structural intent. Collision discovery, provider support, policy applicability to a concrete item type, generated names, destructive confirmation, and the final resolved action belong to preflight. The companion planner resolves the supported Copy subset into an owning review-ready report and the narrower Move subset into an intent-only report.
 
 ## Intrinsic effects
 
@@ -57,7 +57,7 @@ Requested conflict policy does not alter these intrinsic effects. Resolved overw
 
 ## Architectural boundary
 
-The structural value ends after construction and validation. The separate [`OperationPlanner`](copy_preflight_planner_foundation.md) adds Copy-only provider, item, destination, access, conflict, estimate, space, warning, and blocker evidence. [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foundation.md) supplies the production provider bindings and probes; `ReviewedVFSOperationPreflight` records explicit approval.
+The structural value ends after construction and validation. The separate [`OperationPlanner`](copy_preflight_planner_foundation.md) adds Copy provider, item, destination, access, conflict, estimate, space, warning, and blocker evidence plus narrow same-provider Move parent-rename evidence. [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foundation.md) supplies the production provider bindings and probes; `ReviewedVFSOperationPreflight` records explicit approval for Copy and rejects Move before authority issuance.
 
 `OperationPlanCodec` provides strict schema-v1 serialization for the structural intent, and `OperationJournal` provides durable admission, lifecycle snapshots, item results, terminal state, and restart classification. These layers preserve the authority boundary: serialization, persistence, review, and queue admission are distinct capabilities.
 
@@ -68,6 +68,8 @@ The Native clone-only provider transaction includes a strict internal-writable-A
 ## Verified coverage
 
 The focused `OperationPlan` suite passed 8 cases / 113 assertions. It covers value ownership and construction traits, all five operation types, exact identity/path validation, duplicate-source identity, destination kind/cardinality/provider rules, conflict-policy presence and enum validation, injected timestamp, and intrinsic effects.
+
+Final Move-preflight verification (2026-08-06): focused Debug planner passes 5 / 69, VFS rename mapping 1 / 4, review rejection 1 / 5 and application access checking 4 / 65. Full Debug `OperationsUT` records 203 / 204 and 5,379 / 5,383 with only the NativeCreateCopy set-ID metadata host baseline; full Debug `WinCommanderUT` records 330 / 334 and 5,317 / 5,321 with four headless pasteboard host baselines. This does not change the structural-plan test result or grant Move execution authority.
 
 Current Debug evidence for the operation pipeline:
 
@@ -98,4 +100,6 @@ The implemented copy-first pure [`OperationPlanner`](copy_preflight_planner_foun
 
 The production [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foundation.md) adapter creates a bound preflight that retains the exact immutable provider bindings used for its evidence. [`ReviewedVFSOperationPreflight`](reviewed_copy_factory_foundation.md) records explicit approval and issues one private-sealed provider authority. `OperationJournal` issues exact admission/run receipts, and the production `CopyOperationOrchestrator` privately consumes the reviewed factory's transaction-owning execution product while preserving durable queue, terminal, reconcile, and Pool-release ordering.
 
-The app-boundary proof for the bounded `CopyAs::Perform` consumer is complete: its production seam covers zero enqueue for blocked, stale, unpersisted and cancelled intent, exact review projection, and durable UI dispatch before non-success Pool release. The next vertical slice runs the physical-volume/power-loss protocol; cross-volume staging and non-Copy preflight remain later sequences.
+The narrow Move extension accepts only one regular file to an absent exact-item destination on the same provider with `Ask/ThisItem`, exact path identity and both parent rename permissions. Its report carries `RuntimeRevalidationRequired`, but review returns `UnsupportedPlanType`; the existing Move path remains legacy `Copying(docopy = false)` until a separate factory/execution slice.
+
+The app-boundary proof for the bounded `CopyAs::Perform` consumer is complete: its production seam covers zero enqueue for blocked, stale, unpersisted and cancelled intent, exact review projection, and durable UI dispatch before non-success Pool release. The next vertical slice runs the physical-volume/power-loss protocol; cross-volume staging, Move review/factory/execution and the remaining non-Copy preflight remain later sequences.

@@ -78,8 +78,14 @@ enum class CopyOperationDurableTerminalConfirmation : uint8_t {
 struct CopyOperationDurableTerminalOutcome final {
     std::string plan_id;
     OperationJournalState state;
-    std::optional<OperationJournalItemResult> item_result;
+    std::vector<OperationJournalItemResult> item_results;
     CopyOperationDurableTerminalConfirmation confirmation;
+
+    /** Compatibility projection for consumers that can present exactly one source item. */
+    [[nodiscard]] const OperationJournalItemResult *SingleItemResult() const noexcept
+    {
+        return item_results.size() == 1 ? &item_results.front() : nullptr;
+    }
 
     bool operator==(const CopyOperationDurableTerminalOutcome &) const = default;
 };
@@ -187,12 +193,13 @@ private:
         std::shared_ptr<Slot> m_Slot;
         friend class CopyOperationRunReceiptCustodian;
         friend class CopyOperationOrchestrator;
+        friend class CopyOperationRunReceiptCustodianTesting;
     };
 
     [[nodiscard]] std::expected<Reservation, CopyOperationRunReceiptCustodianError>
     Reserve(OperationPlan _plan,
             std::shared_ptr<OperationJournal> _journal,
-            CopyOperationExecutionProduct::TerminalItemResultAccessor _accessor,
+            CopyOperationExecutionProduct::TerminalEvidenceAccessor _accessor,
             std::function<void(const CopyOperationDurableTerminalOutcome &)> _terminal_observer);
     [[nodiscard]] bool Arm(Reservation &_reservation, OperationJournalRunReceipt &&_receipt) noexcept;
     void Release(Reservation &_reservation) noexcept;

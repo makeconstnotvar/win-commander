@@ -3,6 +3,7 @@
 
 #include <Security/SecRandom.h>
 #include <algorithm>
+#include <unistd.h>
 #include <utility>
 
 namespace nc::routedio::cross_volume_staging::helper {
@@ -21,16 +22,65 @@ std::expected<LeaseToken, LeaseStore::Error> GenerateLeaseToken() noexcept
 
 } // namespace
 
-LeaseStore::TerminalLease::TerminalLease(OwnerID _owner,
+LeaseStore::LeaseStore() noexcept : m_CreatorPID{static_cast<int>(::getpid())}
+{
+}
+
+bool LeaseStore::IsCreatedByCurrentProcess() const noexcept
+{
+    return m_CreatorPID == static_cast<int>(::getpid());
+}
+
+LeaseStore::TerminalLease::TerminalLease(const int _creator_pid,
+                                         OwnerID _owner,
                                          BeginRequest _request,
                                          xpc_codec::OwnedBeginDescriptors _descriptors,
-                                         Lease _lease) noexcept
-    : m_Owner{_owner}, m_Request{std::move(_request)}, m_Descriptors{std::move(_descriptors)}, m_Lease{std::move(_lease)}
+                                         Lease _lease,
+                                         const TerminalDisposition _disposition) noexcept
+    : m_CreatorPID{_creator_pid}, m_Owner{_owner}, m_Request{std::move(_request)},
+      m_Descriptors{std::move(_descriptors)}, m_Lease{std::move(_lease)}, m_Disposition{_disposition}
 {
+}
+
+LeaseStore::TerminalLease::TerminalLease(TerminalLease &&_other) noexcept
+    : m_CreatorPID{_other.m_CreatorPID}, m_Owner{_other.m_Owner}, m_Request{std::move(_other.m_Request)},
+      m_Descriptors{std::move(_other.m_Descriptors)}, m_Lease{std::move(_other.m_Lease)},
+      m_Disposition{_other.m_Disposition}, m_Valid{std::exchange(_other.m_Valid, false)}
+{
+}
+
+LeaseStore::TerminalLease &LeaseStore::TerminalLease::operator=(TerminalLease &&_other) noexcept
+{
+    if( this == &_other )
+        return *this;
+    m_CreatorPID = _other.m_CreatorPID;
+    m_Owner = _other.m_Owner;
+    m_Request = std::move(_other.m_Request);
+    m_Descriptors = std::move(_other.m_Descriptors);
+    m_Lease = std::move(_other.m_Lease);
+    m_Disposition = _other.m_Disposition;
+    m_Valid = std::exchange(_other.m_Valid, false);
+    return *this;
+}
+
+bool LeaseStore::TerminalLease::HasCurrentProcessCreator() const noexcept
+{
+    return m_CreatorPID == static_cast<int>(::getpid());
+}
+
+bool LeaseStore::TerminalLease::IsCreatedByCurrentProcess() const noexcept
+{
+    return m_Valid && HasCurrentProcessCreator();
 }
 
 std::expected<Lease, LeaseStore::Error> LeaseStore::Grant(OwnerID _owner, ValidatedBegin _begin) noexcept
 {
+    if( !IsCreatedByCurrentProcess() )
+        return std::unexpected{Error::ForkedProcess};
+    if( !_begin.IsValid() )
+        return std::unexpected{Error::InvalidArgument};
+    if( !_begin.IsCreatedByCurrentProcess() )
+        return std::unexpected{Error::ForkedProcess};
     if( _owner == 0 || !Validate(_begin.m_Begin.request) )
         return std::unexpected{Error::InvalidArgument};
 
@@ -65,33 +115,48 @@ std::expected<Lease, LeaseStore::Error> LeaseStore::Grant(OwnerID _owner, Valida
         if( collision )
             continue;
 
-        free_entry->emplace(
-            TerminalLease{_owner, std::move(_begin.m_Begin.request), std::move(_begin.m_Begin.descriptors), lease});
+        free_entry->emplace(TerminalLease{m_CreatorPID,
+                                          _owner,
+                                          std::move(_begin.m_Begin.request),
+                                          std::move(_begin.m_Begin.descriptors),
+                                          lease,
+                                          TerminalDisposition::Pending});
+        _begin.m_Valid = false;
         return lease;
     }
     return std::unexpected{Error::TokenGenerationFailed};
 }
 
-std::expected<LeaseStore::TerminalLease, LeaseStore::Error>
-LeaseStore::Take(OwnerID _owner, const CommitRequest &_request) noexcept
+std::expected<LeaseStore::TerminalLease, LeaseStore::Error> LeaseStore::Take(OwnerID _owner,
+                                                                             const CommitRequest &_request) noexcept
 {
+    if( !IsCreatedByCurrentProcess() )
+        return std::unexpected{Error::ForkedProcess};
     if( !Validate(_request) )
         return std::unexpected{Error::InvalidArgument};
-    return Take(_owner, _request.header, _request.lease);
+    return Take(_owner, _request.header, _request.lease, TerminalDisposition::Commit);
+}
+
+std::expected<LeaseStore::TerminalLease, LeaseStore::Error> LeaseStore::Take(OwnerID _owner,
+                                                                             const AbortRequest &_request) noexcept
+{
+    if( !IsCreatedByCurrentProcess() )
+        return std::unexpected{Error::ForkedProcess};
+    if( !Validate(_request) )
+        return std::unexpected{Error::InvalidArgument};
+    return Take(_owner, _request.header, _request.lease, TerminalDisposition::Abort);
 }
 
 std::expected<LeaseStore::TerminalLease, LeaseStore::Error>
-LeaseStore::Take(OwnerID _owner, const AbortRequest &_request) noexcept
+LeaseStore::Take(OwnerID _owner,
+                 const Header &_header,
+                 const Lease &_lease,
+                 const TerminalDisposition _disposition) noexcept
 {
-    if( !Validate(_request) )
-        return std::unexpected{Error::InvalidArgument};
-    return Take(_owner, _request.header, _request.lease);
-}
-
-std::expected<LeaseStore::TerminalLease, LeaseStore::Error>
-LeaseStore::Take(OwnerID _owner, const Header &_header, const Lease &_lease) noexcept
-{
-    if( _owner == 0 || !Validate(_header) || !Validate(_lease) || _header != _lease.header )
+    if( !IsCreatedByCurrentProcess() )
+        return std::unexpected{Error::ForkedProcess};
+    if( _owner == 0 || _disposition == TerminalDisposition::Pending || !Validate(_header) || !Validate(_lease) ||
+        _header != _lease.header )
         return std::unexpected{Error::InvalidArgument};
 
     std::lock_guard lock{m_Mutex};
@@ -105,6 +170,7 @@ LeaseStore::Take(OwnerID _owner, const Header &_header, const Lease &_lease) noe
 
         TerminalLease terminal = std::move(*entry);
         entry.reset();
+        terminal.m_Disposition = _disposition;
         return terminal;
     }
     return std::unexpected{Error::UnknownLease};
@@ -112,6 +178,8 @@ LeaseStore::Take(OwnerID _owner, const Header &_header, const Lease &_lease) noe
 
 size_t LeaseStore::RevokeOwner(OwnerID _owner) noexcept
 {
+    if( !IsCreatedByCurrentProcess() )
+        return 0;
     if( _owner == 0 )
         return 0;
 
@@ -128,6 +196,8 @@ size_t LeaseStore::RevokeOwner(OwnerID _owner) noexcept
 
 size_t LeaseStore::ActiveLeaseCount() const noexcept
 {
+    if( !IsCreatedByCurrentProcess() )
+        return 0;
     std::lock_guard lock{m_Mutex};
     size_t active = 0;
     for( const auto &entry : m_Entries ) {

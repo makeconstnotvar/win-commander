@@ -32,12 +32,14 @@ The terminal observer receives an owning `CopyOperationDurableTerminalOutcome` c
 
 - the exact plan ID;
 - the durable journal terminal state;
-- the exact item result when one exists;
+- the exact ordered terminal-evidence vector;
 - `Finalized`, `ReconciledTerminal`, or `ReconciledInterrupted` confirmation.
 
-The value owns its plan ID and item evidence, so a consumer can copy or move it into another executor without retaining orchestrator or custodian storage. Delivery is synchronous on the caller that establishes the terminal fact: the Submit caller for a post-Running pre-enqueue terminal path, a Pool finalizer thread, an explicit retry caller, or a reconciliation/release caller. UI presentation therefore dispatches the owning outcome explicitly.
+The value owns its plan ID and terminal evidence, so a consumer can copy or move it into another executor without retaining orchestrator or custodian storage. `SingleItemResult()` remains a compatibility projection only when the vector has exactly one item. Delivery is synchronous on the caller that establishes the terminal fact: the Submit caller for a post-Running pre-enqueue terminal path, a Pool finalizer thread, an explicit retry caller, or a reconciliation/release caller. UI presentation therefore dispatches the owning outcome explicitly.
 
 Delivery occurs only after exact durable finalization or read-only reopen reconciliation and before Pool removal or generic success reporting. Observer exceptions are contained. The custodian consumes the observer under the slot lock before invocation, providing at-most-once delivery across persistence retry, repeated reconciliation, concurrent Pool retry and `ReleaseReconciled` races.
+
+The production `CopyAs` presenter consumes only that one-item scalar projection. `CopyOperationRunReceiptCustodianTesting::EnqueueExactTerminalEvidence` is a test-only multi-item custody seam for an already journal-issued Running receipt; it is not a production execution path and does not make factory, orchestrator, coordinator or `CopyAs` batch-capable.
 
 ## Pool terminal release
 
@@ -48,7 +50,7 @@ The finalizer maps durable state to two release forms:
 - durable `Completed` uses `Release`, removes the operation and permits the generic completion callback;
 - failure, cancellation and reconciled `Interrupted` use `ReleaseWithoutCompletion`, remove the operation and start eligible pending work while suppressing the generic completion callback.
 
-If terminal evidence is pending, inconsistent or not durably persisted, the finalizer returns `Retain`. A retry reuses the exact cached receipt and item evidence. Post-rename uncertainty requires an independently reopened journal; `Reconcile` confirms the exact terminal snapshot or startup-produced `Interrupted`, and Pool-owned custody is released separately through `ReleaseReconciled`.
+If terminal evidence is pending, inconsistent or not durably persisted, the finalizer returns `Retain`. A retry reuses the exact cached receipt and terminal-evidence snapshot. Post-rename uncertainty requires an independently reopened journal; `Reconcile` confirms the exact terminal snapshot or startup-produced `Interrupted`, and Pool-owned custody is released separately through `ReleaseReconciled`.
 
 For Pool-owned reconciliation, terminal delivery is deferred until the matching Pool finalizer accepts release. A concurrent release reports `InProgress` while preserving custody. If the Pool has expired, the already reconciled slot can deliver the same owning outcome and release custody without manufacturing a Pool completion event.
 
@@ -63,6 +65,8 @@ The journal and `CopyOperationRunReceiptCustodian` need process-lifetime ownersh
 ## Verification snapshot
 
 Current Debug evidence for this snapshot:
+
+- Current-worktree multi-item terminal-evidence custody coverage awaits its final focused integrated target record; no new aggregate count is claimed here.
 
 - `CopyOperationOrchestrator_UT`: 15 cases / 758 assertions;
 - `Pool_UT`: 17 / 219;

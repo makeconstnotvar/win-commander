@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <chrono>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -15,9 +16,11 @@ namespace {
 
 using nc::core::CopyOperationRecoveryCoordinator;
 using nc::core::CopyOperationRecoveryCoordinatorTesting;
+using nc::core::CopyOperationRecoveryHistoryRefreshResult;
 using nc::core::CopyOperationRecoveryHistoryRefreshStatus;
 using nc::core::CopyOperationRecoveryServiceError;
 using nc::core::CopyOperationRecoveryServiceStep;
+using nc::core::RetryDeferredHistoryProjection;
 using nc::core::ServiceCopyRecoveryAndRefreshHistory;
 using nc::ops::CopyOperationRunReceiptCustodyResult;
 using nc::ops::CopyOperationRunReceiptCustodyStatus;
@@ -402,5 +405,226 @@ TEST_CASE(PREFIX "keeps confirmed custody separate when Operation Center history
     CHECK(result.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Deferred);
     REQUIRE(result.history_refresh_error);
     CHECK(result.history_refresh_error->code == OperationCenterCoordinatorErrorCode::ColdHistoryBusy);
+    CHECK(result.HasDeferredHistoryProjection());
+    CHECK((*operation_center)->Model().Snapshot() == before);
+}
+
+TEST_CASE(PREFIX "retries one deferred cold-history projection without servicing custody again")
+{
+    TempTestDir temporary;
+    const auto directory = CanonicalDirectory(temporary);
+    auto journal = OpenJournal(directory);
+    auto initial = journal->Admit(Plan("initial-history"));
+    REQUIRE(initial);
+    REQUIRE(journal->FinalizeAdmission(std::move(*initial), OperationJournalState::Failed));
+
+    auto operation_center = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(operation_center);
+    const auto before = (*operation_center)->Model().Snapshot();
+
+    auto recovered = journal->Admit(Plan("recovered-history"));
+    REQUIRE(recovered);
+    REQUIRE(journal->TransitionToRunning(std::move(*recovered)));
+
+    int retries = 0;
+    int reopens = 0;
+    int reconciliations = 0;
+    int releases = 0;
+    auto services = PassiveServices();
+    services.retry = [&](std::string_view) {
+        ++retries;
+        return CopyOperationRunReceiptCustodyResult{.status = CopyOperationRunReceiptCustodyStatus::ReconcileRequired};
+    };
+    services.reopen = [&](const std::string_view _directory) {
+        ++reopens;
+        return OperationJournal::Open(_directory);
+    };
+    services.reconcile = [&](std::string_view, const OperationJournal &) {
+        ++reconciliations;
+        return CopyOperationRunReceiptReconciliationResult{
+            .status = CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed, .pool_release_required = true};
+    };
+    services.release_reconciled = [&](std::string_view) {
+        ++releases;
+        return CopyOperationRunReceiptPoolReleaseStatus::Released;
+    };
+    auto recovery = CopyOperationRecoveryCoordinatorTesting::Make(std::move(journal), directory, std::move(services));
+
+    std::optional<CopyOperationRecoveryHistoryRefreshResult> deferred;
+    {
+        auto staging = (*operation_center)->StageAdmission(*recovery->CurrentJournal(), Plan("staged-history"));
+        REQUIRE(staging);
+        deferred.emplace(ServiceCopyRecoveryAndRefreshHistory(recovery, *operation_center, "recovered-history"));
+    }
+
+    REQUIRE(deferred);
+    CHECK(deferred->history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Deferred);
+    CHECK(deferred->HasDeferredHistoryProjection());
+    CHECK(deferred->recovery.last_step == CopyOperationRecoveryServiceStep::ReleaseReconciled);
+    CHECK(retries == 1);
+    CHECK(reopens == 1);
+    CHECK(reconciliations == 1);
+    CHECK(releases == 1);
+
+    const auto refreshed = RetryDeferredHistoryProjection(recovery, *operation_center, *deferred);
+
+    CHECK(refreshed.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Refreshed);
+    CHECK_FALSE(refreshed.history_refresh_error);
+    CHECK_FALSE(refreshed.HasDeferredHistoryProjection());
+    CHECK(retries == 1);
+    CHECK(reopens == 1);
+    CHECK(reconciliations == 1);
+    CHECK(releases == 1);
+    const auto records = (*operation_center)->Model().Snapshot();
+    REQUIRE(records.size() == 2);
+    CHECK(records[0] == before[0]);
+    CHECK(records[1].plan_id.Value() == "recovered-history");
+    CHECK(records[1].state == OperationRecordState::Interrupted);
+}
+
+TEST_CASE(PREFIX "consumes its sole deferred projection retry while cold history remains busy")
+{
+    TempTestDir temporary;
+    const auto directory = CanonicalDirectory(temporary);
+    auto journal = OpenJournal(directory);
+    auto initial = journal->Admit(Plan("initial-history"));
+    REQUIRE(initial);
+    REQUIRE(journal->FinalizeAdmission(std::move(*initial), OperationJournalState::Failed));
+
+    auto operation_center = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(operation_center);
+    const auto before = (*operation_center)->Model().Snapshot();
+    auto staging = (*operation_center)->StageAdmission(*journal, Plan("staged-history"));
+    REQUIRE(staging);
+
+    auto recovered = journal->Admit(Plan("recovered-history"));
+    REQUIRE(recovered);
+    REQUIRE(journal->TransitionToRunning(std::move(*recovered)));
+
+    int retries = 0;
+    int reopens = 0;
+    int reconciliations = 0;
+    auto services = PassiveServices();
+    services.retry = [&](std::string_view) {
+        ++retries;
+        return CopyOperationRunReceiptCustodyResult{.status = CopyOperationRunReceiptCustodyStatus::ReconcileRequired};
+    };
+    services.reopen = [&](const std::string_view _directory) {
+        ++reopens;
+        return OperationJournal::Open(_directory);
+    };
+    services.reconcile = [&](std::string_view, const OperationJournal &) {
+        ++reconciliations;
+        return CopyOperationRunReceiptReconciliationResult{
+            .status = CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed};
+    };
+    auto recovery = CopyOperationRecoveryCoordinatorTesting::Make(std::move(journal), directory, std::move(services));
+
+    const auto deferred = ServiceCopyRecoveryAndRefreshHistory(recovery, *operation_center, "recovered-history");
+    REQUIRE(deferred.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Deferred);
+    REQUIRE(deferred.HasDeferredHistoryProjection());
+
+    const auto exhausted = RetryDeferredHistoryProjection(recovery, *operation_center, deferred);
+    CHECK(exhausted.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::RetryExhausted);
+    REQUIRE(exhausted.history_refresh_error);
+    CHECK(exhausted.history_refresh_error->code == OperationCenterCoordinatorErrorCode::ColdHistoryBusy);
+    CHECK_FALSE(exhausted.HasDeferredHistoryProjection());
+    CHECK_FALSE(deferred.HasDeferredHistoryProjection());
+    CHECK((*operation_center)->Model().Snapshot() == before);
+
+    const auto reused = RetryDeferredHistoryProjection(recovery, *operation_center, deferred);
+    CHECK(reused.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::RetryExhausted);
+    CHECK_FALSE(reused.history_refresh_error);
+    CHECK_FALSE(reused.HasDeferredHistoryProjection());
+    CHECK(retries == 1);
+    CHECK(reopens == 1);
+    CHECK(reconciliations == 1);
+}
+
+TEST_CASE(PREFIX "does not mint a retry for a nonbusy history projection failure")
+{
+    TempTestDir temporary;
+    const auto directory = CanonicalDirectory(temporary);
+    const auto foreign_path = temporary.directory / "foreign";
+    REQUIRE(std::filesystem::create_directory(foreign_path));
+    const auto foreign_directory = std::filesystem::canonical(foreign_path).string();
+    auto journal = OpenJournal(directory);
+    auto initial = journal->Admit(Plan("initial-history"));
+    REQUIRE(initial);
+    REQUIRE(journal->FinalizeAdmission(std::move(*initial), OperationJournalState::Failed));
+
+    auto foreign_journal = OpenJournal(foreign_directory);
+    auto foreign_operation_center = OperationCenterCoordinator::Create(*foreign_journal);
+    REQUIRE(foreign_operation_center);
+    const auto before = (*foreign_operation_center)->Model().Snapshot();
+
+    auto recovered = journal->Admit(Plan("recovered-history"));
+    REQUIRE(recovered);
+    REQUIRE(journal->TransitionToRunning(std::move(*recovered)));
+
+    auto services = PassiveServices();
+    services.retry = [](std::string_view) {
+        return CopyOperationRunReceiptCustodyResult{.status = CopyOperationRunReceiptCustodyStatus::ReconcileRequired};
+    };
+    services.reconcile = [](std::string_view, const OperationJournal &) {
+        return CopyOperationRunReceiptReconciliationResult{
+            .status = CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed};
+    };
+    auto recovery = CopyOperationRecoveryCoordinatorTesting::Make(std::move(journal), directory, std::move(services));
+
+    const auto result = ServiceCopyRecoveryAndRefreshHistory(recovery, *foreign_operation_center, "recovered-history");
+
+    CHECK(result.recovery.error == CopyOperationRecoveryServiceError::None);
+    REQUIRE(result.recovery.reconciliation);
+    CHECK(result.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed);
+    REQUIRE(result.history_refresh_error);
+    CHECK(result.history_refresh_error->code == OperationCenterCoordinatorErrorCode::JournalStorageMismatch);
+    CHECK_FALSE(result.HasDeferredHistoryProjection());
+    CHECK((*foreign_operation_center)->Model().Snapshot() == before);
+}
+
+TEST_CASE(PREFIX "rejects a deferred projection when its recovery journal identity changes")
+{
+    TempTestDir temporary;
+    const auto directory = CanonicalDirectory(temporary);
+    const auto foreign_path = temporary.directory / "foreign";
+    REQUIRE(std::filesystem::create_directory(foreign_path));
+    const auto foreign_directory = std::filesystem::canonical(foreign_path).string();
+    auto journal = OpenJournal(directory);
+    auto initial = journal->Admit(Plan("initial-history"));
+    REQUIRE(initial);
+    REQUIRE(journal->FinalizeAdmission(std::move(*initial), OperationJournalState::Failed));
+
+    auto operation_center = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(operation_center);
+    const auto before = (*operation_center)->Model().Snapshot();
+    auto staging = (*operation_center)->StageAdmission(*journal, Plan("staged-history"));
+    REQUIRE(staging);
+
+    auto recovered = journal->Admit(Plan("recovered-history"));
+    REQUIRE(recovered);
+    REQUIRE(journal->TransitionToRunning(std::move(*recovered)));
+
+    auto services = PassiveServices();
+    services.retry = [](std::string_view) {
+        return CopyOperationRunReceiptCustodyResult{.status = CopyOperationRunReceiptCustodyStatus::ReconcileRequired};
+    };
+    services.reconcile = [](std::string_view, const OperationJournal &) {
+        return CopyOperationRunReceiptReconciliationResult{
+            .status = CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed};
+    };
+    auto recovery = CopyOperationRecoveryCoordinatorTesting::Make(std::move(journal), directory, std::move(services));
+    const auto deferred = ServiceCopyRecoveryAndRefreshHistory(recovery, *operation_center, "recovered-history");
+    REQUIRE(deferred.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::Deferred);
+    REQUIRE(deferred.HasDeferredHistoryProjection());
+
+    auto foreign_recovery =
+        CopyOperationRecoveryCoordinatorTesting::Make(OpenJournal(foreign_directory), foreign_directory, PassiveServices());
+    const auto rejected = RetryDeferredHistoryProjection(foreign_recovery, *operation_center, deferred);
+
+    CHECK(rejected.history_refresh == CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed);
+    REQUIRE(rejected.history_refresh_error);
+    CHECK(rejected.history_refresh_error->code == OperationCenterCoordinatorErrorCode::JournalStorageMismatch);
+    CHECK_FALSE(rejected.HasDeferredHistoryProjection());
     CHECK((*operation_center)->Model().Snapshot() == before);
 }
