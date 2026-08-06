@@ -47,6 +47,8 @@ struct OperationPlanningProviderEvidence final {
     bool can_replace_file = false;
     bool can_replace_directory = false;
     bool can_copy_symlink_to = false;
+    /** Provider-level rename capability. Namespace access remains separately probed on each parent directory. */
+    bool can_rename = false;
 
     bool operator==(const OperationPlanningProviderEvidence &) const = default;
 };
@@ -113,7 +115,9 @@ enum class OperationPlanningRequiredAccess : uint8_t {
     Read,
     Write,
     ReplaceFile,
-    ReplaceDirectory
+    ReplaceDirectory,
+    /** Rename mutates the supplied parent namespace; it is distinct from creation access. */
+    Rename
 };
 
 enum class OperationPlanningAccessState : uint8_t {

@@ -404,7 +404,7 @@ TEST_CASE(PREFIX "app boundary dispatches one owning durable failure before non-
     const nc::ops::CopyOperationDurableTerminalOutcome expected_outcome{
         .plan_id = "reviewed-copy-as-boundary",
         .state = nc::ops::OperationJournalState::Failed,
-        .item_result =
+        .item_results = {
             nc::ops::OperationJournalItemResult{
                 .item_index = 0,
                 .status = nc::ops::OperationJournalItemStatus::Failed,
@@ -417,7 +417,7 @@ TEST_CASE(PREFIX "app boundary dispatches one owning durable failure before non-
                 .filesystem_sync_status = nc::ops::OperationJournalFilesystemSyncStatus::NotAttempted,
                 .filesystem_sync_system_error = 0,
                 .recovery_action = nc::ops::OperationJournalRecoveryAction::InspectDestination,
-            },
+            }},
         .confirmation = nc::ops::CopyOperationDurableTerminalConfirmation::Finalized,
     };
 

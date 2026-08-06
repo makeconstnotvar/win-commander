@@ -12,7 +12,7 @@ This slice keeps accepted planning, explicit review, journal admission, provider
 
 1. `MakeVFSOperationPlanningAccessChecker` projects application access into fail-closed planner evidence.
 2. `VFSOperationPlanningProbes` binds exact hosts and source/destination version evidence to an accepted preflight.
-3. `ReviewedVFSOperationPreflight::Review` creates a move-only approval value and requires explicit destructive confirmation when applicable.
+3. `ReviewedVFSOperationPreflight::Review` creates a move-only approval value only for Copy and requires explicit destructive confirmation when applicable. It rejects an accepted Move preflight with `UnsupportedPlanType` before any factory authority exists.
 4. `OperationPlanCodec` serializes the structural plan losslessly; `OperationJournal` durably admits it and issues exact move-only admission/run receipts.
 5. `ReviewedOperationFactory` validates one Native-to-Native, create-only regular-file Copy and consumes the reviewed preflight into a private-constructible `ProviderConditionalCopyReviewedAuthority`.
 6. The authority retains the moved reviewed preflight as a private seal and exposes immutable exact claims. `BeginConditionalCopyTransaction` consumes it once; a provider may then mint a move-only, single-use `ProviderConditionalCopyTransaction`.
@@ -44,18 +44,21 @@ The reviewed source version is the admission and immediate pre-publication fresh
 
 Known unsupported scopes retain the established Copy path. Once an action selects the reviewed lifecycle, later failure remains in its typed journal/recovery path and cannot fall back to a second legacy mutation attempt.
 
+The narrow Move planner result is intentionally outside this reviewed Copy chain. It supplies exact parent-namespace rename evidence and `RuntimeRevalidationRequired`, but cannot reach `ReviewedOperationFactory`, journal admission or `Pool`; legacy `Copying(docopy = false)` remains its execution route until a dedicated Move factory slice.
+
 ## Verified coverage
 
 - `OperationPlan`: 8 / 113; planner: 13 / 228; VFS probes: 5 / 178; codec: 12 / 151.
 - Reviewed factory: 8 / 225; VFS planning probes: 5 / 178.
-- Provider capabilities: 16 / 549; Native conditional Copy: 16 / 328; combined Debug selection: 32 / 877; latest full Debug `VFSUT` run: 95 / 43,566.
+- Provider capabilities: 16 / 549; Native conditional Copy: 16 / 328; combined Debug selection: 32 / 877; latest full Debug `VFSUT` run records 161 / 164 and 46,560 / 46,563 with only the `Application marker`, `FetchUsers` and `FetchGroups` host baselines.
 - Earlier staged Native create-copy snapshot: 19 / 924; provider result mapper: 4 / 237; execution product: 9 / 188; journal: 27 / 592; Pool: 17 / 219; orchestrator: 15 / 758, including production construction at 3 / 138.
 - Job lifecycle and worker-launch hardening: 10 / 608.
 - Previously recorded explicitly instrumented Release ASAN and UBSAN `VFSUT` snapshots pass ProviderCapabilities at 16 / 548 and Native conditional Copy at 15 / 312.
 - Historical foundation snapshot: Debug, Release ASAN and Release UBSAN `OperationsUT` passed 170 / 4,748 in each configuration, with both sanitizer runtimes confirmed and no diagnostics. The current coordinator/control subset separately passes Release ASAN and UBSAN at 28 / 999 without diagnostics.
 - Current M0: unsigned Debug app and 10 aggregate binaries, 897 / 132,011 in the recorded seeded run.
 - Docker-backed Debug ASAN integration: 163 / 89,392; fixture cleanup completed.
+- Final Move no-authority evidence (2026-08-06): planner 5 / 69, VFS rename mapping 1 / 4, review rejection 1 / 5 and application access checking 4 / 65 all pass in focused Debug. Full Debug `OperationsUT` records 203 / 204 and 5,379 / 5,383 with only the NativeCreateCopy set-ID metadata host baseline; full Debug `WinCommanderUT` records 330 / 334 and 5,317 / 5,321 with four headless pasteboard host baselines. This verifies rejection before factory authority, not Move execution.
 
 ## Next slice
 
-Add physical-volume evidence for the bounded `CopyAs::Perform` consumer. Cross-volume staging follows only after the ADR 0002 helper boundary is available.
+Add physical-volume evidence for the bounded `CopyAs::Perform` consumer. The test-only VFSUT characterization now proves that a same-euid name rebind can make `RENAME_EXCL` publish a replacement rather than the prior validated stage inode (1 / 48 focused Debug); it grants no publisher API or authority. Cross-volume staging remains `Unsupported` until a descriptor-bound namespace primitive or a revised signed-root trust model has root-acquisition/transport proof. Move needs its own reviewed factory and execution authority beyond the verified narrow preflight.

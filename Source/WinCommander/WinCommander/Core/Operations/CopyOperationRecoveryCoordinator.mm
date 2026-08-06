@@ -2,9 +2,37 @@
 #include "CopyOperationRecoveryCoordinator.h"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 namespace nc::core {
+
+class CopyOperationRecoveryDeferredHistoryProjection final
+{
+public:
+    [[nodiscard]] bool Consume() noexcept { return !m_Consumed.exchange(true, std::memory_order_acq_rel); }
+    [[nodiscard]] bool Available() const noexcept { return !m_Consumed.load(std::memory_order_acquire); }
+    [[nodiscard]] const std::pair<uint64_t, uint64_t> &StorageIdentity() const noexcept { return m_StorageIdentity; }
+
+private:
+    explicit CopyOperationRecoveryDeferredHistoryProjection(std::pair<uint64_t, uint64_t> _storage_identity) noexcept
+        : m_StorageIdentity{_storage_identity}
+    {
+    }
+
+    std::pair<uint64_t, uint64_t> m_StorageIdentity;
+    std::atomic_bool m_Consumed{false};
+
+    friend CopyOperationRecoveryHistoryRefreshResult ServiceCopyRecoveryAndRefreshHistory(
+        const std::shared_ptr<CopyOperationRecoveryCoordinator> &,
+        const std::shared_ptr<nc::ops::OperationCenterCoordinator> &,
+        std::string_view) noexcept;
+};
+
+bool CopyOperationRecoveryHistoryRefreshResult::HasDeferredHistoryProjection() const noexcept
+{
+    return deferred_history_projection && deferred_history_projection->Available();
+}
 
 CopyOperationRecoveryCoordinator::Services CopyOperationRecoveryCoordinator::MakeProductionServices(
     const std::shared_ptr<nc::ops::CopyOperationRunReceiptCustodian> &_custodian)
@@ -187,13 +215,80 @@ ServiceCopyRecoveryAndRefreshHistory(const std::shared_ptr<CopyOperationRecovery
 
     const auto refreshed = _operation_center->RefreshColdHistory(*journal);
     if( !refreshed ) {
-        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::Deferred;
         result.history_refresh_error = refreshed.error();
+        if( refreshed.error().code == nc::ops::OperationCenterCoordinatorErrorCode::ColdHistoryBusy ) {
+            result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::Deferred;
+            try {
+                result.deferred_history_projection = std::shared_ptr<CopyOperationRecoveryDeferredHistoryProjection>{
+                    new CopyOperationRecoveryDeferredHistoryProjection{
+                        _operation_center->HistoryProjectionStorageIdentity()}};
+            } catch( ... ) {
+                result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed;
+                result.history_refresh_error.reset();
+            }
+        }
+        else {
+            result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed;
+        }
         return result;
     }
 
     result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::Refreshed;
     return result;
+}
+
+CopyOperationRecoveryHistoryRefreshResult
+RetryDeferredHistoryProjection(const std::shared_ptr<CopyOperationRecoveryCoordinator> &_recovery_coordinator,
+                               const std::shared_ptr<nc::ops::OperationCenterCoordinator> &_operation_center,
+                               const CopyOperationRecoveryHistoryRefreshResult &_prior) noexcept
+{
+    auto result = CopyOperationRecoveryHistoryRefreshResult{
+        .history_refresh = CopyOperationRecoveryHistoryRefreshStatus::RetryExhausted};
+    try {
+        result.recovery = _prior.recovery;
+    } catch( ... ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed;
+        return result;
+    }
+    const auto continuation = _prior.deferred_history_projection;
+    if( !continuation || !continuation->Consume() )
+        return result;
+    if( !_recovery_coordinator ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::JournalUnavailable;
+        return result;
+    }
+    if( !_operation_center ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::CoordinatorUnavailable;
+        return result;
+    }
+
+    const auto journal = _recovery_coordinator->CurrentJournal();
+    if( !journal ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::JournalUnavailable;
+        return result;
+    }
+    if( _operation_center->HistoryProjectionStorageIdentity() != continuation->StorageIdentity() ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed;
+        result.history_refresh_error = nc::ops::OperationCenterCoordinatorError{
+            .code = nc::ops::OperationCenterCoordinatorErrorCode::JournalStorageMismatch};
+        return result;
+    }
+
+    try {
+        const auto refreshed = _operation_center->RefreshColdHistory(*journal);
+        if( refreshed ) {
+            result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::Refreshed;
+            return result;
+        }
+        result.history_refresh_error = refreshed.error();
+        result.history_refresh = refreshed.error().code == nc::ops::OperationCenterCoordinatorErrorCode::ColdHistoryBusy
+                                     ? CopyOperationRecoveryHistoryRefreshStatus::RetryExhausted
+                                     : CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed;
+        return result;
+    } catch( ... ) {
+        result.history_refresh = CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed;
+        return result;
+    }
 }
 
 } // namespace nc::core

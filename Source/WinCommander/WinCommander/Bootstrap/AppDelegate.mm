@@ -48,6 +48,7 @@
 #include <WinCommander/Core/Commands/FileRenameCommand.h>
 #include <WinCommander/Core/Commands/NavigationHistoryCommand.h>
 #include <WinCommander/Core/Commands/OperationCancelCommand.h>
+#include <WinCommander/Core/Commands/OperationCenterOpenCommand.h>
 #include <WinCommander/Core/Commands/PaneNavigationCommand.h>
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
@@ -63,6 +64,7 @@
 #include <WinCommander/Core/VFSInstanceManagerImpl.h>
 #include <WinCommander/Bootstrap/NCEditMenuPresentationDelegate.h>
 #include <WinCommander/States/Terminal/ShellState.h>
+#include <WinCommander/States/Explorer/NCExplorerCommandBarView.h>
 #include <WinCommander/States/MainWindow.h>
 #include <WinCommander/States/MainWindowController.h>
 #include <WinCommander/States/FilePanels/MainWindowFilePanelState.h>
@@ -402,6 +404,24 @@ static NCAppDelegate *g_Me = nil;
             });
         [[maybe_unused]] const auto operation_cancel_result = m_CommandRegistry->Register(operation_cancel_registration);
         assert(operation_cancel_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto operation_center_open_registration = nc::core::MakeOperationCenterOpenCommand(
+            [operation_center]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                const auto coordinator = operation_center.lock();
+                if( !coordinator )
+                    return std::nullopt;
+                return coordinator->Model().Snapshot();
+            },
+            [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
+                if( _native_target == nullptr )
+                    return false;
+                NCExplorerCommandBarView *const command_bar =
+                    (__bridge NCExplorerCommandBarView *)_native_target;
+                return [command_bar presentOperationCenterSnapshot:std::move(_snapshot)];
+            },
+            [operation_center] { return !operation_center.expired(); });
+        [[maybe_unused]] const auto operation_center_open_result =
+            m_CommandRegistry->Register(operation_center_open_registration);
+        assert(operation_center_open_result == nc::core::CommandRegistry::RegisterResult::Registered);
     }
     return self;
 }

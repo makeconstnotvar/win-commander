@@ -5,9 +5,12 @@
 #include <array>
 #include <cerrno>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define PREFIX "RoutedIO cross-volume staging helper lease store "
@@ -89,6 +92,61 @@ static void Write(const std::filesystem::path &_path)
     REQUIRE(close(fd) == 0);
 }
 
+static bool WriteExact(const int _fd, const void *_buffer, size_t _size) noexcept
+{
+    const auto *cursor = static_cast<const char *>(_buffer);
+    while( _size != 0 ) {
+        ssize_t written = -1;
+        do {
+            written = ::write(_fd, cursor, _size);
+        } while( written < 0 && errno == EINTR );
+        if( written <= 0 )
+            return false;
+        cursor += written;
+        _size -= static_cast<size_t>(written);
+    }
+    return true;
+}
+
+constexpr int kChildResultTimeoutMilliseconds = 5'000;
+
+static bool ReadExactWithin(const int _fd, void *_buffer, size_t _size) noexcept
+{
+    auto *cursor = static_cast<char *>(_buffer);
+    while( _size != 0 ) {
+        struct pollfd descriptor{.fd = _fd, .events = POLLIN, .revents = 0};
+        int ready = -1;
+        do {
+            ready = ::poll(&descriptor, 1, kChildResultTimeoutMilliseconds);
+        } while( ready < 0 && errno == EINTR );
+        if( ready <= 0 || (descriptor.revents & (POLLERR | POLLNVAL)) != 0 )
+            return false;
+        ssize_t read = -1;
+        do {
+            read = ::read(_fd, cursor, _size);
+        } while( read < 0 && errno == EINTR );
+        if( read <= 0 )
+            return false;
+        cursor += read;
+        _size -= static_cast<size_t>(read);
+    }
+    return true;
+}
+
+static bool ReadChildResultAndWait(const pid_t _child, const int _result_fd, uint8_t &_result, int &_status) noexcept
+{
+    const bool received = ReadExactWithin(_result_fd, &_result, sizeof(_result));
+    if( !received )
+        (void)::kill(_child, SIGKILL);
+    for( ;; ) {
+        const pid_t waited = ::waitpid(_child, &_status, 0);
+        if( waited == _child )
+            return received;
+        if( waited < 0 && errno != EINTR )
+            return false;
+    }
+}
+
 static codec::DecodedBegin DecodedBegin(TestDir &_directory,
                                        const protocol::Header &_header,
                                        const std::string_view _suffix = {})
@@ -167,6 +225,23 @@ TEST_CASE(PREFIX "retains decoded descriptor rights until an exact terminal take
     CHECK(errno == EBADF);
     CHECK(store.ActiveLeaseCount() == 0);
     CHECK_FALSE(store.Take(1, Abort(*granted)));
+}
+
+TEST_CASE(PREFIX "consumes a validated begin when granting its exact lease")
+{
+    TestDir directory;
+    auto begin = MakeValidatedBegin(directory, Header(1));
+    helper::LeaseStore first_store;
+    helper::LeaseStore second_store;
+
+    const auto first = first_store.Grant(1, std::move(begin));
+    REQUIRE(first);
+    CHECK(first_store.ActiveLeaseCount() == 1);
+
+    const auto reused = second_store.Grant(1, std::move(begin));
+    REQUIRE_FALSE(reused);
+    CHECK(reused.error() == helper::LeaseStore::Error::InvalidArgument);
+    CHECK(second_store.ActiveLeaseCount() == 0);
 }
 
 TEST_CASE(PREFIX "wrong owner, correlation and token leave the exact lease available")
@@ -266,6 +341,39 @@ TEST_CASE(PREFIX "owner revoke closes pending descriptor rights without affectin
     CHECK(errno == EBADF);
     CHECK(store.Take(2, Commit(*retained)));
     CHECK(store.ActiveLeaseCount() == 0);
+}
+
+TEST_CASE(PREFIX "rejects an inherited validated begin in a child-created store")
+{
+    TestDir directory;
+    auto validated = MakeValidatedBegin(directory, Header(1));
+
+    int result_pipe[2]{};
+    REQUIRE(pipe(result_pipe) == 0);
+    const pid_t child = fork();
+    REQUIRE(child >= 0);
+    if( child == 0 ) {
+        (void)::close(result_pipe[0]);
+        helper::LeaseStore child_store;
+        const auto granted = child_store.Grant(1, std::move(validated));
+        const uint8_t result = !granted && granted.error() == helper::LeaseStore::Error::ForkedProcess &&
+                                       child_store.ActiveLeaseCount() == 0
+                                   ? 1
+                                   : 0;
+        const bool wrote = WriteExact(result_pipe[1], &result, sizeof(result));
+        (void)::close(result_pipe[1]);
+        _exit(wrote && result == 1 ? 0 : 20);
+    }
+
+    REQUIRE(close(result_pipe[1]) == 0);
+    uint8_t result = 0;
+    int status = 0;
+    const bool completed = ReadChildResultAndWait(child, result_pipe[0], result, status);
+    REQUIRE(close(result_pipe[0]) == 0);
+    REQUIRE(completed);
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+    CHECK(result == 1);
 }
 
 } // namespace CrossVolumeStagingHelperLeaseStoreTests

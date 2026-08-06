@@ -1,16 +1,16 @@
 # Feature: copy preflight planner foundation
 
-> Status: pure Copy preflight through production conditional transaction, execution product, durable orchestration, and recovery implemented; application mutation adoption remains open
+> Status: pure Copy preflight through production conditional transaction, execution product, durable orchestration, and recovery implemented; narrow Move intent preflight is verified, rejected by generic review, and has no execution adoption
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` sections 13.6, 14, 15, and 32
 > Execution tracker: M3 in `Docs/Development-Plan.md`, R5 in `Docs/refactor_plan.md`
 
 ## Purpose
 
-`nc::ops::OperationPlanner` is the pure preflight boundary between a structurally valid `OperationPlan` and later review/factory stages. The current slice supports Copy and returns an owning deterministic `AcceptedOperationPlan` or `BlockedOperationPlan` without UI, queue, execution, persistence, or concrete provider ownership. The companion production adapter wraps that result with the exact immutable VFS bindings used to derive it.
+`nc::ops::OperationPlanner` is the pure preflight boundary between a structurally valid `OperationPlan` and later review/factory stages. The implemented Copy slice and a deliberately narrower Move intent slice return an owning deterministic `AcceptedOperationPlan` or `BlockedOperationPlan` without UI, queue, execution, persistence, or concrete provider ownership. The companion production adapter wraps that result with the exact immutable VFS bindings used to derive it.
 
 The C++ `OperationPlan` is the structural intent portion of the ideal specification's canonical UI-visible Operation Plan. The user-visible review model is composed from that intent and this planner's preflight report, including provider/access evidence, affected paths, estimates, conflicts, destructive effects, warnings, blockers, and confirmation requirements.
 
-`Accepted` means that the captured evidence is ready for explicit review. `ReviewedVFSOperationPreflight::Review` turns an accepted bound result into a move-only factory input and requires a destructive confirmation decision for Replace. Every accepted report still requires runtime revalidation before mutation.
+For Copy, `Accepted` means that the captured evidence is ready for explicit review. `ReviewedVFSOperationPreflight::Review` turns an accepted bound Copy result into a move-only factory input and requires a destructive confirmation decision for Replace. It rejects accepted Move with `UnsupportedPlanType`; every accepted report still requires runtime revalidation before any future mutation.
 
 ## Inputs and probe contract
 
@@ -19,7 +19,7 @@ The planner accepts an owning structural plan and an injected `OperationPlanning
 - provider capability and path-identity evidence;
 - item existence, kind, symlink presence, and optional file size;
 - destination filename validity;
-- required read/write access state;
+- required read/write/rename access state;
 - recursive file/byte estimates;
 - available destination space.
 
@@ -58,17 +58,25 @@ The implemented policy boundary:
 
 An empty effective item set becomes `NothingToDo`. A blocked result always owns at least one typed blocker. Neither result type exposes an execution method, and callers cannot fabricate accepted or blocked values through public constructors.
 
+## Narrow Move intent preflight
+
+The Move subset accepts exactly one regular file from one provider to an absent `ExactItem` destination on that same provider. Its structural policy must be `Ask/ThisItem`. It probes authoritative path identity, both source and destination parent directories, destination-name validity, `can_rename`, and `Rename` access on each parent namespace. The accepted report owns one exact source/destination item and records `RuntimeRevalidationRequired`.
+
+Folders, symlinks, batches, cross-provider destinations, directory destinations, same paths, existing destinations, and conflict policies other than `Ask/ThisItem` are blocked. The Move path uses no Copy read/create capability, recursive estimate, or free-space claim. It produces no reviewed token: `ReviewedVFSOperationPreflight::Review` rejects its bound accepted result before factory, journal, or `Pool` authority. Existing `Copying(docopy = false)` Move execution remains outside this slice.
+
 ## Architectural boundary
 
 The production [`VFSOperationPlanningProbes`](vfs_operation_planning_probes_foundation.md) adapter now provides provider binding plus provider, item, destination-name, access, estimate, and space evidence. Its bound result retains the exact `VFSOperationPlanningBindings::Ptr`; the pure planner itself remains independent of VFS ownership.
 
-The combined foundation now includes application access composition, schema-v1 structural-plan persistence, durable journal admission, explicit review, private-sealed conditional authority, a clone-only Native provider transaction, lossless provider-result mapping, a transaction-owning execution product, and production journal/`Pool` orchestration. `ReviewedOperationFactory` exposes its production execution-product authority only to the orchestrator; the public compatibility construction surface remains fail closed. Other providers, cross-volume targets and filesystems without clone capability return `Unsupported`.
+The combined foundation now includes application access composition, schema-v1 structural-plan persistence, durable journal admission, explicit Copy review, private-sealed conditional authority, a clone-only Native provider transaction, lossless provider-result mapping, a transaction-owning execution product, and production journal/`Pool` orchestration. `ReviewedOperationFactory` exposes its production execution-product authority only to the orchestrator; the public compatibility construction surface remains fail closed. The accepted Move report deliberately stops before this authority boundary. Other providers, cross-volume targets and filesystems without clone capability return `Unsupported`.
 
-The bounded `CopyAs` consumer now supplies exact create-only review, app coordination of restricted cold hooks and durable result/recovery presentation. Its production boundary proves zero enqueue for blocked, stale, unpersisted and cancelled intent plus exact review and durable outcome dispatch. Remaining boundaries are live permission/conflict, broader mutation-consumer adoption, cross-volume staging, execution of the physical-volume/power-loss protocol, Operation Center presentation, and preflight for Move, Rename, Trash, Permanent Delete or archive operations. Committed Rename still reaches `nc::ops::Copying(docopy = false)`, and Cut remains clipboard Move intent until Paste.
+The bounded `CopyAs` consumer now supplies exact create-only review, app coordination of restricted cold hooks and durable result/recovery presentation. Its production boundary proves zero enqueue for blocked, stale, unpersisted and cancelled intent plus exact review and durable outcome dispatch. Remaining boundaries are live permission/conflict, Move review/factory/execution adoption, broader mutation-consumer adoption, cross-volume staging, execution of the physical-volume/power-loss protocol, live/full Operation Center presentation, and preflight for Rename, Trash, Permanent Delete or archive operations. Committed Rename and Move execution still reach `nc::ops::Copying(docopy = false)`, and Cut remains clipboard Move intent until Paste.
 
 ## Verified coverage
 
 The focused Debug `OperationPlanner` suite passed 13 cases / 228 assertions. It covers owning result lifetime after probe destruction, Copy-only admission, deterministic probe ordering and deduplication, exception/error/enum fail-closed behavior, access and capability blockers, preserved provider paths, exact and ASCII-only identity semantics including non-ASCII rejection, same/recursive paths, intra-plan collisions, unsupported policies and directory replacement, destructive confirmation, estimates, special files, symlink capability, unknown evidence, overflow, and insufficient space.
+
+Final Move-preflight evidence (2026-08-06): focused Debug planner passes 5 cases / 69 assertions; VFS rename-capability mapping passes 1 / 4 and generic-review rejection passes 1 / 5; application access-checker coverage passes 4 / 65. The full Debug `OperationsUT` run records 203 / 204 cases and 5,379 / 5,383 assertions with only the established NativeCreateCopy set-ID metadata host baseline. The full Debug `WinCommanderUT` run records 330 / 334 and 5,317 / 5,321 with four headless pasteboard host baselines. These cases cover accepted one-file same-provider intent, both parent rename capabilities/access, same-path and destination-conflict rejection, special/batch/cross-provider rejection, absence of Copy estimate/space/read claims, and `Review(...Move...) == UnsupportedPlanType`; they prove no execution authority.
 
 Current Debug evidence for the operation pipeline:
 
@@ -90,4 +98,4 @@ The current-tree M0 run from 2026-08-01 passed the unsigned Debug application an
 
 ## Next slice
 
-Add physical-volume proof for the bounded `CopyAs::Perform` consumer, preserving tri-state publication, terminal durability, read-only post-rename reconciliation and exact reconciled Pool release. Cross-volume Copy requires separate provider-owned bounded staging; non-Copy preflight follows as separate slices.
+Add physical-volume proof for the bounded `CopyAs::Perform` consumer, preserving tri-state publication, terminal durability, read-only post-rename reconciliation and exact reconciled Pool release. Cross-volume Copy requires separate provider-owned bounded staging; Move review/factory/execution and other non-Copy preflight follow as separate slices.

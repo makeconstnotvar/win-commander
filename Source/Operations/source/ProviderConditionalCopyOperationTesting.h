@@ -25,6 +25,8 @@ public:
     [[nodiscard]] static std::shared_ptr<Operation> &Operation(CopyOperationExecutionProduct &_product) noexcept;
     [[nodiscard]] static CopyOperationExecutionProduct::TerminalItemResultAccessor &
     TerminalItemResult(CopyOperationExecutionProduct &_product) noexcept;
+    [[nodiscard]] static CopyOperationExecutionProduct::TerminalEvidenceAccessor &
+    TerminalEvidence(CopyOperationExecutionProduct &_product) noexcept;
 };
 
 } // namespace nc::ops

@@ -7,6 +7,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
@@ -30,7 +31,7 @@ struct CopyOperationRunReceiptCustodian::Slot final {
     Slot(OperationPlan _plan,
          std::string _plan_id,
          std::shared_ptr<OperationJournal> _journal,
-         CopyOperationExecutionProduct::TerminalItemResultAccessor _accessor,
+         CopyOperationExecutionProduct::TerminalEvidenceAccessor _accessor,
          std::function<void(const CopyOperationDurableTerminalOutcome &)> _terminal_observer,
          std::weak_ptr<Impl> _owner,
          std::pair<uint64_t, uint64_t> _storage_identity)
@@ -39,6 +40,7 @@ struct CopyOperationRunReceiptCustodian::Slot final {
           terminal_observer{std::move(_terminal_observer)}, owner{std::move(_owner)},
           storage_identity{_storage_identity}
     {
+        singleton_terminal_evidence_storage.reserve(1);
     }
 
     const OperationPlan plan;
@@ -46,11 +48,12 @@ struct CopyOperationRunReceiptCustodian::Slot final {
     std::string terminal_outcome_plan_id;
     std::shared_ptr<OperationJournal> journal;
     std::optional<OperationJournalRunReceipt> receipt;
-    CopyOperationExecutionProduct::TerminalItemResultAccessor accessor;
+    CopyOperationExecutionProduct::TerminalEvidenceAccessor accessor;
     bool terminal_evidence_acquired{false};
     std::optional<CopyOperationTerminalResultError> terminal_result_error;
-    std::optional<OperationJournalItemResult> item_result;
-    std::optional<OperationJournalState> terminal_state;
+    std::optional<CopyOperationTerminalEvidence> terminal_evidence;
+    /** Allocated with the bounded custody Slot before Running for synthetic one-item terminalization. */
+    std::vector<OperationJournalItemResult> singleton_terminal_evidence_storage;
     std::function<void(const CopyOperationDurableTerminalOutcome &)> terminal_observer;
     bool terminal_observer_delivered{false};
     std::optional<OperationJournalError> last_journal_error;
@@ -87,6 +90,9 @@ struct CopyOperationRunReceiptCustodian::Impl final {
 };
 
 namespace {
+
+static_assert(std::is_nothrow_move_constructible_v<OperationJournalItemResult>);
+static_assert(std::is_nothrow_move_constructible_v<CopyOperationTerminalEvidence>);
 
 CopyOperationOrchestratorError
 CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode _code,
@@ -173,20 +179,6 @@ OperationJournalItemResult CopyOrchestratorEnqueueFailureItemResult(PoolEnqueueR
     };
 }
 
-std::optional<OperationJournalState> CopyOrchestratorTerminalState(const OperationJournalItemResult &_result) noexcept
-{
-    switch( _result.status ) {
-        case OperationJournalItemStatus::Succeeded:
-        case OperationJournalItemStatus::Skipped:
-            return OperationJournalState::Completed;
-        case OperationJournalItemStatus::Failed:
-            return OperationJournalState::Failed;
-        case OperationJournalItemStatus::Cancelled:
-            return OperationJournalState::Cancelled;
-    }
-    return std::nullopt;
-}
-
 std::optional<CopyOperationRunReceiptRecoveryDisposition>
 CopyOrchestratorRecoveryDisposition(CopyOperationRunReceiptCustodyStatus _status) noexcept
 {
@@ -234,7 +226,7 @@ void CopyOperationRunReceiptCustodian::DeliverTerminalOutcome(
 
     std::function<void(const CopyOperationDurableTerminalOutcome &)> observer;
     OperationJournalState state = OperationJournalState::Interrupted;
-    std::optional<OperationJournalItemResult> item_result;
+    CopyOperationTerminalEvidence *terminal_evidence = nullptr;
     std::optional<CopyOperationDurableTerminalOutcome> outcome;
     {
         const auto guard = std::lock_guard{_slot->lock};
@@ -243,18 +235,18 @@ void CopyOperationRunReceiptCustodian::DeliverTerminalOutcome(
 
         switch( _confirmation ) {
             case CopyOperationDurableTerminalConfirmation::Finalized:
-                if( _slot->phase != Slot::Phase::Finalized || !_slot->terminal_state || !_slot->item_result )
+                if( _slot->phase != Slot::Phase::Finalized || !_slot->terminal_evidence )
                     return;
-                state = *_slot->terminal_state;
-                item_result = _slot->item_result;
+                state = _slot->terminal_evidence->state;
+                terminal_evidence = &*_slot->terminal_evidence;
                 break;
             case CopyOperationDurableTerminalConfirmation::ReconciledTerminal:
                 if( (_slot->phase != Slot::Phase::Reconciled && _slot->phase != Slot::Phase::ReleaseInProgress) ||
                     _slot->reconciliation_status != CopyOperationRunReceiptReconciliationStatus::TerminalConfirmed ||
-                    !_slot->terminal_state || !_slot->item_result )
+                    !_slot->terminal_evidence )
                     return;
-                state = *_slot->terminal_state;
-                item_result = _slot->item_result;
+                state = _slot->terminal_evidence->state;
+                terminal_evidence = &*_slot->terminal_evidence;
                 break;
             case CopyOperationDurableTerminalConfirmation::ReconciledInterrupted:
                 if( (_slot->phase != Slot::Phase::Reconciled && _slot->phase != Slot::Phase::ReleaseInProgress) ||
@@ -267,7 +259,9 @@ void CopyOperationRunReceiptCustodian::DeliverTerminalOutcome(
         try {
             outcome.emplace(CopyOperationDurableTerminalOutcome{.plan_id = std::move(_slot->terminal_outcome_plan_id),
                                                                 .state = state,
-                                                                .item_result = item_result,
+                                                                .item_results = terminal_evidence
+                                                                                    ? std::move(terminal_evidence->item_results)
+                                                                                    : std::vector<OperationJournalItemResult>{},
                                                                 .confirmation = _confirmation});
         } catch( ... ) {
             _slot->terminal_observer = {};
@@ -292,9 +286,9 @@ CopyOperationRunReceiptCustodian::ReleaseDecision(const std::shared_ptr<Slot> &_
     const auto guard = std::lock_guard{_slot->lock};
     if( _slot->reconciliation_status == CopyOperationRunReceiptReconciliationStatus::InterruptedConfirmed )
         return PoolTerminalFinalizationDecision::ReleaseWithoutCompletion;
-    if( !_slot->terminal_state )
+    if( !_slot->terminal_evidence )
         return PoolTerminalFinalizationDecision::Retain;
-    return *_slot->terminal_state == OperationJournalState::Completed
+    return _slot->terminal_evidence->state == OperationJournalState::Completed
                ? PoolTerminalFinalizationDecision::Release
                : PoolTerminalFinalizationDecision::ReleaseWithoutCompletion;
 }
@@ -303,7 +297,7 @@ std::expected<CopyOperationRunReceiptCustodian::Reservation, CopyOperationRunRec
 CopyOperationRunReceiptCustodian::Reserve(
     OperationPlan _plan,
     std::shared_ptr<OperationJournal> _journal,
-    CopyOperationExecutionProduct::TerminalItemResultAccessor _accessor,
+    CopyOperationExecutionProduct::TerminalEvidenceAccessor _accessor,
     std::function<void(const CopyOperationDurableTerminalOutcome &)> _terminal_observer)
 {
     std::string plan_id;
@@ -375,8 +369,7 @@ CopyOperationRunReceiptCustodian::FinalizeCustodiedSlot(const std::shared_ptr<Sl
     const auto guard = std::lock_guard{_slot->lock};
     if( _slot->phase != Slot::Phase::Armed && _slot->phase != Slot::Phase::RetryRequired )
         return {.status = CopyOperationRunReceiptCustodyStatus::Busy, .journal_error = std::nullopt};
-    if( !_slot->journal || !_slot->receipt || !_slot->terminal_evidence_acquired || !_slot->item_result ||
-        !_slot->terminal_state ) {
+    if( !_slot->journal || !_slot->receipt || !_slot->terminal_evidence_acquired || !_slot->terminal_evidence ) {
         _slot->phase = Slot::Phase::ContractViolation;
         return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
     }
@@ -384,7 +377,8 @@ CopyOperationRunReceiptCustodian::FinalizeCustodiedSlot(const std::shared_ptr<Sl
     std::expected<void, OperationJournalError> finalized =
         std::unexpected(OperationJournalError{.code = OperationJournalErrorCode::JournalUnusable});
     try {
-        finalized = _slot->journal->Finalize(std::move(*_slot->receipt), *_slot->item_result, *_slot->terminal_state);
+        finalized = _slot->journal->Finalize(
+            std::move(*_slot->receipt), _slot->terminal_evidence->item_results, _slot->terminal_evidence->state);
     } catch( ... ) {
         _slot->phase = Slot::Phase::RetryRequired;
         _slot->last_journal_error.reset();
@@ -429,8 +423,17 @@ CopyOperationRunReceiptCustodian::FinalizeBeforeEnqueue(Reservation &_reservatio
             slot->phase = Slot::Phase::ContractViolation;
             return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
         }
-        slot->item_result = std::move(_result);
-        slot->terminal_state = _terminal_state;
+        if( !slot->singleton_terminal_evidence_storage.empty() ||
+            slot->singleton_terminal_evidence_storage.capacity() < 1 ) {
+            slot->phase = Slot::Phase::ContractViolation;
+            return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
+        }
+        // Slot construction reserves this single bounded element before the Running transition.
+        slot->singleton_terminal_evidence_storage.emplace_back(std::move(_result));
+        slot->terminal_evidence.emplace(CopyOperationTerminalEvidence{
+            .state = _terminal_state,
+            .item_results = std::move(slot->singleton_terminal_evidence_storage),
+        });
         slot->terminal_evidence_acquired = true;
     }
 
@@ -500,8 +503,17 @@ CopyOperationRunReceiptCustodian::RejectEnqueue(Reservation &_reservation,
             slot->phase = Slot::Phase::ContractViolation;
             return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
         }
-        slot->item_result = std::move(_result);
-        slot->terminal_state = _terminal_state;
+        if( !slot->singleton_terminal_evidence_storage.empty() ||
+            slot->singleton_terminal_evidence_storage.capacity() < 1 ) {
+            slot->phase = Slot::Phase::ContractViolation;
+            return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
+        }
+        // Slot construction reserves this single bounded element before the Running transition.
+        slot->singleton_terminal_evidence_storage.emplace_back(std::move(_result));
+        slot->terminal_evidence.emplace(CopyOperationTerminalEvidence{
+            .state = _terminal_state,
+            .item_results = std::move(slot->singleton_terminal_evidence_storage),
+        });
         slot->terminal_evidence_acquired = true;
         slot->phase = Slot::Phase::Armed;
     }
@@ -556,7 +568,7 @@ CopyOperationRunReceiptCustodian::FinalizePoolSlot(const std::shared_ptr<Slot> &
         return PoolTerminalFinalizationDecision::Retain;
 
     if( !_slot->terminal_evidence_acquired ) {
-        std::expected<OperationJournalItemResult, CopyOperationTerminalResultError> result =
+        std::expected<CopyOperationTerminalEvidence, CopyOperationTerminalResultError> result =
             std::unexpected(CopyOperationTerminalResultError::Inconsistent);
         try {
             result = _slot->accessor();
@@ -571,11 +583,17 @@ CopyOperationRunReceiptCustodian::FinalizePoolSlot(const std::shared_ptr<Slot> &
             }
             return PoolTerminalFinalizationDecision::Retain;
         }
-        _slot->item_result = std::move(*result);
-        _slot->terminal_state = CopyOrchestratorTerminalState(*_slot->item_result);
+        try {
+            _slot->terminal_evidence.emplace(std::move(*result));
+        } catch( ... ) {
+            _slot->terminal_result_error = CopyOperationTerminalResultError::Inconsistent;
+            _slot->terminal_evidence_acquired = true;
+            _slot->phase = Slot::Phase::ContractViolation;
+            return PoolTerminalFinalizationDecision::Retain;
+        }
         _slot->terminal_evidence_acquired = true;
     }
-    if( !_slot->terminal_state || !_slot->item_result ) {
+    if( !_slot->terminal_evidence ) {
         _slot->phase = Slot::Phase::ContractViolation;
         return PoolTerminalFinalizationDecision::Retain;
     }
@@ -583,7 +601,8 @@ CopyOperationRunReceiptCustodian::FinalizePoolSlot(const std::shared_ptr<Slot> &
     std::expected<void, OperationJournalError> finalized =
         std::unexpected(OperationJournalError{.code = OperationJournalErrorCode::JournalUnusable});
     try {
-        finalized = _slot->journal->Finalize(std::move(*_slot->receipt), *_slot->item_result, *_slot->terminal_state);
+        finalized = _slot->journal->Finalize(
+            std::move(*_slot->receipt), _slot->terminal_evidence->item_results, _slot->terminal_evidence->state);
     } catch( ... ) {
         return PoolTerminalFinalizationDecision::Retain;
     }
@@ -700,7 +719,7 @@ CopyOperationRunReceiptCustodian::Reconcile(std::string_view _plan_id,
             case Slot::Phase::Released:
                 return {.status = CopyOperationRunReceiptReconciliationStatus::Busy};
         }
-        if( !slot->terminal_evidence_acquired || !slot->item_result || !slot->terminal_state )
+        if( !slot->terminal_evidence_acquired || !slot->terminal_evidence )
             return {.status = CopyOperationRunReceiptReconciliationStatus::ContractViolation};
         if( _reopened_journal.StorageIdentityForCustody() != slot->storage_identity )
             return {.status = CopyOperationRunReceiptReconciliationStatus::Mismatch};
@@ -711,8 +730,8 @@ CopyOperationRunReceiptCustodian::Reconcile(std::string_view _plan_id,
                 snapshot, [&](const auto &_entry) { return _entry.plan.Id().Value() == slot->plan.Id().Value(); });
             if( entry == snapshot.end() || entry->plan != slot->plan )
                 return {.status = CopyOperationRunReceiptReconciliationStatus::Mismatch};
-            if( entry->state == *slot->terminal_state && entry->item_results.size() == 1 &&
-                entry->item_results[0] == *slot->item_result ) {
+            if( entry->state == slot->terminal_evidence->state &&
+                entry->item_results == slot->terminal_evidence->item_results ) {
                 result = CopyOperationRunReceiptReconciliationStatus::TerminalConfirmed;
             }
             else if( entry->state == OperationJournalState::Interrupted && entry->item_results.empty() ) {
@@ -840,6 +859,52 @@ CopyOperationRunReceiptCustodian::ReleaseReconciled(std::string_view _plan_id) n
     if( found != m_Impl->slots.end() && found->second == slot )
         m_Impl->slots.erase(found);
     return CopyOperationRunReceiptPoolReleaseStatus::Released;
+}
+
+bool CopyOperationRunReceiptCustodianTesting::EnqueueExactTerminalEvidence(
+    CopyOperationRunReceiptCustodian &_custodian,
+    OperationPlan _plan,
+    std::shared_ptr<OperationJournal> _journal,
+    OperationJournalRunReceipt &&_receipt,
+    CopyOperationExecutionProduct::TerminalEvidenceAccessor _accessor,
+    const std::shared_ptr<Pool> &_pool,
+    const std::shared_ptr<Operation> &_operation,
+    std::function<void(const CopyOperationDurableTerminalOutcome &)> _terminal_observer)
+{
+    if( !_journal || !_pool || !_operation || !_accessor )
+        return false;
+    auto reservation = _custodian.Reserve(
+        std::move(_plan), std::move(_journal), std::move(_accessor), std::move(_terminal_observer));
+    if( !reservation )
+        return false;
+    if( !_custodian.Arm(*reservation, std::move(_receipt)) ) {
+        _custodian.Release(*reservation);
+        return false;
+    }
+    if( !_custodian.BeginEnqueue(*reservation, _pool, _operation) ) {
+        (void)_custodian.FinalizeBeforeEnqueue(
+            *reservation, CopyOrchestratorEnqueueFailureItemResult(PoolEnqueueResult::NotCold), OperationJournalState::Failed);
+        return false;
+    }
+
+    const auto finalization_slot = reservation->m_Slot;
+    PoolEnqueueResult enqueue_result = PoolEnqueueResult::NotCold;
+    try {
+        enqueue_result = _pool->TryEnqueue(_operation, [finalization_slot](const std::shared_ptr<Operation> &) {
+            return CopyOperationRunReceiptCustodian::FinalizePoolSlot(finalization_slot);
+        });
+    } catch( ... ) {
+        enqueue_result = PoolEnqueueResult::NotCold;
+    }
+    if( enqueue_result != PoolEnqueueResult::Accepted ) {
+        const auto terminal_state = enqueue_result == PoolEnqueueResult::ShuttingDown ? OperationJournalState::Cancelled
+                                                                                      : OperationJournalState::Failed;
+        (void)_custodian.RejectEnqueue(
+            *reservation, CopyOrchestratorEnqueueFailureItemResult(enqueue_result), terminal_state);
+        return false;
+    }
+    _custodian.CommitEnqueue(*reservation);
+    return true;
 }
 
 bool CopyOperationRunReceiptCustodianTesting::SetReleaseFinalizerBarrier(CopyOperationRunReceiptCustodian &_custodian,
@@ -1027,7 +1092,7 @@ CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewe
         }
         product = std::move(*reviewed_product);
     }
-    if( !product->m_Operation || !product->m_TerminalItemResult ||
+    if( !product->m_Operation || !product->m_TerminalEvidence ||
         product->m_Operation->State() != OperationState::Cold ) {
         if( const auto finalization_error = finalize_admission(OperationJournalState::Failed) )
             return std::unexpected(*finalization_error);
@@ -1048,6 +1113,7 @@ CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewe
             operation->SetItemStatusCallback(std::move(_hooks.item_status_observer));
     } catch( ... ) {
         product->m_Operation.reset();
+        product->m_TerminalEvidence = {};
         product->m_TerminalItemResult = {};
         if( const auto finalization_error = finalize_admission(OperationJournalState::Failed) )
             return std::unexpected(*finalization_error);
@@ -1055,7 +1121,7 @@ CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewe
             CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::OperationConfigurationFailed));
     }
     auto reservation = m_RunReceiptCustodian->Reserve(
-        plan, m_Journal, std::move(product->m_TerminalItemResult), std::move(_hooks.durable_terminal_observer));
+        plan, m_Journal, std::move(product->m_TerminalEvidence), std::move(_hooks.durable_terminal_observer));
     if( !reservation ) {
         if( const auto finalization_error = finalize_admission(OperationJournalState::Failed) )
             return std::unexpected(*finalization_error);

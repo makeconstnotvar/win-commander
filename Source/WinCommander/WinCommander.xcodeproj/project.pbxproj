@@ -32,6 +32,7 @@
 		BACC000131C2000000000002 /* NavigationHistoryCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BACC000131C2000000000013 /* NavigationHistoryCommand_UT.cpp */; };
 		BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */; };
 		C0CA000131D7000000000001 /* OperationCancelCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C0CA000131D7000000000012 /* OperationCancelCommand.cpp */; };
+		C0CB000131D8000000000001 /* OperationCenterOpenCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C0CB000131D8000000000012 /* OperationCenterOpenCommand.cpp */; };
 		BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */; };
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
@@ -973,6 +974,8 @@
 		BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationCommand.cpp; path = WinCommander/Core/Commands/PaneNavigationCommand.cpp; sourceTree = SOURCE_ROOT; };
 		C0CA000131D7000000000011 /* OperationCancelCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationCancelCommand.h; path = WinCommander/Core/Commands/OperationCancelCommand.h; sourceTree = SOURCE_ROOT; };
 		C0CA000131D7000000000012 /* OperationCancelCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationCancelCommand.cpp; path = WinCommander/Core/Commands/OperationCancelCommand.cpp; sourceTree = SOURCE_ROOT; };
+		C0CB000131D8000000000011 /* OperationCenterOpenCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OperationCenterOpenCommand.h; path = WinCommander/Core/Commands/OperationCenterOpenCommand.h; sourceTree = SOURCE_ROOT; };
+		C0CB000131D8000000000012 /* OperationCenterOpenCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OperationCenterOpenCommand.cpp; path = WinCommander/Core/Commands/OperationCenterOpenCommand.cpp; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationCommand_UT.cpp; path = WinCommander/Tests/PaneNavigationCommand_UT.cpp; sourceTree = "<group>"; };
 		BAEC000241D3000000000014 /* PaneNavigationAvailability.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationAvailability.h; path = WinCommander/Core/Pane/PaneNavigationAvailability.h; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability_UT.cpp; path = WinCommander/Tests/PaneNavigationAvailability_UT.cpp; sourceTree = "<group>"; };
@@ -1631,6 +1634,8 @@
 				BAEC000241D3000000000012 /* PaneNavigationCommand.cpp */,
 				C0CA000131D7000000000011 /* OperationCancelCommand.h */,
 				C0CA000131D7000000000012 /* OperationCancelCommand.cpp */,
+				C0CB000131D8000000000011 /* OperationCenterOpenCommand.h */,
+				C0CB000131D8000000000012 /* OperationCenterOpenCommand.cpp */,
 				9342789A6E594D8392A98057 /* LegacyShortcutBindingAdapter.h */,
 				0E465329C92C49B8A22E62BC /* LegacyShortcutBindingAdapter.cpp */,
 			);
@@ -3360,6 +3365,7 @@
 				BACC000131C2000000000001 /* NavigationHistoryCommand.cpp in Sources */,
 				BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */,
 				C0CA000131D7000000000001 /* OperationCancelCommand.cpp in Sources */,
+				C0CB000131D8000000000001 /* OperationCenterOpenCommand.cpp in Sources */,
 				BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */,
 				9A10A00131B0000000000001 /* VisualStateMapper.cpp in Sources */,
 				B71A000131B1000000000001 /* CommandPresentationAdapter.mm in Sources */,

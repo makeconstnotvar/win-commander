@@ -3,6 +3,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 namespace nc::routedio::cross_volume_staging::helper {
 namespace {
@@ -64,6 +65,32 @@ DescriptorPreparation PrepareReadOnlyDescriptor(const int _fd) noexcept
 }
 
 } // namespace
+
+ValidatedBegin::ValidatedBegin(xpc_codec::DecodedBegin _begin) noexcept
+    : m_CreatorPID{static_cast<int>(::getpid())}, m_Begin{std::move(_begin)}
+{
+}
+
+ValidatedBegin::ValidatedBegin(ValidatedBegin &&_other) noexcept
+    : m_CreatorPID{_other.m_CreatorPID}, m_Begin{std::move(_other.m_Begin)},
+      m_Valid{std::exchange(_other.m_Valid, false)}
+{
+}
+
+ValidatedBegin &ValidatedBegin::operator=(ValidatedBegin &&_other) noexcept
+{
+    if( this == &_other )
+        return *this;
+    m_CreatorPID = _other.m_CreatorPID;
+    m_Begin = std::move(_other.m_Begin);
+    m_Valid = std::exchange(_other.m_Valid, false);
+    return *this;
+}
+
+bool ValidatedBegin::IsCreatedByCurrentProcess() const noexcept
+{
+    return m_Valid && m_CreatorPID == static_cast<int>(::getpid());
+}
 
 std::expected<ValidatedBegin, BeginDescriptorValidationError>
 ValidateBeginDescriptors(xpc_codec::DecodedBegin _begin) noexcept

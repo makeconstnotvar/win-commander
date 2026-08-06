@@ -1,316 +1,206 @@
 # План разработки Win Commander
 
 > Статус: активный roadmap
-> Актуализирован: 2026-08-04
-> Базовая ревизия: `ec7f9f4`
+> Переприоритизирован: 2026-08-06
 > Каноническая продуктовая спецификация: [`win_commander_ideal_file_manager_spec.md`](win_commander_ideal_file_manager_spec.md)
+> Историческое evidence M0–M3 до переприоритизации: [`Evidence-Archive.md`](Evidence-Archive.md)
 
-## 1. Роль roadmap
+## 1. Цель и главный принцип
 
-Продуктовая спецификация задаёт целевое поведение, архитектурные инварианты, Definition of Done, test matrix и release gates. Этот roadmap задаёт порядок реализации, зависимости, текущий статус и доказательства готовности.
+Цель ближайшего периода — **работающий, приятный файловый менеджер, которым можно пользоваться каждый день**. Не доказанный движок операций, не полное покрытие спецификации, а продукт.
 
-Полномочия источников разделены по назначению:
+Главный принцип переприоритизации:
 
-1. `win_commander_ideal_file_manager_spec.md` определяет целевой продукт и критерии качества;
-2. `Development-Plan.md` определяет последовательность работ и статус;
-3. код и исполняемые тесты определяют подтверждённое текущее поведение;
-4. feature-spec и ADR фиксируют границы и решения конкретной задачи.
+> **Пользовательская функция важнее нового движка. Существующий движок важнее нового движка.**
 
-`WindowsUI-Redesign-Plan.md` и `WindowsUI-Redesign-Design.md` сохраняют исторический контекст. Новые задачи планируются по этому roadmap.
+Практически это значит:
 
-Статусы:
+1. Каждый срез Очереди 1 обязан добавлять поведение, которое пользователь видит и может выполнить мышью и клавиатурой.
+2. Исполнение мутаций в Очереди 1 идёт через **существующие `nc::ops::*` операции** (`Copying`, `Deletion`, `DirectoryCreation`, `Compression`, `BatchRenaming`, `Linkage`, `AttrsChanging`). Новый reviewed-движок в Очередь 1 не расширяется.
+3. Новые контракты (Registry, `PaneStore`, `Capabilities`, `FileManagerError`, Visual State) уже построены — их надо **использовать как дешёвый шаблон**, а не углублять.
+4. Сложное, внешне заблокированное и требующее физического оборудования — уходит в конец (раздел 6).
 
-- **done** — acceptance criteria приняты и подтверждены evidence;
-- **partial** — есть работающая часть, exit criteria закрыты не полностью;
-- **not started** — целевой контракт фазы ещё не реализован.
+## 2. Что фактически готово
 
-Приоритеты: **P0** — следующий release gate; **P1** — Beta/1.0 после устойчивого local core; **P2** — post-1.0 expert layer.
-
-## 2. Текущий baseline
-
-| Область | Статус | Фактическое состояние |
+| Область | Статус | Что реально работает |
 |---|---|---|
-| Бренд и targets | **done** | Win Commander и bundle identifiers настроены; есть схемы Unsigned, NonMAS и MAS. |
+| Движки | **done** | `Base`, `Utility`, `Config`, `CUI`, `Panel`, `VFS`, `VFSIcon`, `Operations`, `Viewer`, `Term`, `RoutedIO` разделены, собраны, покрыты тестами. |
+| Legacy Commander | **done** | `MainWindowFilePanelState` — полнофункциональный двухпанельный менеджер: вкладки, копирование, перемещение, удаление, архивы, viewer, terminal. Это работающий fallback-продукт. |
+| Legacy операции | **done** | `Copying`, `Deletion`, `DirectoryCreation`, `Compression`, `BatchRenaming`, `Linkage`, `AttrsChanging` + диалоги и `AggregateProgressTracker`. Покрывают все P0-мутации, включая cross-volume. |
+| Legacy actions | **done** | `States/FilePanels/Actions/*` — ~40 готовых действий (Delete, MakeNew, Compress, Duplicate, BatchRename, CalculateSizes, CopyFilePaths, InsertFromPasteboard, Link, FindFiles, ChangeAttributes…). |
+| VFS | **partial** | local, archive, FTP, SFTP, WebDAV, xattr, process. `ProviderCapabilities` даёт conservative path-aware проекцию, typed host-error classification, таймауты 30 с для FTP/SFTP/WebDAV. |
+| `PaneStore` | **done для чтения** | Источник правды для navigation, listing, selection, hidden/sort/group/view state, layout slot, Back/Forward availability, current History entry. Reducer и production bridge покрыты тестами. |
+| Explorer shell | **partial** | Sidebar, toolbar, breadcrumb + address editor, quick search, command bar, status bar (count/selection/bytes из Store). Нет вкладок, нет preview/details, inspector — заглушка, Quick Look возвращает `nil`. |
+| Command Registry | **partial** | 11 stable IDs с production-определениями: `file.copy`, `file.cut`, `file.rename` (инициация), `file.open`, `view.toggleHiddenFiles`, `navigation.back/forward/up/refresh`, `operation.cancel`, `operationCenter.open`. Остальные действия — только legacy-пути. |
+| Visual State / Errors | **partial** | Pure mapper + AppKit adapter, полная taxonomy `FileManagerError` с POSIX-маппингами. Подключены к тем же 11 командам. |
+| Operation Engine (новый) | **partial, заморожен** | `OperationPlan` → preflight → review → journal → Pool → durable terminal. Продакшн-охват: **одно обычное файловое копирование на том же внутреннем APFS-томе**. Cross-volume — `Unsupported`, идёт по legacy-маршруту. |
+| Operation Center | **partial** | Статическая панель со снапшотом активных и терминальных операций + Cancel. Нет прогресса, pause/resume/retry, наблюдателя. |
+| Search | **partial** | Есть quick search, Find Files, Spotlight. Нет `SearchStore`, scope, progress, ограничений backend. |
 | Local development identity | **done** | Канонический local-development runtime устанавливается в `~/Applications/WinCommander-Codex.app`, использует bundle ID `com.wincommander.App.CodexDev` и закреплённые вне app bundle certificate fingerprint и exact designated requirement. Legacy `build_unsigned_and_run.sh` делегирует стабильному entry point; build/sign/install сериализован machine-local lock, replacement и rollback проходят exact identity/entitlement gates. Unsigned products используются как compile/test evidence. |
-| Базовые библиотеки | **done** | `Base`, `Utility`, `Config`, `CUI`, `Panel`, `VFS`, `VFSIcon`, `Operations`, `Viewer`, `Term` разделены на проекты и test targets. |
-| VFS | **partial** | Работают local, archive, FTP, SFTP, WebDAV, xattr и process providers. Conservative `ProviderCapabilities` resolver получает явные declarations от NativeHost, ArcLA, ArcLARaw, FTP, SFTP, WebDAV, XAttrHost и PSHost. `VFSHost` теперь предоставляет authoritative case/namespace identity seams, typed host-error classification и symlink capability; Native, FTP и SFTP имеют нужные production specializations. Raw-archive path semantics и selection-sensitive application composition ещё не закрыты. |
-| Operations | **partial** | Structural plan/preflight/review, private provider authority, schema-v1 plan codec, schema-v3 journal-owned ID reservations/high-water, tri-state publication and hardened `Job`/`Operation`/`Pool` lifecycle реализованы. Native provider supports one create-only regular-file Copy on the exact same internal/local/writable APFS volume with anchored metadata seals, exclusive clone publication, destination verification and ordered durability. Provider results map losslessly into the journal; a sealed move-only execution product owns commit/stop/destruction authority. The production-configured `CopyOperationOrchestrator` reaches the private reviewed factory, configures restricted cold-operation hooks, custodies the exact run receipt, delivers an owning exact durable outcome, and retains Pool residency until durable finalization or exact reopen/release reconciliation. Pool preallocates terminal-transition authority and separates generic success reporting through `ReleaseWithoutCompletion`. A bounded production `CopyAs` consumer now shows the exact bound plan, revalidates pane/item intent, uses a process-owned `OperationCenterCoordinator`, and submits explicit path-specific `SameVolumeClone` eligibility; `CrossVolumeStaged` remains unselected until a production helper authority is installed. The coordinator publishes `Queued` from its exact receipt, appends only absent terminal history from the same cold reopened storage, registers preallocated exact live Pool/Operation residency before enqueue, reduces Start and durable terminal outcomes through weak callbacks, and exposes revision-checked engine cancellation without raw executor access. The production `operation.cancel` Registry adapter accepts only value ID/revision/can-cancel targets and maps every revalidated control result without exposing an executor; Explorer `More` presents the current snapshot as a compact type/state/ID menu and routes only its Cancel entries through that adapter. A test-only Native checkpoint harness now persists a descriptor-bound manifest at `BeforePublish` or `AfterPublishBeforeFullFSync`; recovery reads the exact journal without mutation before normal startup marks it `Interrupted`. The full Operation Center, pause/resume/retry, real physical/hardware evidence, cross-volume staging and non-Copy preflight remain open. |
-| Explorer shell | **partial** | `NCExplorerState` встроен в window state machine; работают sidebar, toolbar, breadcrumb/address editor, quick search и command bar. |
-| Навигация | **partial** | Sidebar использует favorites, volumes, connections и tags; breadcrumb поддерживает сегменты, ввод пути и `Command-L`. `PanelController`, его lifecycle coordinator и production Store bridge используют один factory-injected `PaneId`; breadcrumb читает immutable snapshot. Navigation и refresh проходят через stable request identity, explicit worker ownership и exactly-one terminal outcome. Store публикует exact focused item только после cursor restoration; refresh сохраняет location generation, публикует новую listing identity и coalesces запросы как running + latest pending. Остальные consumers и live-provider/permission integration остаются в работе. |
-| File views | **partial** | Используются list/brief/gallery presentation; доступны layout, sort, grouping и hidden items. `PaneStore` публикует hidden-file hard-filter, semantic sort/group state, actual view mode и valid layout slot даже до загрузки listing. Explorer View/Sort popovers читают matching Store snapshot для hidden, sort, group и layout markers. Pure `VisualStateMapper` задаёт baseline pane/command composition; history и остальные view/item/operation render adapters ещё не подключены. |
-| Команды | **partial** | Добавлены pure C++ command contracts, registry и shortcut binding. При одиннадцати stable IDs десять app-owned production definitions маршрутизируют `file.copy`, `file.cut`, initiation `file.rename`, `file.open`, `view.toggleHiddenFiles`, `navigation.back`, `navigation.forward`, `navigation.up`, `navigation.refresh` и `operation.cancel` через Registry и общий `CommandPresentationAdapter`. Explorer подаёт matching Store snapshots в Registry presentation для hidden-files и навигационной toolbar; Explorer `More` передаёт в `operation.cancel` только immutable ID/revision/can-cancel target; menu/shortcut execution использует live pane context. Остальные P0-команды ещё используют migration paths. |
-| Cut state | **done** | Pasteboard cut token, визуальное состояние и отмена через Escape реализованы и имеют unit coverage. |
-| Status/preview | **partial** | Explorer footer через `PanelView` получает count, selection count и selected bytes только из matching `PaneStore` snapshot; отдельные `NCExplorerStatusBarView` и inspector placeholder не используются, полноценного preview/details pane нет. |
-| Tabs/multi-pane | **partial** | Legacy file panels поддерживают tabs и dual-pane; Explorer state сейчас однопанельный. |
-| Search | **partial** | Есть quick search, Find Files и Spotlight actions; нет общего Search State с явным scope и backend limitations. |
-| Tests/CI | **partial** | Recorded local M0 gate прошёл unsigned Debug build и 10/10 aggregate binaries: 897 / 132 011. The current focused CopyAs policy and app-boundary suites pass 10 / 98 and 4 / 70; the latter also passes Release ASAN and UBSAN. Explorer footer Store-state coverage passes 2 / 18. The pre-checkpoint isolated Debug `OperationsUT` snapshot had 195 / 196 passing cases and 5,270 / 5,274 passing assertions; the single set-ID metadata failure is the existing NativeCreateCopy host baseline. An intermediate full rerun reached 135 / 196 and 3,442 / 3,503 because 61 unrelated tests could not remove the pre-existing shared `_nc__operations__test_` temporary directory; the changed timeout probe itself passed 1 / 64. Focused Operations evidence: schema-v3 journal 33 / 752, pure OperationCenterModel 4 / 64, receipt-bound `OperationCenterCoordinator` with cold exact-storage history refresh 15 / 284, coordinator/orchestrator/control integration 31 / 1,060, and confirmed recovery-to-history projection 8 / 107 with fresh Release ASAN and UBSAN, Native create-copy 19 / 924, Native outcome mapper 2 / 382, provider journal mapper 4 / 237, product 9 / 188, factory 8 / 225, Job 10 / 608, probes 5 / 178, orchestrator 19 / 849 (production 3 / 138), Pool 17 / 219. The remote-transport snapshot had ProviderCapabilities and Native conditional Copy at 16 / 549 and 16 / 328, `VFSUT` at 95 / 43 549 and `WinCommanderUT` at 321 / 5 206. SFTP now bounds TCP connect and libssh2 session work to 30 seconds; an in-process blackhole VFSIT proves its 150 ms test seam returns the preserved `VFSSFTP/timeout` error (1 / 2), while host timeout classification presents `TimeoutError` without erasing the provider error. Focused Docker FTP/SFTP/WebDAV `WinCommanderIT` app-boundary coverage passes 6 / 244: every endpoint outage/reconnect preserves the committed listing and generation through `Failed(NetworkError)`, then reconnects through the same controller/host user Refresh; FTP retains `ftp::ErrorDomain/couldnt_connect` with provider `Unavailable`, SFTP retains its provider-domain `Unavailable` classification, and WebDAV retains `POSIX/ECONNREFUSED` or `ECONNRESET`. Deterministic app-boundary timeout coverage for FTP/SFTP/WebDAV remains open. A production deferred external-loading Busy case passes 1 / 22. Aggregate ASAN/UBSAN reruns stop at the same pasteboard baseline after BaseUT and ConfigUT; no sanitizer diagnostic preceded it. Seeded Docker-backed ASAN integration passes 163 / 89 392. Current full Debug reruns after the staging-cancellation contract yield `VFSUT` 97 / 100 cases and 43,645 / 43,648 assertions, with three pre-existing host-environment failures in FetchUsers/FetchGroups/Application marker; `OperationsUT` 196 / 197 and 5,291 / 5,295, with the existing set-ID NativeCreateCopy metadata baseline; and `WinCommanderUT` 330 / 334 and 5,308 / 5,312, with four unavailable-AppKit-pasteboard baselines. Hosted CI remains open. |
+| Tests/CI | **partial** | Локально: `VFSUT` 162/165 и 46 598/46 601, `OperationsUT` 210/211 и 5 662/5 666, `WinCommanderUT` 334/338 и 5 407/5 411 (известные host-baseline провалы). Seeded Docker ASAN 163/89 392. Hosted CI ещё не запускался. |
 
 Local development identity evidence 2026-08-04: the installed certificate `66CA97F3581582C97871BCC0DFC11BEAB4C65C83` is pinned in machine-local state, and the prior content-changing rebuild changed CDHash from `367a50c5943b49e619d46b247f5ecb00e670022f` to `cda67423c625a18eb1ede01f21c163a0b358c862` while preserving bundle ID `com.wincommander.App.CodexDev` and the exact designated requirement `designated => identifier "com.wincommander.App.CodexDev" and certificate leaf = H"66ca97f3581582c97871bcc0dfc11beab4c65c83"`. The closing current-tree gate passed two consecutive `Scripts/build_stable_dev_and_run.sh --no-run` rebuilds. A separate contention probe held the fixed machine-local lock for three seconds and invoked the build through a different signing-state override; the build waited, completed, and preserved the same requirement. Both staged-candidate and canonical post-install verification passed. The state directory is `0700`; the certificate pin, requirement pin, build lock and dedicated keychain are `0600`. Negative checks rejected an otherwise valid candidate with an extended designated requirement, an unsigned DerivedData candidate and unsafe state-directory permissions. No WinCommander process was started. Observed continuity of existing FDA/Automation/Accessibility grants remains the explicit M7 runtime smoke.
 
-The recorded remote-transport slice superseded the older 6 / 244 snapshot: at that slice Debug `VFSUT` was 95 / 43 563 and `WinCommanderUT` was 321 / 5 206; `IntegrationTests` built; the focused Docker `WinCommanderIT` suite was 9 / 376. FTP listing, WebDAV blocking-control and SFTP connect/session deadlines are 30 seconds in production and use isolated 500 ms seams in the tests. The pause/unpause cases preserve raw FTP `operation_timeout`, SFTP `timeout` and WebDAV `POSIX/ETIMEDOUT`, map each to `TimeoutError`, retain listing/generation and prove same-controller reconnect. The SFTP blackhole VFSIT remains 1 / 2; negative `readdir` fails closed and transport/timeout connections are not returned to the pool.
+### 2.1 Что осталось до продукта
 
-The pre-checkpoint coordinator-focused evidence adds the pure `OperationCenterModel` foundation at 4 / 64, schema-v3 `OperationJournal` allocation/migration at 33 / 752, and receipt-bound `OperationCenterCoordinator` hydration/admission/cold exact-storage refresh at 15 / 284. Coordinator/orchestrator/control integration passes 31 / 1,060, including `Queued` before Pool addition, Start reduction, durable terminal reduction, sealed pre-enqueue residency, stale-revision rejection, exact cancellation, reentrant cancellation rejection, a failed handoff without Pool side effects and cold refresh rejection while stage/commit/liveness is present; the same subset passes Release ASAN and UBSAN. The explicit confirmed recovery-to-history bridge passes 8 / 107 in Debug, Release ASAN and Release UBSAN. That isolated Debug `OperationsUT` snapshot was 195 / 196 and 5,270 / 5,274, with the same NativeCreateCopy set-ID metadata host baseline; the later current full Debug run is 197 / 5,295.
+Отсутствует не движок, а **поверхность Explorer**:
 
-Current-tree M0 2026-08-01: `Scripts/verify_m0.sh` собрал unsigned Debug application и выполнил все десять seeded aggregate unit-test targets — 897 cases / 132 011 assertions в recorded run. Its historical `OperationsUT` snapshot passed 170 / 4 748 in Debug and explicitly instrumented Release ASAN/UBSAN; the current coordinator/control subset separately passes fresh Release ASAN and UBSAN at 31 / 1,060. Seeded Docker-backed integration ASAN passed 163 / 89 392; the first hosted CI run remains open evidence.
+- нет команд Paste, Delete/Trash, New Folder/New File, Select All, Compress/Extract, Duplicate, Copy Path, Properties, Batch Rename, Calculate Sizes в Registry;
+- нет details/preview-панели (`P0-VIEW-02` = **missing**);
+- нет вкладок в Explorer;
+- нет контекстного меню через Registry;
+- нет полного набора view modes и их persistence;
+- нет восстановления сессии;
+- нет Search Mode со scope и ограничениями;
+- нет прогресса и conflict-диалога копирования в Explorer-оболочке.
 
-Целевые контракты вводятся адаптерами поверх зрелых модулей:
+## 3. Решение о переприоритизации
 
-| Контракт спецификации | Основа в коде |
+### 3.1 Что замораживается и почему
+
+**Заморожено: cross-volume staging authority (бывший пункт очереди 2 старого плана).**
+
+Построены `ProtectedRootLedger`, `LeaseStore`, `LeaseLifecycle` (Begin/Commit/Abort в helper-dispatcher, без artifact и namespace mutation), `SourceSnapshotWriter`, `DestinationStageWriter`, `StagingRootAuthority`, `LockedSession`, `StagingSessionRunner`, `StagingPublicationBarrier`, `PublicationPermit`, lifecycle retention/inspection и V1 protocol/codec/client. При этом:
+
+- **publisher отсутствует** и заблокирован: нет descriptor-bound namespace primitive; `VFSUT`-характеризация подтвердила окно подмены same-euid перед `renameatx_np(..., RENAME_EXCL)`;
+- нужен подписанный привилегированный helper (Developer ID + hardened runtime + SMJobBless), локальных identity нет;
+- нужен фикстур из двух отдельных внутренних APFS-томов, которого нет на машине разработки (`/`, `/private/tmp`, `/Volumes` — один `st_dev`);
+- **функционального выигрыша нет**: `nc::ops::Copying` уже копирует между томами сегодня.
+
+Это самая дорогая работа в репозитории с нулевым видимым пользователю результатом. Возобновляется только после закрытия Очереди 1 — либо не возобновляется вовсе, если legacy-маршрут окажется достаточным.
+
+**Заморожено: hardware power-loss evidence.** Требует одноразового физического Mac и оператора, вручную обрывающего питание в двух фазах. Это release-gate 1.0, а не задача разработки. Test-only checkpoint harness уже готов и ждёт оборудования.
+
+**Заморожено: расширение reviewed-движка на batch, Move, Delete и остальных потребителей.** Возобновляется в Очереди 2 после того, как продукт станет пригоден к ежедневному использованию.
+
+### 3.2 Что меняется в процессе работы
+
+| Было | Стало |
 |---|---|
-| `FileSystemProvider` + `ProviderCapabilities` | `Source/VFS`, `VFSHost`, `VFSOperationPlanningBindings`, `VFSOperationPlanningProbes` и `Core/VFSOperationPlanningAccessChecker` |
-| `PaneStore` | `Core/Pane/PaneSnapshot`, `PaneStoreAdapter`; `PanelController`, `PanelData`, panel persistency |
-| `Command Registry` | `PanelControllerActionsDispatcher`, menu actions, `ActionsShortcutsManager` |
-| `Operation Engine` | structural `OperationPlan`, codec, copy-first `OperationPlanner`, reviewed bound preflight, provider conditional transaction, result mapper, sealed execution product, durable `OperationJournal`, private reviewed factory path, production-configured `CopyOperationOrchestrator`, `Operation`, `Job`, `Pool` in `Source/Operations` |
-| Visual State System | panel presentation, notifications, operation statistics |
-| Error Model | `Core/Errors/FileManagerError`, `FileManagerErrorAdapter`; `nc::Error`, VFS errors, operation dialogs |
+| Каждый срез переписывает абзацы evidence-прозы в плане | Срез меняет **одну ячейку статуса** + одну строку в `changelog.md`. Подробное evidence — в feature-spec среза. |
+| План накапливает историю | История — в [`Evidence-Archive.md`](Evidence-Archive.md); план описывает только текущее состояние и очередь. |
+| Release ASAN + UBSAN на каждом «risk-bearing batch» | ASAN/UBSAN только при изменениях в `Operations`, `VFS`, `RoutedIO`, конкурентности, владении памятью и async-teardown. Для AppKit/Registry/Store-срезов — focused-фильтр + один Debug-билд. |
+| Полный aggregate-прогон на закрытии среза | Полный прогон затронутого бинарника на закрытии среза; aggregate — на закрытии очереди. |
+| Формальная строгость как цель | Fail-closed остаётся обязательным для мутаций. Доказательная строгость уровня M3 — только для нового движка операций, не для UI-срезов. |
 
-Технический принцип: ввести контракт и адаптер, перевести на них один сквозной сценарий, подтвердить seam тестами, затем мигрировать остальные сценарии.
+## 4. Очередь 1 — продукт
 
-## 3. Карта milestones
+Цель очереди: **Explorer становится основным режимом и полностью заменяет Commander для повседневных задач.**
 
-| ID | Milestone | Spec phase | Priority | Status | Depends on | Gate |
-|---|---|---:|---:|---|---|---|
-| M0 | Baseline и архитектурные границы | 0 | P0 | **partial** | — | — |
-| M1 | Source of Truth и Command foundation | 1 | P0 | **partial** | M0 | Alpha |
-| M2 | Local Explorer vertical slice | 1 | P0 | **partial** | M1 | Alpha |
-| M3 | Безопасный Operation lifecycle | 2 | P0 | **partial** | M1, M2 | Alpha |
-| M4 | Search и ежедневные workflow | 2 | P0 | **partial** | M1–M3 | Beta |
-| M5 | Power-user workflow | 3 | P1 | **partial** | M1–M4 | Beta |
-| M6 | Archives и remote workflow | 4 | P1 | **partial** | M3–M5 | 1.0 |
-| M7 | Надёжность и выпуск 1.0 | cross-cutting | P0 | **partial** | M1–M6 | 1.0 |
-| M8 | Expert layer | 5 | P2 | **not started** | M7 | post-1.0 |
+Все мутации исполняются существующими `nc::ops::*`. Все команды используют готовые `Command`/`CommandRegistry`/`CommandState`/`ProviderCapabilities`/`FileManagerError`/`VisualStateMapper` контракты — как шаблон, копированием структуры уже сделанных срезов.
 
-## 4. Milestones и exit criteria
+| # | Срез | Размер | Что даёт пользователю | Основа в коде |
+|---|---|---|---|---|
+| **Q1-1** | Полный roster команд Registry | **L** (серия S-срезов) | Paste, Delete/Trash, Permanent Delete, New Folder, New File, Select All, Invert Selection, Compress, Extract, Duplicate, Copy Path, Calculate Sizes, Batch Rename, Properties — работают одинаково из toolbar, меню, контекстного меню и по хоткею, с локализованной причиной недоступности | `Actions/{InsertFromPasteboard,Delete,MakeNew,Compress,Duplicate,CopyFilePaths,CalculateSizes,BatchRename,ChangeAttributes}` + `CommandRegistry` |
+| **Q1-2** | Контекстное меню и toolbar overflow через Registry | **S** | Правый клик по файлу, папке и фону даёт тот же набор действий с теми же состояниями | Определения из Q1-1 + `CommandPresentationAdapter` |
+| **Q1-3** | Details / Preview pane | **M** | Реальный инспектор: превью, метаданные, права, действия; Quick Look по пробелу; loading/error states | `Viewer`, `VFSIcon`, `QLPreviewPanel`; заменяет `NCExplorerInspectorPlaceholderView` |
+| **Q1-4** | Вкладки в Explorer | **M** | Ctrl/Cmd+T, закрытие, переключение, drag-reorder; у каждой вкладки свой `PaneId` и своя история | `PanelController` + `PaneId` factory; tab-модель из `MainWindowFilePanelState` |
+| **Q1-5** | View modes, density и persistence | **M** | Details / List / Icons / Compact, ширина и набор колонок, сортировка и группировка сохраняются per-location | `PaneStore` уже публикует view mode, layout slot, sort/group; нужен write-path и persistence |
+| **Q1-6** | Восстановление сессии | **S** | После перезапуска возвращаются окно, вкладки, локации и view settings | Существующая `StateConfig` persistency |
+| **Q1-7** | Полный набор состояний строки и папки | **M** | Inline rename (F2) с валидацией, drag & drop с copy/move-бейджами, loading skeleton, empty, permission denied, drive disconnected | `file.rename` commit → `Copying(docopy=false)`; `PanelView` drag-инфраструктура |
+| **Q1-8** | Прогресс и конфликты копирования в Explorer | **M** | Видимый прогресс операции, MB/s, ETA, текущий файл; диалог конфликта Replace/Skip/Keep both/Apply to all | `AggregateProgressTracker`, `CopyingDialog`, существующая панель Operation Center |
+| **Q1-9** | Search Mode | **L** | Поиск с явным scope (папка / диск / Spotlight), прогресс, отмена, понятные ограничения backend, результаты как обычный listing с навигацией к элементу | `Actions/FindFiles`, quick search, Spotlight; новый `SearchStore` |
+| **Q1-10** | Explorer как режим по умолчанию + перф и accessibility | **M** | Explorer открывается по умолчанию; папки 10k/100k остаются интерактивными; VoiceOver-проход по основным поверхностям | `MainWindowController` state machine; baseline из `Performance/` |
 
-### M0 — Baseline и архитектурные границы
+### 4.1 Порядок исполнения
 
-**Работы:** оформить architecture audit, gap matrix, risks и refactor boundaries; закрепить владельцев app/pane/folder/selection/search/operation state; сопоставить actions, VFS capabilities и errors с целевыми контрактами; добавить CI для unsigned build и unit tests; описать local vertical slice.
+Q1-1 → Q1-2 → Q1-3 → Q1-4 → Q1-5 → Q1-6 → Q1-7 → Q1-8 → Q1-9 → Q1-10.
 
-**Acceptance:**
+Q1-1 идёт первым и даёт максимальный прирост функциональности на единицу затрат: инфраструктура готова, каждая команда — повторение уже сделанного среза, исполнение — вызов готовой legacy-операции. Q1-2 почти бесплатен после Q1-1.
 
-- у каждого authoritative system из раздела 7 спецификации указаны модуль, API boundary и владелец состояния;
-- каждое P0-требование в gap matrix связано с milestone;
-- unsigned build и aggregate unit tests запускаются одной командой локально и в CI;
-- vertical slice описан feature-spec по разделу 39 спецификации;
-- есть baseline для папок на 10 000 и 100 000 элементов.
+Внутри Q1-1 команды закрываются партиями по 3–4, а не по одной: у них общий шаблон, общий тестовый фикстур и общий presentation-путь.
 
-**Evidence:** ADR/architecture docs, CI run, performance report и feature-spec.
+### 4.2 Definition of Done среза Очереди 1
 
-**Текущее evidence (2026-08-02):**
+1. Действие доступно мышью и клавиатурой, с одинаковой валидацией во всех точках входа.
+2. Недоступное действие возвращает локализуемую причину.
+3. Мутация fail-closed: заблокированный, устаревший, отменённый или неподдерживаемый intent не доходит до исполнения.
+4. Есть happy path + минимум три содержательных edge case в focused-тесте.
+5. Проверены loading, empty, error, permission и disabled states.
+6. Одна строка в `changelog.md` + обновлённая ячейка статуса в этом плане.
 
-- [`current_architecture_audit.md`](current_architecture_audit.md) — runtime topology, state owners, adapters и verification seams;
-- [`M0-Acceptance-Evidence.md`](M0-Acceptance-Evidence.md) — requirement-by-requirement аудит: четыре локальных критерия закрыты, hosted execution остаётся единственным M0 closure gate;
-- [`refactor_plan.md`](refactor_plan.md) — последовательность R0–R7 и boundaries миграции;
-- [`feature_gap_matrix.md`](feature_gap_matrix.md) и [`implementation_risks.md`](implementation_risks.md) — полное P0 coverage и risk gates;
-- [`Features/local_explorer_vertical_slice.md`](Features/local_explorer_vertical_slice.md) — первый local browse-and-copy slice;
-- [`Performance/large_folder_baseline_2026-08-01.md`](Performance/large_folder_baseline_2026-08-01.md) — model load/natural-sort baseline 10k/100k; UI first-render/main-thread/memory evidence остаётся в M2/M7;
-- `Scripts/verify_m0.sh` — current-tree local M0 с unsigned build и 10/10 unit targets: 897 cases / 132 011 assertions в финальном recorded seeded run. Entry point требует Xcode 26.5, а aggregate runner fail closed проверяет присутствие всех десяти baseline products до сборки. `.github/workflows/m0-verification.yml` использует тот же entry point; первый hosted run ожидается.
-- `Base::SerialQueue` сохраняет корректный `Length` при failure построения callable, task exception и observer exception; cleanup выполняет decrement до освобождения context, а штатная dispatch policy логирует и поглощает callback exceptions. Focused coverage входит в локально пройденный `BaseUT`: 78 cases / 70,566 assertions.
+### 4.3 Exit criteria Очереди 1
 
-### M1 — Source of Truth и Command foundation
+- Explorer закрывает повседневный цикл: навигация, просмотр, создание, копирование, перемещение, переименование, удаление, архивирование, поиск, свойства.
+- Вкладки, preview, view modes и сессия работают и восстанавливаются.
+- Длинные операции видимы и отменяемы, конфликты разрешаются явно.
+- Папки 10 000 и 100 000 элементов остаются интерактивными.
+- Аггрегатные unit-тесты проходят локально; первый hosted CI run выполнен.
 
-**Работы:** ввести `Command`, `CommandContext`, `CommandState`, `CommandRegistry`; адаптировать shortcut storage; построить observable `PaneStore`; добавить `ProviderCapabilities`, базовый `FileManagerError` и Visual State composition; перевести P0-команды Explorer на registry через существующий dispatcher. Pure pane lifecycle producer/reducer и app-layer coordinator готовы; `PanelController` владеет coordinator для своего `PaneId`, navigation и refresh подключены к production lifecycle, Store bridge редуцирует их events и публикует exact focus/selection identities, hidden-file filter, semantic sort/group state, view mode/layout slot, Back/Forward availability и runtime current History entry identity. Explorer breadcrumb рендерит activity/error projection, View/Sort popovers и toolbar получают presentation state из matching snapshot. Production Registry routes готовы для `file.copy`, `file.cut`, initiation `file.rename`, `file.open`, `view.toggleHiddenFiles`, `navigation.back`, `navigation.forward`, explicit `navigation.up` и forced-user `navigation.refresh`. Следующие M1 increments переводят оставшиеся P0-команды и contexts; M3 now has one bounded `CopyAs` mutation consumer, while physical-volume, cross-volume and broader-consumer gates remain separate.
+## 5. Очередь 2 — power-user и полнота
 
-**Acceptance:**
+Начинается только после exit criteria Очереди 1.
 
-- одно действие имеет один command id и одинаковую validation во всех UI entry points;
-- disabled command возвращает локализуемую причину;
-- toolbar, menu, context menu и shortcut исполняют P0-команды через registry;
-- `PaneStore` является источником navigation, listing, selection и view state;
-- каждый принятый navigation/refresh/load request имеет stable per-pane identity и ровно один main-queue terminal outcome; success публикуется после model commit;
-- capability-dependent actions корректны для local, archive и remote hosts;
-- registry, stores и adapters покрыты unit tests.
+| # | Срез | Размер | Содержание |
+|---|---|---|---|
+| **Q2-1** | Dual Pane в Explorer + workspaces | **L** | Две независимые `PaneStore`, общий command bar, F5/F6/F7, сохранение layout |
+| **Q2-2** | Folder compare и one-way sync | **L** | left-only / right-only / changed / same, dry-run с preview удалений |
+| **Q2-3** | Command palette и hotkey profiles | **M** | Fuzzy-поиск по Registry; профили macOS native / Windows Explorer / Commander |
+| **Q2-4** | Live Operation Center | **L** | Наблюдатель, прогресс, pause/resume/retry, персистентная история, логи |
+| **Q2-5** | Remote Connection Manager | **L** | Хранение credentials и host verification в Keychain, queue/retry/reconnect, latency/offline/read-only states, системные SMB/NFS mounts |
+| **Q2-6** | Архивы через Operation Center | **M** | Create/extract с планом, прогрессом и typed result |
+| **Q2-7** | Gallery, cloud sync states, network states | **M** | Отдельный режим просмотра медиа; badges синхронизации только там, где они уместны |
+| **Q2-8** | Расширение reviewed-движка | **L** | Batch, Move, Delete и остальные P0-потребители через `OperationPlan` |
+| **Q2-9** | Terminal/editor/git-интеграция | **M** | Корректный cwd, пути, git badges |
+| **Q2-10** | Release hardening 1.0 | **L** | Обязательные CI checks, crash recovery, atomic persistence, локализация, полный accessibility, подпись и нотаризация |
 
-**Evidence:** unit tests, integration test одной команды через все entry points, ADR mapping старого dispatcher.
+### 5.1 Отложено за пределы Очереди 2
 
-**Текущее evidence (2026-08-02):**
+| Пункт | Причина | Условие возврата |
+|---|---|---|
+| Cross-volume staging authority (подписанный helper) | Заблокирован отсутствующим descriptor-bound namespace primitive; требует Developer ID + SMJobBless + фикстур из двух APFS-томов; legacy `Copying` уже решает задачу | Появление подходящего примитива ядра **и** доказанная недостаточность legacy-маршрута |
+| Hardware power-loss evidence | Требует одноразового физического Mac и ручного обрыва питания | Release-gate 1.0, вне цикла разработки |
+| Physical internal/external volume matrix | Требует вручную подготовленных user-owned marker roots | Release-gate 1.0 |
+| S3/cloud providers, duplicate/checksum search, automation, scheduled sync, plugin API | Expert layer | После 1.0 |
 
-- `Source/VFS/include/VFS/ProviderCapabilities.h` и resolver дают conservative path-aware projection для NativeHost, ArcLA, ArcLARaw, FTP, SFTP, WebDAV, XAttrHost и PSHost. `VFSHost` классифицирует POSIX failures, SFTP дополняет provider-domain classification; authoritative case semantics, semantic namespace identity и symlink creation/read capability поступают в preflight fail closed. Native exposes four path-specific conditional-Copy states: `SameVolumeClone`, `CrossVolumeStaged`, `Unsupported` and `Unavailable`; without an available production staging authority, different volumes remain `Unsupported`. Move-only reviewed authority privately retains the consumed exact preflight and issues immutable Copy claims once. Native conditional transaction owns source/destination-parent descriptors, admits exact same internal/local/writable APFS volume, seals supported metadata, publishes through one `fclonefileat(..., CLONE_ACL)`, verifies the destination and executes ordered durability barriers. At the 2026-08-02 snapshot, focused ProviderCapabilities passed 16 / 549, Native conditional Copy 16 / 328 and the combined Debug selection 32 / 877; its full Debug `VFSUT` run was 95 / 43 566. The current full Debug `VFSUT` result is 96 / 43 606, and seeded Docker-backed VFS/VFSIcon ASAN integration remains 58 / 87 975;
-- `Source/WinCommander/WinCommander/Core/Commands/` содержит pure C++ command contracts, одиннадцать stable IDs, registry и read-only legacy shortcut binding adapter с explicit ambiguity. Девять IDs имеют app-owned production definitions. Focused Back/Forward Registry run прошёл 14 / 173, Up/Refresh core command/availability/identity/alias run — 22 / 281, а `file.open` core/Registry/shortcut run — 23 / 201;
-- [`Features/file_copy_command_registry_slice.md`](Features/file_copy_command_registry_slice.md) фиксирует первый production command slice: `file.copy` имеет один typed synchronous context и один pasteboard writer для command bar, menu, shortcut и context menu; native-only eligibility исключает partial mixed-provider writes. Focused suite прошёл 6 cases / 58 assertions. `file.cut` является вторым app-owned Registry/Visual State consumer; writer failure превращается в typed `FileCutWriteError`, и registry не сообщает `Executed`. Focused `file.cut` suite прошёл 8 / 73. Production surfaces используют общий `CommandPresentationAdapter`; focused presentation suite прошёл 10 / 69;
-- [`Features/file_rename_command_registry_slice.md`](Features/file_rename_command_registry_slice.md) фиксирует третий app-owned command slice: stable `file.rename` принимает ровно один non-dotdot item, проверяет path-aware `ProviderCapabilities::can_rename` и live borrowed pane target, затем синхронно re-resolves item, фокусирует его и открывает inline editor. Menu/persisted shortcut, Explorer command bar, context menu и direct field-editor mouse entry сходятся в одной Registry definition; false editor start превращается в `FileRenameInitiationError`. Focused suite прошёл 5 cases / 64 assertions. Commit нового имени остаётся на `PanelController::requestQuickRenamingOfItem` → `nc::ops::Copying(docopy = false)` до миграции через `OperationPlan`;
-- [`Features/view_toggle_hidden_files_command_registry_slice.md`](Features/view_toggle_hidden_files_command_registry_slice.md) фиксирует четвёртый app-owned command slice: stable `view.toggleHiddenFiles` проецирует `On`/`Off`, локализованные missing-target/state reasons и exactly-once setter в View menu, persisted shortcut и Explorer View popover. Selector execution больше не вызывает legacy action напрямую. Popover presentation получает `shows_hidden_files` из matching `PaneSnapshot`; отсутствие Store state и foreign pane identity fail closed, а execution остаётся live. Debug `WinCommanderUT` scheme build прошёл; объединённый focused command/registry/mapper/presentation run — 28 cases / 372 assertions;
-- [`Features/operation_plan_foundation.md`](Features/operation_plan_foundation.md), [`Features/copy_preflight_planner_foundation.md`](Features/copy_preflight_planner_foundation.md), [`Features/vfs_operation_planning_probes_foundation.md`](Features/vfs_operation_planning_probes_foundation.md), [`Features/reviewed_copy_factory_foundation.md`](Features/reviewed_copy_factory_foundation.md), [`Features/provider_conditional_copy_execution_product.md`](Features/provider_conditional_copy_execution_product.md), [`Features/operation_plan_codec_foundation.md`](Features/operation_plan_codec_foundation.md), [`Features/native_create_copy_execution_foundation.md`](Features/native_create_copy_execution_foundation.md), [`Features/operation_journal_foundation.md`](Features/operation_journal_foundation.md), [`Features/operation_center_model_and_control_projection.md`](Features/operation_center_model_and_control_projection.md), [`Features/copy_operation_submission_hooks.md`](Features/copy_operation_submission_hooks.md) и [`Features/reviewed_copy_as_production_consumer.md`](Features/reviewed_copy_as_production_consumer.md) фиксируют M3 chain. Exact bindings reach a provider-owned internal-APFS clone transaction; the provider result maps losslessly into a transaction-backed Job and exact journal terminal evidence. `CopyOperationRunReceiptCustodian` owns retry/reconcile authority, including `ReleaseReconciled` Pool handoff. The production-configured orchestrator calls the private reviewed factory, installs restricted cold hooks and delivers the exact durable outcome; its injected seam is test-only. The bounded `CopyAs` consumer adds path-aware eligibility, exact user review, stale-intent gates, process recovery, window submission custody and typed UI outcomes. The process-owned coordinator preallocates a model draft, binds `Queued` to the exact journal receipt, appends only absent terminal history from the same cold reopened storage, registers sealed live residency before enqueue, and reduces Start plus durable terminal outcomes through weak callbacks. Confirmed explicit recovery projects that history separately from custody. At the pre-checkpoint evidence snapshot, Debug evidence was factory 8 / 225, probes 5 / 178, Native create-copy 19 / 924, Native mapper 2 / 382, provider mapper 4 / 237, product 9 / 188, schema-v3 journal 33 / 752, pure OperationCenterModel 4 / 64, coordinator 15 / 284, coordinator/orchestrator/control integration 31 / 1,060, recovery-to-history projection 8 / 107 in Debug, Release ASAN and Release UBSAN, Pool 17 / 219, ProviderCapabilities 16 / 549, Native conditional Copy 16 / 328, CopyAs policy/gate 6 / 28 and recovery coordinator 6 / 67; the isolated Debug `OperationsUT` snapshot was 195 / 196 and 5,270 / 5,274 with the existing set-ID metadata host baseline. The current full Debug `OperationsUT` result is 197 / 5,295;
-- [`Features/pane_store_explorer_read_projection.md`](Features/pane_store_explorer_read_projection.md) фиксирует production read/lifecycle slice; `PanelControllerPaneStoreAdapter` проецирует exact focus, immutable shared selected identities в display order, hidden/filter/sort/group/view state, Back/Forward availability and runtime current History entry ID. `SelectionProjectionGeneration()` ограничивает O(N) materialization изменениями membership/order/listing, cursor-only projection переиспользует payload за O(1), а reducer проверяет new payload на exact listing/range/count/uniqueness и использует trusted-identity fast path. Sort/group/view mapper сохраняет legacy ordering semantics, derives effective grouping and separates configured slot identity from actual presentation/fallback; malformed enum/combination fail closed за O(1). Presentation/History-only changes продвигают `revision`, но не `listing_generation`; lifecycle overlays сохраняют updated committed state. Explorer presentation принимает только matching snapshot. Focused Store suite прошёл 18 / 220, reducer 19 / 335, production bridge 28 / 461; combined 65 / 1 016. Panel generation contract прошёл 1 / 42, Explorer matching-pane presentation/toolbar baseline — 2 / 266. Grouping persistence остаётся M2 gap;
-- [`Features/pane_history_availability_projection.md`](Features/pane_history_availability_projection.md) и [`Features/pane_history_current_entry_identity.md`](Features/pane_history_current_entry_identity.md) фиксируют runtime History projection: unified navigation-state callback exactly-once сообщает availability или current-ID changes, bridge публикует их для unloaded/loaded and lifecycle overlays, а Explorer принимает availability только из matching snapshot. Current Store/reducer/bridge прошли 65 / 1 016; dedicated History — 5 / 457; combined 70 / 1 473. Matching-pane model/toolbar baseline прошёл 2 / 266. Lifecycle-correlated restore и persistence остаются отдельной работой;
-- [`Features/navigation_history_command_registry_slice.md`](Features/navigation_history_command_registry_slice.md) фиксирует Registry route для stable `navigation.back`/`navigation.forward`: menu, persisted shortcut, Explorer toolbar and programmatic selectors share typed state, localized reasons and one live execution port. Store-backed toolbar presentation и live menu state проходят одну definition; legacy action-map registrations удалены. Core Registry evidence — 14 / 173; dispatcher/toolbar evidence — 2 / 102; arm64 Debug build прошёл. `Executed` пока означает cursor move + submission в legacy `ListingPromiseLoader`, а не lifecycle listing commit;
-- [`Features/pane_navigation_up_refresh_command_registry.md`](Features/pane_navigation_up_refresh_command_registry.md) фиксирует Registry route для explicit `navigation.up` и forced-user `navigation.refresh`. Matching-`PaneId` Store snapshots определяют Explorer toolbar presentation, а menu/shortcut/selector execution повторно читает live controller availability через общий с admission queue-ownership helper. Up submits только uniform child/provider-parent navigation; non-uniform dot-dot/Enter сохраняет compatibility Back fallback как отдельную legacy navigation boundary. Secondary Up shortcut сохраняет menu bounce, а command-aware descriptor aliases классифицируют bounced invocation как Shortcut. Registry Refresh выставляет `initiated_by_user` и `F_ForceRefresh`, тогда как automatic soft refresh остаётся вне Registry. Lifecycle `Accepted`/`Deferred` означает submitted request, а не committed listing. Итог slice — 32 / 549: core 22 / 281, production navigation 4 / 50, production Refresh 3 / 37, Registry surfaces 1 / 27, Explorer model/toolbar 2 / 154. Explicit-Up non-cooperative teardown прошёл 1 / 12; broader production navigation/refresh prefixes — 8 / 103 и 16 / 154. Additional live-local `NativeHost` navigation plus forced refresh passes 1 / 30 against a real temporary directory. Hosted CI для slice не запускался;
-- [`Features/file_open_command_registry_slice.md`](Features/file_open_command_registry_slice.md) фиксирует stable `file.open` как девятую app-owned production Registry definition при одиннадцати stable IDs. `OnOpenNatively:` и main-menu Open, ordinary-file fallback of Enter, explicit Shortcut/Shift-Return и context-menu exact-item payload используют один typed context и одну availability policy. Один regular file допускается на provider с `Read`; batch состоит только из regular files одного exact provider instance и требует `Read` для всех items; native directory/special item допускает handoff текущему workspace path, а dot-dot и remote directory/special item fail closed с typed локализуемой причиной. Enter остаётся router для folder/archive navigation и terminal executable. Executor синхронно передаёт exact items в общий `FileOpener`; `Executed` означает submitted handoff, а не подтверждённое открытие Launch Services или remote opener. Legacy duplicate `OnOpenNatively:` удалён из action map. Dot-dot route теперь возвращается после единственного enclosing-folder request. Итог focused slice — 24 / 267: `FileOpenCommand` 8 / 102, Registry/shortcut 15 / 99 и production menu/Enter/context-menu/Shift-Return route 1 / 66; полный production Registry fixture прошёл 3 / 122. Explicit Release ASAN для core command и production route прошёл 9 / 168. Hosted CI не запускался;
-- `Source/WinCommander/WinCommander/Core/Errors/` содержит полную taxonomy и conservative lossless POSIX mappings для permission/path/read-only/unsupported/cancel/conflict/space/busy/timeout/network/authentication при flow-owned recovery policy; focused suite прошёл 6 cases / 519 assertions;
-- [`Features/visual_state_mapper_baseline.md`](Features/visual_state_mapper_baseline.md) и `Core/VisualState` фиксируют pure pane/command projection с explicit priorities для unavailable/loading/refreshing/empty/error/permission/disabled; mapper также сохраняет semantic `Off`/`On`/`Mixed`, а AppKit adapter проецирует его в menu/button state. `file.copy`, `file.cut`, initiation `file.rename`, `file.open`, `view.toggleHiddenFiles`, `navigation.back`, `navigation.forward`, `navigation.up` и `navigation.refresh` имеют production command renderers, а Explorer breadcrumb отображает reduced navigation/refresh activity/error state, retained content и accessibility message. Up/Refresh toolbar state выводится только из matching pane projection и fail closed для missing/foreign state. Prior combined command evidence — 28 / 372; Back/Forward core/UI — 16 / 275; `file.open` focused production route прошёл 1 / 66. Остальные pane/item/operation render adapters и P0 consumers остаются следующими increments;
-- `Source/WinCommander/WinCommander/Core/Pane/PaneLifecycleProducer.{h,cpp}` содержит pure main-queue sequencer со stable pane/request identity, explicit acceptance/rejection, owned typed admission diagnostics, ordered terminal events, supersession, shutdown, reentrant FIFO delivery и transactional finish. Linearizable `Subscribe` объединяет live observation с active seed или retained-failure replay/checkpoint. Финальный Debug suite прошёл 24 cases / 267 assertions;
-- `Source/WinCommander/WinCommander/Core/Pane/PanelControllerLifecycle.{h,cpp}` содержит pure app-layer coordinator: fresh admission probe, navigation/refresh supersession matrix, deferred reentrant admission с exactly-once resolution feedback, request-aware scheduler, transactional post-model-commit publication, stale-commit suppression и retryable callback-safe shutdown. Admission-probe exception даёт `Rejected(Unavailable)` с owned `admission_error`, scheduler/commit exception даёт `Failed`. Финальный Debug suite прошёл 21 cases / 211 assertions;
-- Common factory выдаёт каждому `PanelController` immutable-for-lifetime `PaneId`, Store bridge использует ту же identity, а controller владеет `PanelControllerLifecycle`. `GoToDirWithContext` проводит navigation через explicit `NavigationWorkerSlot`; asynchronous work захватывает shared loading `SerialQueue`, performs detached provider fetch and returns to main through weak controller callbacks. Dealloc stops the queue without `Wait`, so a non-cooperative provider cannot retain or block the controller. `refreshPanelDiscardingCaches` допускает refresh только через `SubmitRefresh`, захватывает immutable source listing/location/provider snapshot и использует один running worker плюс один latest pending intent. Uniform listing загружается через provider, temporary listing обновляется через `ProduceUpdatedTemporaryPanelListing`; prepared model reload предшествует transactional commit. Exact request/content/source/generation/host/path gates подавляют stale completion, а terminal `Committed`, typed `Failed` или `Cancelled` публикуется ровно один раз. После invalid-location failure запускается ordinary asynchronous navigation recovery к доступному ancestor или native home. Broader production navigation/refresh prefixes прошли 8 / 103 и 16 / 154; real temporary-directory `NativeHost` navigation plus forced refresh passes 1 / 30, a `0000` Native directory proves `EACCES` → typed permission failure at 1 / 22, and Docker FTP/SFTP/WebDAV navigation, shadow-host mutation, endpoint outage and reconnect passes 6 / 244. FTP and WebDAV intentionally supersede a successful user refresh with a correlated soft-refresh successor under the existing latest-wins contract; SFTP commits the direct user refresh without provider observation/cache. FTP and SFTP retain their provider-domain `Unavailable` classification, WebDAV retains `POSIX/ECONNREFUSED` or `ECONNRESET`; every outage emits `Failed(NetworkError)` while retaining the exact committed listing and location generation, and a restarted endpoint reconnects through the next user Refresh. A Started observer's external loading task causes the deferred successor navigation to resolve once as `Rejected(Busy)` without fetch or model commit (1 / 22).
-- Общий content-intent epoch отменяет running/pending refresh и late navigation/recovery/legacy commits; navigation invalidation also cancels the worker callback/fetch token. Navigation supersedes refresh; ESC отменяет active refresh до появления delayed spinner. Loading/reload queues retain their detached worker resources, while both navigation and refresh cross the main callback boundary through weak controller boxes. Teardown remains main-thread nonblocking when a provider ignores cancellation. Persistency fallback/recovery callbacks also capture the panel weakly;
-- Focused rename editor regression прошёл 2 cases / 23 assertions;
-- Текущий Debug `WinCommanderUT` прошёл 217 cases / 2 694 assertions; application access checker — 4 / 56. Explicitly instrumented current-tree Release ASAN и UBSAN `WinCommanderUT` прошли 217 / 2 694 без diagnostics;
-- Explorer breadcrumb проецирует `PaneState::visible_error` через `VisualStateMapper` в localized persistent error label и accessibility value/help, сохраняет committed address/content во время lifecycle phases, блокирует address editor при loading и не показывает cancellation/informational outcomes как blocking errors.
+Test-only checkpoint harness и `[reviewed-copy-as-physical]` остаются в дереве как readiness evidence и не требуют поддержки.
 
-### M2 — Local Explorer vertical slice
+## 6. Цикл реализации среза
 
-**Работы:** count, selection count и selected size в используемом Explorer footer уже переведены на `PaneStore`; подключить preview/details и tabs; завершить toolbar overflow и context menu через registry; реализовать remaining loading/empty/error/permission states; стабилизировать list/details/icons/content и density; восстановить window, tabs, locations и view settings; измерить большие папки.
+1. Прочитать релевантный раздел спецификации и строку среза в этом плане.
+2. Реализовать минимальный вертикальный срез через существующие движки и контракты.
+3. Happy path + три edge case; проверить mouse, keyboard, loading, empty, error, permission, disabled.
+4. Focused-фильтр тестов; полный прогон затронутого бинарника на закрытии среза.
+5. Одна строка в `changelog.md`, обновлённая ячейка статуса, feature-spec если срез вводит новый контракт.
+6. Local-development UI и local permission smoke выполнять через `Scripts/build_stable_dev_and_run.sh`; release/MAS/NonMAS/updater/Admin Mode/helper/distribution evidence получать на фактическом signed variant с его собственным identity contract.
+7. Изменения app target, plist, entitlements, signing, packaging или launch tooling закрывать сравнением exact designated requirement до и после двух последовательных `--no-run` rebuild и проверкой `Scripts/verify_stable_dev_identity.sh`.
 
-**Acceptance:**
-
-- local navigation, history, breadcrumb, views и tabs образуют цельный workflow;
-- path приходит из `PaneStore`; count, selection count и selected size в Explorer footer уже приходят из matching snapshot;
-- preview/details поддерживает loading и error states;
-- create, copy, move, rename и trash доступны мышью и клавиатурой через registry;
-- папки на 10 000 и 100 000 элементов сохраняют интерактивный UI;
-- session state восстанавливается после restart;
-- keyboard focus и accessibility labels проходят VoiceOver walkthrough.
-
-**Evidence:** store/persistence/UI tests, performance report, light/dark screenshots основных состояний.
-
-### M3 — Безопасный Operation lifecycle
-
-**Работы:** plan/preflight/review, provider authority, codec, exact journal receipts, tri-state publication, clone-only Native transaction, metadata parity and ordered durability are implemented. The lossless provider mapper and sealed transaction-backed Job join commit results to exact journal evidence. `CopyOperationRunReceiptCustodian` owns the bounded post-Running slot, exact retry, storage-bound read-only reconciliation and explicit Pool release handshake. The production-configured `CopyOperationOrchestrator` reaches the private reviewed factory, validates and installs restricted hooks while cold, and delivers an owning exact durable outcome before release. Pool preallocates the accepted terminal transition; `ReleaseWithoutCompletion` preserves removal and pending-work progress for durable non-success without publishing generic completion. The first bounded production `CopyAs` consumer now performs path-aware eligibility, exact bound-plan review, stale-intent suppression, durable submission, typed outcome presentation and explicit recovery. The physical-volume fixture and test-only power-loss checkpoint/recovery harness are implemented; real physical/hardware evidence and cross-volume staging remain open.
-
-**Acceptance:**
-
-- destructive action показывает точный plan до запуска;
-- долгие операции видны и поддерживают применимые pause/resume/cancel;
-- conflict policy имеет явный scope;
-- partial success, cancel и failure сохраняют item-level result и recovery action;
-- restart восстанавливает историю и классифицирует interrupted operations;
-- P0-сценарии из test matrix 42.2 автоматизированы.
-
-**Текущее evidence:** schema-v3 journal 33 / 752, pure OperationCenterModel 4 / 64, receipt-bound coordinator including cold exact-storage history refresh 15 / 284, coordinator/orchestrator/control integration 31 / 1,060, explicit recovery-to-history projection 8 / 107, Native create-copy 19 / 924, Native mapper 2 / 382, provider journal mapper 4 / 237, product 9 / 188, factory 8 / 225, Job 10 / 608, probes 5 / 178, orchestrator 19 / 849 with production subset 3 / 138, Pool 17 / 219, ProviderCapabilities 16 / 549 and Native conditional Copy 16 / 328. The compact Explorer Operations menu is covered by rebuilt `WinCommanderUT 'nc::core::CommandRegistry*' --rng-seed 424242` at 12 / 115, `WinCommanderUT '*operation.cancel*' --rng-seed 424242` at 3 / 51, and non-modal AppKit `WinCommanderUT 'Explorer presentation geometry compact Operations menu*' --rng-seed 424242` at 4 / 69. The pure and Registry tests cover missing-Registry fail-closed behavior and immutable live execution; AppKit coverage verifies builder/menu unavailable, empty, value-record and Registry-gated Cancel paths, while `CommandPresentationAdapter` covers disabled presentation. Full Debug `WinCommanderUT --rng-seed 424242` passes 333 / 5,376. The test-only checkpoint seam proves `BeforePublish` before clone and `AfterPublishBeforeFullFSync` after the destination and parent barriers but before `F_FULLFSYNC`; the current focused Native conditional-Copy filter passes 17 / 347. The last full Debug `VFSUT` run before the final test-only checkpoint assertions passes 96 / 43,606. The full Debug `OperationsUT` run passes 197 / 5,295. Fresh rebuilt `OperationsIT` readiness runs without roots report checkpoint profile 1 skipped / 1 passed assertion, recovery profile 1 skipped / 0 assertions, and `[reviewed-copy-as-physical]` 2 skipped / 0 assertions; they are not physical or hardware evidence. The production `ReviewedCopyAsApplicationBoundary` proves blocked, stale, unpersisted and cancelled zero-enqueue paths, exact plan projection, and owning durable failure dispatch before Pool removal with generic completion suppressed: 4 / 70; the combined policy/app suite is 10 / 98. That app-boundary filter also passes explicitly instrumented Release ASAN and UBSAN without diagnostics. The coordinator/orchestrator/control and recovery-projection filters also pass Release ASAN and UBSAN without diagnostics. Recorded M0 remains 897 / 132 011; seeded Docker-backed integration ASAN passes 163 / 89 392.
-
-The pure `OperationCenterModel` foundation adds 4 / 64: opaque ID contract, value-only records, stale revision, finalization ordering and immutable snapshots; production ID allocation is no longer public on the model. Schema-v3 journal allocation/migration adds 33 / 752: journal-owned reservations, durable high-water persistence, exact receipt propagation, strict decode and deterministic v1/v2 migration, including a post-rename uncertainty reopen. Coordinator admission/hydration/refresh adds 15 / 284: it preallocates an invisible model draft before journal admission, binds `Queued` to the exact receipt, compensates a foreign-draft publication failure, imports terminal/interrupted history without retaining the Journal, and after exact-storage reopen appends only absent terminal history while model, journal, drafts and residencies are cold. The coordinator/orchestrator/control subset is 31 / 1,060 and proves private pre-enqueue exact residency, `Queued` before Pool addition, Start/durable-terminal reduction, stale-revision rejection, exact cancellation, reentrant cancellation rejection, zero Pool side effects for a failed handoff and cold-refresh serialization. Its pre-checkpoint isolated Debug `OperationsUT` snapshot was 195 / 196 and 5,270 / 5,274; the sole failure remains the same host-specific set-ID metadata baseline. The current full Debug `OperationsUT` result is 197 / 5,295.
-
-**Оставшееся evidence:** bounded cross-volume staging; physical internal/external-volume matrix; two checkpoint-driven hardware power-loss runs and their recovery records; bounded retry/defer policy for recovery history projection, full Operation Center presentation and persistent projection, pause/resume/retry; non-Copy preflight; hosted required CI. The compact menu's focused Registry and non-modal AppKit builder/menu evidence are current. It is an immutable type/state/ID snapshot at open with only `operation.cancel` and does not claim a live progress/history/log screen. Docker-backed integration baseline does not include the production volume fixtures.
-
-### M4 — Search и ежедневные workflow
-
-**Работы:** ввести `SearchStore`, scope и backend descriptor; объединить Find Files, Spotlight и provider search в Search Mode; показать progress, cancel и limitations; завершить Properties и async folder size; добавить copy path variants; перевести batch rename на `OperationPlan` с preview.
-
-**Acceptance:**
-
-- поиск всегда показывает scope, backend, progress и ограничения;
-- результаты сохраняют понятный navigation context;
-- no-results, cancelled, backend-unavailable и permission-limited states различимы;
-- Properties показывает metadata/permissions, folder size считается асинхронно;
-- batch rename показывает итоговые имена и конфликты до исполнения;
-- требования local search test matrix 42.4 покрыты.
-
-**Evidence:** search/state tests, batch rename preflight tests, accessibility walkthrough трёх поверхностей.
-
-### M5 — Power-user workflow
-
-**Работы:** подключить Dual Pane к независимым `PaneStore`; добавить workspaces и multi-pane persistence; реализовать folder compare, one-way sync и dry-run; интегрировать terminal/editor/git badges; добавить command palette и hotkey profiles; закрыть keyboard-only workflow.
-
-**Acceptance:**
-
-- panes сохраняют независимые location, selection, history и view state;
-- workspace восстанавливает layout, tabs и active focus;
-- compare выдаёт полный набор состояний раздела 45 спецификации;
-- destructive sync запускается после dry-run с deletion preview;
-- terminal/editor получают корректный cwd и paths;
-- Beta gate 41.2 закрыт полностью.
-
-**Evidence:** multi-pane state tests, generated compare/sync fixtures, workspace persistence tests, keyboard/VoiceOver checklist.
-
-### M6 — Archives и remote workflow
-
-**Работы:** завершить capabilities для archive/FTP/SFTP/WebDAV; подключить archive create/extract к Operation Center; построить Remote Connection Manager; хранить credentials и host verification в Keychain; добавить queue/retry/reconnect; интегрировать системные SMB/NFS mounts; показать latency/offline/read-only states.
-
-**Acceptance:**
-
-- archive browse/create/extract имеют plan, progress и typed result;
-- remote transfers управляются через Operation Center;
-- interruption сохраняет состояние и предлагает retry/reconnect;
-- credentials не попадают в diagnostics;
-- provider limitations и применимые alternatives видны пользователю;
-- применимые archive/remote тесты 42.5–42.6 закрыты.
-
-**Evidence:** `VFSUT`/`VFSIT`/`OperationsIT`, security review credential paths, reconnect fault-injection report.
-
-### M7 — Надёжность и выпуск 1.0
-
-**Работы:** сделать build/tests/static analysis обязательными CI checks; закрыть crash recovery и atomic persistence; провести performance pass; завершить accessibility, localization и visual states; проверить permissions, external volumes и network transitions; подготовить выбранные release variants; актуализировать Help/Building/Release/changelog.
-
-**Acceptance:**
-
-- Alpha, Beta и 1.0 gates 41.1–41.3 имеют ссылки на evidence;
-- unit suite стабильно проходит в CI, integration suite разделён на deterministic и environment subsets;
-- performance budgets раздела 35 воспроизводимо измеряются;
-- diagnostics важных failures исключает credentials и содержимое файлов;
-- release build проходит install, first-run, update и rollback smoke tests;
-- две последовательные local development rebuild/install операции сохраняют canonical path, bundle ID, certificate fingerprint и exact designated requirement; runtime smoke подтверждает сохранение ранее выданных macOS permissions;
-- P0 test matrix закрыта без silent failures и main-thread stalls.
-
-**Evidence:** release checklist, CI runs, performance/accessibility reports, signed artifacts и notarization receipts.
-
-### M8 — Expert layer
-
-**Работы:** S3/cloud providers, duplicate/checksum search, automation, scheduled sync, plugin/actions API, command chains и advanced metadata развиваются отдельными feature-spec после M7.
-
-**Acceptance:** функции используют Registry, Capabilities, Operation Engine и Error Model; automation создаёт тот же `OperationPlan`; extension API версионирован и изолирует failures; default layer сохраняет ясную hierarchy.
-
-**Evidence:** feature-spec, threat model, API compatibility и end-to-end tests для каждого extension surface.
-
-## 5. Release slices
-
-- **Alpha:** M0–M3. Local browsing, базовые операции, Registry, Visual State и Operation Center образуют один законченный vertical slice.
-- **Beta:** M4–M5 и соответствующий hardening M7. Закрыты search, conflicts, batch rename, dual-pane, compare/sync, settings, shortcuts и accessibility baseline.
-- **1.0:** M6–M7. Полный gate спецификации; archive и remote workflows сохраняют стабильность local core.
-
-## 6. Цикл реализации функции
-
-1. Создать или обновить feature-spec по шаблону раздела 39.
-2. Зафиксировать affected stores, commands, capabilities, operation lifecycle и errors.
-3. Реализовать минимальный vertical slice через существующие engine boundaries.
-4. Добавить happy path и минимум три содержательных edge cases.
-5. Проверить mouse, keyboard, accessibility, loading, empty, error, permission и disabled states.
-6. Сохранить evidence, обновить milestone, документацию и `changelog.md` в одном change set.
-7. Local-development UI и local permission smoke выполнять через `Scripts/build_stable_dev_and_run.sh`; release/MAS/NonMAS/updater/Admin Mode/helper/distribution evidence получать на фактическом signed variant с его собственным identity contract.
-8. Изменения app target, plist, entitlements, signing, packaging или launch tooling закрывать сравнением exact designated requirement до и после двух последовательных `--no-run` rebuild и проверкой `Scripts/verify_stable_dev_identity.sh`.
-
-Статус **done** присваивается после полного Definition of Done из раздела 40 спецификации.
+ASAN/UBSAN запускаются при изменениях в `Operations`, `VFS`, `RoutedIO`, конкурентности, владении памятью или async-teardown. Aggregate `UnitTests` и `verify_m0.sh` — на закрытии очереди, при изменениях build-системы и перед релизом.
 
 ## 7. Verification commands
 
-Команды запускаются из корня репозитория.
-
 ```bash
-# M0 gate: project discovery, unsigned Debug build and all unit-test executables
-Scripts/verify_m0.sh
-
 # Canonical interactive development build with persistent macOS TCC identity
 Scripts/build_stable_dev_and_run.sh
 
 # Read-only validation of the installed development identity
 Scripts/verify_stable_dev_identity.sh
-
-# Unit tests alone; configuration can be Debug, Release, ASAN or UBSAN
-Scripts/run_all_unit_tests.sh Debug
-
-# Integration suite; requires Docker and nc, xcpretty is optional
-Scripts/run_all_integration_tests.sh
-
-# Documentation and patch hygiene
-git diff --check
 ```
 
 Local runtime compatibility contract: `~/Applications/WinCommander-Codex.app`, `com.wincommander.App.CodexDev`, the machine-local pins at `~/Library/Application Support/WinCommanderCodex/local-signing-identity.sha1` and `local-signing-requirement.txt`, and the exact entitlement profile form one channel identity. The pins survive app removal and make missing keys, ambiguous initial certificate enrollment, ad-hoc signatures, bundle-ID/requirement/entitlement drift, and implicit certificate rotation fail before replacement. Unsigned DerivedData products remain isolated compile/test artifacts and do not constitute app-bound permission evidence.
 
-Integration environment описан в `Docs/Building.md` и fixtures соответствующих модулей. Seeded Docker-backed ASAN baseline выполнен: Term 18 / 555, Operations 87 / 862, VFS 52 / 87 968, VFSIcon 6 / 7, total 163 / 89 392. Планируемый CI должен запускать deterministic subset; network, credential, provider transaction и external-volume suites выполняются в выделенном окружении.
+```bash
+Scripts/run_all_unit_tests.sh Debug
+```
 
-## 8. Evidence и ближайшая очередь
+```bash
+Scripts/verify_m0.sh
+```
 
-Для закрытия milestone требуются commit/PR, точные команды и итоги build/test, ссылки на tests, performance measurements затронутых hot paths, visual evidence сложных UI states, accessibility checklist и запись в `changelog.md`.
+```bash
+Scripts/run_all_integration_tests.sh
+```
 
-Ближайшая очередь:
+## 8. Соответствие milestones старого плана
 
-1. Выполнить physical internal/external-volume `OperationsIT` и hardware power-loss evidence. Безопасный opt-in fixture `[reviewed-copy-as-physical]` требует descriptor-anchored user-owned marker roots, проверяет internal publication и external `UnsupportedExternalMedia`, а при отсутствии roots даёт `SKIP`. Новый test-only harness имеет отдельные opt-in profiles `[.reviewed-copy-as-power-loss-checkpoint]` и `[.reviewed-copy-as-power-loss-recovery]`: первый сохраняет и синхронизирует retained checkpoint manifest в `BeforePublish` или `AfterPublishBeforeFullFSync`, второй читает exact journal read-only до того, как normal startup классифицирует его как `Interrupted`. Reviewed Native transaction already orders `fsync(destination)` → `fsync(parent)` → `F_FULLFSYNC(destination)`. Protocol: `Docs/Features/reviewed_copy_as_physical_volume_protocol.md`.
-
-   **Внешняя готовность physical profile (2026-08-04):** repository-level readiness подтверждён. Fresh rebuilt `OperationsIT` runs without roots report `[reviewed-copy-as-physical]` 2 skipped / 0 assertions, `[.reviewed-copy-as-power-loss-checkpoint]` 1 skipped / 1 passed assertion, and `[.reviewed-copy-as-power-loss-recovery]` 1 skipped / 0 assertions. Для evidence нужны вручную подготовленные выделенные user-owned marker roots: child internal local writable APFS для `SameVolumeClone` и child external/removable/ejectable APFS для `UnsupportedExternalMedia`. Запись разрешена только с `WINCOMMANDER_OPERATIONS_IT_REQUIRE_VOLUMES=1` и включает descriptor identity, APFS/media evidence, journal/Pool outcome и command output. Hardware gate остаётся отдельным release blocker: каждой фазе `WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_PHASE=before-publish` и `after-publish-before-full-fsync` нужен disposable physical Mac, `WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_BLOCK=1` и управляемый оператором реальный abrupt power-cycle; после boot recovery profile получает explicit retained workspace через `WINCOMMANDER_OPERATIONS_IT_POWER_LOSS_RECOVERY_WORKSPACE` и читает journal до любой мутации. Skipped profile является только readiness evidence.
-2. Реализовать bounded private staging authority для отдельного cross-volume scope. Текущий Native in-process путь блокирован: между проверкой named stage и `renameatx_np(..., RENAME_EXCL)` same-UID actor может подменить inode, а journal не имеет descriptor-bound cleanup authority. До отдельного signed helper с isolated staging roots, bounded lease/recovery authority и two-internal-APFS evidence cross-volume остаётся на legacy route. ADR: `Docs/ADR/0002-cross-volume-staging-authority.md`.
-
-   **Foundation, private client and isolated helper target (2026-08-04):** path eligibility различает `SameVolumeClone` и `CrossVolumeStaged`; прежний clone scope не получил новый смысл. Native adapter принимает только borrowed no-follow source/destination-parent descriptors, single destination component и scalar reviewed seals, без user/staging path, metadata blobs или journal cleanup authority. В отсутствие authority eligible cross-volume сохраняет known `Unsupported`/legacy route; установленный, но unavailable authority возвращает `Unavailable` до reviewed selection. Focused Debug `VFSUT '*conditional Copy*' --rng-seed 424242` passes 26 cases / 850 assertions; it covers no-authority legacy selection, unavailable fail-closed selection, distinct staged scope, descriptor/seal-only request, prevalidation, Begin failure and late cancellation before publication. Rebuilt `OperationsUT` focused provider/orchestrator/factory sets pass 44 / 1,608, and `WinCommanderUT 'reviewed CopyAs policy *' --rng-seed 424242` passes 11 / 101 and keeps clone and staged selection distinct. `RoutedIO/CrossVolumeStagingProtocol` fixes V1 version/correlation, complete scalar seals, bounded byte component, opaque lease and the exact existing tri-state/error/sync completion matrix independently of VFS or the legacy generic helper. Its private XPC codec accepts only the exact V1 grammar and two duplicated FDs; it now exposes only request-kind dispatch and reply population for `xpc_dictionary_create_reply()`. The injectable `CrossVolumeStagingClient` duplicates the anchored FDs before transport, checks every reply/correlation, retains one terminal Commit-or-Abort authority and maps lost/malformed post-dispatch replies to `Unknown`; it rejects cancellation before Begin, after Granted and before Commit dispatch. Native owns an untransferred granted lease until generic transaction mint succeeds. The independent `com.wincommander.App.CrossVolumeStagingHelperV1` target compiles protocol/codec directly, links only Security/CoreFoundation, authenticates the signed peer before strict decode, sets/checks `FD_CLOEXEC`, rejects writable descriptor rights and exact-`fstat` revalidates every source/destination-parent scalar seal into move-only private `ValidatedBegin`. It maps invalid claims, source/parent drift and helper failure to typed Begin rejection; valid claims still receive inert `Unsupported`. Its helper-private `LeaseStore` has a fixed capacity of 16, accepts only `ValidatedBegin`, generates each 256-bit token with `SecRandomCopyBytes`, binds a live correlation to one owner and closes validated FDs after terminal take, revoke or failed admission. Its `ProtectedRootLedger` accepts only a root-owned `0700` root FD, gives each sealed root a process-local singleton, persists a random artifact ID with exact root/correlation/role claims into a root-owned `0600` one-link manifest, and has a read-only restart classifier for sealed artifacts. Exact classification requires the complete root/header/role/artifact-ID claims plus the full no-follow artifact seal; sealed, absent, incomplete, malformed and mismatched states remain retained, while a reservation record is removable only when its canonical private artifact name is absent. The layer has no artifact materialization, cleanup or destination namespace authority. NonMAS owns the V1 target dependency, `CodeSignOnCopy` embed and matching `SMPrivilegedExecutables`; Unsigned uses a separate plist without privileged helper declaration and MAS has no V1 dependency. The helper target requires Developer ID plus hardened runtime. No valid local code-signing identity is available, so signed package and SMJobBless trust validation remain external release evidence. Focused Debug protocol/codec/client filters pass 5 / 44, 4 / 74 and 4 / 108; `VFSUT 'RoutedIO cross-volume staging helper descriptor-seal validator *' --rng-seed 424242` passes 4 / 208 in Debug, Release ASAN and Release UBSAN, the updated lease-store filter passes 5 / 328, the protected-root ledger filter passes 8 / 207 in Debug, Release ASAN and Release UBSAN, the helper target builds in Debug, and full Debug `VFSUT` reaches 127 / 130 cases and 44,616 / 44,619 assertions with the FetchUsers, FetchGroups and Application-marker host baselines. Production installs neither this client nor a transport, so cross-volume remains the known `Unsupported`/legacy route. Remaining work is durable artifact materialization and seal writing, final descriptor/destination/stage validation plus cancellation at the publication barrier, helper-only cleanup/recovery, two-internal-APFS fixture, signed package trust proof and final ASAN/UBSAN for the eventual mutable authority.
-
-   **Authenticated lease lifecycle (2026-08-04):** valid `ValidatedBegin` now enters the helper-private `LeaseLifecycle`: Begin retains only the exact descriptor pair and mints one owner-bound lease, without root selection, artifact materialization or namespace mutation. Exact Commit consumes that lease and reports confirmed `NotPublished` / `HelperFailure` / `EOPNOTSUPP` until a staging executor exists; Abort consumes it as `NotPublished` / `Aborted`; failed reply delivery and peer disconnect revoke all retained pairs. This changes no production capability: neither VFS client nor signed transport is installed, so `CrossVolumeStaged` remains unselected and cross-volume uses the known legacy route. The new focused Debug lifecycle filter passes 4 cases / 111 assertions, including both FD rights closed on Commit, Abort, rejected duplicate admission and owner revoke. The helper target builds in Debug; the same focused filter passes in explicit Release ASAN and UBSAN without diagnostics; full Debug `VFSUT --rng-seed 424242` passes 138 cases / 44,898 assertions. Durable staging/seal writing, final source/destination-parent/stage revalidation and cancellation at the publication barrier, helper-only cleanup/recovery, two-internal-APFS evidence and signed package trust remain open.
-3. После первого consumer расширять factory на batch и остальные P0 mutation consumers; параллельно переводить оставшиеся P0 command consumers на Registry/Capabilities/Error/Visual State contracts. [`OperationCenterCoordinator`](Features/operation_center_model_and_control_projection.md) is process-owned at the `CopyAs` boundary: it binds `Queued` to the exact schema-v3 journal receipt, registers sealed exact live residency before Pool admission, reduces Start plus durable terminal outcomes through weak callbacks, revalidates `OperationId`/revision for engine-only cancellation and appends only absent terminal history from the same cold reopened storage without exposing raw `Operation *`. Production `operation.cancel` forwards only that value target into the sealed port and maps typed revalidation failures to Registry rejection. Explorer `More` is its first compact consumer: it snapshots value records, renders only type/state/ID and routes an enabled Cancel item through the Registry; the full Operation Center, pause/resume/retry, progress and persistent history presentation remain separate work.
-4. Расширить production lifecycle evidence на remaining remote transport and permission scopes. Focused Docker `WinCommanderIT` coverage now passes 9 / 376 for FTP/SFTP/WebDAV navigation and a shadow-host mutation followed by forced user refresh: FTP and WebDAV prove user `Refresh` `Superseded` → provider soft-successor `Committed`, while SFTP proves direct user `Refresh` → `Committed` without provider observation/cache. Dedicated stop/restart cases retain committed listing and generation through `Failed(NetworkError)`, then prove a fresh `Committed` successor through the same controller/host user-refresh path. FTP and SFTP retain their provider-domain `Unavailable` classification; WebDAV retains `POSIX/ECONNREFUSED` or `ECONNRESET`. The three `pause`/`unpause` cases hold a reachable endpoint without replies and prove raw FTP `operation_timeout`, SFTP `timeout`, and WebDAV `POSIX/ETIMEDOUT` mapped to `TimeoutError`, with exact content/generation retention and recovery. FTP bounds directory listings, WebDAV bounds blocking control requests and SFTP bounds connect/session work to 30 seconds without limiting bulk I/O; the SFTP blackhole VFSIT 150 ms seam passes 1 / 2, negative `readdir` fails closed, and transport/timeout connections never re-enter the pool. Deferred external-loading Busy также подтверждён production fixture: nested asynchronous navigation resolves once as `Rejected(Busy)` with `EBUSY` admission feedback and no fetch/model commit (1 / 22). Live-local `NativeHost` navigation/forced-refresh proof is 1 / 30 and the owned `0000` directory permission-denied path is 1 / 22. The current deterministic security-scope layer passes 4 / 47 in `PanelControllerNavigation_UT`: normalized scope containment accepts only an exact path or path-component descendant, a user denial and an automatic navigation fail with `EPERM` before provider fetch/model replacement, the automatic request never prompts, and one user grant resumes the same lifecycle request. The accepted-but-denied path also returns its `LoadingResultCallback` once as an `Admission` failure. Full Debug `WinCommanderUT` passes 327 / 5,290. Signed MAS clean-bookmark consent and separate FDA/TCC evidence remain external release gates. Explorer footer count/selection/bytes уже читает matching Store snapshot; preview/details, tabs и persistence остаются M2 work.
-5. Получить первый hosted run `M0 Verification` после публикации и закрепить выполненный Docker-backed ASAN baseline как отдельный required integration profile.
+| Старый milestone | Судьба |
+|---|---|
+| M0 Baseline | Закрыт локально; остаётся первый hosted CI run → Q1-10 |
+| M1 Source of Truth и Commands | `PaneStore` закрыт для чтения; остаток roster команд → Q1-1, Q1-2 |
+| M2 Local Explorer | → Q1-3 … Q1-7, Q1-10 |
+| M3 Operation lifecycle | Заморожен на текущем bounded-срезе; UI-часть (прогресс, конфликты) → Q1-8; расширение движка → Q2-8; cross-volume и hardware → раздел 5.1 |
+| M4 Search | → Q1-9 |
+| M5 Power-user | → Q2-1 … Q2-3, Q2-9 |
+| M6 Archives и remote | → Q2-5, Q2-6 |
+| M7 Release 1.0 | → Q2-10 |
+| M8 Expert layer | → раздел 5.1 |

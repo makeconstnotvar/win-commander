@@ -89,14 +89,14 @@ The slice introduces canonical definitions for:
 | `file.copy` | local selection contains copyable items | existing copy-to-pasteboard action |
 | `file.cut` | local selection contains movable items | existing cut-token action |
 | `file.paste` | clipboard has supported items and destination can accept them | reviewed plan → durable journal admission → production orchestrator/private factory → `Pool` |
-| `operationCenter.open` | unavailable: the stable ID is declared, while the presentation port and Registry definition are pending | `OperationCenterModel` presentation surface |
-| `operation.cancel` | value-only Registry adapter is implemented; Operation Center presentation remains pending | `OperationCenterCoordinator` revalidates `OperationId` plus expected revision through its sealed control port |
+| `operationCenter.open` | obtains a current value snapshot through the weak coordinator and opens a bounded static copied panel | Registry passes the copied records to a borrowed synchronous Explorer presenter; the panel shows active plus terminal/interrupted type/state, `OperationId`/`PlanId` and timestamps, and its Cancel re-enters the Registry |
+| `operation.cancel` | an active snapshot record supplies immutable `{OperationId, expected revision, can-cancel}` context | `OperationCenterCoordinator` revalidates the exact value context through its sealed control port |
 | `operation.retry` | final error is retryable | recreate execution from persisted plan/result |
 | navigation commands | derived from pane history/location state | existing panel action dispatcher |
 
 Every entry point resolves `CommandState` from the same `CommandContext`. Existing selectors remain adapter details during migration.
 
-`Operation::Stop()` and `Job::Stop()` remain engine lifecycle primitives. The production `operation.cancel` adapter accepts only the published value `{OperationId, revision, can-cancel}` and calls the control port; it never receives the corresponding Pool/operation reference. An Operation Center surface remains the future presentation consumer.
+`Operation::Stop()` and `Job::Stop()` remain engine lifecycle primitives. The production `operation.cancel` adapter accepts only published `{OperationId, expected revision, can-cancel}` and calls the control port; it never receives the corresponding Pool/operation reference. `operationCenter.open` obtains a weak-coordinator snapshot and its panel holds only copied value records. `More` remains an active-only compact menu; panel reopen is the only refresh. A live observer, progress, results/log, pause/resume and retry remain future presentation work.
 
 ## Data model
 
@@ -217,6 +217,7 @@ Each error carries a user message, technical context, affected items, operation 
 - OperationPlan validation and immutable source/destination capture;
 - error mapping and recovery actions;
 - visual-state priority composition.
+- `operationCenter.open` snapshot-copy isolation, static-panel content and Registry-gated cancellation; focused evidence is core 17 / 183, compact `More` 4 / 70 and static panel 3 / 104.
 
 ### Integration
 

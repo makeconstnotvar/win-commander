@@ -4,6 +4,7 @@
 #include <catch2/catch_all.hpp>
 #include <algorithm>
 #include <concepts>
+#include <filesystem>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -73,6 +74,8 @@ struct FakeProbes final : OperationPlanningProbes {
                     return "access-read";
                 case OperationPlanningRequiredAccess::Write:
                     return "access-write";
+                case OperationPlanningRequiredAccess::Rename:
+                    return "access-rename";
                 case OperationPlanningRequiredAccess::ReplaceFile:
                     return "access-replace-file";
                 case OperationPlanningRequiredAccess::ReplaceDirectory:
@@ -145,10 +148,52 @@ OperationPlan MakeCopy(std::vector<OperationPlanSourceInput> _sources = {{"sourc
     return std::move(*plan);
 }
 
+OperationPlan MakeMove(
+    std::vector<OperationPlanSourceInput> _sources = {{"local", "/src/a.txt"}},
+    OperationPlanDestinationInput _destination = {"local", "/dst/moved.txt", OperationPlanDestinationKind::ExactItem},
+    OperationPlanConflictPolicy _policy = {OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem})
+{
+    auto plan = OperationPlan::Create({.plan_id = "move-plan",
+                                       .type = OperationPlanType::Move,
+                                       .sources = std::move(_sources),
+                                       .destination = std::move(_destination),
+                                       .conflict_policy = _policy,
+                                       .created_at = OperationPlan::TimePoint{1'700'000'000s}});
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
 OperationPlan MakeTrash()
 {
     auto plan = OperationPlan::Create({.plan_id = "trash-plan",
                                        .type = OperationPlanType::Trash,
+                                       .sources = {{"source", "/src/a.txt"}},
+                                       .destination = std::nullopt,
+                                       .conflict_policy = std::nullopt,
+                                       .created_at = OperationPlan::TimePoint{1'700'000'000s}});
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+OperationPlan MakeRename()
+{
+    auto plan = OperationPlan::Create(
+        {.plan_id = "rename-plan",
+         .type = OperationPlanType::Rename,
+         .sources = {{"source", "/src/a.txt"}},
+         .destination =
+             OperationPlanDestinationInput{"source", "/src/renamed.txt", OperationPlanDestinationKind::ExactItem},
+         .conflict_policy =
+             OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
+         .created_at = OperationPlan::TimePoint{1'700'000'000s}});
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+OperationPlan MakePermanentDelete()
+{
+    auto plan = OperationPlan::Create({.plan_id = "permanent-delete-plan",
+                                       .type = OperationPlanType::PermanentDelete,
                                        .sources = {{"source", "/src/a.txt"}},
                                        .destination = std::nullopt,
                                        .conflict_policy = std::nullopt,
@@ -168,6 +213,26 @@ void ScriptFileCopy(FakeProbes &_probes,
                           OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
     _probes.items.emplace(Key(Path(_source_provider, _source_path)),
                           OperationPlanningItemEvidence{OperationPlanningItemKind::File, _bytes});
+}
+
+void ScriptFileMove(FakeProbes &_probes,
+                    std::string _source_provider = "local",
+                    std::string _source_path = "/src/a.txt",
+                    std::string _destination_provider = "local",
+                    std::string _destination_path = "/dst/moved.txt",
+                    uint64_t _bytes = 10)
+{
+    _probes.default_provider.can_rename = true;
+    const auto source_parent = std::filesystem::path{_source_path}.parent_path().native();
+    const auto destination_parent = std::filesystem::path{_destination_path}.parent_path().native();
+    _probes.items.emplace(Key(Path(_source_provider, source_parent)),
+                          OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+    _probes.items.emplace(Key(Path(_destination_provider, destination_parent)),
+                          OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+    _probes.items.emplace(Key(Path(_source_provider, _source_path)),
+                          OperationPlanningItemEvidence{OperationPlanningItemKind::File, _bytes});
+    _probes.items.emplace(Key(Path(_destination_provider, _destination_path)),
+                          OperationPlanningItemEvidence{OperationPlanningItemKind::Missing, std::nullopt});
 }
 
 const AcceptedOperationPlan &Accepted(const OperationPreflightResult &_result)
@@ -249,11 +314,214 @@ TEST_CASE(PREFIX "accepts an owning cross-provider file copy report", "[operatio
 
 TEST_CASE(PREFIX "blocks non-copy plans before probing", "[operation-planner]")
 {
-    FakeProbes probes;
-    const auto result = OperationPlanner::Preflight(MakeTrash(), probes);
+    const auto check = [](OperationPlan _plan) {
+        FakeProbes probes;
+        const auto result = OperationPlanner::Preflight(std::move(_plan), probes);
 
-    CHECK(probes.calls.empty());
-    CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::UnsupportedPlanType));
+        CHECK(probes.calls.empty());
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::UnsupportedPlanType));
+    };
+
+    SECTION("Trash")
+    {
+        check(MakeTrash());
+    }
+    SECTION("Rename")
+    {
+        check(MakeRename());
+    }
+    SECTION("PermanentDelete")
+    {
+        check(MakePermanentDelete());
+    }
+}
+
+TEST_CASE(PREFIX "Move accepts the exact one-file same-provider intent", "[operation-planner][move-preflight]")
+{
+    FakeProbes probes;
+    ScriptFileMove(probes);
+    probes.default_space.available_bytes = 0;
+
+    const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+    const auto &accepted = Accepted(result);
+    CHECK(accepted.Plan().Type() == OperationPlanType::Move);
+    REQUIRE(accepted.Report().items.size() == 1);
+    const auto &item = accepted.Report().items.front();
+    CHECK(item.source == Path("local", "/src/a.txt"));
+    CHECK(item.destination == Path("local", "/dst/moved.txt"));
+    CHECK(item.source_kind == OperationPlanningItemKind::File);
+    CHECK(item.estimate == OperationPlanningEstimateEvidence{.files = 1, .bytes = 10});
+    CHECK(accepted.Report().estimated_files == 1);
+    CHECK(accepted.Report().estimated_bytes == 10);
+    CHECK_FALSE(accepted.Report().destination_space);
+    CHECK_FALSE(accepted.Report().requires_confirmation);
+    CHECK(HasWarning(accepted.Report(), OperationPlanningWarningCode::RuntimeRevalidationRequired));
+    REQUIRE(accepted.Report().access_evidence.size() == 2);
+    CHECK(accepted.Report().access_evidence[0].required == OperationPlanningRequiredAccess::Rename);
+    CHECK(accepted.Report().access_evidence[1].required == OperationPlanningRequiredAccess::Rename);
+    CHECK(std::ranges::find(probes.calls, "access-read:local\n/src/a.txt") == probes.calls.end());
+    CHECK(std::ranges::none_of(probes.calls, [](const std::string &_call) {
+        return _call.starts_with("space:") || _call.starts_with("estimate:");
+    }));
+    CHECK(std::ranges::find(probes.calls, "access-rename:local\n/src") != probes.calls.end());
+    CHECK(std::ranges::find(probes.calls, "access-rename:local\n/dst") != probes.calls.end());
+    CHECK(std::ranges::none_of(probes.calls,
+                               [](const std::string &_call) { return _call.starts_with("access-write:"); }));
+}
+
+TEST_CASE(PREFIX "Move deduplicates same-parent evidence and namespace access", "[operation-planner][move-preflight]")
+{
+    FakeProbes probes;
+    ScriptFileMove(probes, "local", "/src/a.txt", "local", "/src/moved.txt");
+
+    const auto result = OperationPlanner::Preflight(
+        MakeMove({{"local", "/src/a.txt"}}, {"local", "/src/moved.txt", OperationPlanDestinationKind::ExactItem}),
+        probes);
+    REQUIRE(std::holds_alternative<AcceptedOperationPlan>(result));
+    CHECK(std::ranges::count(probes.calls, "provider:local\n/src") == 1);
+    CHECK(std::ranges::count(probes.calls, "item:local\n/src") == 1);
+    CHECK(std::ranges::count(probes.calls, "access-rename:local\n/src") == 1);
+}
+
+TEST_CASE(PREFIX "Move fails closed outside its narrow intent", "[operation-planner][move-preflight]")
+{
+    SECTION("a cross-provider move is unsupported before probing")
+    {
+        FakeProbes probes;
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"source", "/src/a.txt"}},
+                     {"destination", "/dst/moved.txt", OperationPlanDestinationKind::ExactItem}),
+            probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
+        CHECK(probes.calls.empty());
+    }
+
+    SECTION("a directory source is unsupported")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.items[Key(Path("local", "/src/a.txt"))] =
+            OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt};
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
+    }
+
+    SECTION("a symlink source is unsupported")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.items[Key(Path("local", "/src/a.txt"))] =
+            OperationPlanningItemEvidence{OperationPlanningItemKind::Symlink, 4};
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
+    }
+
+    SECTION("a batch plan is unsupported before probing")
+    {
+        FakeProbes probes;
+        const auto result =
+            OperationPlanner::Preflight(MakeMove({{"local", "/src/a.txt"}, {"local", "/src/b.txt"}},
+                                                 {"local", "/dst", OperationPlanDestinationKind::Directory}),
+                                        probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::UnsupportedPlanType));
+        CHECK(probes.calls.empty());
+    }
+
+    SECTION("a directory destination is unsupported before probing")
+    {
+        FakeProbes probes;
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"local", "/src/a.txt"}}, {"local", "/dst", OperationPlanDestinationKind::Directory}), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::UnsupportedPlanType));
+        CHECK(probes.calls.empty());
+    }
+
+    SECTION("a non-Ask policy is rejected before probing")
+    {
+        FakeProbes probes;
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"local", "/src/a.txt"}},
+                     {"local", "/dst/moved.txt", OperationPlanDestinationKind::ExactItem},
+                     {OperationPlanConflictDecision::Replace, OperationPlanConflictScope::ThisItem}),
+            probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ConflictPolicyUnsupported));
+        CHECK(probes.calls.empty());
+    }
+}
+
+TEST_CASE(PREFIX "Move requires rename capability and both parent namespaces", "[operation-planner][move-preflight]")
+{
+    SECTION("source rename capability")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.providers.emplace(
+            Key(Path("local", "/src")),
+            OperationPlanningProviderEvidence{
+                true, true, OperationPlanningPathIdentitySemantics::ExactBytes, true, true, true, false});
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
+    }
+
+    SECTION("destination rename capability")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.providers.emplace(
+            Key(Path("local", "/dst")),
+            OperationPlanningProviderEvidence{
+                true, true, OperationPlanningPathIdentitySemantics::ExactBytes, true, true, true, false});
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::DestinationNotWritable));
+    }
+
+    SECTION("source-parent access")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.access.emplace(Key(Path("local", "/src")),
+                              OperationPlanningAccessEvidence{OperationPlanningAccessState::Denied});
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::PermissionDenied));
+    }
+
+    SECTION("destination-parent access")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.access.emplace(Key(Path("local", "/dst")),
+                              OperationPlanningAccessEvidence{OperationPlanningAccessState::Denied});
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::PermissionDenied));
+    }
+}
+
+TEST_CASE(PREFIX "Move retains exact conflict and path guards", "[operation-planner][move-preflight]")
+{
+    SECTION("existing destination requires a later explicit conflict flow")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes);
+        probes.items[Key(Path("local", "/dst/moved.txt"))] =
+            OperationPlanningItemEvidence{OperationPlanningItemKind::File, 5};
+        const auto result = OperationPlanner::Preflight(MakeMove(), probes);
+        const auto &blocked = Blocked(result);
+        CHECK(HasBlocker(blocked, OperationPlanningBlockerCode::ConflictDecisionRequired));
+        REQUIRE(blocked.Report().conflicts.size() == 1);
+        CHECK(blocked.Report().conflicts.front().source == Path("local", "/src/a.txt"));
+        CHECK(blocked.Report().conflicts.front().destination == Path("local", "/dst/moved.txt"));
+    }
+
+    SECTION("same normalized path is rejected")
+    {
+        FakeProbes probes;
+        ScriptFileMove(probes, "local", "/src/a.txt", "local", "/src/dir/../a.txt");
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"local", "/src/a.txt"}},
+                     {"local", "/src/dir/../a.txt", OperationPlanDestinationKind::ExactItem}),
+            probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::SamePath));
+    }
 }
 
 TEST_CASE(PREFIX "fails closed and contains probe failures", "[operation-planner]")

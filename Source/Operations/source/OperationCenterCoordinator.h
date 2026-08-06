@@ -166,6 +166,15 @@ public:
 
     [[nodiscard]] const OperationCenterModel &Model() const noexcept { return m_Model; }
 
+    /**
+     * Value-only storage identity captured during cold-history hydration. It binds an app-owned deferred
+     * history-projection continuation without exposing or retaining the journal authority.
+     */
+    [[nodiscard]] std::pair<uint64_t, uint64_t> HistoryProjectionStorageIdentity() const noexcept
+    {
+        return m_JournalStorageIdentity;
+    }
+
     /** Preallocates the model draft, then reserves one durable journal ID; neither is visible yet. */
     [[nodiscard]] std::expected<AdmissionStaging, OperationCenterCoordinatorError>
     StageAdmission(OperationJournal &_journal, const OperationPlan &_plan);

@@ -226,6 +226,8 @@ public:
 
     OperationPreflightResult Run()
     {
+        if( m_Plan.Type() == OperationPlanType::Move )
+            return RunMove();
         if( m_Plan.Type() != OperationPlanType::Copy ) {
             AddBlocker(OperationPlanningBlockerCode::UnsupportedPlanType, std::nullopt);
             return Block();
@@ -298,6 +300,158 @@ private:
     using AccessResult = OperationPlanningProbeResult<OperationPlanningAccessEvidence>;
     using EstimateResult = OperationPlanningProbeResult<OperationPlanningEstimateEvidence>;
     using SpaceResult = OperationPlanningProbeResult<OperationPlanningSpaceEvidence>;
+
+    /**
+     * The first Move preflight is intentionally an intent-only, one-file rename shape. It binds the
+     * exact source and destination paths plus their parent-namespace capability/access evidence, but
+     * it creates no execution authority and does not promise cross-provider or replacement behavior.
+     */
+    OperationPreflightResult RunMove()
+    {
+        const auto &sources = m_Plan.Sources();
+        const auto &destination = *m_Plan.Destination();
+        const auto &conflict_policy = *m_Plan.ConflictPolicy();
+        if( sources.size() != 1 || destination.Kind() != OperationPlanDestinationKind::ExactItem ) {
+            AddBlocker(OperationPlanningBlockerCode::UnsupportedPlanType, std::nullopt);
+            return Block();
+        }
+        if( conflict_policy.Decision() != OperationPlanConflictDecision::Ask ||
+            conflict_policy.Scope() != OperationPlanConflictScope::ThisItem ) {
+            AddBlocker(OperationPlanningBlockerCode::ConflictPolicyUnsupported, std::nullopt);
+            return Block();
+        }
+
+        const OperationPlanningPath source_path{
+            .provider_id = std::string{sources.front().ProviderId().Value()},
+            .absolute_path = std::string{sources.front().AbsolutePath()},
+        };
+        const OperationPlanningPath destination_path{
+            .provider_id = std::string{destination.ProviderId().Value()},
+            .absolute_path = std::string{destination.AbsolutePath()},
+        };
+        if( source_path.provider_id != destination_path.provider_id ) {
+            AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, destination_path);
+            return FinishMove();
+        }
+
+        const auto source_name = BaseName(source_path.absolute_path);
+        if( source_name.empty() ) {
+            AddBlocker(OperationPlanningBlockerCode::InvalidSourceName, source_path);
+            return FinishMove();
+        }
+        const OperationPlanningPath source_parent{
+            .provider_id = source_path.provider_id,
+            .absolute_path = ParentPath(source_path.absolute_path),
+        };
+        const OperationPlanningPath destination_parent{
+            .provider_id = destination_path.provider_id,
+            .absolute_path = ParentPath(destination_path.absolute_path),
+        };
+
+        const auto *source_provider = Provider(source_parent);
+        const auto *destination_provider = Provider(destination_parent);
+        if( !source_provider || !destination_provider )
+            return FinishMove();
+        if( !source_provider->can_rename ) {
+            AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, source_parent);
+            return FinishMove();
+        }
+        if( !destination_provider->can_rename ) {
+            AddBlocker(OperationPlanningBlockerCode::DestinationNotWritable, destination_parent);
+            return FinishMove();
+        }
+
+        const auto *source_parent_item = Item(source_parent);
+        if( !source_parent_item )
+            return FinishMove();
+        if( source_parent_item->kind != OperationPlanningItemKind::Directory ) {
+            AddBlocker(OperationPlanningBlockerCode::SourceMissing, source_parent);
+            return FinishMove();
+        }
+        const auto *destination_parent_item = Item(destination_parent);
+        if( !destination_parent_item )
+            return FinishMove();
+        if( destination_parent_item->kind == OperationPlanningItemKind::Missing ) {
+            AddBlocker(OperationPlanningBlockerCode::DestinationMissing, destination_parent);
+            return FinishMove();
+        }
+        if( destination_parent_item->kind != OperationPlanningItemKind::Directory ) {
+            AddBlocker(OperationPlanningBlockerCode::DestinationNotDirectory, destination_parent);
+            return FinishMove();
+        }
+
+        const auto *source_item = Item(source_path);
+        if( !source_item )
+            return FinishMove();
+        if( source_item->kind == OperationPlanningItemKind::Missing ) {
+            AddBlocker(OperationPlanningBlockerCode::SourceMissing, source_path);
+            return FinishMove();
+        }
+        if( source_item->kind != OperationPlanningItemKind::File ) {
+            AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, source_path);
+            return FinishMove();
+        }
+
+        const auto *destination_name = Name(destination_path);
+        if( !destination_name )
+            return FinishMove();
+        if( !destination_name->valid ) {
+            AddBlocker(OperationPlanningBlockerCode::InvalidDestinationName, destination_path);
+            return FinishMove();
+        }
+
+        const auto *source_access = Access(source_parent, OperationPlanningRequiredAccess::Rename);
+        if( !source_access || source_access->state != OperationPlanningAccessState::Granted )
+            return FinishMove();
+        const auto *destination_access = Access(destination_parent, OperationPlanningRequiredAccess::Rename);
+        if( !destination_access || destination_access->state != OperationPlanningAccessState::Granted )
+            return FinishMove();
+        if( m_Cancelled )
+            return FinishMove();
+
+        const auto comparison_identity = Combine(source_provider->path_identity, destination_provider->path_identity);
+        if( !SupportsComparison(comparison_identity, source_path.absolute_path, destination_path.absolute_path) ) {
+            AddBlocker(OperationPlanningBlockerCode::PathIdentityUnavailable, destination_path);
+            return FinishMove();
+        }
+        const bool case_sensitive = comparison_identity != OperationPlanningPathIdentitySemantics::ASCIICaseInsensitive;
+        if( SamePath(source_path, destination_path, case_sensitive) ) {
+            AddBlocker(OperationPlanningBlockerCode::SamePath, destination_path);
+            return FinishMove();
+        }
+
+        const auto *destination_item = Item(destination_path);
+        if( !destination_item )
+            return FinishMove();
+        if( destination_item->kind != OperationPlanningItemKind::Missing ) {
+            m_Report.conflicts.emplace_back(
+                OperationPlanningConflict{source_path, destination_path, conflict_policy.Decision()});
+            AddBlocker(OperationPlanningBlockerCode::ConflictDecisionRequired, destination_path);
+            return FinishMove();
+        }
+
+        std::optional<OperationPlanningEstimateEvidence> estimate;
+        if( source_item->byte_size )
+            estimate = OperationPlanningEstimateEvidence{.files = 1, .bytes = *source_item->byte_size};
+        m_Report.items.emplace_back(OperationPlannedCopyItem{
+            .source = source_path,
+            .destination = destination_path,
+            .source_kind = source_item->kind,
+            .estimate = estimate,
+        });
+        return FinishMove();
+    }
+
+    OperationPreflightResult FinishMove()
+    {
+        CalculateTotals();
+        AddWarning(OperationPlanningWarningCode::RuntimeRevalidationRequired, std::nullopt);
+        if( !m_Cancelled && m_Report.items.empty() && m_Blockers.empty() )
+            AddBlocker(OperationPlanningBlockerCode::NothingToDo, std::nullopt);
+        if( m_Blockers.empty() )
+            return AcceptedOperationPlan{std::move(m_Plan), std::move(m_Report)};
+        return Block();
+    }
 
     void PlanSource(const OperationPlanSource &_source,
                     const OperationPlanDestination &_destination,

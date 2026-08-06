@@ -2,6 +2,7 @@
 #include "Tests.h"
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/OperationCancelCommand.h>
+#include <WinCommander/Core/Commands/OperationCenterOpenCommand.h>
 #include <WinCommander/Core/Commands/CommandRegistry.h>
 #include <array>
 #include <set>
@@ -18,6 +19,8 @@ using nc::core::OperationCancelExecutor;
 using nc::core::OperationCancelContextFromRecord;
 using nc::core::OperationCancelPresentationState;
 using nc::core::MakeOperationCancelCommand;
+using nc::core::OperationCenterOpenPresentationState;
+using nc::core::MakeOperationCenterOpenCommand;
 using nc::ops::OperationCenterCancelResult;
 using nc::ops::OperationCenterCancelResultCode;
 using nc::ops::OperationId;
@@ -150,6 +153,23 @@ TEST_CASE(PREFIX "operation.cancel missing Registry definition is visibly disabl
     REQUIRE(presentation.disabled_reason);
     CHECK(presentation.disabled_reason->code == "operation.controlUnavailable");
     CHECK(presentation.disabled_reason->user_message_key == "commands.operation.cancel.disabled.controlUnavailable");
+}
+
+TEST_CASE(PREFIX "operationCenter.open missing Registry definition is visibly disabled with a typed reason")
+{
+    CommandRegistry registry;
+    int native_target = 0;
+    CommandContext context;
+    context.native_target = &native_target;
+    const auto missing = registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+
+    CHECK(missing.status == CommandRegistry::LookupStatus::UnknownCommand);
+    const auto presentation = OperationCenterOpenPresentationState(missing);
+    CHECK(presentation.visible);
+    CHECK_FALSE(presentation.enabled);
+    REQUIRE(presentation.disabled_reason);
+    CHECK(presentation.disabled_reason->code == "operation.centerUnavailable");
+    CHECK(presentation.disabled_reason->user_message_key == "commands.operationCenter.open.disabled.unavailable");
 }
 
 TEST_CASE(PREFIX "rejects invalid ids and missing handlers")
@@ -389,4 +409,182 @@ TEST_CASE(PREFIX "operation.cancel accepts only an enabled value target and maps
         CHECK(rejected.disabled_reason->code == rejection.disabled_code);
     }
     CHECK(executor_calls == 1 + static_cast<int>(rejection_cases.size()));
+}
+
+TEST_CASE(PREFIX "operationCenter.open presents one copied immutable value snapshot")
+{
+    const std::vector<nc::ops::OperationRecord> source_records{OperationCancelRecord(true, 23)};
+    int snapshot_calls = 0;
+    int presenter_calls = 0;
+    int native_target = 0;
+    void *observed_target = nullptr;
+    std::optional<uint64_t> observed_revision;
+
+    CommandRegistry registry;
+    REQUIRE(registry.Register(MakeOperationCenterOpenCommand(
+                [&]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                    ++snapshot_calls;
+                    return source_records;
+                },
+                [&](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
+                    ++presenter_calls;
+                    observed_target = _native_target;
+                    REQUIRE(_snapshot.size() == 1);
+                    observed_revision = _snapshot.front().revision;
+                    _snapshot.front().revision = 99;
+                    return true;
+                })) == CommandRegistry::RegisterResult::Registered);
+
+    const CommandDescriptor *const descriptor = registry.Find(CommandId{nc::core::command_ids::OperationCenterOpen});
+    REQUIRE(descriptor);
+    CHECK(descriptor->title_key == "commands.operationCenter.open.title");
+    CHECK(descriptor->description_key == "commands.operationCenter.open.description");
+    CHECK(descriptor->category == nc::core::CommandCategory::Operation);
+    CHECK(descriptor->icon_name == "list.bullet.rectangle");
+    CHECK_FALSE(descriptor->is_destructive);
+    CHECK_FALSE(descriptor->requires_operation_plan);
+    CHECK_FALSE(descriptor->supports_undo);
+    CHECK(descriptor->analytics_name == "operationCenter.open");
+
+    const auto missing_target = registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, {});
+    CHECK_FALSE(missing_target.state.enabled);
+    REQUIRE(missing_target.state.disabled_reason);
+    CHECK(missing_target.state.disabled_reason->code == "context.operationCenterPresentationTargetRequired");
+    CHECK(snapshot_calls == 0);
+
+    CommandContext context;
+    context.source = CommandInvocationSource::Menu;
+    context.native_target = &native_target;
+    const auto state = registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    CHECK(state.status == CommandRegistry::LookupStatus::Found);
+    CHECK(state.state.visible);
+    CHECK(state.state.enabled);
+    CHECK_FALSE(state.state.disabled_reason);
+    CHECK(snapshot_calls == 0);
+
+    const auto execution = registry.Execute(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    CHECK(execution.status == CommandRegistry::ExecutionStatus::Executed);
+    CHECK(snapshot_calls == 1);
+    CHECK(presenter_calls == 1);
+    CHECK(observed_target == &native_target);
+    REQUIRE(observed_revision);
+    CHECK(*observed_revision == 23);
+    CHECK(source_records.front().revision == 23);
+}
+
+TEST_CASE(PREFIX "operationCenter.open fails closed without its snapshot presenter")
+{
+    int native_target = 0;
+    int snapshot_calls = 0;
+    CommandContext context;
+    context.native_target = &native_target;
+
+    CommandRegistry registry;
+    REQUIRE(registry.Register(MakeOperationCenterOpenCommand(
+                [&]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                    ++snapshot_calls;
+                    return std::vector<nc::ops::OperationRecord>{OperationCancelRecord()};
+                },
+                {})) == CommandRegistry::RegisterResult::Registered);
+
+    const auto state = registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    CHECK_FALSE(state.state.enabled);
+    REQUIRE(state.state.disabled_reason);
+    CHECK(state.state.disabled_reason->code == "operation.presenterUnavailable");
+
+    const auto execution = registry.Execute(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    CHECK(execution.status == CommandRegistry::ExecutionStatus::Disabled);
+    REQUIRE(execution.disabled_reason);
+    CHECK(execution.disabled_reason->code == "operation.presenterUnavailable");
+    CHECK(snapshot_calls == 0);
+}
+
+TEST_CASE(PREFIX "operationCenter.open disables an unavailable snapshot provider before invocation")
+{
+    bool snapshot_available = true;
+    int snapshot_calls = 0;
+    int presenter_calls = 0;
+    int native_target = 0;
+    CommandContext context;
+    context.native_target = &native_target;
+
+    CommandRegistry registry;
+    REQUIRE(registry.Register(MakeOperationCenterOpenCommand(
+                [&]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                    ++snapshot_calls;
+                    return std::vector<nc::ops::OperationRecord>{OperationCancelRecord()};
+                },
+                [&](void *, std::vector<nc::ops::OperationRecord>) {
+                    ++presenter_calls;
+                    return true;
+                },
+                [&] { return snapshot_available; })) == CommandRegistry::RegisterResult::Registered);
+
+    CHECK(registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, context).state.enabled);
+    snapshot_available = false;
+    const auto state = registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    CHECK_FALSE(state.state.enabled);
+    REQUIRE(state.state.disabled_reason);
+    CHECK(state.state.disabled_reason->code == "operation.snapshotUnavailable");
+
+    const auto execution = registry.Execute(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+    CHECK(execution.status == CommandRegistry::ExecutionStatus::Disabled);
+    REQUIRE(execution.disabled_reason);
+    CHECK(execution.disabled_reason->code == "operation.snapshotUnavailable");
+    CHECK(snapshot_calls == 0);
+    CHECK(presenter_calls == 0);
+}
+
+TEST_CASE(PREFIX "operationCenter.open reports runtime snapshot and presentation rejection")
+{
+    int native_target = 0;
+    CommandContext context;
+    context.native_target = &native_target;
+
+    SECTION("snapshot disappears after state projection")
+    {
+        int snapshot_calls = 0;
+        int presenter_calls = 0;
+        CommandRegistry registry;
+        REQUIRE(registry.Register(MakeOperationCenterOpenCommand(
+                    [&]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                        ++snapshot_calls;
+                        return std::nullopt;
+                    },
+                    [&](void *, std::vector<nc::ops::OperationRecord>) {
+                        ++presenter_calls;
+                        return true;
+                    })) == CommandRegistry::RegisterResult::Registered);
+
+        CHECK(registry.QueryState(CommandId{nc::core::command_ids::OperationCenterOpen}, context).state.enabled);
+        const auto execution = registry.Execute(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+        CHECK(execution.status == CommandRegistry::ExecutionStatus::Rejected);
+        REQUIRE(execution.disabled_reason);
+        CHECK(execution.disabled_reason->code == "operation.snapshotUnavailable");
+        CHECK(snapshot_calls == 1);
+        CHECK(presenter_calls == 0);
+    }
+
+    SECTION("presenter rejects the copied snapshot")
+    {
+        int snapshot_calls = 0;
+        int presenter_calls = 0;
+        CommandRegistry registry;
+        REQUIRE(registry.Register(MakeOperationCenterOpenCommand(
+                    [&]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                        ++snapshot_calls;
+                        return std::vector<nc::ops::OperationRecord>{OperationCancelRecord()};
+                    },
+                    [&](void *, std::vector<nc::ops::OperationRecord>) {
+                        ++presenter_calls;
+                        return false;
+                    })) == CommandRegistry::RegisterResult::Registered);
+
+        const auto execution = registry.Execute(CommandId{nc::core::command_ids::OperationCenterOpen}, context);
+        CHECK(execution.status == CommandRegistry::ExecutionStatus::Rejected);
+        REQUIRE(execution.disabled_reason);
+        CHECK(execution.disabled_reason->code == "operation.presentationRejected");
+        CHECK(snapshot_calls == 1);
+        CHECK(presenter_calls == 1);
+    }
 }

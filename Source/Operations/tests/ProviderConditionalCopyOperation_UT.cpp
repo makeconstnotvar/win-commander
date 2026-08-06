@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "../source/ProviderConditionalCopyOperation.h"
 #include "../source/ProviderConditionalCopyOperationTesting.h"
+#include "../source/CopyOperationOrchestratorTesting.h"
 #include "../source/Statistics.h"
 #include "../../VFS/source/ProviderCapabilitiesTesting.h"
 
@@ -39,6 +40,9 @@ static_assert(std::is_move_assignable_v<CopyOperationExecutionProduct>);
 static_assert(!std::is_constructible_v<CopyOperationExecutionProduct,
                                        std::shared_ptr<Operation>,
                                        CopyOperationExecutionProduct::TerminalItemResultAccessor>);
+static_assert(!std::is_constructible_v<CopyOperationExecutionProduct,
+                                       std::shared_ptr<Operation>,
+                                       CopyOperationExecutionProduct::TerminalEvidenceAccessor>);
 
 constexpr ProviderConditionalCopyJournalContext g_ProviderConditionalCopyOperationUTContext{.item_index = 3,
                                                                                             .exact_source_bytes = 4096};
@@ -231,6 +235,14 @@ void ProviderConditionalCopyOperationUTCheckPending(
     CHECK(result.error() == CopyOperationTerminalResultError::Pending);
 }
 
+void ProviderConditionalCopyOperationUTCheckPending(
+    const CopyOperationExecutionProduct::TerminalEvidenceAccessor &_accessor)
+{
+    const auto result = _accessor();
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == CopyOperationTerminalResultError::Pending);
+}
+
 void ProviderConditionalCopyOperationUTCheckTerminal(
     const CopyOperationExecutionProduct::TerminalItemResultAccessor &_accessor,
     const OperationJournalItemResult &_expected)
@@ -241,6 +253,21 @@ void ProviderConditionalCopyOperationUTCheckTerminal(
     const auto second = _accessor();
     REQUIRE(second);
     CHECK(*second == _expected);
+}
+
+void ProviderConditionalCopyOperationUTCheckTerminalEvidence(
+    const CopyOperationExecutionProduct::TerminalEvidenceAccessor &_accessor,
+    OperationJournalState _expected_state,
+    const OperationJournalItemResult &_expected_item)
+{
+    const auto first = _accessor();
+    REQUIRE(first);
+    CHECK(first->state == _expected_state);
+    REQUIRE(first->item_results.size() == 1);
+    CHECK(first->item_results.front() == _expected_item);
+    const auto second = _accessor();
+    REQUIRE(second);
+    CHECK(*second == *first);
 }
 
 bool ProviderConditionalCopyOperationUTWaitUntil(const auto &_predicate)
@@ -261,6 +288,12 @@ CopyOperationExecutionProduct::TerminalItemResultAccessor &
 ProviderConditionalCopyOperationUTTerminal(CopyOperationExecutionProduct &_product) noexcept
 {
     return ProviderConditionalCopyOperationTesting::TerminalItemResult(_product);
+}
+
+CopyOperationExecutionProduct::TerminalEvidenceAccessor &
+ProviderConditionalCopyOperationUTTerminalEvidence(CopyOperationExecutionProduct &_product) noexcept
+{
+    return ProviderConditionalCopyOperationTesting::TerminalEvidence(_product);
 }
 
 } // namespace
@@ -289,6 +322,7 @@ TEST_CASE(PREFIX "commits once and publishes exact success before worker complet
     operation->SetItemStatusCallback([&report](ItemStateReport _report) { report.Capture(_report); });
 
     ProviderConditionalCopyOperationUTCheckPending(ProviderConditionalCopyOperationUTTerminal(product));
+    ProviderConditionalCopyOperationUTCheckPending(ProviderConditionalCopyOperationUTTerminalEvidence(product));
     CHECK(operation->Title() == "Copying /source.txt \u2192 /destination/source.txt");
     CHECK(operation->Statistics().PreferredSource() == Statistics::SourceType::Items);
     CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 1);
@@ -299,6 +333,9 @@ TEST_CASE(PREFIX "commits once and publishes exact success before worker complet
     CHECK(operation->State() == OperationState::Completed);
     ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
                                                     ProviderConditionalCopyOperationUTSuccessItem());
+    ProviderConditionalCopyOperationUTCheckTerminalEvidence(ProviderConditionalCopyOperationUTTerminalEvidence(product),
+                                                            OperationJournalState::Completed,
+                                                            ProviderConditionalCopyOperationUTSuccessItem());
     CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 1);
     CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 1);
     CHECK(report.calls == 1);
@@ -307,6 +344,42 @@ TEST_CASE(PREFIX "commits once and publishes exact success before worker complet
     CHECK(report.status == ItemStatus::Processed);
     CHECK(probe->commit_calls == 1);
     CHECK(probe->abort_calls == 0);
+}
+
+TEST_CASE(PREFIX "adapts singleton terminal accessors to exact terminal evidence",
+          "[provider-conditional-copy][copy-operation-terminal-evidence]")
+{
+    const auto check = [](OperationJournalItemResult _item_result, OperationJournalState _expected_state) {
+        const auto expected_item = _item_result;
+        auto product = CopyOperationOrchestratorTesting::MakeExecutionProduct(
+            std::shared_ptr<Operation>{},
+            [_item_result = std::move(_item_result)] {
+                return std::expected<OperationJournalItemResult, CopyOperationTerminalResultError>{_item_result};
+            });
+        const auto evidence = CopyOperationOrchestratorTesting::TerminalEvidence(product)();
+        REQUIRE(evidence);
+        CHECK(evidence->state == _expected_state);
+        REQUIRE(evidence->item_results.size() == 1);
+        CHECK(evidence->item_results.front() == expected_item);
+    };
+
+    check(ProviderConditionalCopyOperationUTSuccessItem(), OperationJournalState::Completed);
+    auto skipped = ProviderConditionalCopyOperationUTSuccessItem();
+    skipped.status = OperationJournalItemStatus::Skipped;
+    check(std::move(skipped), OperationJournalState::Completed);
+    check(ProviderConditionalCopyOperationUTFailureItem(), OperationJournalState::Failed);
+    check(ProviderConditionalCopyOperationUTCancelledItem(), OperationJournalState::Cancelled);
+
+    auto invalid_item = ProviderConditionalCopyOperationUTSuccessItem();
+    invalid_item.status = static_cast<OperationJournalItemStatus>(255);
+    auto invalid_product = CopyOperationOrchestratorTesting::MakeExecutionProduct(
+        std::shared_ptr<Operation>{},
+        [_item_result = std::move(invalid_item)] {
+            return std::expected<OperationJournalItemResult, CopyOperationTerminalResultError>{_item_result};
+        });
+    const auto invalid_evidence = CopyOperationOrchestratorTesting::TerminalEvidence(invalid_product)();
+    REQUIRE_FALSE(invalid_evidence);
+    CHECK(invalid_evidence.error() == CopyOperationTerminalResultError::Inconsistent);
 }
 
 TEST_CASE(PREFIX "publishes one skipped source report and closes item statistics on failure",
@@ -338,6 +411,9 @@ TEST_CASE(PREFIX "publishes one skipped source report and closes item statistics
     CHECK(operation->State() == OperationState::Completed);
     ProviderConditionalCopyOperationUTCheckTerminal(ProviderConditionalCopyOperationUTTerminal(product),
                                                     ProviderConditionalCopyOperationUTFailureItem());
+    ProviderConditionalCopyOperationUTCheckTerminalEvidence(ProviderConditionalCopyOperationUTTerminalEvidence(product),
+                                                            OperationJournalState::Failed,
+                                                            ProviderConditionalCopyOperationUTFailureItem());
     CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 0);
     CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 0);
     CHECK(report.calls == 1);

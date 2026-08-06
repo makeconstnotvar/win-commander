@@ -1,12 +1,12 @@
 # Feature: production VFS operation-planning probes foundation
 
-> Status: production Copy preflight adapter through conditional transaction, execution product, durable orchestration, and recovery implemented; application mutation adoption remains open
+> Status: production Copy preflight adapter through conditional transaction, execution product, durable orchestration, and recovery implemented; narrow Move rename-evidence adapter is verified, rejected by generic review, and has no execution adoption
 > Canonical requirements: `Docs/win_commander_ideal_file_manager_spec.md` sections 13.6, 14, 15, and 32
 > Execution tracker: M3 in `Docs/Development-Plan.md`, R5 in `Docs/refactor_plan.md`
 
 ## Purpose
 
-`nc::ops::VFSOperationPlanningProbes` is the synchronous production adapter from explicitly bound `VFSHost` instances to the pure [`OperationPlanner`](copy_preflight_planner_foundation.md) probe contract. It supplies filesystem evidence without opening UI, constructing an operation, mutating files, or entering `Operations::Pool`.
+`nc::ops::VFSOperationPlanningProbes` is the synchronous production adapter from explicitly bound `VFSHost` instances to the pure [`OperationPlanner`](copy_preflight_planner_foundation.md) probe contract. It supplies filesystem evidence without opening UI, constructing an operation, mutating files, or entering `Operations::Pool`. Copy may proceed to the separate review boundary; the narrow Move result remains intent evidence only.
 
 The adapter creates `VFSBoundOperationPreflight`, which owns both the typed preflight result and the exact immutable `VFSOperationPlanningBindings::Ptr` used to produce that result. `ReviewedVFSOperationPreflight` consumes this value through an explicit decision. `ReviewedOperationFactory` then consumes the reviewed token into a private-sealed move-only provider authority, so provider IDs cannot be rebound and one token cannot issue two transactions. Durable journal admission remains a separate single-use authority; `CopyOperationOrchestrator` orders it before private factory construction and queue admission.
 
@@ -35,6 +35,7 @@ Different host types have distinct namespaces by contract. For two hosts with th
 - source read and destination file/folder creation;
 - file and directory replacement capability;
 - destination symlink creation capability;
+- rename capability independent of file/folder creation;
 - authoritative path case semantics.
 
 `VFSHost::CaseSensitivityAtPath()` returns optional authoritative evidence. Missing evidence becomes `Unavailable`. Native evidence is exposed as ASCII case-sensitive or ASCII case-insensitive semantics; the planner blocks a comparison containing non-ASCII text under either ASCII-only mode. No Unicode folding or normalization is inferred.
@@ -51,9 +52,9 @@ Different host types have distinct namespaces by contract. For two hosts with th
 
 ### Access evidence
 
-Provider capability is checked before the injected `AccessChecker` for `Read`, `Write`, `ReplaceFile`, or `ReplaceDirectory`. An unsupported capability returns denied evidence. A configured checker supplies application-specific account, sandbox, or permission state and is followed by cancellation revalidation.
+Provider capability is checked before the injected `AccessChecker` for `Read`, `Write`, `Rename`, `ReplaceFile`, or `ReplaceDirectory`. `Rename` maps only to `ProviderCapabilities::can_rename`, rather than inferring authority from creation access. An unsupported capability returns denied evidence. A configured checker supplies application-specific account, sandbox, or permission state and is followed by cancellation revalidation.
 
-The adapter deliberately does not request permission UI. Without an injected checker it returns `PermissionRequired`, so production planning cannot silently assume access. `MakeVFSOperationPlanningAccessChecker` is the production application composition over `DirectoryAccessProvider::HasAccess`: `Write` checks the exact destination directory, while `Read` and replacement access check the normalized parent/root. A denied, malformed, or throwing check maps to `PermissionRequired`; permission recovery remains an outer UI policy.
+The adapter deliberately does not request permission UI. Without an injected checker it returns `PermissionRequired`, so production planning cannot silently assume access. `MakeVFSOperationPlanningAccessChecker` is the production application composition over `DirectoryAccessProvider::HasAccess`: `Write` and `Rename` check the supplied namespace directory, while `Read` and replacement access check the normalized parent/root. A denied, malformed, or throwing check maps to `PermissionRequired`; permission recovery remains an outer UI policy.
 
 ### Recursive estimate and space
 
@@ -75,7 +76,7 @@ Every probe checks cancellation before and after provider or injected callbacks.
 
 ## Planner safety boundary
 
-The combined planner and VFS adapter enforce the current Copy subset:
+The combined planner and VFS adapter enforce the current Copy subset plus a deliberately authority-free Move subset:
 
 - source and destination namespace/path identity must be provable;
 - source and destination capability, access, filename, and space evidence remain fail closed;
@@ -84,8 +85,9 @@ The combined planner and VFS adapter enforce the current Copy subset:
 - `MergeFolders`, generated-name policies, unsupported scopes, and other unsupported policies are blocked;
 - directory replacement is blocked; supported file replacement requires replacement capability, replacement access, destructive warning, and confirmation;
 - a non-native recursive estimate can be a warning, but it never licenses an unsafe symlink or nested-name assumption.
+- Move accepts only one same-provider regular file to an absent exact-item destination with `Ask/ThisItem`, exact path identity and `Rename` evidence for both parents; it does not query Copy estimate or space evidence.
 
-`AcceptedOperationPlan` remains review/factory readiness only. Runtime revalidation is recorded in every report, and the bound result supplies the exact provider instances for that later boundary.
+An accepted Copy result remains review/factory readiness. An accepted Move result remains intent-only: `ReviewedVFSOperationPreflight::Review` returns `UnsupportedPlanType`, so it cannot reach a factory, journal or `Pool`. Runtime revalidation is recorded in every report, and the bound result supplies the exact provider instances for that later boundary.
 
 `ReviewedOperationFactory` is fail closed at its public compatibility boundary. Native consumes exact source, destination-parent and absent-destination claims into a same-host/internal-writable-APFS clone-only transaction with supported metadata parity and ordered durability barriers. The private friend path maps the provider result, creates the transaction-owning execution product, and supplies it to the production orchestrator; direct public construction still resolves the cold transaction without publication and returns an error.
 
@@ -111,6 +113,8 @@ Current Debug evidence:
 
 Coverage includes binding lifetime and semantic alias rejection, authoritative case identity, POSIX/SFTP classification seams, item/name/access/space/cancellation evidence, missing checker behavior, native recursive estimation, non-reentrant stat, partial directory-read failure, vanished entries, symlinks on both sides, special files, unsupported policies, and directory replacement.
 
+Final Move-preflight evidence (2026-08-06): VFS `can_rename` mapping passes 1 case / 4 assertions; generic-review rejection passes 1 / 5; application parent-namespace access coverage passes 4 / 65; and the focused planner passes 5 / 69. Full Debug `OperationsUT` records 203 / 204 and 5,379 / 5,383 with only the NativeCreateCopy set-ID metadata host baseline, while full Debug `WinCommanderUT` records 330 / 334 and 5,317 / 5,321 with four headless pasteboard host baselines. The evidence covers independent `can_rename` mapping, parent namespace access, absence of Copy-capability inference and rejection of generic review for Move; it grants no Move factory, journal or `Pool` authority.
+
 The current-tree M0 run from 2026-08-01 passed the unsigned Debug application and all 10 seeded aggregate binaries: 897 cases / 132,011 assertions in the recorded run. Docker-backed seeded ASAN integration passed 163 / 89,392; hosted CI remains open.
 
 ## Remaining integration
@@ -120,4 +124,4 @@ The next M3 slices must:
 1. add provider-owned bounded staging for cross-volume scope;
 2. execute dedicated physical internal/external-volume fixtures.
 
-Operation Center presentation, non-Copy preflight, and broader remote/archive execution identity remain later increments.
+Live/full Operation Center presentation, Move review/factory/execution, remaining non-Copy preflight, and broader remote/archive execution identity remain later increments.

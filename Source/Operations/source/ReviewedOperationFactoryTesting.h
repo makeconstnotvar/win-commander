@@ -53,6 +53,12 @@ struct ReviewedOperationFactoryTestAccess final {
     {
         return _product.m_TerminalItemResult;
     }
+
+    [[nodiscard]] static CopyOperationExecutionProduct::TerminalEvidenceAccessor &
+    TerminalEvidence(CopyOperationExecutionProduct &_product) noexcept
+    {
+        return _product.m_TerminalEvidence;
+    }
 };
 
 } // namespace nc::ops

@@ -7,6 +7,9 @@
 
 #ifdef __cplusplus
 #include <memory>
+#include <vector>
+
+#include <Operations/OperationCenterModel.h>
 
 namespace nc::core {
 class CommandRegistry;
@@ -42,6 +45,13 @@ class OperationCenterCoordinator;
               panelController:(PanelController *)_panel
     operationCenterCoordinator:(std::weak_ptr<nc::ops::OperationCenterCoordinator>)_operation_center
                commandRegistry:(nc::core::CommandRegistry *)_command_registry;
+
+/**
+ * Presents one static, value-only Operation Center snapshot. The caller transfers copies of
+ * `OperationRecord`; this view retains no coordinator, Journal, Pool, executor, or observer.
+ * Reopening the command supplies a fresh snapshot.
+ */
+- (BOOL)presentOperationCenterSnapshot:(std::vector<nc::ops::OperationRecord>)_snapshot;
 
 /** Updates Store-backed command presentation state. Must be called on the main queue. */
 - (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;

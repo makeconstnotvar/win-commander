@@ -76,6 +76,7 @@ TEST_CASE(PREFIX "projects each required access to the directory permission seam
     const OperationPlanningPath path{"bound-provider", "/parent/item"};
     constexpr std::array required_accesses{OperationPlanningRequiredAccess::Read,
                                            OperationPlanningRequiredAccess::Write,
+                                           OperationPlanningRequiredAccess::Rename,
                                            OperationPlanningRequiredAccess::ReplaceFile,
                                            OperationPlanningRequiredAccess::ReplaceDirectory};
 
@@ -85,8 +86,9 @@ TEST_CASE(PREFIX "projects each required access to the directory permission seam
     REQUIRE(provider.calls.size() == required_accesses.size());
     CHECK(provider.calls[0].directory == "/parent");
     CHECK(provider.calls[1].directory == "/parent/item");
-    CHECK(provider.calls[2].directory == "/parent");
+    CHECK(provider.calls[2].directory == "/parent/item");
     CHECK(provider.calls[3].directory == "/parent");
+    CHECK(provider.calls[4].directory == "/parent");
     for( const auto &call : provider.calls ) {
         CHECK(call.panel == nullptr);
         CHECK(call.host == &host);
@@ -106,6 +108,11 @@ TEST_CASE(PREFIX "preserves the exact write path and handles parent root project
                   OperationPlanningRequiredAccess::Write,
                   native_host) == OperationPlanningAccessState::Granted);
     CHECK(StateOf(checker,
+                  {"native", "/destination/"},
+                  OperationPlanningRequiredAccess::Rename,
+                  native_host) ==
+          OperationPlanningAccessState::Granted);
+    CHECK(StateOf(checker,
                   {"remote", "/item"},
                   OperationPlanningRequiredAccess::Read,
                   remote_host) == OperationPlanningAccessState::Granted);
@@ -114,13 +121,15 @@ TEST_CASE(PREFIX "preserves the exact write path and handles parent root project
                   OperationPlanningRequiredAccess::ReplaceDirectory,
                   remote_host) == OperationPlanningAccessState::Granted);
 
-    REQUIRE(provider.calls.size() == 3);
+    REQUIRE(provider.calls.size() == 4);
     CHECK(provider.calls[0].directory == "/destination/");
     CHECK(provider.calls[0].host == &native_host);
-    CHECK(provider.calls[1].directory == "/");
-    CHECK(provider.calls[1].host == &remote_host);
+    CHECK(provider.calls[1].directory == "/destination/");
+    CHECK(provider.calls[1].host == &native_host);
     CHECK(provider.calls[2].directory == "/");
     CHECK(provider.calls[2].host == &remote_host);
+    CHECK(provider.calls[3].directory == "/");
+    CHECK(provider.calls[3].host == &remote_host);
     CHECK(provider.request_access_calls == 0);
 }
 

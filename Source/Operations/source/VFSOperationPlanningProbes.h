@@ -92,7 +92,8 @@ enum class VFSOperationPreflightReviewDecision : uint8_t {
 enum class VFSOperationPreflightReviewError : uint8_t {
     Blocked,
     DestructiveConfirmationRequired,
-    InvalidDecision
+    InvalidDecision,
+    UnsupportedPlanType
 };
 
 /** Explicit review token required before a bound accepted preflight can reach an operation factory. */

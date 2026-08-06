@@ -14,6 +14,7 @@ bool IsValid(const ops::OperationPlanningRequiredAccess _required) noexcept
     switch( _required ) {
         case ops::OperationPlanningRequiredAccess::Read:
         case ops::OperationPlanningRequiredAccess::Write:
+        case ops::OperationPlanningRequiredAccess::Rename:
         case ops::OperationPlanningRequiredAccess::ReplaceFile:
         case ops::OperationPlanningRequiredAccess::ReplaceDirectory:
             return true;
@@ -65,7 +66,8 @@ MakeVFSOperationPlanningAccessChecker(panel::DirectoryAccessProvider &_provider)
             !IsValid(_required) )
             return PermissionRequired();
 
-        const std::string access_directory = _required == ops::OperationPlanningRequiredAccess::Write
+        const std::string access_directory = _required == ops::OperationPlanningRequiredAccess::Write ||
+                                                     _required == ops::OperationPlanningRequiredAccess::Rename
                                                  ? _path.absolute_path
                                                  : ParentDirectory(_path.absolute_path);
         try {

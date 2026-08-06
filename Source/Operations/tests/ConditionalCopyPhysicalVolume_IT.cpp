@@ -1132,9 +1132,10 @@ TEST_CASE("CopyAs physical volumes: internal APFS publication reaches durable co
         REQUIRE(terminal_outcome);
         CHECK(terminal_outcome->plan_id == "physical-internal-copy");
         CHECK(terminal_outcome->state == OperationJournalState::Completed);
-        REQUIRE(terminal_outcome->item_result);
-        CHECK(terminal_outcome->item_result->destination_publication == OperationJournalPublicationState::Published);
-        CHECK(terminal_outcome->item_result->filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed);
+        const auto *const item_result = terminal_outcome->SingleItemResult();
+        REQUIRE(item_result);
+        CHECK(item_result->destination_publication == OperationJournalPublicationState::Published);
+        CHECK(item_result->filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed);
     }
     CHECK(removal_after_terminal);
     const auto snapshot = journal->Snapshot();

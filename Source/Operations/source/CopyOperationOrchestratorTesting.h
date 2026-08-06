@@ -4,6 +4,7 @@
 #include "CopyOperationOrchestrator.h"
 
 #include <functional>
+#include <type_traits>
 #include <utility>
 
 namespace nc::ops {
@@ -23,6 +24,24 @@ public:
     {
         return CopyOperationExecutionProduct{
             std::move(_operation), std::move(_terminal_item_result)};
+    }
+
+    template <class TerminalAccessor>
+        requires std::is_invocable_r_v<std::expected<CopyOperationTerminalEvidence,
+                                                     CopyOperationTerminalResultError>,
+                                         TerminalAccessor &>
+    [[nodiscard]] static CopyOperationExecutionProduct
+    MakeExecutionProduct(std::shared_ptr<Operation> _operation, TerminalAccessor &&_terminal_evidence)
+    {
+        return CopyOperationExecutionProduct{
+            std::move(_operation),
+            CopyOperationExecutionProduct::TerminalEvidenceAccessor{std::forward<TerminalAccessor>(_terminal_evidence)}};
+    }
+
+    [[nodiscard]] static CopyOperationExecutionProduct::TerminalEvidenceAccessor &
+    TerminalEvidence(CopyOperationExecutionProduct &_product) noexcept
+    {
+        return _product.m_TerminalEvidence;
     }
 
     [[nodiscard]] static CopyOperationOrchestrator
@@ -69,6 +88,20 @@ public:
 class CopyOperationRunReceiptCustodianTesting final
 {
 public:
+    /**
+     * Test-only custody path for multi-item terminal evidence. It requires an exact journal-issued Running receipt
+     * and is not a production execution route; production retains the Orchestrator singleton-shape admission gate.
+     */
+    [[nodiscard]] static bool
+    EnqueueExactTerminalEvidence(CopyOperationRunReceiptCustodian &_custodian,
+                                 OperationPlan _plan,
+                                 std::shared_ptr<OperationJournal> _journal,
+                                 OperationJournalRunReceipt &&_receipt,
+                                 CopyOperationExecutionProduct::TerminalEvidenceAccessor _accessor,
+                                 const std::shared_ptr<Pool> &_pool,
+                                 const std::shared_ptr<Operation> &_operation,
+                                 std::function<void(const CopyOperationDurableTerminalOutcome &)> _terminal_observer = {});
+
     [[nodiscard]] static bool
     SetReleaseFinalizerBarrier(CopyOperationRunReceiptCustodian &_custodian,
                                std::string_view _plan_id,

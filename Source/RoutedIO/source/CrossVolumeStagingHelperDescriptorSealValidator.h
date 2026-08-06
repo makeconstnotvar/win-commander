@@ -28,15 +28,20 @@ class ValidatedBegin final
 public:
     ValidatedBegin(const ValidatedBegin &) = delete;
     ValidatedBegin &operator=(const ValidatedBegin &) = delete;
-    ValidatedBegin(ValidatedBegin &&) noexcept = default;
-    ValidatedBegin &operator=(ValidatedBegin &&) noexcept = default;
+    ValidatedBegin(ValidatedBegin &&_other) noexcept;
+    ValidatedBegin &operator=(ValidatedBegin &&_other) noexcept;
 
     [[nodiscard]] const BeginRequest &Request() const noexcept { return m_Begin.request; }
 
 private:
-    explicit ValidatedBegin(xpc_codec::DecodedBegin _begin) noexcept : m_Begin{std::move(_begin)} {}
+    explicit ValidatedBegin(xpc_codec::DecodedBegin _begin) noexcept;
 
+    [[nodiscard]] bool IsCreatedByCurrentProcess() const noexcept;
+    [[nodiscard]] bool IsValid() const noexcept { return m_Valid; }
+
+    int m_CreatorPID{-1};
     xpc_codec::DecodedBegin m_Begin;
+    bool m_Valid{true};
 
     friend class LeaseStore;
     friend std::expected<ValidatedBegin, BeginDescriptorValidationError>

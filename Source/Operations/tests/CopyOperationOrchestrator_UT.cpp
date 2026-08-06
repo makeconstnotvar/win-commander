@@ -106,6 +106,64 @@ CopyOrchestratorReview(std::string _id,
     return std::move(*reviewed);
 }
 
+ReviewedVFSOperationPreflight CopyOrchestratorBatchReview(std::string _id, TempTestDir &_temporary)
+{
+    const auto first_source = _temporary.directory / "first-source.txt";
+    const auto second_source = _temporary.directory / "second-source.txt";
+    const auto destination = _temporary.directory / "destination";
+    for( const auto *const source : {&first_source, &second_source} ) {
+        std::ofstream stream{*source};
+        REQUIRE(stream);
+        stream << "source";
+        REQUIRE(stream);
+    }
+    REQUIRE(std::filesystem::create_directory(destination));
+
+    auto plan = OperationPlan::Create({
+        .plan_id = std::move(_id),
+        .type = OperationPlanType::Copy,
+        .sources = {OperationPlanSourceInput{"local", first_source.string()},
+                    OperationPlanSourceInput{"local", second_source.string()}},
+        .destination =
+            OperationPlanDestinationInput{"local", destination.string(), OperationPlanDestinationKind::Directory},
+        .conflict_policy = OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask,
+                                                        OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{1'700'000'000s},
+    });
+    REQUIRE(plan);
+    auto bindings = VFSOperationPlanningBindings::Create({{"local", TestEnv().vfs_native}});
+    REQUIRE(bindings);
+    auto probes = VFSOperationPlanningProbes::Create(
+        *bindings,
+        [](const OperationPlanningPath &,
+           OperationPlanningRequiredAccess,
+           nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+            return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+        });
+    REQUIRE(probes);
+    auto reviewed = ReviewedVFSOperationPreflight::Review(
+        probes->Preflight(std::move(*plan)), VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE(reviewed);
+    return std::move(*reviewed);
+}
+
+OperationPlan CopyOrchestratorThreeSourcePlan(std::string _id)
+{
+    auto plan = OperationPlan::Create({
+        .plan_id = std::move(_id),
+        .type = OperationPlanType::Copy,
+        .sources = {OperationPlanSourceInput{"local", "/first-source"},
+                    OperationPlanSourceInput{"local", "/second-source"},
+                    OperationPlanSourceInput{"local", "/third-source"}},
+        .destination = OperationPlanDestinationInput{"local", "/destination", OperationPlanDestinationKind::Directory},
+        .conflict_policy = OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask,
+                                                        OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{1'700'000'000s},
+    });
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
 OperationJournalItemResult CopyOrchestratorSuccess()
 {
     return OperationJournalItemResult{
@@ -155,6 +213,16 @@ OperationJournalItemResult CopyOrchestratorCancelled()
         .filesystem_sync_system_error = 0,
         .recovery_action = OperationJournalRecoveryAction::None,
     };
+}
+
+std::vector<OperationJournalItemResult> CopyOrchestratorThreeItemSuccesses()
+{
+    auto first = CopyOrchestratorSuccess();
+    auto second = CopyOrchestratorSuccess();
+    auto third = CopyOrchestratorSuccess();
+    second.item_index = 1;
+    third.item_index = 2;
+    return {std::move(first), std::move(second), std::move(third)};
 }
 
 CopyOperationOrchestratorTesting::ConditionalCommitTransactionResolver
@@ -525,7 +593,7 @@ TEST_CASE(PREFIX "orders durable admission, construction, enqueue and terminal r
                     const auto snapshot = journal->Snapshot();
                     terminal_observer_saw_durable_result =
                         _outcome.plan_id == "ordered" && _outcome.state == OperationJournalState::Completed &&
-                        _outcome.item_result == CopyOrchestratorSuccess() &&
+                        _outcome.item_results == std::vector{CopyOrchestratorSuccess()} &&
                         _outcome.confirmation == CopyOperationDurableTerminalConfirmation::Finalized &&
                         snapshot.size() == 1 && snapshot[0].state == OperationJournalState::Completed &&
                         snapshot[0].item_results == std::vector{CopyOrchestratorSuccess()};
@@ -544,6 +612,274 @@ TEST_CASE(PREFIX "orders durable admission, construction, enqueue and terminal r
     CHECK(item_status_calls == 1);
     CHECK(item_status_was_exact);
     CHECK(removal_saw_completed);
+}
+
+TEST_CASE(PREFIX "persists an atomic empty cancellation evidence snapshot", "[copy-operation-orchestrator][batch-durable-terminal]")
+{
+    CopyOrchestratorDirectory directory;
+    TempTestDir temporary;
+    auto journal = CopyOrchestratorJournal(directory);
+    auto pool = Pool::Make();
+    auto operation = std::make_shared<CopyOrchestratorControlledOperation>();
+    operation->job.done = true;
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    std::optional<CopyOperationDurableTerminalOutcome> terminal_outcome;
+    auto orchestrator = CopyOperationOrchestratorTesting::CreateInjected(
+        journal,
+        pool,
+        [operation](ReviewedVFSOperationPreflight, CopyOperationOrchestrator::CancelChecker) {
+            return CopyOperationOrchestratorTesting::MakeExecutionProduct(operation, [] {
+                return std::expected<CopyOperationTerminalEvidence, CopyOperationTerminalResultError>{
+                    CopyOperationTerminalEvidence{.state = OperationJournalState::Cancelled, .item_results = {}}};
+            });
+        },
+        custodian);
+
+    const auto submitted = orchestrator.Submit(
+        CopyOrchestratorReview("empty-cancellation-evidence", temporary),
+        {},
+        CopyOperationSubmissionHooks{
+            .durable_terminal_observer = [&terminal_outcome](const CopyOperationDurableTerminalOutcome &_outcome) {
+                terminal_outcome = _outcome;
+            }});
+    REQUIRE(submitted);
+    REQUIRE((*submitted)->Wait(1s));
+    REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->Empty(); }));
+
+    REQUIRE(terminal_outcome);
+    CHECK(terminal_outcome->plan_id == "empty-cancellation-evidence");
+    CHECK(terminal_outcome->state == OperationJournalState::Cancelled);
+    CHECK(terminal_outcome->item_results.empty());
+    CHECK(terminal_outcome->SingleItemResult() == nullptr);
+    CHECK(terminal_outcome->confirmation == CopyOperationDurableTerminalConfirmation::Finalized);
+    CHECK(custodian->PendingCount() == 0);
+    const auto snapshot = journal->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Cancelled);
+    CHECK(snapshot[0].item_results.empty());
+}
+
+TEST_CASE(PREFIX "custodian retries an exact three-item terminal evidence snapshot without reaccessing",
+          "[copy-operation-orchestrator][batch-durable-terminal]")
+{
+    CopyOrchestratorDirectory directory;
+    auto syscalls = OperationJournalTesting::DefaultSyscalls();
+    auto journal = CopyOrchestratorJournal(directory, syscalls);
+    auto pool = Pool::Make();
+    auto operation = std::make_shared<CopyOrchestratorControlledOperation>();
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    const auto plan = CopyOrchestratorThreeSourcePlan("three-item-retry");
+    const auto evidence = CopyOrchestratorThreeItemSuccesses();
+    std::atomic_int accessor_calls{0};
+    std::optional<CopyOperationDurableTerminalOutcome> terminal_outcome;
+
+    auto admission = journal->Admit(plan);
+    REQUIRE(admission);
+    auto run = journal->TransitionToRunning(std::move(*admission));
+    REQUIRE(run);
+    REQUIRE(CopyOperationRunReceiptCustodianTesting::EnqueueExactTerminalEvidence(
+        *custodian,
+        plan,
+        journal,
+        std::move(*run),
+        [&accessor_calls, evidence] {
+            ++accessor_calls;
+            return std::expected<CopyOperationTerminalEvidence, CopyOperationTerminalResultError>{
+                CopyOperationTerminalEvidence{.state = OperationJournalState::Completed, .item_results = evidence}};
+        },
+        pool,
+        operation,
+        [&terminal_outcome](const CopyOperationDurableTerminalOutcome &_outcome) { terminal_outcome = _outcome; }));
+
+    const auto real_open_at = syscalls->open_at;
+    std::atomic_bool fail_once{true};
+    syscalls->open_at = [real_open_at, &fail_once](int _directory, const char *_path, int _flags, mode_t _mode) {
+        if( fail_once.exchange(false) ) {
+            errno = EIO;
+            return -1;
+        }
+        return real_open_at(_directory, _path, _flags, _mode);
+    };
+    operation->job.done = true;
+    REQUIRE(operation->Wait(1s));
+    REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->FinalizingOperationsCount() == 1; }));
+    CHECK(accessor_calls == 1);
+    const auto running = journal->Snapshot();
+    REQUIRE(running.size() == 1);
+    CHECK(running[0].state == OperationJournalState::Running);
+    CHECK(running[0].item_results.empty());
+    CHECK_FALSE(terminal_outcome);
+
+    CHECK(pool->RetryFinalization(operation) == PoolRetryFinalizationResult::Released);
+    CHECK(accessor_calls == 1);
+    CHECK(pool->Empty());
+    CHECK(custodian->PendingCount() == 0);
+    REQUIRE(terminal_outcome);
+    CHECK(terminal_outcome->state == OperationJournalState::Completed);
+    CHECK(terminal_outcome->item_results == evidence);
+    CHECK(terminal_outcome->SingleItemResult() == nullptr);
+    CHECK(terminal_outcome->confirmation == CopyOperationDurableTerminalConfirmation::Finalized);
+    const auto finalized = journal->Snapshot();
+    REQUIRE(finalized.size() == 1);
+    CHECK(finalized[0].state == OperationJournalState::Completed);
+    CHECK(finalized[0].item_results == evidence);
+}
+
+TEST_CASE(PREFIX "custodian reconciles and releases an exact three-item terminal evidence snapshot",
+          "[copy-operation-orchestrator][batch-durable-terminal]")
+{
+    CopyOrchestratorDirectory directory;
+    CopyOrchestratorDirectory wrong_directory;
+    auto pool = Pool::Make();
+    auto operation = std::make_shared<CopyOrchestratorControlledOperation>();
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    const auto evidence = CopyOrchestratorThreeItemSuccesses();
+    std::atomic_int accessor_calls{0};
+    std::atomic_int removals{0};
+    std::optional<CopyOperationDurableTerminalOutcome> terminal_outcome;
+    pool->ObserveUnticketed(Pool::NotifyAboutRemoval, [&] { ++removals; });
+
+    {
+        auto syscalls = OperationJournalTesting::DefaultSyscalls();
+        auto journal = CopyOrchestratorJournal(directory, syscalls);
+        const auto plan = CopyOrchestratorThreeSourcePlan("three-item-reconcile");
+        auto admission = journal->Admit(plan);
+        REQUIRE(admission);
+        auto run = journal->TransitionToRunning(std::move(*admission));
+        REQUIRE(run);
+        const auto real_rename_at = syscalls->rename_at;
+        std::atomic_bool inject_failure{false};
+        syscalls->rename_at = [real_rename_at, &inject_failure](
+                                  int _from_directory, const char *_from, int _to_directory, const char *_to) {
+            if( !inject_failure.exchange(false) )
+                return real_rename_at(_from_directory, _from, _to_directory, _to);
+            const int renamed = real_rename_at(_from_directory, _from, _to_directory, _to);
+            if( renamed != 0 )
+                return renamed;
+            errno = EIO;
+            return -1;
+        };
+        REQUIRE(CopyOperationRunReceiptCustodianTesting::EnqueueExactTerminalEvidence(
+            *custodian,
+            plan,
+            journal,
+            std::move(*run),
+            [&accessor_calls, evidence] {
+                ++accessor_calls;
+                return std::expected<CopyOperationTerminalEvidence, CopyOperationTerminalResultError>{
+                    CopyOperationTerminalEvidence{.state = OperationJournalState::Completed, .item_results = evidence}};
+            },
+            pool,
+            operation,
+            [&terminal_outcome](const CopyOperationDurableTerminalOutcome &_outcome) {
+                terminal_outcome = _outcome;
+            }));
+
+        inject_failure = true;
+        operation->job.done = true;
+        REQUIRE(operation->Wait(1s));
+        REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->FinalizingOperationsCount() == 1; }));
+        CHECK(accessor_calls == 1);
+        CHECK(custodian->Retry("three-item-reconcile").status ==
+              CopyOperationRunReceiptCustodyStatus::ReconcileRequired);
+        CHECK_FALSE(terminal_outcome);
+    }
+
+    auto wrong = CopyOrchestratorJournal(wrong_directory);
+    CHECK(custodian->Reconcile("three-item-reconcile", *wrong).status ==
+          CopyOperationRunReceiptReconciliationStatus::Mismatch);
+    CHECK(pool->FinalizingOperationsCount() == 1);
+    auto reopened = CopyOrchestratorJournal(directory);
+    const auto reconciled = custodian->Reconcile("three-item-reconcile", *reopened);
+    CHECK(reconciled.status == CopyOperationRunReceiptReconciliationStatus::TerminalConfirmed);
+    CHECK(reconciled.pool_release_required);
+    CHECK(custodian->ReleaseReconciled("three-item-reconcile") == CopyOperationRunReceiptPoolReleaseStatus::Released);
+
+    CHECK(accessor_calls == 1);
+    CHECK(removals == 1);
+    CHECK(pool->Empty());
+    CHECK(custodian->PendingCount() == 0);
+    REQUIRE(terminal_outcome);
+    CHECK(terminal_outcome->state == OperationJournalState::Completed);
+    CHECK(terminal_outcome->item_results == evidence);
+    CHECK(terminal_outcome->SingleItemResult() == nullptr);
+    CHECK(terminal_outcome->confirmation == CopyOperationDurableTerminalConfirmation::ReconciledTerminal);
+    const auto snapshot = reopened->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Completed);
+    CHECK(snapshot[0].item_results == evidence);
+}
+
+TEST_CASE(PREFIX "rejects a batch review before direct admission", "[copy-operation-orchestrator][batch-durable-terminal]")
+{
+    CopyOrchestratorDirectory directory;
+    TempTestDir temporary;
+    auto journal = CopyOrchestratorJournal(directory);
+    auto pool = Pool::Make();
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    std::atomic_int factory_calls{0};
+    std::atomic_int additions{0};
+    pool->ObserveUnticketed(Pool::NotifyAboutAddition, [&] { ++additions; });
+    auto orchestrator = CopyOperationOrchestratorTesting::CreateInjected(
+        journal,
+        pool,
+        [&factory_calls](ReviewedVFSOperationPreflight, CopyOperationOrchestrator::CancelChecker) {
+            ++factory_calls;
+            return std::unexpected(CopyOperationExecutionFactoryError::Rejected);
+        },
+        custodian);
+
+    auto reviewed = CopyOrchestratorBatchReview("direct-batch-rejection", temporary);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Sources().size() == 2);
+    REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 2);
+    const auto submitted = orchestrator.Submit(std::move(reviewed));
+
+    REQUIRE_FALSE(submitted);
+    CHECK(submitted.error().code == CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan);
+    CHECK(factory_calls == 0);
+    CHECK(additions == 0);
+    CHECK(pool->Empty());
+    CHECK(custodian->PendingCount() == 0);
+    CHECK(journal->Snapshot().empty());
+}
+
+TEST_CASE(PREFIX "coordinator rejects a batch review before model or journal admission",
+          "[copy-operation-orchestrator][operation-center-coordinator][batch-durable-terminal]")
+{
+    CopyOrchestratorDirectory directory;
+    TempTestDir temporary;
+    auto journal = CopyOrchestratorJournal(directory);
+    auto pool = Pool::Make();
+    auto coordinator = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(coordinator);
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    std::atomic_int factory_calls{0};
+    std::atomic_int additions{0};
+    pool->ObserveUnticketed(Pool::NotifyAboutAddition, [&] { ++additions; });
+    auto orchestrator = CopyOperationOrchestratorTesting::CreateInjected(
+        journal,
+        pool,
+        [&factory_calls](ReviewedVFSOperationPreflight, CopyOperationOrchestrator::CancelChecker) {
+            ++factory_calls;
+            return std::unexpected(CopyOperationExecutionFactoryError::Rejected);
+        },
+        custodian);
+
+    auto reviewed = CopyOrchestratorBatchReview("coordinator-batch-rejection", temporary);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Sources().size() == 2);
+    REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 2);
+    const auto submitted = (*coordinator)->SubmitReviewedCopy(*journal, orchestrator, std::move(reviewed), {}, {});
+
+    REQUIRE_FALSE(submitted);
+    CHECK(submitted.error().code == OperationCenterSubmissionErrorCode::OrchestratorRejected);
+    REQUIRE(submitted.error().orchestrator_error);
+    CHECK(submitted.error().orchestrator_error->code == CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan);
+    CHECK(factory_calls == 0);
+    CHECK(additions == 0);
+    CHECK(pool->Empty());
+    CHECK(custodian->PendingCount() == 0);
+    CHECK(journal->Snapshot().empty());
+    CHECK((*coordinator)->Model().Snapshot().empty());
 }
 
 TEST_CASE(PREFIX "consumes coordinator admission without a second journal entry and sees queued model before Pool start",
@@ -986,7 +1322,7 @@ TEST_CASE(PREFIX "durable failure suppresses the generic success callback and co
                 const auto snapshot = journal->Snapshot();
                 terminal_saw_exact_failure =
                     _outcome.plan_id == "unknown-failure" && _outcome.state == OperationJournalState::Failed &&
-                    _outcome.item_result == CopyOrchestratorUnknownFailure() &&
+                    _outcome.item_results == std::vector{CopyOrchestratorUnknownFailure()} &&
                     _outcome.confirmation == CopyOperationDurableTerminalConfirmation::Finalized &&
                     snapshot.size() == 1 && snapshot[0].state == OperationJournalState::Failed &&
                     snapshot[0].item_results == std::vector{CopyOrchestratorUnknownFailure()};
@@ -1119,8 +1455,9 @@ TEST_CASE(PREFIX "final cancellation atomically records an item and never enqueu
     REQUIRE(terminal_outcome);
     CHECK(terminal_outcome->plan_id == "final-cancel");
     CHECK(terminal_outcome->state == OperationJournalState::Cancelled);
-    REQUIRE(terminal_outcome->item_result);
-    CHECK(terminal_outcome->item_result->status == OperationJournalItemStatus::Cancelled);
+    const auto *const terminal_item_result = terminal_outcome->SingleItemResult();
+    REQUIRE(terminal_item_result);
+    CHECK(terminal_item_result->status == OperationJournalItemStatus::Cancelled);
     CHECK(terminal_outcome->confirmation == CopyOperationDurableTerminalConfirmation::Finalized);
     const auto snapshot = journal->Snapshot();
     REQUIRE(snapshot.size() == 1);
@@ -1293,7 +1630,7 @@ TEST_CASE(PREFIX "retains and retries the exact terminal result after persistenc
     REQUIRE(terminal_outcome);
     CHECK(terminal_outcome->plan_id == "persist-retry");
     CHECK(terminal_outcome->state == OperationJournalState::Completed);
-    CHECK(terminal_outcome->item_result == CopyOrchestratorSuccess());
+    CHECK(terminal_outcome->item_results == std::vector{CopyOrchestratorSuccess()});
     CHECK(terminal_outcome->confirmation == CopyOperationDurableTerminalConfirmation::Finalized);
     CHECK(pool->Empty());
 }
@@ -1643,9 +1980,10 @@ TEST_CASE(PREFIX "retains accepted Pool residency through exact reopen reconcili
     CHECK(terminal_outcome->confirmation == (publish_candidate
                                                  ? CopyOperationDurableTerminalConfirmation::ReconciledTerminal
                                                  : CopyOperationDurableTerminalConfirmation::ReconciledInterrupted));
-    CHECK(static_cast<bool>(terminal_outcome->item_result) == publish_candidate);
+    const auto *const reconciled_item_result = terminal_outcome->SingleItemResult();
+    CHECK(static_cast<bool>(reconciled_item_result) == publish_candidate);
     if( publish_candidate )
-        CHECK(terminal_outcome->item_result == CopyOrchestratorSuccess());
+        CHECK(*reconciled_item_result == CopyOrchestratorSuccess());
     CHECK(removals == (drop_pool_before_release ? 0 : 1));
     CHECK(removal_saw_terminal == !drop_pool_before_release);
     CHECK(completions == (publish_candidate ? 1 : 0));

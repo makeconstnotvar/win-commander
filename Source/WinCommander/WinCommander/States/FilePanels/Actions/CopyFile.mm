@@ -425,9 +425,95 @@ NSString *RecoveryHistoryRefreshDescription(const nc::core::CopyOperationRecover
         case nc::core::CopyOperationRecoveryHistoryRefreshStatus::JournalUnavailable:
             return @"\n\nThe durable recovery completed, but its operation history could not be reopened for display.";
         case nc::core::CopyOperationRecoveryHistoryRefreshStatus::Deferred:
-            return @"\n\nThe durable recovery completed, but operation history could not be refreshed in this application session.";
+            return @"\n\nThe durable recovery completed, but operation history is busy. You can refresh it once.";
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::ProjectionFailed:
+            return @"\n\nThe durable recovery completed, but operation history could not be refreshed.";
+        case nc::core::CopyOperationRecoveryHistoryRefreshStatus::RetryExhausted:
+            return @"\n\nThe durable recovery completed, but operation history is still busy after its one refresh attempt.";
     }
     return @"";
+}
+
+void RefreshDeferredRecoveryHistoryInUI(
+    const std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> &_recovery_coordinator,
+    const std::shared_ptr<nc::ops::OperationCenterCoordinator> &_operation_center,
+    const nc::core::CopyOperationRecoveryHistoryRefreshResult &_prior,
+    const std::shared_ptr<std::atomic_bool> &_durable_outcome_delivered,
+    __weak NCMainWindowController *_weak_window_controller)
+{
+    dispatch_to_default([recovery_coordinator = _recovery_coordinator,
+                         operation_center = _operation_center,
+                         prior = _prior,
+                         durable_outcome_delivered = _durable_outcome_delivered,
+                         weak_window_controller = _weak_window_controller] {
+        if( !durable_outcome_delivered || durable_outcome_delivered->load(std::memory_order_acquire) )
+            return;
+        const auto result = nc::core::RetryDeferredHistoryProjection(recovery_coordinator, operation_center, prior);
+        if( durable_outcome_delivered->load(std::memory_order_acquire) )
+            return;
+        dispatch_to_main_queue([result, weak_window_controller] {
+            if( NCMainWindowController *const controller = weak_window_controller ) {
+                ShowCopyAlert(controller,
+                              result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
+                                  ? @"Copy recovery result"
+                                  : @"Copy recovery incomplete",
+                              [RecoveryServiceDescription(result.recovery)
+                                  stringByAppendingString:RecoveryHistoryRefreshDescription(result)],
+                              result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
+                                  ? NSAlertStyleInformational
+                                  : NSAlertStyleCritical);
+            }
+        });
+    });
+}
+
+void PresentRecoveryHistoryRefreshResult(
+    NCMainWindowController *_window_controller,
+    const nc::core::CopyOperationRecoveryHistoryRefreshResult &_result,
+    std::shared_ptr<nc::core::CopyOperationRecoveryCoordinator> _recovery_coordinator,
+    std::shared_ptr<nc::ops::OperationCenterCoordinator> _operation_center,
+    std::shared_ptr<std::atomic_bool> _durable_outcome_delivered)
+{
+    dispatch_assert_main_queue();
+    const bool can_refresh = _result.history_refresh == nc::core::CopyOperationRecoveryHistoryRefreshStatus::Deferred &&
+                             _result.HasDeferredHistoryProjection();
+    if( !can_refresh ) {
+        ShowCopyAlert(_window_controller,
+                      _result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
+                          ? @"Copy recovery result"
+                          : @"Copy recovery incomplete",
+                      [RecoveryServiceDescription(_result.recovery)
+                          stringByAppendingString:RecoveryHistoryRefreshDescription(_result)],
+                      _result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None ? NSAlertStyleInformational
+                                                                                                   : NSAlertStyleCritical);
+        return;
+    }
+
+    Alert *const alert = [[Alert alloc] init];
+    alert.alertStyle = NSAlertStyleInformational;
+    alert.messageText = @"Copy recovery result";
+    alert.informativeText = [RecoveryServiceDescription(_result.recovery)
+        stringByAppendingString:RecoveryHistoryRefreshDescription(_result)];
+    [alert addButtonWithTitle:NSLocalizedString(@"Refresh history", "Refresh deferred copy recovery history once")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Dismiss", "Dismiss deferred copy recovery history refresh")];
+
+    const auto prior = _result;
+    __weak NCMainWindowController *weak_window_controller = _window_controller;
+    if( _window_controller.window ) {
+        [alert beginSheetModalForWindow:_window_controller.window
+                      completionHandler:^(NSModalResponse response) {
+                        if( response == NSAlertFirstButtonReturn )
+                            RefreshDeferredRecoveryHistoryInUI(_recovery_coordinator,
+                                                              _operation_center,
+                                                              prior,
+                                                              _durable_outcome_delivered,
+                                                              weak_window_controller);
+                      }];
+    }
+    else if( [alert runModal] == NSAlertFirstButtonReturn ) {
+        RefreshDeferredRecoveryHistoryInUI(
+            _recovery_coordinator, _operation_center, prior, _durable_outcome_delivered, weak_window_controller);
+    }
 }
 
 void PresentSubmissionFailure(NCMainWindowController *_window_controller,
@@ -465,18 +551,17 @@ void PresentSubmissionFailure(NCMainWindowController *_window_controller,
                             recovery_coordinator, operation_center, plan_id);
                         if( durable_outcome_delivered->load(std::memory_order_acquire) )
                             return;
-                        dispatch_to_main_queue([result, weak_window_controller] {
+                        dispatch_to_main_queue([result,
+                                                recovery_coordinator,
+                                                operation_center,
+                                                durable_outcome_delivered,
+                                                weak_window_controller] {
                             if( NCMainWindowController *const controller = weak_window_controller ) {
-                                NSString *const history_description = RecoveryHistoryRefreshDescription(result);
-                                ShowCopyAlert(controller,
-                                              result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
-                                                  ? @"Copy recovery result"
-                                                  : @"Copy recovery incomplete",
-                                              [RecoveryServiceDescription(result.recovery)
-                                                  stringByAppendingString:history_description],
-                                              result.recovery.error == nc::core::CopyOperationRecoveryServiceError::None
-                                                  ? NSAlertStyleInformational
-                                                  : NSAlertStyleCritical);
+                                PresentRecoveryHistoryRefreshResult(controller,
+                                                                    result,
+                                                                    recovery_coordinator,
+                                                                    operation_center,
+                                                                    durable_outcome_delivered);
                             }
                         });
                     });
@@ -635,7 +720,7 @@ void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcom
                                const std::string &_destination)
 {
     dispatch_assert_main_queue();
-    const auto &item_result = _outcome.item_result;
+    const auto *const item_result = _outcome.SingleItemResult();
     const bool succeeded = _outcome.state == nc::ops::OperationJournalState::Completed && item_result &&
                            item_result->status == nc::ops::OperationJournalItemStatus::Succeeded &&
                            item_result->destination_publication == nc::ops::OperationJournalPublicationState::Published;
