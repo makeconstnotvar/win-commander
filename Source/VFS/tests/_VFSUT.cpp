@@ -5,6 +5,7 @@
 #include "CrossVolumeStagingProtocol_UT.cpp"
 #include "CrossVolumeStagingXPCCodec_UT.cpp"
 #include "CrossVolumeStagingHelperLeaseStore_UT.cpp"
+#include "CrossVolumeStagingHelperLeaseLifecycle_UT.cpp"
 #include "CrossVolumeStagingProtectedRootLedger_UT.cpp"
 #include "CrossVolumeStagingHelperDescriptorSealValidator_UT.cpp"
 #include "NativeConditionalCopyTransaction_UT.cpp"

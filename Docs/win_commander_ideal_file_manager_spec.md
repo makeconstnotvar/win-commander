@@ -2418,6 +2418,9 @@ Requirements:
 - объяснять пользователю, зачем нужен доступ;
 - поддерживать scoped access where required;
 - не терять granted permissions;
+- сохранять fixed app path, bundle identifier и exact designated requirement управляемого local-development channel при restart и rebuild;
+- сохранять bundle identifier и effective designated requirement при release update, включая certificate renewal, которое удовлетворяет прежнему requirement;
+- выполнять изменение effective TCC identity/designated requirement как явную migration с отдельным consent flow;
 - безопасно хранить credentials для remote connections;
 - использовать Keychain для паролей;
 - не логировать секреты;

@@ -112,7 +112,7 @@
 - **Verification:**
   - [ ] `xcodebuild -project Source/Viewer/Viewer.xcodeproj -scheme ViewerUT -configuration Debug test` — зелёный.
   - [ ] Тест/тестовый двойник VFS с искусственной задержкой чтения (если существующая тестовая инфраструктура это позволяет) — подтвердить, что скролл не блокирует вызывающий поток дольше заданного порога.
-  - [ ] Ручная проверка через `Scripts/build_unsigned_and_run.sh`: открыть большой файл на нативном (быстром) VFS — поведение скролла визуально не изменилось (нет регресса).
+  - [ ] Ручная проверка через `Scripts/build_stable_dev_and_run.sh`: открыть большой файл на нативном (быстром) VFS — поведение скролла визуально не изменилось (нет регресса).
 
 ### OPT-006: синхронное ожидание подсветки синтаксиса + отсутствие инкрементального перелексинга во Viewer
 
@@ -125,7 +125,7 @@
 - **Verification:**
   - [ ] `xcodebuild -project Source/Viewer/Viewer.xcodeproj -scheme ViewerUT -configuration Debug test` — зелёный.
   - [ ] Тест, подтверждающий, что при скролле на 1 строку в большом файле объём пересылаемых в XPC данных (или диапазон вызова `Lex`) пропорционален размеру дельты, а не полного окна.
-  - [ ] Ручная проверка через `Scripts/build_unsigned_and_run.sh` минимум на 2 языках (например, C++ и Python из существующих фикстур `Source/Viewer/.../SyntaxHighlighting` или тестов) — подсветка визуально корректна, скролл не блокируется.
+  - [ ] Ручная проверка через `Scripts/build_stable_dev_and_run.sh` минимум на 2 языках (например, C++ и Python из существующих фикстур `Source/Viewer/.../SyntaxHighlighting` или тестов) — подсветка визуально корректна, скролл не блокируется.
 
 ## 4. P2 — производительность (средний приоритет)
 
@@ -161,14 +161,14 @@
 - **Файлы:** `Source/Panel/source/ExternalTools.mm` (`StartDetachedUI()`, ~строки 856–877: `ctx->cv.wait_for(lk, std::chrono::seconds{10}, ...)` после асинхронного вызова `NSWorkspace openApplicationAtURL/openURLs`); вызывающий код — `Source/WinCommander/WinCommander/States/FilePanels/Actions/ExecuteExternalTool.mm:89` (`dispatch_assert_main_queue()`) → `:102` (`StartDetached()`).
 - **Требуемое изменение:** доставлять результат запуска (pid/ошибка) асинхронным коллбэком в главную очередь вместо блокирующего ожидания на condition variable внутри функции, вызываемой напрямую из главного потока.
 - **Ограничения:** сохранить текущий контракт возврата ошибки/pid для существующих вызывающих; если какой-то вызывающий код требует синхронного результата — обновить именно его на приём асинхронного колбэка, а не оставлять блокировку внутри `StartDetachedUI`.
-- **Verification:** `xcodebuild -project Source/Panel/Panel.xcodeproj -scheme PanelUT -configuration Debug test` и `-project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test`; ручная проверка через `Scripts/build_unsigned_and_run.sh` — запуск на заведомо медленный/несуществующий бандл не блокирует приложение.
+- **Verification:** `xcodebuild -project Source/Panel/Panel.xcodeproj -scheme PanelUT -configuration Debug test` и `-project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test`; ручная проверка через `Scripts/build_stable_dev_and_run.sh` — запуск на заведомо медленный/несуществующий бандл не блокирует приложение.
 
 ### OPT-012: медленная конвертация UTF-8→UTF-16 в терминале
 
 - **Файл:** `Source/Term/source/InterpreterImpl.cpp:671` (`ConvertUTF8ToUTF16`), авторский комментарий "temp and slow implementation"; вызывается из `ProcessText()` (~строка 151, там же TODO "convert iteratively, avoid CF for conversion") — на каждый кусок вывода из шелла.
 - **Требуемое изменение:** заменить `CFStringCreateWithUTF8StringNoCopy` + `CFStringGetCharacters` round-trip на прямой потоковый UTF-8→UTF-16 декодер без CoreFoundation.
 - **Ограничения:** обработка некорректных/усечённых UTF-8 последовательностей (replacement character и т.п.) должна остаться такой же, как в текущей CF-based реализации — перед заменой зафиксировать текущее поведение на некорректном вводе тестом, затем убедиться, что новая реализация даёт тот же результат.
-- **Verification:** `xcodebuild -project Source/Term/Term.xcodeproj -scheme TermUT -configuration Debug test` и `-scheme TermIT`; ручная проверка вывода не-ASCII текста (многобайтовые символы, эмодзи, комбинируемые символы) через `Scripts/build_unsigned_and_run.sh`.
+- **Verification:** `xcodebuild -project Source/Term/Term.xcodeproj -scheme TermUT -configuration Debug test` и `-scheme TermIT`; ручная проверка вывода не-ASCII текста (многобайтовые символы, эмодзи, комбинируемые символы) через `Scripts/build_stable_dev_and_run.sh`.
 
 ### OPT-013: общий спинлок сериализует форматирование дат по всем потокам
 
@@ -182,7 +182,7 @@
 - **Файл:** `Source/WinCommander/WinCommander/States/FilePanels/DragReceiver.mm`, `FetchListingItems()` (~строка 488), вызывается из `PerformWithURLsSource` (~строки 330–331). Авторские комментарии в этом же файле: "rather moronic approach of fetching multiple single-item listings" и "currently fetching listings synchronously in main thread, which is BAAAD".
 - **Требуемое изменение:** сгруппировать входящие `NSURL` по родительской директории, выполнить один bulk-листинг (`FetchDirectoryListing`/`FetchFlexibleListingItems`, см. также OPT-007) на директорию вместо листинга каждого файла по отдельности; перенести выполнение на фоновую очередь с асинхронным коллбэком по готовности — по аналогии с уже существующим асинхронным паттерном для операций Copying/Linkage в этом же файле.
 - **Ограничения:** итоговый список перетащенных элементов для данного выбора должен остаться идентичным текущему поведению.
-- **Verification:** `xcodebuild -project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test` и `-scheme IntegrationTests`; ручная проверка через `Scripts/build_unsigned_and_run.sh` — перетаскивание 50+ файлов из Finder не вызывает видимого подвисания UI.
+- **Verification:** `xcodebuild -project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test` и `-scheme IntegrationTests`; ручная проверка через `Scripts/build_stable_dev_and_run.sh` — перетаскивание 50+ файлов из Finder не вызывает видимого подвисания UI.
 
 ## 5. P3 — низкий приоритет (выполнять по возможности, можно пропускать по одной с указанием причины в итоговом отчёте)
 
@@ -231,7 +231,7 @@
 - **Требуемое изменение:** реализовать эквивалентное поведение самостоятельно, без стороннего `3rd_Party/LetsMove`: определить, находится ли бандл приложения уже в `/Applications` (или в поддиректории пользовательских Applications), и если нет — предложить пользователю переместить его туда, обработать сценарии отсутствия прав (запрос авторизации), карантин Gatekeeper при перемещении, и перезапуск приложения из нового расположения. Сохранить текущее поведение шима: под `__NC_VERSION_NONMAS__` вызывается, для MAS-сборки — no-op.
 - **Ограничения:** учесть флаги/quarantine-атрибуты и повторный запуск приложения — это единственная часть задачи, требующая аккуратности, несмотря на маленький объём кода.
 - **Verification:**
-  - [ ] Ручная проверка через `Scripts/build_unsigned_and_run.sh`: запуск собранного `.app` не из `/Applications` предлагает перенос; согласие переносит и перезапускает приложение из `/Applications`; отказ оставляет приложение на месте и не показывает диалог повторно в рамках той же сессии (сохранить текущее поведение, если оно таково — проверить по исходнику `LetsMove` перед реализацией замены).
+  - [ ] Ручная проверка на отдельном release-like артефакте из `Scripts/build_unsigned.sh`: запуск `WinCommander-Unsigned.app` из корня checkout предлагает перенос; согласие переносит и перезапускает приложение из `/Applications`; отказ оставляет приложение на месте и не показывает диалог повторно в рамках той же сессии (сохранить текущее поведение, если оно таково — проверить по исходнику `LetsMove` перед реализацией замены). Этот изолированный packaging-check не используется как permission/TCC evidence.
   - [ ] Убрать `3rd_Party/LetsMove` из bootstrap/линковки после замены.
 
 ### LIB-004: переписать `GTMHotKeyTextField` на современный AppKit
@@ -239,7 +239,7 @@
 - **Использование:** 1 файл — `Source/WinCommander/WinCommander/Preferences/PreferencesWindowHotkeysTab.mm` — использует `GTMHotKeyTextField`/`GTMHotKeyTextFieldCell` для поля захвата комбинации клавиш в настройках горячих клавиш.
 - **Требуемое изменение:** реализовать собственный `NSTextField`/`NSTextFieldCell`-наследник (или `NSView`-виджет) с эквивалентным поведением: захват одной комбинации клавиши + модификаторов из `NSEvent`, отображение в формате, аналогичном системному редактору сочетаний клавиш macOS, чтение/запись объекта, эквивалентного `GTMHotKey` (комбинация клавиши + модификаторы). Заменить использование в `PreferencesWindowHotkeysTab.mm`. Убрать `3rd_Party/GTMHotKeyTextField` из проекта после замены.
 - **Verification:**
-  - [ ] Unit-тест (если для UI-виджетов в проекте есть прецедент тестирования) или, при отсутствии — ручная проверка через `Scripts/build_unsigned_and_run.sh`: вкладка "Hotkeys" в настройках корректно захватывает и отображает комбинации клавиш, включая модификаторы (Cmd/Shift/Option/Control) и специальные клавиши.
+  - [ ] Unit-тест (если для UI-виджетов в проекте есть прецедент тестирования) или, при отсутствии — ручная проверка через `Scripts/build_stable_dev_and_run.sh`: вкладка "Hotkeys" в настройках корректно захватывает и отображает комбинации клавиш, включая модификаторы (Cmd/Shift/Option/Control) и специальные клавиши.
   - [ ] `xcodebuild -project Source/WinCommander/WinCommander.xcodeproj -scheme WinCommanderUT -configuration Debug test` — зелёный (регресс по остальным настройкам).
 
 ### LIB-005: закрепить версию `rapidjson` вместо плавающего `master`

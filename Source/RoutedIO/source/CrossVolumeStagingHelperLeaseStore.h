@@ -92,4 +92,25 @@ private:
     std::array<std::optional<TerminalLease>, kMaximumLeases> m_Entries;
 };
 
+/**
+ * Helper-private one-use lease lifecycle.  Begin is intentionally namespace-mutation-free: it can only retain the
+ * descriptor-validated claim and mint an opaque lease.  Until a later Commit-stage staging authority exists, Commit
+ * consumes the lease and reports a confirmed NotPublished helper failure; Abort consumes it as NotPublished/Aborted.
+ */
+class LeaseLifecycle final
+{
+public:
+    explicit LeaseLifecycle(LeaseStore &_leases) noexcept;
+
+    [[nodiscard]] BeginResult Begin(OwnerID _owner, ValidatedBegin _begin) noexcept;
+    [[nodiscard]] CompletionResult Commit(OwnerID _owner, const CommitRequest &_request) noexcept;
+    [[nodiscard]] CompletionResult Abort(OwnerID _owner, const AbortRequest &_request) noexcept;
+
+    /** Closes every descriptor pair still owned by a disconnected authenticated peer. */
+    size_t RevokeOwner(OwnerID _owner) noexcept;
+
+private:
+    LeaseStore &m_Leases;
+};
+
 } // namespace nc::routedio::cross_volume_staging::helper

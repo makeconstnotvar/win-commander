@@ -36,18 +36,30 @@ Builds Win Commander with the `WinCommander-Unsigned` scheme / `Release` configu
 `xcodebuild`, `xcpretty` and `create-dmg` must be available in the environment in order for this script to run.  
 
 ## `build_unsigned_and_run.sh`
-Builds Win Commander with the `WinCommander-Unsigned` scheme / `Debug` configuration and runs it afterwards.  
-`xcodebuild` must be available in the environment in order for this script to run.
+Compatibility entry point for older documentation and workflows. It delegates to `build_stable_dev_and_run.sh`, so it cannot launch an ephemeral DerivedData app with a rebuild-specific TCC identity.
 
 ## `build_stable_dev_and_run.sh [--no-run]`
 Builds the Debug application, signs it with a persistent local development identity, installs it at
 `~/Applications/WinCommander-Codex.app`, and runs that stable copy. This preserves the macOS TCC identity across
 rebuilds, so filesystem and automation permissions normally need to be granted only once for this identity. The
 grant is needed again only after a TCC reset or an intentional certificate replacement. The signing key is kept in a
-dedicated keychain that is exposed to `codesign` only while signing. Pass `--no-run` to build, sign, and install
+dedicated keychain that is temporarily added to the user search list while signing. New identities authorize
+`codesign` explicitly; identities created by the older tooling can retain their legacy permissive ACL until a
+separate fingerprint-preserving migration. The certificate fingerprint and exact designated requirement are pinned
+at `~/Library/Application Support/WinCommanderCodex/local-signing-identity.sha1` and
+`local-signing-requirement.txt`; a missing or different pinned key/requirement fails before the installed app is
+replaced. The complete build/sign/install transaction uses the fixed machine-local
+`~/Library/Application Support/WinCommanderCodex/stable-build.lock`; test overrides for signing state do not change
+that lock domain. Pass `--no-run` to build, sign, and install
 without launching the application. This local build disables Sparkle/LetsMove and excludes Admin Mode because the
 privileged helper is intentionally bound to the upstream Developer ID certificate. Library validation alone is
 disabled for this development bundle because a self-signed certificate has no Apple Team ID for the Debug dylibs.
+
+## `verify_stable_dev_identity.sh [--candidate app-path]`
+Performs a read-only check of the canonical local development identity: exact bundle ID, pinned certificate leaf,
+exact non-adhoc designated requirement, entitlement profile, private state modes, deep/strict signature integrity,
+and absence of privileged-helper declarations/files. With no argument it enforces the canonical path
+`~/Applications/WinCommander-Codex.app`; `--candidate` is reserved for pre-install staging verification.
 
 ## `run_all_integration_tests.sh`
 Builds and executes the aggregate integration suite with Debug ASAN instrumentation. The script starts local FTP,

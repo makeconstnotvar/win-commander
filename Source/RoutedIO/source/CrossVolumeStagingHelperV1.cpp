@@ -1,10 +1,13 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
-// Isolated, inert V1 staging-helper security boundary.  It deliberately grants no staging authority yet.
+// Isolated V1 staging-helper security boundary.  It grants one-use descriptor leases but no staging or publication
+// authority yet.
 #include "CrossVolumeStagingHelperDescriptorSealValidator.h"
+#include "CrossVolumeStagingHelperLeaseStore.h"
 
 #include <Security/SecCode.h>
 #include <Security/Security.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <cstdint>
 #include <cstdlib>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -92,58 +95,34 @@ bool AuthenticatePeer(xpc_connection_t _peer) noexcept
     return true;
 }
 
-void SendBeginResult(xpc_connection_t _peer, xpc_object_t _event, const protocol::BeginResult &_result) noexcept
+bool SendBeginResult(xpc_object_t _event, const protocol::BeginResult &_result) noexcept
 {
     xpc_connection_t remote = xpc_dictionary_get_remote_connection(_event);
-    if( remote == nullptr ) {
-        xpc_connection_cancel(_peer);
-        return;
-    }
+    if( remote == nullptr )
+        return false;
     xpc_object_t reply = xpc_dictionary_create_reply(_event);
-    if( reply == nullptr ) {
-        xpc_connection_cancel(_peer);
-        return;
-    }
+    if( reply == nullptr )
+        return false;
     const auto populated = codec::PopulateBeginResultReply(reply, _result);
     if( populated )
         xpc_connection_send_message(remote, reply);
-    else
-        xpc_connection_cancel(_peer);
     xpc_release(reply);
+    return populated.has_value();
 }
 
-void SendCompletionResult(xpc_connection_t _peer,
-                          xpc_object_t _event,
-                          const protocol::CompletionResult &_result) noexcept
+bool SendCompletionResult(xpc_object_t _event, const protocol::CompletionResult &_result) noexcept
 {
     xpc_connection_t remote = xpc_dictionary_get_remote_connection(_event);
-    if( remote == nullptr ) {
-        xpc_connection_cancel(_peer);
-        return;
-    }
+    if( remote == nullptr )
+        return false;
     xpc_object_t reply = xpc_dictionary_create_reply(_event);
-    if( reply == nullptr ) {
-        xpc_connection_cancel(_peer);
-        return;
-    }
+    if( reply == nullptr )
+        return false;
     const auto populated = codec::PopulateCompletionResultReply(reply, _result);
     if( populated )
         xpc_connection_send_message(remote, reply);
-    else
-        xpc_connection_cancel(_peer);
     xpc_release(reply);
-}
-
-protocol::CompletionResult NoAuthorityCompletion(const protocol::Header &_header) noexcept
-{
-    return protocol::CompletionResult{
-        .header = _header,
-        .publication = protocol::Publication::Unknown,
-        .failure = protocol::CompletionFailure::HelperFailure,
-        .system_error = EIO,
-        .filesystem_sync = protocol::FilesystemSync::NotAttempted,
-        .filesystem_sync_system_error = 0,
-    };
+    return populated.has_value();
 }
 
 protocol::BeginFailure BeginFailureFor(const helper::BeginDescriptorValidationError _error) noexcept
@@ -161,11 +140,25 @@ protocol::BeginFailure BeginFailureFor(const helper::BeginDescriptorValidationEr
     return protocol::BeginFailure::HelperFailure;
 }
 
-void Dispatch(xpc_connection_t _peer, xpc_object_t _event) noexcept
+helper::OwnerID OwnerFor(const xpc_connection_t _peer) noexcept
+{
+    return static_cast<helper::OwnerID>(reinterpret_cast<uintptr_t>(_peer));
+}
+
+void DisconnectPeer(xpc_connection_t _peer, helper::LeaseLifecycle &_lifecycle, const helper::OwnerID _owner) noexcept
+{
+    (void)_lifecycle.RevokeOwner(_owner);
+    xpc_connection_cancel(_peer);
+}
+
+void Dispatch(xpc_connection_t _peer,
+              xpc_object_t _event,
+              helper::LeaseLifecycle &_lifecycle,
+              const helper::OwnerID _owner) noexcept
 {
     const auto kind = codec::DecodeRequestKind(_event);
     if( !kind ) {
-        xpc_connection_cancel(_peer);
+        DisconnectPeer(_peer, _lifecycle, _owner);
         return;
     }
 
@@ -173,57 +166,66 @@ void Dispatch(xpc_connection_t _peer, xpc_object_t _event) noexcept
         case codec::RequestKind::Begin: {
             auto begin = codec::DecodeBegin(_event);
             if( !begin ) {
-                xpc_connection_cancel(_peer);
+                DisconnectPeer(_peer, _lifecycle, _owner);
                 return;
             }
             const protocol::Header header = begin->request.header;
-            const auto validated = helper::ValidateBeginDescriptors(std::move(*begin));
-            // This inert boundary does not mint a lease, select a protected root, create an artifact or perform a
-            // namespace operation.  It nevertheless proves the incoming descriptor pair still matches its reviewed
-            // scalar seals, so a future lease store cannot receive an unchecked decoded Begin.
-            SendBeginResult(_peer,
-                            _event,
-                            {.header = header,
-                             .disposition = protocol::BeginDisposition::Rejected,
-                             .failure = validated ? protocol::BeginFailure::Unsupported : BeginFailureFor(validated.error()),
-                             .lease = {.header = header}});
+            auto validated = helper::ValidateBeginDescriptors(std::move(*begin));
+            if( !validated ) {
+                if( !SendBeginResult(_event,
+                                      {.header = header,
+                                       .disposition = protocol::BeginDisposition::Rejected,
+                                       .failure = BeginFailureFor(validated.error()),
+                                       .lease = {.header = header}}) )
+                    DisconnectPeer(_peer, _lifecycle, _owner);
+                return;
+            }
+            if( !SendBeginResult(_event, _lifecycle.Begin(_owner, std::move(*validated))) )
+                DisconnectPeer(_peer, _lifecycle, _owner);
             return;
         }
         case codec::RequestKind::Commit: {
             const auto commit = codec::DecodeCommit(_event);
             if( !commit ) {
-                xpc_connection_cancel(_peer);
+                DisconnectPeer(_peer, _lifecycle, _owner);
                 return;
             }
-            SendCompletionResult(_peer, _event, NoAuthorityCompletion(commit->header));
+            if( !SendCompletionResult(_event, _lifecycle.Commit(_owner, *commit)) )
+                DisconnectPeer(_peer, _lifecycle, _owner);
             return;
         }
         case codec::RequestKind::Abort: {
             const auto abort = codec::DecodeAbort(_event);
             if( !abort ) {
-                xpc_connection_cancel(_peer);
+                DisconnectPeer(_peer, _lifecycle, _owner);
                 return;
             }
-            SendCompletionResult(_peer, _event, NoAuthorityCompletion(abort->header));
+            if( !SendCompletionResult(_event, _lifecycle.Abort(_owner, *abort)) )
+                DisconnectPeer(_peer, _lifecycle, _owner);
             return;
         }
     }
-    xpc_connection_cancel(_peer);
+    DisconnectPeer(_peer, _lifecycle, _owner);
 }
 
-void AcceptPeer(xpc_connection_t _peer) noexcept
+void AcceptPeer(xpc_connection_t _peer, helper::LeaseLifecycle &_lifecycle) noexcept
 {
     if( !AuthenticatePeer(_peer) ) {
+        xpc_connection_cancel(_peer);
+        return;
+    }
+    const helper::OwnerID owner = OwnerFor(_peer);
+    if( owner == 0 ) {
         xpc_connection_cancel(_peer);
         return;
     }
 
     xpc_connection_set_event_handler(_peer, ^(xpc_object_t event) {
       if( xpc_get_type(event) != XPC_TYPE_DICTIONARY ) {
-          xpc_connection_cancel(_peer);
+          DisconnectPeer(_peer, _lifecycle, owner);
           return;
       }
-      Dispatch(_peer, event);
+      Dispatch(_peer, event, _lifecycle, owner);
     });
     xpc_connection_resume(_peer);
 }
@@ -236,6 +238,10 @@ int main()
         return EXIT_FAILURE;
 
     umask(077);
+    // The listener never returns from dispatch_main().  Deliberately retain this process-wide helper state instead of
+    // registering exit-time destructors, which would race service teardown after the XPC runtime begins shutdown.
+    auto *const leases = new helper::LeaseStore;
+    auto *const lease_lifecycle = new helper::LeaseLifecycle{*leases};
     xpc_connection_t service = xpc_connection_create_mach_service(
         kServiceName, dispatch_get_main_queue(), XPC_CONNECTION_MACH_SERVICE_LISTENER);
     if( service == nullptr )
@@ -243,7 +249,7 @@ int main()
 
     xpc_connection_set_event_handler(service, ^(xpc_object_t object) {
       if( xpc_get_type(object) == XPC_TYPE_CONNECTION )
-          AcceptPeer(static_cast<xpc_connection_t>(object));
+          AcceptPeer(static_cast<xpc_connection_t>(object), *lease_lifecycle);
     });
     xpc_connection_resume(service);
     dispatch_main();

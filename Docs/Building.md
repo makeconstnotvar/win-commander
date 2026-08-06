@@ -12,7 +12,17 @@ After obtaining the source code, you'll need Xcode 26.5 to open and compile the 
 
 ![](schema.png)
 
-Select the `WinCommander-Unsigned` scheme in Xcode. Use `Cmd+B` to build and `Cmd+R` to run the project under Xcode's debugger.
+Select the `WinCommander-Unsigned` scheme in Xcode and use `Cmd+B` for compile-only development. Run the application from the repository root with:
+
+```sh
+Scripts/build_stable_dev_and_run.sh
+```
+
+This command builds Debug, signs every nested code object with the machine's persistent local identity, installs the canonical app at `~/Applications/WinCommander-Codex.app`, and opens that exact path. The channel keeps the fixed bundle ID `com.wincommander.App.CodexDev` and the same designated requirement, preserving the TCC identity macOS uses for filesystem, Automation, Accessibility, and Full Disk Access grants. Observed grant continuity remains a runtime smoke gate in the development plan.
+
+The first run creates or adopts the local certificate and records its fingerprint and exact designated requirement in `~/Library/Application Support/WinCommanderCodex/local-signing-identity.sha1` and `local-signing-requirement.txt`. Later builds resolve only that pinned certificate and exact requirement and stop before replacement when the key, bundle ID, entitlements, or requirement differs. These pins are independent of the installed app, so removing the bundle cannot silently rotate its TCC identity. Certificate/requirement rotation is an explicit maintenance event and requires granting macOS permissions once for the new effective identity.
+
+Use `Scripts/build_stable_dev_and_run.sh --no-run` to rebuild and install without opening the app. Validate an installed copy without rebuilding with `Scripts/verify_stable_dev_identity.sh`. The historical `Scripts/build_unsigned_and_run.sh` command is a compatibility alias for this same stable path. Direct DerivedData products remain suitable for compile/test evidence.
 
 ## Exploring the Source Code
 Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The source tree includes the main application and 11 library projects:

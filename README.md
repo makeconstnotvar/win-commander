@@ -19,14 +19,17 @@ The first Native conditional provider scope is implemented for one create-only r
 
 ## Build and verify
 
-Open `Source/WinCommander/WinCommander.xcodeproj` and use the `WinCommander-Unsigned` scheme for local development.
+Open `Source/WinCommander/WinCommander.xcodeproj` and use the `WinCommander-Unsigned` scheme for editing and compile-only development. Interactive runs use the stable locally signed development app so the same macOS TCC identity is preserved across rebuilds.
 
 ```sh
 Scripts/verify_m0.sh
-Scripts/build_unsigned_and_run.sh
+Scripts/build_stable_dev_and_run.sh
+Scripts/verify_stable_dev_identity.sh
 Scripts/run_all_unit_tests.sh Debug
 Scripts/run_all_integration_tests.sh
 ```
+
+The local-development entry point installs and opens `~/Applications/WinCommander-Codex.app` with the fixed bundle ID `com.wincommander.App.CodexDev` and machine-pinned certificate plus exact designated requirement. Rebuilds replace that exact channel only after its identity and entitlement profile are proven unchanged. `Scripts/build_unsigned_and_run.sh` remains a compatibility alias and delegates to the same stable path.
 
 Current local evidence:
 

@@ -5,9 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DERIVED_DATA_PATH="${WINCOMMANDER_DERIVED_DATA_PATH:-$HOME/Library/Developer/Xcode/DerivedData/WinCommanderCodex}"
-INSTALLED_APP_PATH="${WINCOMMANDER_DEV_APP_PATH:-$HOME/Applications/WinCommander-Codex.app}"
+INSTALLED_APP_PATH="$HOME/Applications/WinCommander-Codex.app"
 ENTITLEMENTS_PATH="$REPOSITORY_ROOT/Source/WinCommander/WinCommander/Resources/WinCommander-CodexDev.entitlements"
 DEVELOPER_DIRECTORY="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+DEVELOPMENT_BUNDLE_IDENTIFIER="com.wincommander.App.CodexDev"
+MACHINE_LOCK_DIRECTORY="$HOME/Library/Application Support/WinCommanderCodex"
 RUN_AFTER_BUILD=1
 
 if [[ "${1:-}" = "--no-run" ]]; then
@@ -20,7 +22,17 @@ fi
 # shellcheck source=local_dev_signing.sh
 source "$SCRIPT_DIR/local_dev_signing.sh"
 
+mkdir -p "$MACHINE_LOCK_DIRECTORY"
+chmod 700 "$MACHINE_LOCK_DIRECTORY"
+exec 9>"$MACHINE_LOCK_DIRECTORY/stable-build.lock"
+chmod 600 "$MACHINE_LOCK_DIRECTORY/stable-build.lock"
+if ! lockf -s -t 600 9; then
+  echo "Timed out waiting for another stable Win Commander build to finish." >&2
+  exit 75
+fi
+
 mkdir -p "$(dirname "$INSTALLED_APP_PATH")" "$DERIVED_DATA_PATH"
+SIGNING_IDENTITY="$(wc_resolve_pinned_local_identity "$INSTALLED_APP_PATH" "$DEVELOPMENT_BUNDLE_IDENTIFIER")"
 
 XCODEBUILD=(
   xcodebuild
@@ -42,23 +54,27 @@ if [[ ! -d "$SOURCE_APP_PATH" ]]; then
   exit 1
 fi
 
-SIGNING_IDENTITY="$(wc_resolve_local_identity)"
 STAGING_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/wincommander-codex.XXXXXX")"
 STAGING_APP_PATH="$STAGING_DIRECTORY/WinCommander-Codex.app"
 BACKUP_APP_PATH=""
+NEW_APP_INSTALLED=0
+INSTALLATION_COMMITTED=0
 
 cleanup() {
-  rm -rf "$STAGING_DIRECTORY"
+  if [[ "$NEW_APP_INSTALLED" = "1" && "$INSTALLATION_COMMITTED" = "0" && -d "$INSTALLED_APP_PATH" ]]; then
+    mv "$INSTALLED_APP_PATH" "$STAGING_DIRECTORY/Rejected-WinCommander-Codex.app" 2>/dev/null || true
+  fi
   if [[ -n "$BACKUP_APP_PATH" && -d "$BACKUP_APP_PATH" && ! -d "$INSTALLED_APP_PATH" ]]; then
     mv "$BACKUP_APP_PATH" "$INSTALLED_APP_PATH"
   fi
+  rm -rf "$STAGING_DIRECTORY"
 }
 trap cleanup EXIT
 
 ditto "$SOURCE_APP_PATH" "$STAGING_APP_PATH"
 /usr/bin/xattr -dr com.apple.quarantine "$STAGING_APP_PATH" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.provenance "$STAGING_APP_PATH" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.wincommander.App.CodexDev" \
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $DEVELOPMENT_BUNDLE_IDENTIFIER" \
   "$STAGING_APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName WinCommander Codex Dev" \
   "$STAGING_APP_PATH/Contents/Info.plist"
@@ -75,6 +91,10 @@ rm -f "$STAGING_APP_PATH/Contents/Library/LaunchServices/com.wincommander.App.Cr
   "$STAGING_APP_PATH/Contents/Info.plist" 2>/dev/null || true
 
 wc_sign_app_bundle "$STAGING_APP_PATH" "$SIGNING_IDENTITY" "$ENTITLEMENTS_PATH"
+wc_assert_expected_local_identity \
+  "$STAGING_APP_PATH" "$DEVELOPMENT_BUNDLE_IDENTIFIER" "$SIGNING_IDENTITY"
+wc_adopt_or_assert_pinned_designated_requirement "$STAGING_APP_PATH"
+"$SCRIPT_DIR/verify_stable_dev_identity.sh" --candidate "$STAGING_APP_PATH"
 NEW_REQUIREMENT="$(wc_designated_requirement "$STAGING_APP_PATH")"
 
 if [[ -d "$INSTALLED_APP_PATH" ]]; then
@@ -96,6 +116,11 @@ if [[ -d "$INSTALLED_APP_PATH" ]]; then
 fi
 
 mv "$STAGING_APP_PATH" "$INSTALLED_APP_PATH"
+NEW_APP_INSTALLED=1
+
+"$SCRIPT_DIR/verify_stable_dev_identity.sh"
+INSTALLATION_COMMITTED=1
+
 if [[ -n "$BACKUP_APP_PATH" ]]; then
   rm -rf "$(dirname "$BACKUP_APP_PATH")"
   BACKUP_APP_PATH=""
@@ -106,6 +131,7 @@ LAUNCH_SERVICES_REGISTER="/System/Library/Frameworks/CoreServices.framework/Fram
 
 echo "Installed: $INSTALLED_APP_PATH"
 echo "Bundle ID: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INSTALLED_APP_PATH/Contents/Info.plist")"
+echo "Certificate: $SIGNING_IDENTITY"
 echo "Requirement: $NEW_REQUIREMENT"
 
 if [[ "$RUN_AFTER_BUILD" = "1" ]]; then

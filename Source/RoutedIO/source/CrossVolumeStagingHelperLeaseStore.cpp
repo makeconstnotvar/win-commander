@@ -3,6 +3,7 @@
 
 #include <Security/SecRandom.h>
 #include <algorithm>
+#include <cerrno>
 #include <utility>
 
 namespace nc::routedio::cross_volume_staging::helper {
@@ -135,6 +136,85 @@ size_t LeaseStore::ActiveLeaseCount() const noexcept
             ++active;
     }
     return active;
+}
+
+LeaseLifecycle::LeaseLifecycle(LeaseStore &_leases) noexcept : m_Leases{_leases} {}
+
+BeginResult LeaseLifecycle::Begin(const OwnerID _owner, ValidatedBegin _begin) noexcept
+{
+    const Header header = _begin.Request().header;
+    const auto granted = m_Leases.Grant(_owner, std::move(_begin));
+    if( granted ) {
+        return BeginResult{
+            .header = header,
+            .disposition = BeginDisposition::Granted,
+            .failure = BeginFailure::None,
+            .lease = *granted,
+        };
+    }
+
+    const BeginFailure failure = granted.error() == LeaseStore::Error::InvalidArgument
+                                     ? BeginFailure::InvalidRequest
+                                     : BeginFailure::HelperFailure;
+    return BeginResult{
+        .header = header,
+        .disposition = BeginDisposition::Rejected,
+        .failure = failure,
+        .lease = {.header = header},
+    };
+}
+
+CompletionResult LeaseLifecycle::Commit(const OwnerID _owner, const CommitRequest &_request) noexcept
+{
+    const auto terminal = m_Leases.Take(_owner, _request);
+    if( !terminal ) {
+        return CompletionResult{
+            .header = _request.header,
+            .publication = Publication::Unknown,
+            .failure = CompletionFailure::HelperFailure,
+            .system_error = EIO,
+            .filesystem_sync = FilesystemSync::NotAttempted,
+            .filesystem_sync_system_error = 0,
+        };
+    }
+
+    return CompletionResult{
+        .header = _request.header,
+        .publication = Publication::NotPublished,
+        .failure = CompletionFailure::HelperFailure,
+        .system_error = EOPNOTSUPP,
+        .filesystem_sync = FilesystemSync::NotAttempted,
+        .filesystem_sync_system_error = 0,
+    };
+}
+
+CompletionResult LeaseLifecycle::Abort(const OwnerID _owner, const AbortRequest &_request) noexcept
+{
+    const auto terminal = m_Leases.Take(_owner, _request);
+    if( !terminal ) {
+        return CompletionResult{
+            .header = _request.header,
+            .publication = Publication::Unknown,
+            .failure = CompletionFailure::HelperFailure,
+            .system_error = EIO,
+            .filesystem_sync = FilesystemSync::NotAttempted,
+            .filesystem_sync_system_error = 0,
+        };
+    }
+
+    return CompletionResult{
+        .header = _request.header,
+        .publication = Publication::NotPublished,
+        .failure = CompletionFailure::Aborted,
+        .system_error = 0,
+        .filesystem_sync = FilesystemSync::NotAttempted,
+        .filesystem_sync_system_error = 0,
+    };
+}
+
+size_t LeaseLifecycle::RevokeOwner(const OwnerID _owner) noexcept
+{
+    return m_Leases.RevokeOwner(_owner);
 }
 
 } // namespace nc::routedio::cross_volume_staging::helper
