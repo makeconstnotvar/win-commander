@@ -91,6 +91,10 @@ struct CommandContext {
     // every QueryState()/Execute() invocation; handlers must not treat it as durable pane state.
     std::optional<bool> shows_hidden_files;
 
+    // Borrowed synchronous snapshot of the pane-local Details / Preview surface visibility. The
+    // setter compares its live value with this projection before applying the requested toggle.
+    std::optional<bool> preview_pane_visible;
+
     // Borrowed synchronous history-availability projection. The execution port must still validate
     // the live pane history immediately before moving because this snapshot can become stale.
     std::optional<bool> can_go_back;

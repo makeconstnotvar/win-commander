@@ -110,6 +110,11 @@ void Job::Execute() noexcept
 
 void Job::FinishExecution() noexcept
 {
+    {
+        const auto guard = std::lock_guard{m_CurrentItemPathMutex};
+        m_CurrentItemPath.reset();
+    }
+
     if( !IsStopped() )
         SetCompleted();
 
@@ -251,6 +256,18 @@ class Statistics &Job::Statistics()
 const class Statistics &Job::Statistics() const
 {
     return m_Stats;
+}
+
+std::optional<std::string> Job::CurrentItemPath() const
+{
+    const auto guard = std::lock_guard{m_CurrentItemPathMutex};
+    return m_CurrentItemPath;
+}
+
+void Job::PublishCurrentItemPath(std::string _path)
+{
+    const auto guard = std::lock_guard{m_CurrentItemPathMutex};
+    m_CurrentItemPath = std::move(_path);
 }
 
 void Job::Pause()

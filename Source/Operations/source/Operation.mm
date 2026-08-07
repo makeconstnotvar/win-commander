@@ -44,6 +44,13 @@ const class Statistics &Operation::Statistics() const
     throw std::logic_error("Operation::Statistics(): no valid Job object to access to");
 }
 
+std::optional<std::string> Operation::CurrentItemPath() const
+{
+    if( const auto job = GetJob() )
+        return job->CurrentItemPath();
+    return std::nullopt;
+}
+
 OperationState Operation::State() const
 {
     if( auto j = GetJob() ) {

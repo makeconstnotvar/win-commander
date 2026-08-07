@@ -110,6 +110,106 @@ core::PaneSortState ProjectPaneSortState(const data::SortMode _sort_mode) noexce
     return state;
 }
 
+std::optional<data::SortMode> RestorePanelSortMode(const core::PaneSortState &_sort_state) noexcept
+{
+    using Collation = core::PaneTextCollation;
+    using Direction = core::PaneSortDirection;
+    using Key = core::PaneSortKey;
+    using LegacyCollation = data::SortMode::Collation;
+    using LegacyMode = data::SortMode::Mode;
+
+    data::SortMode result;
+    result.sep_dirs = _sort_state.separates_directories;
+    result.extensionless_dirs = _sort_state.extensionless_directories;
+    switch( _sort_state.collation ) {
+        case Collation::Natural:
+            result.collation = LegacyCollation::Natural;
+            break;
+        case Collation::CaseInsensitive:
+            result.collation = LegacyCollation::CaseInsensitive;
+            break;
+        case Collation::CaseSensitive:
+            result.collation = LegacyCollation::CaseSensitive;
+            break;
+        case Collation::Unknown:
+        default:
+            return std::nullopt;
+    }
+
+    switch( _sort_state.key ) {
+        case Key::Unsorted:
+            if( _sort_state.direction != Direction::None )
+                return std::nullopt;
+            result.sort = LegacyMode::SortNoSort;
+            break;
+        case Key::RawName:
+            if( _sort_state.direction != Direction::Ascending )
+                return std::nullopt;
+            result.sort = LegacyMode::SortByRawCName;
+            break;
+        case Key::Name:
+            if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortByName;
+            else if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortByNameRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::Extension:
+            if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortByExt;
+            else if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortByExtRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::Size:
+            if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortBySize;
+            else if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortBySizeRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::ModifiedTime:
+            if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortByModTime;
+            else if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortByModTimeRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::CreatedTime:
+            if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortByBirthTime;
+            else if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortByBirthTimeRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::AddedTime:
+            if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortByAddTime;
+            else if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortByAddTimeRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::AccessedTime:
+            if( _sort_state.direction == Direction::Descending )
+                result.sort = LegacyMode::SortByAccessTime;
+            else if( _sort_state.direction == Direction::Ascending )
+                result.sort = LegacyMode::SortByAccessTimeRev;
+            else
+                return std::nullopt;
+            break;
+        case Key::Unknown:
+        default:
+            return std::nullopt;
+    }
+    return result;
+}
+
 core::PaneGroupingState ProjectPaneGroupingState(const data::SortMode _sort_mode,
                                                  const bool _enabled) noexcept
 {

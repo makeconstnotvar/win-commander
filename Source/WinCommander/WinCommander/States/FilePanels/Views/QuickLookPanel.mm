@@ -100,6 +100,7 @@ static const std::chrono::nanoseconds g_Delay = std::chrono::milliseconds{100};
     if( _controller != m_Owner )
         return false;
 
+    ++m_CurrentTicket;
     m_Owner = nil;
     m_CurrentPath = "";
     m_CurrentHost.reset();

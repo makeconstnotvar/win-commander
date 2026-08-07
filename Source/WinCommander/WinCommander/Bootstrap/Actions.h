@@ -42,6 +42,7 @@ static constexpr std::pair<const char*,int> g_ActionsTags[] = {
     {"menu.file.close_window",                          11'041},
     {"menu.file.close",                                 11'040},
     {"menu.file.close_other_tabs",                      11'180},
+    {"menu.file.get_info",                              11'190},
     {"menu.file.find",                                  11'050},
     {"menu.file.find_next",                             11'051},
     {"menu.file.find_with_spotlight",                   11'130},
@@ -79,6 +80,7 @@ static constexpr std::pair<const char*,int> g_ActionsTags[] = {
     {"menu.view.sorting_view_hidden",                   13'140},
     {"menu.view.sorting_separate_folders",              13'150},
     {"menu.view.sorting_extensionless_folders",         13'270},
+    {"menu.view.toggle_preview_pane",                   13'280},
 //  {"menu.view.sorting_case_sensitive",                13'160}, // no longer used
 //  {"menu.view.sorting_numeric_comparison",            13'170}, // no longer used
     {"menu.view.sorting_natural",                       13'161},
@@ -134,6 +136,7 @@ static constexpr std::pair<const char*,int> g_ActionsTags[] = {
     {"menu.command.copy_file_name",                     15'030},
     {"menu.command.copy_file_path",                     15'040},
     {"menu.command.copy_file_directory",                15'240},
+    {"menu.command.extract_archive_here",               15'250},
     {"menu.command.select_with_mask",                   15'050},
     {"menu.command.select_with_extension",              15'051},
     {"menu.command.deselect_with_mask",                 15'060},
@@ -252,6 +255,7 @@ static constinit std::pair<const char*, const char*> g_DefaultActionShortcuts[] 
     {"menu.file.close_window",                              "⇧⌘w"     }, // shift+cmd+w
     {"menu.file.close",                                     "⌘w"      }, // cmd+w
     {"menu.file.close_other_tabs",                          "⌥⌘w"     }, // alt+cmd+w
+    {"menu.file.get_info",                                  "⌘i"      }, // cmd+i
     {"menu.file.find",                                      "⌘f"      }, // cmd+f
     {"menu.file.find_next",                                 "⌘g"      }, // cmd+g
     {"menu.file.find_with_spotlight",                       "⌥⌘f"     }, // alt+cmd+f
@@ -289,6 +293,7 @@ static constinit std::pair<const char*, const char*> g_DefaultActionShortcuts[] 
     {"menu.view.sorting_view_hidden",                       "⇧⌘."     }, // shift+cmd+.
     {"menu.view.sorting_separate_folders",                  ""        },
     {"menu.view.sorting_extensionless_folders",             ""        },
+    {"menu.view.toggle_preview_pane",                       "^⌘p"     }, // ctrl+cmd+p
 //  {"menu.view.sorting_case_sensitive",                    ""        }, // no longer used
 //  {"menu.view.sorting_numeric_comparison",                ""        }, // no longer used
     {"menu.view.sorting_natural",                           ""        },
@@ -367,6 +372,7 @@ static constinit std::pair<const char*, const char*> g_DefaultActionShortcuts[] 
     {"menu.command.link_create_hard",                       ""        },
     {"menu.command.link_edit",                              ""        },
     {"menu.command.open_xattr",                             "⌥⌘x"     }, // alt+cmd+x
+    {"menu.command.extract_archive_here",                   ""        },
 
     {"menu.window.minimize",                                "⌘m"      }, // cmd+m
     {"menu.window.fullscreen",                              "^⌘f"     }, // ctrl+cmd+f

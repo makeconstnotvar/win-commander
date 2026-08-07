@@ -4,6 +4,8 @@
 #include <Base/ScopedObservable.h>
 #include <VFS/VFS.h>
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include "ItemStateReport.h"
@@ -54,6 +56,7 @@ public:
     std::string Title() const;
     OperationState State() const;
     const class Statistics &Statistics() const;
+    std::optional<std::string> CurrentItemPath() const;
 
     void Wait() const;
     bool Wait(std::chrono::nanoseconds _wait_for_time) const;

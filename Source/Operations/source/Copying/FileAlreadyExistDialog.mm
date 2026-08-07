@@ -36,6 +36,9 @@
 @interface NCOpsFileAlreadyExistDialog ()
 
 @property(strong, nonatomic) IBOutlet NSTextField *TargetFilename;
+@property(strong, nonatomic) IBOutlet NSTextField *conflictTitle;
+@property(strong, nonatomic) IBOutlet NSTextField *sourceItemLabel;
+@property(strong, nonatomic) IBOutlet NSTextField *existingItemLabel;
 @property(strong, nonatomic) IBOutlet NSTextField *NewFileSize;
 @property(strong, nonatomic) IBOutlet NSTextField *ExistingFileSize;
 @property(strong, nonatomic) IBOutlet NSTextField *NewFileTime;
@@ -46,6 +49,9 @@
 @property(strong, nonatomic) IBOutlet NSButton *keepBothButton;
 @property(strong, nonatomic) IBOutlet NSButton *appendButton;
 @property(strong, nonatomic) IBOutlet NSButton *abortButton;
+@property(strong, nonatomic) IBOutlet NSPopUpButton *replaceOptionsButton;
+
+- (void)updateApplyToAllAvailability;
 
 @end
 
@@ -54,11 +60,15 @@
     struct stat m_SourceStat;
     struct stat m_DestinationStat;
     std::shared_ptr<nc::ops::AsyncDialogResponse> m_Ctx;
+    bool m_SingleItem;
 }
 @synthesize allowAppending;
 @synthesize allowKeepingBoth;
-@synthesize singleItem;
+@synthesize singleItem = m_SingleItem;
 @synthesize TargetFilename;
+@synthesize conflictTitle;
+@synthesize sourceItemLabel;
+@synthesize existingItemLabel;
 @synthesize NewFileSize;
 @synthesize ExistingFileSize;
 @synthesize NewFileTime;
@@ -69,6 +79,7 @@
 @synthesize keepBothButton;
 @synthesize appendButton;
 @synthesize abortButton;
+@synthesize replaceOptionsButton;
 
 - (id)initWithDestPath:(const std::string &)_path
          withSourceStat:(const struct stat &)_src_stat
@@ -85,7 +96,7 @@
         m_Ctx = _ctx;
         self.allowAppending = true;
         self.allowKeepingBoth = false;
-        self.singleItem = false;
+        m_SingleItem = false;
     }
     return self;
 }
@@ -109,12 +120,69 @@
     self.ExistingFileSize.integerValue = m_DestinationStat.st_size;
     self.RememberCheck.state = NSControlStateValueOff;
 
+    self.window.accessibilityIdentifier = @"wincommander.operation.conflict.window";
+    self.window.accessibilityLabel = self.conflictTitle.stringValue;
+    self.conflictTitle.accessibilityIdentifier = @"wincommander.operation.conflict.title";
+    self.TargetFilename.accessibilityIdentifier = @"wincommander.operation.conflict.destinationPath";
+    self.TargetFilename.accessibilityLabel = self.existingItemLabel.stringValue;
+    self.NewFileSize.accessibilityIdentifier = @"wincommander.operation.conflict.sourceSize";
+    self.NewFileSize.accessibilityLabel = self.sourceItemLabel.stringValue;
+    self.NewFileTime.accessibilityIdentifier = @"wincommander.operation.conflict.sourceModified";
+    self.NewFileTime.accessibilityLabel = self.sourceItemLabel.stringValue;
+    self.ExistingFileSize.accessibilityIdentifier = @"wincommander.operation.conflict.destinationSize";
+    self.ExistingFileSize.accessibilityLabel = self.existingItemLabel.stringValue;
+    self.ExistingFileTime.accessibilityIdentifier = @"wincommander.operation.conflict.destinationModified";
+    self.ExistingFileTime.accessibilityLabel = self.existingItemLabel.stringValue;
+    self.RememberCheck.accessibilityIdentifier = @"wincommander.operation.conflict.applyToAll";
+    self.RememberCheck.accessibilityLabel = self.RememberCheck.title;
+    self.abortButton.accessibilityIdentifier = @"wincommander.operation.conflict.cancel";
+    self.abortButton.accessibilityLabel = self.abortButton.title;
+    self.appendButton.accessibilityIdentifier = @"wincommander.operation.conflict.append";
+    self.appendButton.accessibilityLabel = self.appendButton.title;
+    self.keepBothButton.accessibilityIdentifier = @"wincommander.operation.conflict.keepBoth";
+    self.keepBothButton.accessibilityLabel = self.keepBothButton.title;
+    self.skipButton.accessibilityIdentifier = @"wincommander.operation.conflict.skip";
+    self.skipButton.accessibilityLabel = self.skipButton.title;
+    self.overwriteButton.accessibilityIdentifier = @"wincommander.operation.conflict.replace";
+    self.overwriteButton.accessibilityLabel = self.overwriteButton.title;
+    self.replaceOptionsButton.accessibilityIdentifier = @"wincommander.operation.conflict.replaceOptions";
+    self.replaceOptionsButton.accessibilityLabel = self.replaceOptionsButton.lastItem.title;
+    if( @available(macOS 11.0, *) )
+        self.overwriteButton.hasDestructiveAction = true;
+
+    [self updateApplyToAllAvailability];
+
     NCSheetWithHotkeys *sheet = nc::objc_cast<NCSheetWithHotkeys>(self.window);
-    sheet.onCtrlA = [sheet makeClickHotkey:self.RememberCheck];
+    if( !self.singleItem )
+        sheet.onCtrlA = [sheet makeClickHotkey:self.RememberCheck];
     sheet.onCtrlK = [sheet makeClickHotkey:self.keepBothButton];
     sheet.onCtrlO = [sheet makeClickHotkey:self.overwriteButton];
     sheet.onCtrlP = [sheet makeClickHotkey:self.appendButton];
     sheet.onCtrlS = [sheet makeClickHotkey:self.skipButton];
+}
+
+- (void)setSingleItem:(bool)_singleItem
+{
+    if( m_SingleItem == _singleItem )
+        return;
+
+    m_SingleItem = _singleItem;
+    if( self.isWindowLoaded ) {
+        [self updateApplyToAllAvailability];
+        auto sheet = nc::objc_cast<NCSheetWithHotkeys>(self.window);
+        if( m_SingleItem )
+            sheet.onCtrlA = nil;
+        else
+            sheet.onCtrlA = [sheet makeClickHotkey:self.RememberCheck];
+    }
+}
+
+- (void)updateApplyToAllAvailability
+{
+    self.RememberCheck.hidden = self.singleItem;
+    self.RememberCheck.enabled = !self.singleItem;
+    if( self.singleItem )
+        self.RememberCheck.state = NSControlStateValueOff;
 }
 
 - (IBAction)OnOverwrite:(id) [[maybe_unused]] _sender
@@ -149,11 +217,12 @@
 
 - (void)endDialogWithReturnCode:(NSInteger)_returnCode
 {
-    if( (NSEvent.modifierFlags & NSEventModifierFlagShift) != 0 )
+    if( !self.singleItem && (NSEvent.modifierFlags & NSEventModifierFlagShift) != 0 )
         self.RememberCheck.state = NSControlStateValueOn;
 
     if( m_Ctx )
-        m_Ctx->SetApplyToAll(self.RememberCheck.state == NSControlStateValueOn);
+        m_Ctx->SetApplyToAll(!self.singleItem && self.RememberCheck.enabled && !self.RememberCheck.hidden &&
+                            self.RememberCheck.state == NSControlStateValueOn);
 
     [self.window.sheetParent endSheet:self.window returnCode:_returnCode];
 }

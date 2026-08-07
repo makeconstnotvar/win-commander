@@ -45,6 +45,24 @@ public:
 
     using LookingInCallback = std::function<void(const char *, VFSHost &)>;
 
+    struct SkippedLocation {
+        enum class Context : uint8_t {
+            Root,
+            Descendant,
+            Item
+        };
+
+        std::string path;
+        VFSHostPtr host;
+        Error error;
+        Context context;
+    };
+
+    using SkippedLocationCallback = std::function<void(const SkippedLocation &)>;
+
+    using DescendPredicate =
+        std::function<bool(std::string_view _full_path, const VFSDirEnt &_dirent, VFSHost &_in_host)>;
+
     SearchForFiles();
     ~SearchForFiles();
 
@@ -79,7 +97,9 @@ public:
             FoundCallback _found_callback,
             std::function<void()> _finish_callback,
             LookingInCallback _looking_in_callback = nullptr,
-            SpawnArchiveCallback _spawn_archive_callback = nullptr);
+            SpawnArchiveCallback _spawn_archive_callback = nullptr,
+            SkippedLocationCallback _skipped_location_callback = nullptr,
+            DescendPredicate _descend_predicate = nullptr);
 
     /**
      * Singals to a working thread that it should stop. Returns immediately.
@@ -111,6 +131,7 @@ private:
                            CFRange _cont_range);
 
     void NotifyLookingIn(const char *_path, VFSHost &_in_host) const;
+    void ReportItemFailure(const char *_path, VFSHost &_in_host, const Error &_error) const;
     bool FilterByContent(const char *_full_path, VFSHost &_in_host, CFRange &_r);
     bool FilterByFilename(std::string_view _filename) const;
     static utility::Encoding EncodingFromXAttr(const VFSFilePtr &_f);
@@ -124,8 +145,10 @@ private:
     SpawnArchiveCallback m_SpawnArchiveCallback;
     std::function<void()> m_FinishCallback;
     LookingInCallback m_LookingInCallback;
+    SkippedLocationCallback m_SkippedLocationCallback;
+    DescendPredicate m_DescendPredicate;
     int m_SearchOptions;
-    std::queue<VFSPath> m_DirsFIFO;
+    std::queue<std::pair<VFSPath, SkippedLocation::Context>> m_DirsFIFO;
 };
 
 } // namespace nc::vfs

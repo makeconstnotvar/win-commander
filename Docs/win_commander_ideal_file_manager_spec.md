@@ -571,6 +571,7 @@ file.cut
 file.paste
 file.move
 file.rename
+file.batchRename
 file.duplicate
 file.delete
 file.trash
@@ -581,6 +582,7 @@ file.open
 file.openWith
 file.preview
 file.getInfo
+file.calculateSizes
 file.copyPath
 file.copyPosixPath
 file.copyRelativePath
@@ -636,6 +638,10 @@ developer.copyImportPath
 settings.open
 commandPalette.open
 ```
+
+`file.getInfo` открывает read-only Properties для просмотра metadata выбранных элементов. Изменение прав выполняется отдельной mutation-командой `file.editPermissions`.
+
+`file.calculateSizes` рассчитывает размеры точных выбранных или сфокусированного элементов. `Calculate All Folders Sizes` является отдельной pane-wide семантикой со своим intent и собственной command definition.
 
 ## 10.4. UI integration
 

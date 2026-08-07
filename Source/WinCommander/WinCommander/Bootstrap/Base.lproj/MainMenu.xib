@@ -136,6 +136,11 @@ DQ
                                     <action selector="onAlwaysOpenFileWith:" target="-1" id="Nk0-Ry-daQ"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Get Info" tag="11190" keyEquivalent="i" id="Q13-Get-Inf">
+                                <connections>
+                                    <action selector="OnFileGetInfo:" target="-1" id="Q13-Get-Act"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Reveal In Opposite Panel" tag="11021" id="jt1-bG-SNx">
                                 <string key="keyEquivalent" base64-UTF8="YES">
 DQ
@@ -468,6 +473,12 @@ DQ
                                 <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
                                 <connections>
                                     <action selector="ToggleViewHiddenFiles:" target="-1" id="Ayw-w8-zaF"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Show Details Pane" tag="13280" keyEquivalent="p" id="Q13-Det-Pan">
+                                <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
+                                <connections>
+                                    <action selector="OnTogglePreviewPane:" target="-1" id="Q13-Det-Act"/>
                                 </connections>
                             </menuItem>
                             <menuItem isSeparatorItem="YES" id="t5L-ik-2nt"/>
@@ -854,6 +865,12 @@ DQ
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
                                     <action selector="OnBatchRename:" target="-1" id="RQM-7Z-7oJ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Extract Here" tag="15250" id="Q1x-Ex-Here">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="onExtractArchiveHere:" target="-1" id="Q1x-Ex-Actn"/>
                                 </connections>
                             </menuItem>
                             <menuItem title="Copy To..." tag="15110" keyEquivalent="" id="838">

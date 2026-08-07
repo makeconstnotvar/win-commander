@@ -52,7 +52,8 @@ public:
     using FailureHandler = std::function<void(Error)>;
     void Restore(const nc::panel::PersistentLocation &_location,
                  SuccessHandler _success_handler,
-                 FailureHandler _failure_handler);
+                 FailureHandler _failure_handler,
+                 PanelDataPersistency::VFSRestoreOptions _options = {});
 
 private:
     PanelController *m_Panel = nil;

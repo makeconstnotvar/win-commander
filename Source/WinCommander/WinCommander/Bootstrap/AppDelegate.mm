@@ -44,13 +44,17 @@
 #include <WinCommander/Core/ActionsShortcutsManager.h>
 #include <WinCommander/Core/Commands/FileCopyCommand.h>
 #include <WinCommander/Core/Commands/FileCutCommand.h>
+#include <WinCommander/Core/Commands/FileGetInfoCommand.h>
 #include <WinCommander/Core/Commands/FileOpenCommand.h>
+#include <WinCommander/Core/Commands/FilePreviewCommand.h>
+#include <WinCommander/Core/Commands/FileMutationCommands.h>
 #include <WinCommander/Core/Commands/FileRenameCommand.h>
 #include <WinCommander/Core/Commands/NavigationHistoryCommand.h>
 #include <WinCommander/Core/Commands/OperationCancelCommand.h>
 #include <WinCommander/Core/Commands/OperationCenterOpenCommand.h>
 #include <WinCommander/Core/Commands/PaneNavigationCommand.h>
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
+#include <WinCommander/Core/Commands/TogglePreviewPaneCommand.h>
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
 #include <WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h>
 #include <WinCommander/Core/SandboxManager.h>
@@ -65,6 +69,8 @@
 #include <WinCommander/Bootstrap/NCEditMenuPresentationDelegate.h>
 #include <WinCommander/States/Terminal/ShellState.h>
 #include <WinCommander/States/Explorer/NCExplorerCommandBarView.h>
+#include <WinCommander/States/Explorer/NCExplorerInspectorPresenting.h>
+#include <WinCommander/States/Explorer/ExplorerViewSettingsPersistence.h>
 #include <WinCommander/States/MainWindow.h>
 #include <WinCommander/States/MainWindowController.h>
 #include <WinCommander/States/FilePanels/MainWindowFilePanelState.h>
@@ -75,6 +81,17 @@
 #include <WinCommander/States/FilePanels/Actions/NavigateHistory.h>
 #include <WinCommander/States/FilePanels/Actions/GoToFolder.h>
 #include <WinCommander/States/FilePanels/Actions/OpenFile.h>
+#include <WinCommander/States/FilePanels/Actions/ShowQuickLook.h>
+#include <WinCommander/States/FilePanels/Actions/Delete.h>
+#include <WinCommander/States/FilePanels/Actions/InsertFromPasteboard.h>
+#include <WinCommander/States/FilePanels/Actions/MakeNew.h>
+#include <WinCommander/States/FilePanels/Actions/Select.h>
+#include <WinCommander/States/FilePanels/Actions/Compress.h>
+#include <WinCommander/States/FilePanels/Actions/ExtractArchive.h>
+#include <WinCommander/States/FilePanels/Actions/Duplicate.h>
+#include <WinCommander/States/FilePanels/Actions/CopyFilePaths.h>
+#include <WinCommander/States/FilePanels/Actions/CalculateSizes.h>
+#include <WinCommander/States/FilePanels/Actions/BatchRename.h>
 #include <WinCommander/States/FilePanels/Helpers/Pasteboard.h>
 #include <WinCommander/States/FilePanels/FavoritesImpl.h>
 #include <WinCommander/States/FilePanels/FavoritesWindowController.h>
@@ -288,6 +305,50 @@ static NCAppDelegate *g_Me = nil;
             });
         [[maybe_unused]] const auto file_open_result = m_CommandRegistry->Register(file_open_registration);
         assert(file_open_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_get_info_registration = nc::core::MakeFileGetInfoCommand(
+            [](void *_native_target, const nc::core::FileGetInfoPresentation _presentation) {
+                if( _native_target == nullptr )
+                    return false;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                id<NCExplorerInspectorPresenting> const presenter =
+                    [panel.state conformsToProtocol:@protocol(NCExplorerInspectorPresenting)]
+                        ? static_cast<id<NCExplorerInspectorPresenting>>(panel.state)
+                        : nil;
+                return presenter && [presenter presentFileGetInfo:_presentation forPanel:panel];
+            });
+        [[maybe_unused]] const auto file_get_info_result = m_CommandRegistry->Register(file_get_info_registration);
+        assert(file_get_info_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_preview_registration = nc::core::MakeFilePreviewCommand([](void *_native_target,
+                                                                                   const nc::vfs::ListingItem &_item,
+                                                                                   nc::core::FilePreviewIntent) {
+            if( _native_target == nullptr )
+                return false;
+            PanelController *const panel = (__bridge PanelController *)_native_target;
+            try {
+                if( !_item || _item.IsDotDot() )
+                    return false;
+                const int sort_position = panel.data.SortPositionOfEntry(_item);
+                if( sort_position < 0 || !panel.data.IsValidSortPosition(sort_position) )
+                    return false;
+                PanelView *const view = panel.view;
+                if( view == nil )
+                    return false;
+                view.curpos = sort_position;
+                const VFSListingItem focused_item = view.item;
+                if( !focused_item || focused_item.Listing() != _item.Listing() ||
+                    focused_item.Index() != _item.Index() )
+                    return false;
+                const nc::panel::actions::ShowQuickLook action;
+                if( !action.Predicate(panel) )
+                    return false;
+                action.Perform(panel, nil);
+                return true;
+            } catch( ... ) {
+                return false;
+            }
+        });
+        [[maybe_unused]] const auto file_preview_result = m_CommandRegistry->Register(file_preview_registration);
+        assert(file_preview_result == nc::core::CommandRegistry::RegisterResult::Registered);
         const auto file_copy_registration =
             nc::core::MakeFileCopyCommand([](const std::span<const nc::vfs::ListingItem> _items) {
                 const std::vector<VFSListingItem> items{_items.begin(), _items.end()};
@@ -306,6 +367,460 @@ static NCAppDelegate *g_Me = nil;
             });
         [[maybe_unused]] const auto file_cut_result = m_CommandRegistry->Register(file_cut_registration);
         assert(file_cut_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const nc::core::FilePasteAvailabilityProvider file_paste_availability = [](void *_native_target) {
+            if( !_native_target )
+                return nc::core::FilePasteAvailability::PaneUnavailable;
+            PanelController *const panel = (__bridge PanelController *)_native_target;
+            try {
+                if( !panel.mainWindowController )
+                    return nc::core::FilePasteAvailability::WindowUnavailable;
+                if( panel.isDoingBackgroundLoading || !panel.isUniform || !panel.vfs )
+                    return nc::core::FilePasteAvailability::DestinationUnavailable;
+                if( !nc::vfs::ProviderCapabilitiesResolver::Resolve(*panel.vfs, panel.currentDirectoryPath).can_write )
+                    return nc::core::FilePasteAvailability::DestinationReadOnly;
+            } catch( ... ) {
+                return nc::core::FilePasteAvailability::DestinationUnavailable;
+            }
+
+            NSPasteboard *const pasteboard = NSPasteboard.generalPasteboard;
+            if( !nc::panel::PasteboardSupport::CanReadFileList(pasteboard) )
+                return nc::core::FilePasteAvailability::ClipboardUnavailable;
+            if( nc::panel::PasteboardSupport::IsCutInFlight(pasteboard) ||
+                nc::panel::PasteboardSupport::IsFileListMoveInFlight(pasteboard) )
+                return nc::core::FilePasteAvailability::ClipboardBusy;
+            return nc::core::FilePasteAvailability::Available;
+        };
+        nc::vfs::NativeHost *const native_host = m_NativeHost.get();
+        const auto file_paste_registration = nc::core::MakeFilePasteCommand(
+            file_paste_availability, [file_paste_availability, native_host](void *_native_target, const void *) {
+                const auto live = file_paste_availability(_native_target);
+                if( live != nc::core::FilePasteAvailability::Available )
+                    return live;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                const nc::panel::actions::PasteFromPasteboard action{*native_host};
+                using Submission = nc::panel::actions::PasteSubmissionResult;
+                switch( action.Execute(panel) ) {
+                    case Submission::Submitted:
+                        return nc::core::FilePasteAvailability::Available;
+                    case Submission::PaneUnavailable:
+                        return nc::core::FilePasteAvailability::PaneUnavailable;
+                    case Submission::WindowUnavailable:
+                        return nc::core::FilePasteAvailability::WindowUnavailable;
+                    case Submission::DestinationUnavailable:
+                        return nc::core::FilePasteAvailability::DestinationUnavailable;
+                    case Submission::DestinationReadOnly:
+                        return nc::core::FilePasteAvailability::DestinationReadOnly;
+                    case Submission::ClipboardUnavailable:
+                        return nc::core::FilePasteAvailability::ClipboardUnavailable;
+                    case Submission::ClipboardBusy:
+                        return nc::core::FilePasteAvailability::ClipboardBusy;
+                    case Submission::ClipboardChanged:
+                        return nc::core::FilePasteAvailability::ClipboardChanged;
+                    case Submission::SourceUnavailable:
+                        return nc::core::FilePasteAvailability::SourceUnavailable;
+                }
+                return nc::core::FilePasteAvailability::DestinationUnavailable;
+            });
+        [[maybe_unused]] const auto file_paste_result = m_CommandRegistry->Register(file_paste_registration);
+        assert(file_paste_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const nc::core::FileDeletionExecutor file_deletion_executor =
+            [](void *_native_target,
+               const std::span<const nc::vfs::ListingItem> _items,
+               const nc::core::FileDeletionIntent _intent,
+               const void *) {
+                if( !_native_target )
+                    return false;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                if( _intent == nc::core::FileDeletionIntent::Trash )
+                    return nc::panel::actions::SubmitItemsToTrash(_items, panel);
+                return nc::panel::actions::PresentPermanentDeletion(_items, panel);
+            };
+        const auto file_trash_registration = nc::core::MakeFileTrashCommand(file_deletion_executor);
+        [[maybe_unused]] const auto file_trash_result = m_CommandRegistry->Register(file_trash_registration);
+        assert(file_trash_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_delete_registration = nc::core::MakeFileDeleteCommand(file_deletion_executor);
+        [[maybe_unused]] const auto file_delete_result = m_CommandRegistry->Register(file_delete_registration);
+        assert(file_delete_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto map_quick_new_file_result = [](const nc::panel::actions::QuickNewFileSubmissionResult _result) {
+            using Submission = nc::panel::actions::QuickNewFileSubmissionResult;
+            switch( _result ) {
+                case Submission::Submitted:
+                    return nc::core::FileCreationAvailability::Available;
+                case Submission::PaneUnavailable:
+                    return nc::core::FileCreationAvailability::PaneUnavailable;
+                case Submission::WindowUnavailable:
+                    return nc::core::FileCreationAvailability::WindowUnavailable;
+                case Submission::Loading:
+                    return nc::core::FileCreationAvailability::Loading;
+                case Submission::DestinationUnavailable:
+                    return nc::core::FileCreationAvailability::DestinationUnavailable;
+                case Submission::DestinationReadOnly:
+                    return nc::core::FileCreationAvailability::DestinationReadOnly;
+                case Submission::ProviderUnsupported:
+                    return nc::core::FileCreationAvailability::ProviderUnsupported;
+                case Submission::StaleDestination:
+                    return nc::core::FileCreationAvailability::StaleDestination;
+                case Submission::NameUnavailable:
+                    return nc::core::FileCreationAvailability::NameUnavailable;
+            }
+            return nc::core::FileCreationAvailability::StaleDestination;
+        };
+        const nc::core::FileCreationAvailabilityProvider file_creation_availability =
+            [map_quick_new_file_result](void *_native_target, const nc::core::FileCreationIntent _intent) {
+                if( !_native_target )
+                    return nc::core::FileCreationAvailability::PaneUnavailable;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                if( _intent == nc::core::FileCreationIntent::File )
+                    return map_quick_new_file_result(nc::panel::actions::EvaluateQuickNewFileSubmission(panel));
+                try {
+                    if( !panel.mainWindowController )
+                        return nc::core::FileCreationAvailability::WindowUnavailable;
+                    if( panel.isDoingBackgroundLoading )
+                        return nc::core::FileCreationAvailability::Loading;
+                    if( !panel.isUniform || !panel.vfs || !panel.data.ListingPtr() )
+                        return nc::core::FileCreationAvailability::DestinationUnavailable;
+                    const std::string path = panel.currentDirectoryPath;
+                    if( !panel.vfs->IsWritableAtPath(path) )
+                        return nc::core::FileCreationAvailability::DestinationReadOnly;
+                    if( !nc::vfs::ProviderCapabilitiesResolver::Resolve(*panel.vfs, path).can_create_folder )
+                        return nc::core::FileCreationAvailability::ProviderUnsupported;
+                    return nc::core::FileCreationAvailability::Available;
+                } catch( ... ) {
+                    return nc::core::FileCreationAvailability::DestinationUnavailable;
+                }
+            };
+        const auto file_new_folder_registration = nc::core::MakeFileNewFolderCommand(
+            file_creation_availability,
+            [file_creation_availability](
+                void *_native_target, const nc::core::FileCreationIntent _intent, const void *) {
+                const auto live = file_creation_availability(_native_target, _intent);
+                if( live != nc::core::FileCreationAvailability::Available )
+                    return live;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                using Submission = nc::panel::actions::QuickNewFolderSubmissionResult;
+                switch( nc::panel::actions::SubmitQuickNewFolder(panel) ) {
+                    case Submission::Submitted:
+                        return nc::core::FileCreationAvailability::Available;
+                    case Submission::PaneUnavailable:
+                        return nc::core::FileCreationAvailability::PaneUnavailable;
+                    case Submission::WindowUnavailable:
+                        return nc::core::FileCreationAvailability::WindowUnavailable;
+                    case Submission::Loading:
+                        return nc::core::FileCreationAvailability::Loading;
+                    case Submission::DestinationUnavailable:
+                        return nc::core::FileCreationAvailability::DestinationUnavailable;
+                    case Submission::DestinationReadOnly:
+                        return nc::core::FileCreationAvailability::DestinationReadOnly;
+                    case Submission::ProviderUnsupported:
+                        return nc::core::FileCreationAvailability::ProviderUnsupported;
+                    case Submission::StaleDestination:
+                        return nc::core::FileCreationAvailability::StaleDestination;
+                    case Submission::NameUnavailable:
+                        return nc::core::FileCreationAvailability::NameUnavailable;
+                }
+                return nc::core::FileCreationAvailability::StaleDestination;
+            });
+        [[maybe_unused]] const auto file_new_folder_result = m_CommandRegistry->Register(file_new_folder_registration);
+        assert(file_new_folder_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto file_new_file_registration = nc::core::MakeFileNewFileCommand(
+            file_creation_availability,
+            [map_quick_new_file_result](void *_native_target, const nc::core::FileCreationIntent, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_quick_new_file_result(nc::panel::actions::SubmitQuickNewFile(panel));
+            });
+        [[maybe_unused]] const auto file_new_file_result = m_CommandRegistry->Register(file_new_file_registration);
+        assert(file_new_file_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_selection_result = [](const nc::panel::actions::PaneSelectionActionResult _result) {
+            using Action = nc::panel::actions::PaneSelectionActionResult;
+            switch( _result ) {
+                case Action::Available:
+                    return nc::core::PaneSelectionAvailability::Available;
+                case Action::PaneUnavailable:
+                    return nc::core::PaneSelectionAvailability::PaneUnavailable;
+                case Action::Loading:
+                    return nc::core::PaneSelectionAvailability::Loading;
+                case Action::ListingUnavailable:
+                    return nc::core::PaneSelectionAvailability::ListingUnavailable;
+                case Action::Empty:
+                    return nc::core::PaneSelectionAvailability::Empty;
+            }
+            return nc::core::PaneSelectionAvailability::ListingUnavailable;
+        };
+        const nc::core::PaneSelectionAvailabilityProvider selection_availability =
+            [map_selection_result](void *_native_target, const nc::core::PaneSelectionIntent) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_selection_result(nc::panel::actions::EvaluatePaneSelectionAction(panel));
+            };
+        const nc::core::PaneSelectionExecutor selection_executor =
+            [map_selection_result](void *_native_target, const nc::core::PaneSelectionIntent _intent, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                const auto result = _intent == nc::core::PaneSelectionIntent::SelectAll
+                                        ? nc::panel::actions::ApplySelectAll(panel)
+                                        : nc::panel::actions::ApplyInvertSelection(panel);
+                return map_selection_result(result);
+            };
+        const auto pane_select_all_registration =
+            nc::core::MakePaneSelectAllCommand(selection_availability, selection_executor);
+        [[maybe_unused]] const auto pane_select_all_result = m_CommandRegistry->Register(pane_select_all_registration);
+        assert(pane_select_all_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto pane_invert_selection_registration =
+            nc::core::MakePaneInvertSelectionCommand(selection_availability, selection_executor);
+        [[maybe_unused]] const auto pane_invert_selection_result =
+            m_CommandRegistry->Register(pane_invert_selection_registration);
+        assert(pane_invert_selection_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_archive_create_result = [](const nc::panel::actions::ArchiveCreateSubmissionResult _result) {
+            using Action = nc::panel::actions::ArchiveCreateSubmissionResult;
+            switch( _result ) {
+                case Action::Presented:
+                    return nc::core::ArchiveCreateAvailability::Available;
+                case Action::PaneUnavailable:
+                    return nc::core::ArchiveCreateAvailability::PaneUnavailable;
+                case Action::WindowUnavailable:
+                    return nc::core::ArchiveCreateAvailability::WindowUnavailable;
+                case Action::Loading:
+                    return nc::core::ArchiveCreateAvailability::Loading;
+                case Action::SelectionUnavailable:
+                    return nc::core::ArchiveCreateAvailability::SelectionUnavailable;
+                case Action::ParentEntryUnsupported:
+                    return nc::core::ArchiveCreateAvailability::ParentEntryUnsupported;
+                case Action::SourceUnreadable:
+                    return nc::core::ArchiveCreateAvailability::SourceUnreadable;
+                case Action::SourceNameCollision:
+                    return nc::core::ArchiveCreateAvailability::SourceNameCollision;
+                case Action::DestinationUnavailable:
+                    return nc::core::ArchiveCreateAvailability::DestinationUnavailable;
+                case Action::DestinationReadOnly:
+                    return nc::core::ArchiveCreateAvailability::DestinationReadOnly;
+                case Action::ProviderUnsupported:
+                    return nc::core::ArchiveCreateAvailability::ProviderUnsupported;
+                case Action::StaleContext:
+                    return nc::core::ArchiveCreateAvailability::StaleContext;
+            }
+            return nc::core::ArchiveCreateAvailability::StaleContext;
+        };
+        const auto archive_create_registration = nc::core::MakeArchiveCreateCommand(
+            [map_archive_create_result](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_archive_create_result(nc::panel::actions::EvaluateArchiveCreateSubmission(_items, panel));
+            },
+            [map_archive_create_result](
+                void *_native_target, const std::span<const nc::vfs::ListingItem> _items, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_archive_create_result(
+                    nc::panel::actions::PresentArchiveCreate(_items, panel, GlobalConfig()));
+            });
+        [[maybe_unused]] const auto archive_create_result = m_CommandRegistry->Register(archive_create_registration);
+        assert(archive_create_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_archive_extract_result =
+            [](const nc::panel::actions::ArchiveExtractionSubmissionResult _result) {
+                using Action = nc::panel::actions::ArchiveExtractionSubmissionResult;
+                switch( _result ) {
+                    case Action::Submitted:
+                        return nc::core::ArchiveExtractAvailability::Available;
+                    case Action::PaneUnavailable:
+                        return nc::core::ArchiveExtractAvailability::PaneUnavailable;
+                    case Action::WindowUnavailable:
+                        return nc::core::ArchiveExtractAvailability::WindowUnavailable;
+                    case Action::Loading:
+                        return nc::core::ArchiveExtractAvailability::Loading;
+                    case Action::SelectionUnavailable:
+                        return nc::core::ArchiveExtractAvailability::SelectionUnavailable;
+                    case Action::ParentEntryUnsupported:
+                        return nc::core::ArchiveExtractAvailability::ParentEntryUnsupported;
+                    case Action::SourceUnsupported:
+                        return nc::core::ArchiveExtractAvailability::SourceUnsupported;
+                    case Action::SourceUnreadable:
+                        return nc::core::ArchiveExtractAvailability::SourceUnreadable;
+                    case Action::DestinationUnavailable:
+                        return nc::core::ArchiveExtractAvailability::DestinationUnavailable;
+                    case Action::DestinationReadOnly:
+                        return nc::core::ArchiveExtractAvailability::DestinationReadOnly;
+                    case Action::ProviderUnsupported:
+                        return nc::core::ArchiveExtractAvailability::ProviderUnsupported;
+                    case Action::CaseSensitivityUnavailable:
+                        return nc::core::ArchiveExtractAvailability::CaseSensitivityUnavailable;
+                    case Action::StaleContext:
+                        return nc::core::ArchiveExtractAvailability::StaleContext;
+                }
+                return nc::core::ArchiveExtractAvailability::StaleContext;
+            };
+        const auto archive_extract_registration = nc::core::MakeArchiveExtractCommand(
+            [map_archive_extract_result](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_archive_extract_result(
+                    nc::panel::actions::EvaluateArchiveExtractionSubmission(_items, panel));
+            },
+            [map_archive_extract_result](
+                void *_native_target, const std::span<const nc::vfs::ListingItem> _items, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_archive_extract_result(nc::panel::actions::SubmitArchiveExtraction(_items, panel));
+            });
+        [[maybe_unused]] const auto archive_extract_result = m_CommandRegistry->Register(archive_extract_registration);
+        assert(archive_extract_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_duplicate_result = [](const nc::panel::actions::DuplicateSubmissionResult _result) {
+            using Action = nc::panel::actions::DuplicateSubmissionResult;
+            switch( _result ) {
+                case Action::Submitted:
+                    return nc::core::FileDuplicateAvailability::Available;
+                case Action::PaneUnavailable:
+                    return nc::core::FileDuplicateAvailability::PaneUnavailable;
+                case Action::WindowUnavailable:
+                    return nc::core::FileDuplicateAvailability::WindowUnavailable;
+                case Action::Loading:
+                    return nc::core::FileDuplicateAvailability::Loading;
+                case Action::SelectionUnavailable:
+                    return nc::core::FileDuplicateAvailability::SelectionUnavailable;
+                case Action::ParentEntryUnsupported:
+                    return nc::core::FileDuplicateAvailability::ParentEntryUnsupported;
+                case Action::SourceUnreadable:
+                    return nc::core::FileDuplicateAvailability::SourceUnreadable;
+                case Action::DestinationUnavailable:
+                    return nc::core::FileDuplicateAvailability::DestinationUnavailable;
+                case Action::DestinationReadOnly:
+                    return nc::core::FileDuplicateAvailability::DestinationReadOnly;
+                case Action::ProviderUnsupported:
+                    return nc::core::FileDuplicateAvailability::ProviderUnsupported;
+                case Action::NameUnavailable:
+                    return nc::core::FileDuplicateAvailability::NameUnavailable;
+                case Action::StaleContext:
+                    return nc::core::FileDuplicateAvailability::StaleContext;
+            }
+            return nc::core::FileDuplicateAvailability::StaleContext;
+        };
+        const auto file_duplicate_registration = nc::core::MakeFileDuplicateCommand(
+            [map_duplicate_result](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_duplicate_result(nc::panel::actions::EvaluateDuplicateSubmission(_items, panel));
+            },
+            [map_duplicate_result](
+                void *_native_target, const std::span<const nc::vfs::ListingItem> _items, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_duplicate_result(nc::panel::actions::SubmitDuplicateItems(_items, panel, GlobalConfig()));
+            });
+        [[maybe_unused]] const auto file_duplicate_result = m_CommandRegistry->Register(file_duplicate_registration);
+        assert(file_duplicate_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_copy_path_result = [](const nc::panel::actions::CopyPathSubmissionResult _result) {
+            using Action = nc::panel::actions::CopyPathSubmissionResult;
+            switch( _result ) {
+                case Action::Submitted:
+                    return nc::core::FileCopyPathAvailability::Available;
+                case Action::PaneUnavailable:
+                    return nc::core::FileCopyPathAvailability::PaneUnavailable;
+                case Action::Loading:
+                    return nc::core::FileCopyPathAvailability::Loading;
+                case Action::SelectionUnavailable:
+                    return nc::core::FileCopyPathAvailability::SelectionUnavailable;
+                case Action::ParentEntryUnsupported:
+                    return nc::core::FileCopyPathAvailability::ParentEntryUnsupported;
+                case Action::StaleContext:
+                    return nc::core::FileCopyPathAvailability::StaleContext;
+                case Action::ClipboardUnavailable:
+                    return nc::core::FileCopyPathAvailability::ClipboardUnavailable;
+            }
+            return nc::core::FileCopyPathAvailability::StaleContext;
+        };
+        const auto file_copy_path_registration = nc::core::MakeFileCopyPathCommand(
+            [map_copy_path_result](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_copy_path_result(nc::panel::actions::EvaluateCopyPathSubmission(_items, panel));
+            },
+            [map_copy_path_result](
+                void *_native_target, const std::span<const nc::vfs::ListingItem> _items, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_copy_path_result(nc::panel::actions::SubmitCopyPaths(_items, panel));
+            });
+        [[maybe_unused]] const auto file_copy_path_result = m_CommandRegistry->Register(file_copy_path_registration);
+        assert(file_copy_path_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_calculate_sizes_result = [](const nc::panel::actions::CalculateSizesSubmissionResult _result) {
+            using Action = nc::panel::actions::CalculateSizesSubmissionResult;
+            switch( _result ) {
+                case Action::Submitted:
+                    return nc::core::FileCalculateSizesAvailability::Available;
+                case Action::PaneUnavailable:
+                    return nc::core::FileCalculateSizesAvailability::PaneUnavailable;
+                case Action::Loading:
+                    return nc::core::FileCalculateSizesAvailability::Loading;
+                case Action::ListingUnavailable:
+                    return nc::core::FileCalculateSizesAvailability::ListingUnavailable;
+                case Action::SelectionUnavailable:
+                    return nc::core::FileCalculateSizesAvailability::SelectionUnavailable;
+                case Action::ParentEntryUnsupported:
+                    return nc::core::FileCalculateSizesAvailability::ParentEntryUnsupported;
+                case Action::NoDirectories:
+                    return nc::core::FileCalculateSizesAvailability::DirectoryRequired;
+                case Action::SourceUnreadable:
+                    return nc::core::FileCalculateSizesAvailability::SourceUnreadable;
+                case Action::CalculationBusy:
+                    return nc::core::FileCalculateSizesAvailability::Busy;
+                case Action::StaleContext:
+                    return nc::core::FileCalculateSizesAvailability::StaleContext;
+            }
+            return nc::core::FileCalculateSizesAvailability::StaleContext;
+        };
+        const auto file_calculate_sizes_registration = nc::core::MakeFileCalculateSizesCommand(
+            [map_calculate_sizes_result](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_calculate_sizes_result(nc::panel::actions::EvaluateCalculateSizesSubmission(_items, panel));
+            },
+            [map_calculate_sizes_result](
+                void *_native_target, const std::span<const nc::vfs::ListingItem> _items, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_calculate_sizes_result(nc::panel::actions::SubmitCalculateSizes(_items, panel));
+            });
+        [[maybe_unused]] const auto file_calculate_sizes_result =
+            m_CommandRegistry->Register(file_calculate_sizes_registration);
+        assert(file_calculate_sizes_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
+        const auto map_batch_rename_result = [](const nc::panel::actions::BatchRenameSubmissionResult _result) {
+            using Action = nc::panel::actions::BatchRenameSubmissionResult;
+            switch( _result ) {
+                case Action::Presented:
+                    return nc::core::FileBatchRenameAvailability::Available;
+                case Action::PaneUnavailable:
+                    return nc::core::FileBatchRenameAvailability::PaneUnavailable;
+                case Action::WindowUnavailable:
+                    return nc::core::FileBatchRenameAvailability::WindowUnavailable;
+                case Action::Loading:
+                    return nc::core::FileBatchRenameAvailability::Loading;
+                case Action::ListingUnavailable:
+                    return nc::core::FileBatchRenameAvailability::ListingUnavailable;
+                case Action::SelectionUnavailable:
+                    return nc::core::FileBatchRenameAvailability::SelectionUnavailable;
+                case Action::ParentEntryUnsupported:
+                    return nc::core::FileBatchRenameAvailability::ParentEntryUnsupported;
+                case Action::MixedProviders:
+                    return nc::core::FileBatchRenameAvailability::MixedProviders;
+                case Action::ProviderUnsupported:
+                    return nc::core::FileBatchRenameAvailability::ProviderUnsupported;
+                case Action::InvalidPlan:
+                    return nc::core::FileBatchRenameAvailability::InvalidPlan;
+                case Action::DestinationConflict:
+                    return nc::core::FileBatchRenameAvailability::DestinationConflict;
+                case Action::StaleContext:
+                    return nc::core::FileBatchRenameAvailability::StaleContext;
+            }
+            return nc::core::FileBatchRenameAvailability::StaleContext;
+        };
+        const auto file_batch_rename_registration = nc::core::MakeFileBatchRenameCommand(
+            [map_batch_rename_result](void *_native_target, const std::span<const nc::vfs::ListingItem> _items) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_batch_rename_result(nc::panel::actions::EvaluateBatchRenameSubmission(_items, panel));
+            },
+            [map_batch_rename_result](
+                void *_native_target, const std::span<const nc::vfs::ListingItem> _items, const void *) {
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                return map_batch_rename_result(nc::panel::actions::PresentBatchRename(_items, panel));
+            });
+        [[maybe_unused]] const auto file_batch_rename_result =
+            m_CommandRegistry->Register(file_batch_rename_registration);
+        assert(file_batch_rename_result == nc::core::CommandRegistry::RegisterResult::Registered);
+
         const auto file_rename_registration = nc::core::MakeFileRenameCommand([](void *_native_target,
                                                                                  const nc::vfs::ListingItem &_item) {
             if( _native_target == nullptr )
@@ -343,6 +858,22 @@ static NCAppDelegate *g_Me = nil;
         [[maybe_unused]] const auto view_toggle_hidden_files_result =
             m_CommandRegistry->Register(view_toggle_hidden_files_registration);
         assert(view_toggle_hidden_files_result == nc::core::CommandRegistry::RegisterResult::Registered);
+        const auto view_toggle_preview_pane_registration = nc::core::MakeViewTogglePreviewPaneCommand(
+            [](void *_native_target, const bool _expected_visible, const bool _desired_visible) {
+                if( _native_target == nullptr )
+                    return false;
+                PanelController *const panel = (__bridge PanelController *)_native_target;
+                id<NCExplorerInspectorPresenting> const presenter =
+                    [panel.state conformsToProtocol:@protocol(NCExplorerInspectorPresenting)]
+                        ? static_cast<id<NCExplorerInspectorPresenting>>(panel.state)
+                        : nil;
+                return presenter && [presenter setPreviewPaneVisible:_desired_visible
+                                                            expected:_expected_visible
+                                                             forPanel:panel];
+            });
+        [[maybe_unused]] const auto view_toggle_preview_pane_result =
+            m_CommandRegistry->Register(view_toggle_preview_pane_registration);
+        assert(view_toggle_preview_pane_result == nc::core::CommandRegistry::RegisterResult::Registered);
         const nc::core::NavigationHistoryExecutor navigation_history_executor =
             [](void *_native_target, const nc::core::NavigationHistoryDirection _direction) {
                 if( _native_target == nullptr )
@@ -402,7 +933,8 @@ static NCAppDelegate *g_Me = nil;
                 }
                 return coordinator->Cancel(_operation_id, _expected_revision);
             });
-        [[maybe_unused]] const auto operation_cancel_result = m_CommandRegistry->Register(operation_cancel_registration);
+        [[maybe_unused]] const auto operation_cancel_result =
+            m_CommandRegistry->Register(operation_cancel_registration);
         assert(operation_cancel_result == nc::core::CommandRegistry::RegisterResult::Registered);
         const auto operation_center_open_registration = nc::core::MakeOperationCenterOpenCommand(
             [operation_center]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
@@ -411,11 +943,10 @@ static NCAppDelegate *g_Me = nil;
                     return std::nullopt;
                 return coordinator->Model().Snapshot();
             },
-            [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
+            [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) -> bool {
                 if( _native_target == nullptr )
                     return false;
-                NCExplorerCommandBarView *const command_bar =
-                    (__bridge NCExplorerCommandBarView *)_native_target;
+                NCExplorerCommandBarView *const command_bar = (__bridge NCExplorerCommandBarView *)_native_target;
                 return [command_bar presentOperationCenterSnapshot:std::move(_snapshot)];
             },
             [operation_center] { return !operation_center.expired(); });
@@ -485,6 +1016,8 @@ static NCAppDelegate *g_Me = nil;
     // Commander and Explorer intentionally use separate layout sets.
 
     NSMenuItem *const copy_item = item_for_action("menu.edit.copy");
+    NSMenuItem *const paste_item = item_for_action("menu.edit.paste");
+    NSMenuItem *const select_all_item = item_for_action("menu.edit.select_all");
     NSMenuItem *cut_item = nil;
     for( NSMenuItem *const item in copy_item.menu.itemArray ) {
         if( item.action == @selector(cut:) ) {
@@ -493,7 +1026,10 @@ static NCAppDelegate *g_Me = nil;
         }
     }
     static const auto edit_menu_presentation_delegate =
-        [[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item copyMenuItem:copy_item];
+        [[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item
+                                                       copyMenuItem:copy_item
+                                                      pasteMenuItem:paste_item
+                                                  selectAllMenuItem:select_all_item];
     if( edit_menu_presentation_delegate != nil )
         copy_item.menu.delegate = edit_menu_presentation_delegate;
 
@@ -1042,7 +1578,7 @@ static NCAppDelegate *g_Me = nil;
     NCMainWindowController *target_window = nil;
     for( NSWindow *wnd in NSApplication.sharedApplication.orderedWindows )
         if( auto wc = nc::objc_cast<NCMainWindowController>(wnd.windowController) )
-            if( [wc.topmostState isKindOfClass:MainWindowFilePanelState.class] ) {
+            if( wc.visibleActivePanelController ) {
                 target_window = wc;
                 break;
             }
@@ -1203,6 +1739,13 @@ static void DoTemporaryFileStoragePurge()
 {
     [[clang::no_destroy]] static nc::panel::PanelDataPersistency persistency{*self.networkConnectionsManager};
     return persistency;
+}
+
+- (nc::explorer::ExplorerViewSettingsPersistence &)explorerViewSettingsPersistence
+{
+    [[clang::no_destroy]] static nc::explorer::ExplorerViewSettingsPersistence persistence{
+        StateConfig(), self.panelDataPersistency};
+    return persistence;
 }
 
 - (nc::utility::ActionsShortcutsManager &)actionsShortcutsManager

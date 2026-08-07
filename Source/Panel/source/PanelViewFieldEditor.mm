@@ -80,6 +80,16 @@ static NSRange NextFilenameSelectionRange(NSString *_Nonnull _string, NSRange _c
     m_TextView.selectedRange = NextFilenameSelectionRange(m_TextView.string, m_TextView.selectedRange);
 }
 
+- (void)setValidationMessage:(NSString *_Nullable)_message
+{
+    self.toolTip = _message;
+    self.accessibilityHelp = _message;
+    m_TextView.backgroundColor = _message ? [NSColor.systemRedColor colorWithAlphaComponent:0.12]
+                                          : NSColor.textBackgroundColor;
+    if( _message )
+        m_TextView.selectedRange = NSMakeRange(0, m_TextView.string.length);
+}
+
 - (BOOL)textShouldEndEditing:(NSText *_Nonnull) [[maybe_unused]] textObject
 {
     if( m_Stashed ) {
@@ -87,9 +97,14 @@ static NSRange NextFilenameSelectionRange(NSString *_Nonnull _string, NSRange _c
     }
     else {
         Log::Trace("textShouldEndEditing called, accepting");
-        [self finishEditing];
+        return [self finishEditing];
     }
     return true;
+}
+
+- (void)textDidChange:(NSNotification *_Nonnull) [[maybe_unused]] notification
+{
+    [self setValidationMessage:nil];
 }
 
 - (void)textDidEndEditing:(NSNotification *_Nonnull) [[maybe_unused]] notification
@@ -141,22 +156,24 @@ static NSRange NextFilenameSelectionRange(NSString *_Nonnull _string, NSRange _c
     return [super performKeyEquivalent:_event];
 }
 
-- (void)finishEditing
+- (BOOL)finishEditing
 {
-    if( m_TextView.string && m_TextView.string.length > 0 )
-        if( const auto utf8 = m_TextView.string.fileSystemRepresentation ) {
-            auto enter_handler = self.onTextEntered;
-            self.onTextEntered = nil;
-            if( enter_handler ) {
-                enter_handler(utf8);
-            }
-        }
+    const auto utf8 = m_TextView.string.UTF8String;
+    if( !utf8 )
+        return false;
+
+    if( auto enter_handler = self.onTextEntered ) {
+        if( !enter_handler(utf8) )
+            return false;
+        self.onTextEntered = nil;
+    }
 
     auto finish_handler = self.onEditingFinished;
     self.onEditingFinished = nil;
     if( finish_handler ) {
         finish_handler();
     }
+    return true;
 }
 
 - (void)cancelEditing

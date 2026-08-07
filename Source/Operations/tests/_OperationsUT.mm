@@ -2,3 +2,4 @@
 #include "BatchRenaming_UT.mm"
 #include "CopyOperationOrchestrator_UT.cpp"
 #include "Pool_UT.mm"
+#include "FileAlreadyExistDialog_UT.mm"

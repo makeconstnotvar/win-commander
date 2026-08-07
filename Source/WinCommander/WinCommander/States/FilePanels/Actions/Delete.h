@@ -3,12 +3,18 @@
 
 #include <VFS/VFS.h>
 #include "DefaultAction.h"
+#include <span>
 
 namespace nc::utility {
 class NativeFSManager;
 }
 
 namespace nc::panel::actions {
+
+/** Exact-item Registry execution ports over the established nc::ops::Deletion implementation. */
+[[nodiscard]] bool SubmitItemsToTrash(std::span<const VFSListingItem> _items, PanelController *_target);
+[[nodiscard]] bool PresentPermanentDeletion(std::span<const VFSListingItem> _items,
+                                            PanelController *_target);
 
 struct Delete final : PanelAction {
     Delete(nc::utility::NativeFSManager &_nat_fsman, bool _permanently = false);

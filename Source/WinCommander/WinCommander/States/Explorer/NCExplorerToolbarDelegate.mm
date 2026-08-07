@@ -19,6 +19,43 @@ static NSString *const g_RefreshItem = @"explorer_refresh";
 static NSString *const g_BreadcrumbItem = @"explorer_breadcrumb";
 static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
 
+namespace {
+
+NSString *ToolbarButtonHelp(NSString *_identifier)
+{
+    if( [_identifier isEqualToString:@"wincommander.explorer.toolbar.back"] )
+        return NSLocalizedString(@"Go to the previous folder", "Explorer toolbar accessibility help");
+    if( [_identifier isEqualToString:@"wincommander.explorer.toolbar.forward"] )
+        return NSLocalizedString(@"Go to the next folder", "Explorer toolbar accessibility help");
+    if( [_identifier isEqualToString:@"wincommander.explorer.toolbar.up"] )
+        return NSLocalizedString(@"Go to the enclosing folder", "Explorer toolbar accessibility help");
+    if( [_identifier isEqualToString:@"wincommander.explorer.toolbar.refresh"] )
+        return NSLocalizedString(@"Reload the current folder", "Explorer toolbar accessibility help");
+    if( [_identifier isEqualToString:@"wincommander.explorer.toolbar.commanderMode"] )
+        return NSLocalizedString(@"Switch to the dual-pane file manager", "Explorer toolbar accessibility help");
+    return nil;
+}
+
+void ConfigureToolbarButton(NSButton *_button, NSString *_identifier, NSString *_label)
+{
+    _button.accessibilityIdentifier = _identifier;
+    _button.accessibilityLabel = _label;
+    _button.toolTip = ToolbarButtonHelp(_identifier);
+    _button.accessibilityHelp = _button.toolTip;
+}
+
+void ApplyToolbarCommandState(const nc::core::CommandState &_state, NSButton *_button)
+{
+    nc::presentation::CommandPresentationAdapter::Apply(_state, _button);
+    if( _button.accessibilityHelp.length == 0 ) {
+        NSString *const help = ToolbarButtonHelp(_button.accessibilityIdentifier);
+        _button.toolTip = help;
+        _button.accessibilityHelp = help;
+    }
+}
+
+} // namespace
+
 @implementation NCExplorerToolbarDelegate {
     NSToolbar *m_Toolbar;
     NSButton *m_BackButton;
@@ -27,11 +64,13 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
     NSButton *m_RefreshButton;
     NSButton *m_CommanderModeButton;
     NCExplorerBreadcrumbControl *m_Breadcrumb;
+    __weak PanelController *m_Panel;
     __weak NCPanelControllerActionsDispatcher *m_ActionsDispatcher;
     std::optional<nc::explorer::PanePresentationModel> m_PanePresentation;
 }
 
 @synthesize toolbar = m_Toolbar;
+@synthesize panelController = m_Panel;
 
 - (NSProgressIndicator *)busyIndicator
 {
@@ -44,16 +83,48 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
 }
 
 - (instancetype)initWithPanelController:(PanelController *)_panel
-                       actionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher
+                      actionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher
 {
     self = [super init];
     if( self ) {
+        m_Panel = _panel;
         m_ActionsDispatcher = _dispatcher;
         m_PanePresentation.emplace(_panel.paneId);
         [self buildControlsForPanel:_panel];
         [self buildToolbar];
     }
     return self;
+}
+
+- (void)rebindToPanelController:(PanelController *)_panel
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    if( !_panel || m_Panel == _panel )
+        return;
+
+    m_Panel = _panel;
+    m_ActionsDispatcher = _panel.view.actionsDispatcher;
+    m_PanePresentation.emplace(_panel.paneId);
+    for( NSButton *button in @[m_BackButton, m_ForwardButton, m_UpButton, m_RefreshButton] )
+        button.target = m_ActionsDispatcher;
+    [m_Breadcrumb rebindToPanelController:_panel];
+
+    const auto back_state =
+        [m_ActionsDispatcher navigationBackCommandStateForAvailability:std::nullopt
+                                                                source:nc::core::CommandInvocationSource::Toolbar];
+    const auto forward_state =
+        [m_ActionsDispatcher navigationForwardCommandStateForAvailability:std::nullopt
+                                                                   source:nc::core::CommandInvocationSource::Toolbar];
+    const auto up_state =
+        [m_ActionsDispatcher navigationUpCommandStateForAvailability:std::nullopt
+                                                              source:nc::core::CommandInvocationSource::Toolbar];
+    const auto refresh_state =
+        [m_ActionsDispatcher navigationRefreshCommandStateForAvailability:std::nullopt
+                                                                   source:nc::core::CommandInvocationSource::Toolbar];
+    ApplyToolbarCommandState(back_state, m_BackButton);
+    ApplyToolbarCommandState(forward_state, m_ForwardButton);
+    ApplyToolbarCommandState(up_state, m_UpButton);
+    ApplyToolbarCommandState(refresh_state, m_RefreshButton);
 }
 
 - (NSButton *)makeButtonWithSymbol:(NSString *)_symbol_name target:(id)_target action:(SEL)_action
@@ -75,37 +146,56 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
     m_BackButton = [self makeButtonWithSymbol:@"chevron.left" target:dispatcher action:@selector(OnGoBack:)];
     m_ForwardButton = [self makeButtonWithSymbol:@"chevron.right" target:dispatcher action:@selector(OnGoForward:)];
     m_UpButton = [self makeButtonWithSymbol:@"chevron.up" target:dispatcher action:@selector(OnGoToUpperDirectory:)];
-    m_RefreshButton = [self makeButtonWithSymbol:@"arrow.clockwise" target:dispatcher action:@selector(OnRefreshPanel:)];
+    m_RefreshButton = [self makeButtonWithSymbol:@"arrow.clockwise"
+                                          target:dispatcher
+                                          action:@selector(OnRefreshPanel:)];
+    ConfigureToolbarButton(m_BackButton,
+                           @"wincommander.explorer.toolbar.back",
+                           NSLocalizedString(@"Back", "Explorer toolbar accessibility label"));
+    ConfigureToolbarButton(m_ForwardButton,
+                           @"wincommander.explorer.toolbar.forward",
+                           NSLocalizedString(@"Forward", "Explorer toolbar accessibility label"));
+    ConfigureToolbarButton(m_UpButton,
+                           @"wincommander.explorer.toolbar.up",
+                           NSLocalizedString(@"Up", "Explorer toolbar accessibility label"));
+    ConfigureToolbarButton(m_RefreshButton,
+                           @"wincommander.explorer.toolbar.refresh",
+                           NSLocalizedString(@"Refresh", "Explorer toolbar accessibility label"));
     m_BackButton.enabled = false;
     m_ForwardButton.enabled = false;
     m_UpButton.enabled = false;
     m_RefreshButton.enabled = false;
     if( m_ActionsDispatcher ) {
-        const auto back_state = [m_ActionsDispatcher
-            navigationBackCommandStateForAvailability:std::nullopt
-                                                source:nc::core::CommandInvocationSource::Toolbar];
+        const auto back_state =
+            [m_ActionsDispatcher navigationBackCommandStateForAvailability:std::nullopt
+                                                                    source:nc::core::CommandInvocationSource::Toolbar];
         const auto forward_state = [m_ActionsDispatcher
             navigationForwardCommandStateForAvailability:std::nullopt
-                                                   source:nc::core::CommandInvocationSource::Toolbar];
-        const auto up_state = [m_ActionsDispatcher
-            navigationUpCommandStateForAvailability:std::nullopt
-                                              source:nc::core::CommandInvocationSource::Toolbar];
+                                                  source:nc::core::CommandInvocationSource::Toolbar];
+        const auto up_state =
+            [m_ActionsDispatcher navigationUpCommandStateForAvailability:std::nullopt
+                                                                  source:nc::core::CommandInvocationSource::Toolbar];
         const auto refresh_state = [m_ActionsDispatcher
             navigationRefreshCommandStateForAvailability:std::nullopt
-                                                   source:nc::core::CommandInvocationSource::Toolbar];
-        nc::presentation::CommandPresentationAdapter::Apply(back_state, m_BackButton);
-        nc::presentation::CommandPresentationAdapter::Apply(forward_state, m_ForwardButton);
-        nc::presentation::CommandPresentationAdapter::Apply(up_state, m_UpButton);
-        nc::presentation::CommandPresentationAdapter::Apply(refresh_state, m_RefreshButton);
+                                                  source:nc::core::CommandInvocationSource::Toolbar];
+        ApplyToolbarCommandState(back_state, m_BackButton);
+        ApplyToolbarCommandState(forward_state, m_ForwardButton);
+        ApplyToolbarCommandState(up_state, m_UpButton);
+        ApplyToolbarCommandState(refresh_state, m_RefreshButton);
     }
 
     // target is nil - this is dispatched up the responder chain to NCMainWindowController.
     m_CommanderModeButton = [self makeButtonWithSymbol:@"rectangle.split.2x1"
-                                                 target:nil
-                                                 action:@selector(toggleExplorerMode:)];
+                                                target:nil
+                                                action:@selector(toggleExplorerMode:)];
+    ConfigureToolbarButton(m_CommanderModeButton,
+                           @"wincommander.explorer.toolbar.commanderMode",
+                           NSLocalizedString(@"Commander Mode", "Explorer toolbar accessibility label"));
 
-    m_Breadcrumb = [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 0, 600, 27)
-                                                        panelController:_panel];
+    m_Breadcrumb = [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 0, 600, 27) panelController:_panel];
+    m_Breadcrumb.accessibilityIdentifier = @"wincommander.explorer.toolbar.path";
+    m_Breadcrumb.accessibilityHelp =
+        NSLocalizedString(@"Shows the current folder and lets you enter a path", "Explorer toolbar accessibility help");
 }
 
 - (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot
@@ -115,24 +205,25 @@ static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
     const auto history_availability = m_PanePresentation->HistoryAvailability();
     const auto navigation_availability = m_PanePresentation->NavigationAvailability();
     if( m_ActionsDispatcher ) {
-        const auto back_state = [m_ActionsDispatcher
-            navigationBackCommandStateForAvailability:history_availability
-                                                source:nc::core::CommandInvocationSource::Toolbar];
+        const auto back_state =
+            [m_ActionsDispatcher navigationBackCommandStateForAvailability:history_availability
+                                                                    source:nc::core::CommandInvocationSource::Toolbar];
         const auto forward_state = [m_ActionsDispatcher
             navigationForwardCommandStateForAvailability:history_availability
-                                                   source:nc::core::CommandInvocationSource::Toolbar];
+                                                  source:nc::core::CommandInvocationSource::Toolbar];
         const auto up_state = [m_ActionsDispatcher
-            navigationUpCommandStateForAvailability:
-                navigation_availability ? std::optional{navigation_availability->up} : std::nullopt
-                                              source:nc::core::CommandInvocationSource::Toolbar];
+            navigationUpCommandStateForAvailability:navigation_availability ? std::optional{navigation_availability->up}
+                                                                            : std::nullopt
+                                             source:nc::core::CommandInvocationSource::Toolbar];
         const auto refresh_state = [m_ActionsDispatcher
-            navigationRefreshCommandStateForAvailability:
-                navigation_availability ? std::optional{navigation_availability->refresh} : std::nullopt
-                                                   source:nc::core::CommandInvocationSource::Toolbar];
-        nc::presentation::CommandPresentationAdapter::Apply(back_state, m_BackButton);
-        nc::presentation::CommandPresentationAdapter::Apply(forward_state, m_ForwardButton);
-        nc::presentation::CommandPresentationAdapter::Apply(up_state, m_UpButton);
-        nc::presentation::CommandPresentationAdapter::Apply(refresh_state, m_RefreshButton);
+            navigationRefreshCommandStateForAvailability:navigation_availability
+                                                             ? std::optional{navigation_availability->refresh}
+                                                             : std::nullopt
+                                                  source:nc::core::CommandInvocationSource::Toolbar];
+        ApplyToolbarCommandState(back_state, m_BackButton);
+        ApplyToolbarCommandState(forward_state, m_ForwardButton);
+        ApplyToolbarCommandState(up_state, m_UpButton);
+        ApplyToolbarCommandState(refresh_state, m_RefreshButton);
     }
     else {
         m_BackButton.enabled = false;

@@ -14,6 +14,7 @@
 #include <ankerl/unordered_dense.h>
 #include <mutex>
 #include <bit>
+#include <algorithm>
 
 namespace nc::panel::actions {
 
@@ -60,7 +61,8 @@ static const auto g_SelectWithMaskHistoryPath = "filePanel.selectWithMaskPopup.m
 
 void SelectAll::Perform(PanelController *_target, id /*_sender*/) const
 {
-    [_target setEntriesSelection:std::vector<bool>(_target.data.SortedEntriesCount(), true)];
+    if( ApplySelectAll(_target) != PaneSelectionActionResult::Available )
+        NSBeep();
 }
 
 void DeselectAll::Perform(PanelController *_target, id /*_sender*/) const
@@ -70,8 +72,63 @@ void DeselectAll::Perform(PanelController *_target, id /*_sender*/) const
 
 void InvertSelection::Perform(PanelController *_target, id /*_sender*/) const
 {
-    auto selector = data::SelectionBuilder(_target.data);
-    [_target setEntriesSelection:selector.InvertSelection()];
+    if( ApplyInvertSelection(_target) != PaneSelectionActionResult::Available )
+        NSBeep();
+}
+
+PaneSelectionActionResult EvaluatePaneSelectionAction(PanelController *_target)
+{
+    if( !_target )
+        return PaneSelectionActionResult::PaneUnavailable;
+    if( _target.isDoingBackgroundLoading )
+        return PaneSelectionActionResult::Loading;
+    if( !_target.data.ListingPtr() )
+        return PaneSelectionActionResult::ListingUnavailable;
+    const auto &visible = _target.data.EntriesBySoftFiltering();
+    const bool has_selectable = std::ranges::any_of(visible, [_target](const unsigned _position) {
+        const VFSListingItem item = _target.data.EntryAtSortPosition(static_cast<int>(_position));
+        return item && !item.IsDotDot();
+    });
+    return has_selectable ? PaneSelectionActionResult::Available : PaneSelectionActionResult::Empty;
+}
+
+static std::vector<bool> VisibleSelection(PanelController *_target, const bool _invert)
+{
+    std::vector<bool> selection(static_cast<size_t>(_target.data.SortedEntriesCount()), false);
+    for( const unsigned position : _target.data.EntriesBySoftFiltering() ) {
+        const VFSListingItem item = _target.data.EntryAtSortPosition(static_cast<int>(position));
+        if( item && !item.IsDotDot() ) {
+            selection[position] =
+                _invert ? !_target.data.VolatileDataAtSortPosition(static_cast<int>(position)).is_selected() : true;
+        }
+    }
+    return selection;
+}
+
+PaneSelectionActionResult ApplySelectAll(PanelController *_target)
+{
+    const PaneSelectionActionResult availability = EvaluatePaneSelectionAction(_target);
+    if( availability != PaneSelectionActionResult::Available )
+        return availability;
+    const VFSListingPtr listing = _target.data.ListingPtr();
+    std::vector<bool> selection = VisibleSelection(_target, false);
+    if( _target.isDoingBackgroundLoading || _target.data.ListingPtr() != listing )
+        return PaneSelectionActionResult::Loading;
+    [_target setEntriesSelection:selection];
+    return PaneSelectionActionResult::Available;
+}
+
+PaneSelectionActionResult ApplyInvertSelection(PanelController *_target)
+{
+    const PaneSelectionActionResult availability = EvaluatePaneSelectionAction(_target);
+    if( availability != PaneSelectionActionResult::Available )
+        return availability;
+    const VFSListingPtr listing = _target.data.ListingPtr();
+    std::vector<bool> selection = VisibleSelection(_target, true);
+    if( _target.isDoingBackgroundLoading || _target.data.ListingPtr() != listing )
+        return PaneSelectionActionResult::Loading;
+    [_target setEntriesSelection:selection];
+    return PaneSelectionActionResult::Available;
 }
 
 SelectAllByExtension::SelectAllByExtension(bool _result_selection) : m_ResultSelection(_result_selection)

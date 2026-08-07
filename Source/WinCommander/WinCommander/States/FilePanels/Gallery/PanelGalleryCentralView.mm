@@ -89,8 +89,10 @@ static const std::chrono::nanoseconds g_DebounceDelay = std::chrono::millisecond
 - (void)showVFSItem:(VFSListingItem)_item
 {
     dispatch_assert_main_queue();
-    if( !_item )
-        return; // ignore bogus requests. TODO: reset the view here?
+    if( !_item ) {
+        [self clearPreview];
+        return;
+    }
 
     if( m_CurrentPath == _item.Path() && m_CurrentHost.lock() == _item.Host() )
         return; // nothing to do - redundant request
@@ -125,6 +127,19 @@ static const std::chrono::nanoseconds g_DebounceDelay = std::chrono::millisecond
             [self previewVFSIcon:_item ticket:m_CurrentTicket];
         }
     }
+}
+
+- (void)clearPreview
+{
+    dispatch_assert_main_queue();
+    ++m_CurrentTicket;
+    m_CurrentPath.clear();
+    m_CurrentHost.reset();
+    m_CurrentPreviewIsHazardous = false;
+    m_QLView.previewItem = nil;
+    m_QLView.hidden = false;
+    m_FallbackImageView.image = nil;
+    m_FallbackImageView.hidden = true;
 }
 
 - (void)previewNativeQL:(const VFSListingItem &)_item
@@ -343,13 +358,19 @@ static const std::chrono::nanoseconds g_DebounceDelay = std::chrono::millisecond
 - (void)viewDidMoveToSuperview
 {
     [super viewDidMoveToSuperview];
-    ++m_CurrentTicket; // Better safe than sorry
+    if( self.superview == nil )
+        [self clearPreview];
+    else
+        ++m_CurrentTicket;
 }
 
 - (void)viewDidMoveToWindow
 {
     [super viewDidMoveToWindow];
-    ++m_CurrentTicket; // Better safe than sorry
+    if( self.window == nil )
+        [self clearPreview];
+    else
+        ++m_CurrentTicket;
 }
 
 - (void)setBackgroundColor:(NSColor *)_background_color
@@ -363,6 +384,21 @@ static const std::chrono::nanoseconds g_DebounceDelay = std::chrono::millisecond
 - (void)updateLayer
 {
     self.layer.backgroundColor = m_BackgroundColor.CGColor;
+}
+
+- (uint64_t)previewTicketForTesting
+{
+    return m_CurrentTicket;
+}
+
+- (BOOL)hasPublishedPreviewForTesting
+{
+    return m_QLView.previewItem != nil || m_FallbackImageView.image != nil;
+}
+
+- (NSString *)currentPreviewPathForTesting
+{
+    return [NSString stringWithUTF8String:m_CurrentPath.c_str()];
 }
 
 @end

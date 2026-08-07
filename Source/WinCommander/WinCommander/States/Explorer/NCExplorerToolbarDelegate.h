@@ -21,10 +21,14 @@ struct PaneSnapshot;
 
 - (instancetype)initWithPanelController:(PanelController *)_panel;
 - (instancetype)initWithPanelController:(PanelController *)_panel
-                       actionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher;
+                      actionsDispatcher:(NCPanelControllerActionsDispatcher *)_dispatcher;
 
 @property(nonatomic, readonly) NSToolbar *toolbar;
 @property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
+@property(nonatomic, readonly) PanelController *panelController;
+
+/** Atomically retargets navigation controls and the breadcrumb to a different Explorer pane. */
+- (void)rebindToPanelController:(PanelController *)_panel;
 
 #ifdef __cplusplus
 /** Forwards immutable pane state to the breadcrumb renderer. Must be called on the main queue. */

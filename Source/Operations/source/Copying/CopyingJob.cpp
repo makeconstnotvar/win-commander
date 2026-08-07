@@ -211,6 +211,7 @@ CopyingJob::StepResult CopyingJob::ProcessItemNo(int _item_number)
     auto source_size = m_SourceItems.ItemSize(_item_number);
     auto destination_path = ComposeDestinationNameForItem(_item_number);
     auto source_path = m_SourceItems.ComposeFullPath(_item_number);
+    PublishCurrentItemPath(source_path);
     const auto nonexistent_dst_req_handler = RequestNonexistentDst([&] {
         auto new_path =
             copying::FindNonExistingItemPath(destination_path, *m_DestinationHost, [&] { return IsStopped(); });

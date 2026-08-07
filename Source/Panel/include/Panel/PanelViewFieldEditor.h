@@ -8,6 +8,7 @@
 
 - (instancetype)initWithItem:(VFSListingItem)_item;
 - (void)markNextFilenamePart;
+- (void)setValidationMessage:(NSString *)_message;
 
 // Notifies the field editor that it will be temporarily removed from the view hierarchy upon data updating.
 // Thus the field editor should not trigger .onEditingFinished upon removal fround the hierarchy.
@@ -19,7 +20,7 @@
 
 @property(nonatomic, readonly) NSTextView *editor;
 @property(nonatomic, readonly) VFSListingItem originalItem;
-@property(nonatomic) void (^onTextEntered)(const std::string &_new_filename);
+@property(nonatomic) bool (^onTextEntered)(const std::string &_new_filename);
 @property(nonatomic) void (^onEditingFinished)();
 
 @end

@@ -6,8 +6,10 @@
 #include <Operations/Copying.h>
 #include <Base/dispatch_cpp.h>
 #include "PanelController.h"
+#include <Panel/PanelData.h>
 #include "MainWindowFilePanelState.h"
 #include "../MainWindowController.h"
+#include <algorithm>
 
 static const auto g_PrivateDragUTI = @"com.wincommander.filespanelsdraganddrop";
 
@@ -58,6 +60,8 @@ static const auto g_PasteboardFilenamesUTI = static_cast<NSString *>(
     bool m_AreAllHostsWriteable;
     bool m_AreAllHostsNative;
     VFSHostPtr m_NativeVFS;
+    VFSListingPtr m_SourceListing;
+    unsigned long m_SourceGeneration;
 }
 
 @synthesize areAllHostsWriteable = m_AreAllHostsWriteable;
@@ -65,6 +69,8 @@ static const auto g_PasteboardFilenamesUTI = static_cast<NSString *>(
 @synthesize commonHost = m_CommonHost;
 @synthesize items = m_Items;
 @synthesize sourceController = m_SourceController;
+@synthesize sourceListing = m_SourceListing;
+@synthesize sourceGeneration = m_SourceGeneration;
 
 + (NSString *)privateDragUTI
 {
@@ -92,8 +98,25 @@ static const auto g_PasteboardFilenamesUTI = static_cast<NSString *>(
         m_AreAllHostsWriteable = false;
         m_AreAllHostsNative = false;
         m_NativeVFS = _native_vfs.SharedPtr();
+        m_SourceListing = _controller && _controller.data.IsLoaded() ? _controller.data.ListingPtr()
+                                                                     : VFSListingPtr{};
+        m_SourceGeneration = _controller ? _controller.dataGeneration : 0;
     }
     return self;
+}
+
+- (bool)matchesCurrentSourceContext
+{
+    PanelController *const controller = m_SourceController;
+    if( !controller || !m_SourceListing || m_Items.empty() || controller.dataGeneration != m_SourceGeneration ||
+        !controller.data.IsLoaded() || controller.data.ListingPtr() != m_SourceListing ) {
+        return false;
+    }
+    return std::ranges::all_of(m_Items, [&](PanelDraggingItem *const _item) {
+        return _item.item && _item.item.Listing().get() == m_SourceListing.get() &&
+               _item.item.Index() < m_SourceListing->Count() &&
+               m_SourceListing->Item(_item.item.Index()) == _item.item;
+    });
 }
 
 - (void)addItem:(PanelDraggingItem *)_item
@@ -275,6 +298,7 @@ static NSURL *ExtractPromiseDropLocation(NSPasteboard *_pasteboard)
 
     m_Items.clear();
     m_CommonHost = nullptr;
+    m_SourceListing.reset();
 }
 
 static void AddPanelRefreshEpilogIfNeeded(PanelController *_target, nc::ops::Operation &_operation)

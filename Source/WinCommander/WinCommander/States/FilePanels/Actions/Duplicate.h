@@ -10,6 +10,27 @@ class Config;
 
 namespace nc::panel::actions {
 
+enum class DuplicateSubmissionResult {
+    Submitted,
+    PaneUnavailable,
+    WindowUnavailable,
+    Loading,
+    SelectionUnavailable,
+    ParentEntryUnsupported,
+    SourceUnreadable,
+    DestinationUnavailable,
+    DestinationReadOnly,
+    ProviderUnsupported,
+    NameUnavailable,
+    StaleContext
+};
+
+[[nodiscard]] DuplicateSubmissionResult
+EvaluateDuplicateSubmission(std::span<const VFSListingItem> _items, PanelController *_target);
+[[nodiscard]] DuplicateSubmissionResult SubmitDuplicateItems(std::span<const VFSListingItem> _items,
+                                                             PanelController *_target,
+                                                             nc::config::Config &_config);
+
 struct Duplicate final : PanelAction {
     Duplicate(nc::config::Config &_config);
     [[nodiscard]] bool Predicate(PanelController *_target) const override;

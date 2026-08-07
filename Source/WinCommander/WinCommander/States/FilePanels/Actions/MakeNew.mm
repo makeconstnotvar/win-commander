@@ -1,6 +1,5 @@
 // Copyright (C) 2017-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "MakeNew.h"
-#include <WinCommander/Core/Alert.h>
 #include "../PanelController.h"
 #include "../MainWindowFilePanelState.h"
 #include "../PanelAux.h"
@@ -9,9 +8,15 @@
 #include "../../MainWindowController.h"
 #include <Operations/DirectoryCreation.h>
 #include <Operations/DirectoryCreationDialog.h>
+#include <Operations/EmptyFileCreation.h>
 #include <Operations/Copying.h>
+#include <VFS/Native.h>
+#include <VFS/NetSFTP.h>
+#include <VFS/ProviderCapabilities.h>
 #include <Utility/StringExtras.h>
 #include <Base/dispatch_cpp.h>
+#include <algorithm>
+#include <expected>
 
 namespace nc::panel::actions {
 
@@ -90,6 +95,66 @@ static std::string FindSuitableName(const std::string &_initial, const VFSListin
     return name;
 }
 
+static bool IsValidQuickName(const std::string_view _name)
+{
+    if( _name.empty() || _name.size() > 255 || _name == "." || _name == ".." )
+        return false;
+    return std::ranges::none_of(_name, [](const unsigned char c) { return c == '/' || c == '\0' || c < 0x20; });
+}
+
+struct QuickNewFilePreparation final {
+    NCMainWindowController *__strong window_controller;
+    VFSHostPtr vfs;
+    VFSListingPtr listing;
+    std::filesystem::path directory;
+    std::string name;
+};
+
+[[nodiscard]] static std::expected<QuickNewFilePreparation, QuickNewFileSubmissionResult>
+PrepareQuickNewFile(PanelController *_target)
+{
+    if( !_target )
+        return std::unexpected(QuickNewFileSubmissionResult::PaneUnavailable);
+    NCMainWindowController *const window_controller = _target.mainWindowController;
+    if( !window_controller )
+        return std::unexpected(QuickNewFileSubmissionResult::WindowUnavailable);
+    if( _target.isDoingBackgroundLoading )
+        return std::unexpected(QuickNewFileSubmissionResult::Loading);
+    if( !_target.isUniform || !_target.vfs || !_target.data.ListingPtr() )
+        return std::unexpected(QuickNewFileSubmissionResult::DestinationUnavailable);
+
+    const std::filesystem::path directory = _target.currentDirectoryPath;
+    const VFSHostPtr vfs = _target.vfs;
+    const VFSListingPtr listing = _target.data.ListingPtr();
+    try {
+        if( !vfs->IsWritableAtPath(directory.native()) )
+            return std::unexpected(QuickNewFileSubmissionResult::DestinationReadOnly);
+        if( !vfs::ProviderCapabilitiesResolver::Resolve(*vfs, directory.native()).can_create_file ||
+            !SupportsExclusiveQuickNewFile(*vfs) ) {
+            return std::unexpected(QuickNewFileSubmissionResult::ProviderUnsupported);
+        }
+        std::string name =
+            FindSuitableName(g_InitialFileName, *listing, vfs->IsCaseSensitiveAtPath(directory.native()));
+        if( !IsValidQuickName(name) )
+            return std::unexpected(QuickNewFileSubmissionResult::NameUnavailable);
+        return QuickNewFilePreparation{
+            .window_controller = window_controller,
+            .vfs = vfs,
+            .listing = listing,
+            .directory = directory,
+            .name = std::move(name),
+        };
+    } catch( ... ) {
+        return std::unexpected(QuickNewFileSubmissionResult::DestinationUnavailable);
+    }
+}
+
+bool SupportsExclusiveQuickNewFile(const nc::vfs::Host &_host) noexcept
+{
+    const std::string_view tag = _host.Tag();
+    return tag == VFSNativeHost::UniqueTag || tag == vfs::SFTPHost::UniqueTag;
+}
+
 static void ScheduleRenaming(const std::string &_filename, PanelController *_panel)
 {
     __weak PanelController *weak_panel = _panel;
@@ -113,60 +178,118 @@ static void ScheduleFocus(const std::string &_filename, PanelController *_panel)
 
 bool MakeNewFile::Predicate(PanelController *_target) const
 {
-    return _target.isUniform && _target.vfs->IsWritable();
+    return EvaluateQuickNewFileSubmission(_target) == QuickNewFileSubmissionResult::Submitted;
 }
 
 void MakeNewFile::Perform(PanelController *_target, id /*_sender*/) const
 {
-    const std::filesystem::path dir = _target.currentDirectoryPath;
-    const VFSHostPtr vfs = _target.vfs;
-    const VFSListingPtr listing = _target.data.ListingPtr();
-    __weak PanelController *weak_panel = _target;
+    if( SubmitQuickNewFile(_target) != QuickNewFileSubmissionResult::Submitted )
+        NSBeep();
+}
 
-    dispatch_to_background([=] {
-        const bool case_sensitive = vfs->IsCaseSensitiveAtPath(dir.c_str());
-        auto name = FindSuitableName(g_InitialFileName, *listing, case_sensitive);
-        if( name.empty() )
-            return;
+QuickNewFileSubmissionResult EvaluateQuickNewFileSubmission(PanelController *_target)
+{
+    const auto prepared = PrepareQuickNewFile(_target);
+    return prepared ? QuickNewFileSubmissionResult::Submitted : prepared.error();
+}
 
-        const std::expected<void, Error> ret = vfs::easy::VFSEasyCreateEmptyFile((dir / name).c_str(), vfs);
-        if( !ret ) {
-            dispatch_to_main_queue([=] {
-                Alert *const alert = [[Alert alloc] init];
-                alert.messageText = NSLocalizedString(@"Failed to create an empty file:",
-                                                      "Showing error when trying to create an empty file");
-                alert.informativeText = [NSString stringWithUTF8StdString:ret.error().LocalizedFailureReason()];
-                [alert addButtonWithTitle:NSLocalizedString(@"OK", "")];
-                [alert runModal];
-            });
-            return;
+QuickNewFileSubmissionResult SubmitQuickNewFile(PanelController *_target)
+{
+    auto prepared = PrepareQuickNewFile(_target);
+    if( !prepared )
+        return prepared.error();
+
+    NCMainWindowController *const window_controller = prepared->window_controller;
+    const std::filesystem::path dir = std::move(prepared->directory);
+    const VFSHostPtr vfs = std::move(prepared->vfs);
+    const VFSListingPtr listing = std::move(prepared->listing);
+    const std::string name = std::move(prepared->name);
+
+    try {
+        if( _target.mainWindowController != window_controller || _target.isDoingBackgroundLoading ||
+            !_target.isUniform || _target.vfs != vfs || _target.currentDirectoryPath != dir.native() ||
+            _target.data.ListingPtr() != listing || !vfs->IsWritableAtPath(dir.native()) ||
+            !vfs::ProviderCapabilitiesResolver::Resolve(*vfs, dir.native()).can_create_file ||
+            !SupportsExclusiveQuickNewFile(*vfs) ) {
+            return QuickNewFileSubmissionResult::StaleDestination;
         }
+    } catch( ... ) {
+        return QuickNewFileSubmissionResult::StaleDestination;
+    }
 
+    __weak PanelController *weak_panel = _target;
+    const auto operation = std::make_shared<nc::ops::EmptyFileCreation>(name, dir.native(), *vfs);
+    operation->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [=] {
         dispatch_to_main_queue([=] {
-            if( PanelController *const panel = weak_panel ) {
+            PanelController *const panel = weak_panel;
+            if( panel && panel.vfs == vfs && panel.currentDirectoryPath == dir.native() ) {
                 [panel hintAboutFilesystemChange];
                 ScheduleRenaming(name, panel);
             }
         });
     });
+    [window_controller enqueueOperation:operation];
+    return QuickNewFileSubmissionResult::Submitted;
 }
 
 bool MakeNewFolder::Predicate(PanelController *_target) const
 {
-    return _target.isUniform && _target.vfs->IsWritable();
+    if( !_target || !_target.mainWindowController || _target.isDoingBackgroundLoading || !_target.isUniform ||
+        !_target.vfs || !_target.data.ListingPtr() ) {
+        return false;
+    }
+    const std::string path = _target.currentDirectoryPath;
+    return _target.vfs->IsWritableAtPath(path) &&
+           vfs::ProviderCapabilitiesResolver::Resolve(*_target.vfs, path).can_create_folder;
 }
 
 void MakeNewFolder::Perform(PanelController *_target, id /*_sender*/) const
 {
+    if( SubmitQuickNewFolder(_target) != QuickNewFolderSubmissionResult::Submitted )
+        NSBeep();
+}
+
+QuickNewFolderSubmissionResult SubmitQuickNewFolder(PanelController *_target)
+{
+    if( !_target )
+        return QuickNewFolderSubmissionResult::PaneUnavailable;
+    auto *const window_controller = _target.mainWindowController;
+    if( !window_controller )
+        return QuickNewFolderSubmissionResult::WindowUnavailable;
+    if( _target.isDoingBackgroundLoading )
+        return QuickNewFolderSubmissionResult::Loading;
+    if( !_target.isUniform || !_target.vfs || !_target.data.ListingPtr() )
+        return QuickNewFolderSubmissionResult::DestinationUnavailable;
+
     const std::filesystem::path dir = _target.currentDirectoryPath;
     const VFSHostPtr vfs = _target.vfs;
     const VFSListingPtr listing = _target.data.ListingPtr();
-    const bool case_sensitive = vfs->IsCaseSensitiveAtPath(dir.c_str());
+    bool case_sensitive = true;
+    try {
+        if( !vfs->IsWritableAtPath(dir.native()) )
+            return QuickNewFolderSubmissionResult::DestinationReadOnly;
+        if( !vfs::ProviderCapabilitiesResolver::Resolve(*vfs, dir.native()).can_create_folder )
+            return QuickNewFolderSubmissionResult::ProviderUnsupported;
+        case_sensitive = vfs->IsCaseSensitiveAtPath(dir.native());
+    } catch( ... ) {
+        return QuickNewFolderSubmissionResult::DestinationUnavailable;
+    }
     __weak PanelController *weak_panel = _target;
 
     const auto name = FindSuitableName(g_InitialFolderName, *listing, case_sensitive);
-    if( name.empty() )
-        return;
+    if( !IsValidQuickName(name) )
+        return QuickNewFolderSubmissionResult::NameUnavailable;
+
+    try {
+        if( _target.mainWindowController != window_controller || _target.isDoingBackgroundLoading ||
+            !_target.isUniform || _target.vfs != vfs || _target.currentDirectoryPath != dir.native() ||
+            _target.data.ListingPtr() != listing || !vfs->IsWritableAtPath(dir.native()) ||
+            !vfs::ProviderCapabilitiesResolver::Resolve(*vfs, dir.native()).can_create_folder ) {
+            return QuickNewFolderSubmissionResult::StaleDestination;
+        }
+    } catch( ... ) {
+        return QuickNewFolderSubmissionResult::StaleDestination;
+    }
 
     const auto op = std::make_shared<nc::ops::DirectoryCreation>(name, dir.native(), *vfs);
     op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [=] {
@@ -178,7 +301,8 @@ void MakeNewFolder::Perform(PanelController *_target, id /*_sender*/) const
         });
     });
 
-    [_target.mainWindowController enqueueOperation:op];
+    [window_controller enqueueOperation:op];
+    return QuickNewFolderSubmissionResult::Submitted;
 }
 
 bool MakeNewFolderWithSelection::Predicate(PanelController *_target) const

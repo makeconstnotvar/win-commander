@@ -9,14 +9,19 @@
 #include <Utility/PathManip.h>
 #include <Operations/Compression.h>
 #include <Operations/CompressDialog.h>
+#include <VFS/ProviderCapabilities.h>
 #include <Base/dispatch_cpp.h>
 #include <Config/Config.h>
 #include "Helpers.h"
+#include <tuple>
+#include <algorithm>
+#include <unordered_set>
 
 namespace nc::panel::actions {
 
 static PanelController *FindVisibleOppositeController(PanelController *_source);
 static void FocusResult(PanelController *_target, const std::shared_ptr<nc::ops::Compression> &_op);
+static void PresentStaleArchiveAlert(PanelController *_target);
 
 static const auto g_DeselectConfigFlag = "filePanel.general.deselectItemsAfterFileOperations";
 
@@ -38,52 +43,133 @@ bool CompressBase::ShouldAutomaticallyDeselect() const
     return m_Config.GetBool(g_DeselectConfigFlag);
 }
 
+ArchiveCreateSubmissionResult EvaluateArchiveCreateSubmission(const std::span<const VFSListingItem> _items,
+                                                              PanelController *_target)
+{
+    if( !_target )
+        return ArchiveCreateSubmissionResult::PaneUnavailable;
+    if( !_target.mainWindowController )
+        return ArchiveCreateSubmissionResult::WindowUnavailable;
+    if( _target.isDoingBackgroundLoading )
+        return ArchiveCreateSubmissionResult::Loading;
+    if( _items.empty() )
+        return ArchiveCreateSubmissionResult::SelectionUnavailable;
+    if( std::ranges::any_of(_items, [](const VFSListingItem &_item) { return _item.IsDotDot(); }) )
+        return ArchiveCreateSubmissionResult::ParentEntryUnsupported;
+
+    try {
+        const VFSListingPtr listing = _target.data.ListingPtr();
+        if( !_target.isUniform || !_target.vfs || !listing )
+            return ArchiveCreateSubmissionResult::DestinationUnavailable;
+        if( std::ranges::any_of(_items, [&](const VFSListingItem &_item) {
+                return !_item.Host() || _item.Listing().get() != listing.get();
+            }) ) {
+            return ArchiveCreateSubmissionResult::StaleContext;
+        }
+
+        std::unordered_set<std::string> top_level_names;
+        for( const VFSListingItem &item : _items ) {
+            const vfs::ProviderCapabilities source =
+                vfs::ProviderCapabilitiesResolver::Resolve(*item.Host(), item.Directory());
+            if( !source.can_read || (!item.IsReg() && !item.IsDir() && !item.IsSymlink()) )
+                return ArchiveCreateSubmissionResult::SourceUnreadable;
+            NSString *const filename = item.FilenameNS();
+            NSString *const normalized = filename.precomposedStringWithCanonicalMapping.lowercaseString;
+            const char *const normalized_utf8 = normalized.UTF8String;
+            if( normalized.length == 0 || !normalized_utf8 || !top_level_names.emplace(normalized_utf8).second )
+                return ArchiveCreateSubmissionResult::SourceNameCollision;
+        }
+
+        const std::string destination_path = _target.currentDirectoryPath;
+        if( !_target.vfs->IsWritableAtPath(destination_path) )
+            return ArchiveCreateSubmissionResult::DestinationReadOnly;
+        const vfs::ProviderCapabilities destination =
+            vfs::ProviderCapabilitiesResolver::Resolve(*_target.vfs, destination_path);
+        if( !destination.can_create_file )
+            return ArchiveCreateSubmissionResult::ProviderUnsupported;
+    } catch( ... ) {
+        return ArchiveCreateSubmissionResult::DestinationUnavailable;
+    }
+    return ArchiveCreateSubmissionResult::Presented;
+}
+
+ArchiveCreateSubmissionResult PresentArchiveCreate(const std::span<const VFSListingItem> _items,
+                                                   PanelController *_target,
+                                                   nc::config::Config &_config)
+{
+    const ArchiveCreateSubmissionResult live = EvaluateArchiveCreateSubmission(_items, _target);
+    if( live != ArchiveCreateSubmissionResult::Presented )
+        return live;
+
+    const std::vector<VFSListingItem> entries{_items.begin(), _items.end()};
+    const VFSListingPtr source_listing = _target.data.ListingPtr();
+    const unsigned long source_generation = _target.dataGeneration;
+    const VFSHostPtr destination_vfs = _target.vfs;
+    const std::string initial_destination = _target.currentDirectoryPath;
+    NCMainWindowController *const window_controller = _target.mainWindowController;
+    auto dialog = [[NCOpsCompressDialog alloc] initWithItems:entries
+                                              destinationVFS:destination_vfs
+                                          initialDestination:initial_destination];
+    __weak PanelController *weak_target = _target;
+    __weak NCMainWindowController *weak_window_controller = window_controller;
+    auto *const config = &_config;
+    const auto handler = ^(NSModalResponse returnCode) {
+      if( returnCode != NSModalResponseOK )
+          return;
+      PanelController *const target = weak_target;
+      NCMainWindowController *const current_window_controller = weak_window_controller;
+      if( !target || !current_window_controller || target.mainWindowController != current_window_controller ||
+          target.dataGeneration != source_generation || target.data.ListingPtr() != source_listing ||
+          target.vfs != destination_vfs ) {
+          PresentStaleArchiveAlert(target);
+          return;
+      }
+
+      const ArchiveCreateSubmissionResult current = EvaluateArchiveCreateSubmission(entries, target);
+      if( current != ArchiveCreateSubmissionResult::Presented ) {
+          PresentStaleArchiveAlert(target);
+          return;
+      }
+      try {
+          if( dialog.destination.empty() || !destination_vfs->IsWritableAtPath(dialog.destination) ||
+              !vfs::ProviderCapabilitiesResolver::Resolve(*destination_vfs, dialog.destination).can_create_file ) {
+              PresentStaleArchiveAlert(target);
+              return;
+          }
+      } catch( ... ) {
+          PresentStaleArchiveAlert(target);
+          return;
+      }
+
+      auto op = std::make_shared<nc::ops::Compression>(entries, dialog.destination, destination_vfs, dialog.password);
+      const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
+      __weak PanelController *weak_focus_target = target;
+      op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_focus_target, weak_op] {
+          FocusResult(static_cast<PanelController *>(weak_focus_target), weak_op.lock());
+      });
+      CompressBase{*config}.AddDeselectorIfNeeded(*op, target);
+      [current_window_controller enqueueOperation:op];
+    };
+    [window_controller beginSheet:dialog.window completionHandler:handler];
+    return ArchiveCreateSubmissionResult::Presented;
+}
+
 CompressHere::CompressHere(nc::config::Config &_config) : CompressBase(_config)
 {
 }
 
 bool CompressHere::Predicate(PanelController *_target) const
 {
-    if( !_target.isUniform )
+    if( !_target )
         return false;
-
-    if( !_target.vfs->IsWritable() )
-        return false;
-
-    const auto i = _target.view.item;
-    if( !i )
-        return false;
-
-    return !i.IsDotDot() || _target.data.Stats().selected_entries_amount > 0;
+    const auto entries = _target.selectedEntriesOrFocusedEntry;
+    return EvaluateArchiveCreateSubmission(entries, _target) == ArchiveCreateSubmissionResult::Presented;
 }
 
 void CompressHere::Perform(PanelController *_target, id /*_sender*/) const
 {
-    auto entries = _target.selectedEntriesOrFocusedEntry;
-    if( entries.empty() )
-        return;
-
-    auto dialog = [[NCOpsCompressDialog alloc] initWithItems:entries
-                                              destinationVFS:_target.vfs
-                                          initialDestination:_target.currentDirectoryPath];
-
-    const auto handler = ^(NSModalResponse returnCode) {
-      if( returnCode != NSModalResponseOK )
-          return;
-
-      auto op = std::make_shared<nc::ops::Compression>(entries, dialog.destination, _target.vfs, dialog.password);
-      const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
-      __weak PanelController *weak_target = _target;
-      op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_target, weak_op] {
-          FocusResult(static_cast<PanelController *>(weak_target), weak_op.lock());
-      });
-
-      AddDeselectorIfNeeded(*op, _target);
-
-      [_target.mainWindowController enqueueOperation:op];
-    };
-
-    [_target.mainWindowController beginSheet:dialog.window completionHandler:handler];
+    const auto entries = _target.selectedEntriesOrFocusedEntry;
+    std::ignore = PresentArchiveCreate(entries, _target, Config());
 }
 
 CompressToOpposite::CompressToOpposite(nc::config::Config &_config) : CompressBase(_config)
@@ -146,7 +232,7 @@ context::CompressHere::CompressHere(nc::config::Config &_config, const std::vect
 
 bool context::CompressHere::Predicate(PanelController *_target) const
 {
-    return _target.isUniform && _target.vfs->IsWritable();
+    return EvaluateArchiveCreateSubmission(m_Items, _target) == ArchiveCreateSubmissionResult::Presented;
 }
 
 bool context::CompressHere::ValidateMenuItem(PanelController *_target, NSMenuItem *_item) const
@@ -167,18 +253,7 @@ bool context::CompressHere::ValidateMenuItem(PanelController *_target, NSMenuIte
 
 void context::CompressHere::Perform(PanelController *_target, id /*_sender*/) const
 {
-    auto entries = m_Items;
-    auto op = std::make_shared<nc::ops::Compression>(std::move(entries), _target.currentDirectoryPath, _target.vfs);
-
-    const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
-    __weak PanelController *weak_target = _target;
-    op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_target, weak_op] {
-        FocusResult(static_cast<PanelController *>(weak_target), weak_op.lock());
-    });
-
-    AddDeselectorIfNeeded(*op, _target);
-
-    [_target.mainWindowController enqueueOperation:op];
+    std::ignore = PresentArchiveCreate(m_Items, _target, Config());
 }
 
 context::CompressToOpposite::CompressToOpposite(nc::config::Config &_config, const std::vector<VFSListingItem> &_items)
@@ -262,6 +337,20 @@ static void FocusResult(PanelController *_target, const std::shared_ptr<nc::ops:
     }
     else
         dispatch_to_main_queue([_target, _op] { FocusResult(_target, _op); });
+}
+
+static void PresentStaleArchiveAlert(PanelController *_target)
+{
+    if( !_target || !_target.mainWindowController ) {
+        NSBeep();
+        return;
+    }
+    NSAlert *const alert = [NSAlert new];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = NSLocalizedString(@"commands.file.mutation.disabled.stale",
+                                          "Stale archive creation message");
+    [alert addButtonWithTitle:NSLocalizedString(@"OK", "Alert confirmation button")];
+    [alert beginSheetModalForWindow:_target.mainWindowController.window completionHandler:nil];
 }
 
 } // namespace nc::panel::actions

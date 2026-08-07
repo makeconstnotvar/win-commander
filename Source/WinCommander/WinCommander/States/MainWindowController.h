@@ -10,6 +10,7 @@
 @class NCTermShellState;
 @class NCMainWindow;
 @class NCExplorerState;
+@class PanelController;
 
 namespace nc::ops {
 class Pool;
@@ -35,14 +36,20 @@ class Operation;
                                      fileTitle:(const std::string &)_file_title;
 
 - (bool)restoreDefaultWindowStateFromConfig;
-+ (bool)restoreDefaultWindowStateFromConfig:(MainWindowFilePanelState *)_state;
 - (void)restoreDefaultWindowStateFromLastOpenedWindow;
 + (bool)canRestoreDefaultWindowStateFromLastOpenedWindow;
+
+// Installs the single-pane Explorer state over the permanent Commander base. The operation is
+// idempotent and is accepted only while the base state is visible.
+- (BOOL)ensureExplorerMode;
 
 // Access to states
 @property(nonatomic, readwrite) MainWindowFilePanelState *filePanelsState; // one and only one per window
 @property(nonatomic, readonly) NCTermShellState *terminalState;            // zero or one per window
 @property(nonatomic, readonly) id<NCMainWindowState> topmostState;
+// The pane presented by the currently visible file-management state. Terminal/viewer states do
+// not expose a hidden backing pane through this boundary.
+@property(nonatomic, readonly) PanelController *visibleActivePanelController;
 @property(nonatomic, readonly) nc::ops::Pool &operationsPool;
 
 - (void)setOperationsPool:(nc::ops::Pool &)_pool;

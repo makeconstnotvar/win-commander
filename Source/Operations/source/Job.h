@@ -6,6 +6,8 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <thread>
 #include <Base/spinlock.h>
 #include "Statistics.h"
@@ -44,6 +46,9 @@ public:
     class Statistics &Statistics();
     const class Statistics &Statistics() const;
 
+    /** Returns an owning snapshot suitable for polling from another thread. */
+    std::optional<std::string> CurrentItemPath() const;
+
 protected:
     Job();
     /** Production launches Execute() on one detached worker; tests may fail this boundary deterministically. */
@@ -61,6 +66,7 @@ protected:
     void FinishExecution() noexcept;
     void BlockIfPaused();
     void TellItemReport(ItemStateReport _report);
+    void PublishCurrentItemPath(std::string _path);
 
 private:
     void NotifyResumed() noexcept;
@@ -84,6 +90,9 @@ private:
     std::function<void()> m_OnResume;
     ItemStateReportCallback m_OnItemStateReport;
     spinlock m_CallbackLock;
+
+    mutable std::mutex m_CurrentItemPathMutex;
+    std::optional<std::string> m_CurrentItemPath;
 
     class Statistics m_Stats;
 };

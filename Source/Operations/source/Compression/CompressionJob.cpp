@@ -90,11 +90,17 @@ void CompressionJob::Perform()
 
 bool CompressionJob::BuildArchive()
 {
-    const auto flags =
-        VFSFlags::OF_Write | VFSFlags::OF_Create | VFSFlags::OF_IRUsr | VFSFlags::OF_IWUsr | VFSFlags::OF_IRGrp;
+    // The name probe in FindSuitableFilename is advisory. Publication must still be exclusive so
+    // that a destination appearing between the probe and Open cannot be overwritten and later
+    // unlinked by the stopped job.
+    const auto flags = VFSFlags::OF_Write | VFSFlags::OF_Create | VFSFlags::OF_NoExist |
+                       VFSFlags::OF_IRUsr | VFSFlags::OF_IWUsr | VFSFlags::OF_IRGrp;
     const std::expected<std::shared_ptr<VFSFile>, Error> exp_file = m_DstVFS->CreateFile(m_TargetArchivePath);
-    if( !exp_file )
-        return false; // TODO: use error from exp_file
+    if( !exp_file ) {
+        m_TargetWriteError(exp_file.error(), m_TargetArchivePath, *m_DstVFS);
+        Stop();
+        return false;
+    }
 
     m_TargetFile = *exp_file;
     const std::expected<void, Error> open_rc = m_TargetFile->Open(flags);
@@ -381,16 +387,18 @@ CompressionJob::ProcessRegularItem(int _index, const std::string &_relative_path
     return StepResult::Done;
 }
 
-std::string CompressionJob::FindSuitableFilename(const std::string &_proposed_arcname) const
+std::string CompressionJob::FindSuitableFilename(const std::string &_proposed_arcname)
 {
-    std::string fn = fmt::format("{}{}.zip", m_DstRoot, _proposed_arcname);
-    if( !m_DstVFS->Stat(fn, VFSFlags::F_NoFollow) )
-        return fn;
-
-    for( int i = 2; i < 100; ++i ) {
-        fn = fmt::format("{}{} {}.zip", m_DstRoot, _proposed_arcname, i);
-        if( !m_DstVFS->Stat(fn, VFSFlags::F_NoFollow) )
+    for( int i = 1; i < 100; ++i ) {
+        const std::string fn = i == 1 ? fmt::format("{}{}.zip", m_DstRoot, _proposed_arcname)
+                                     : fmt::format("{}{} {}.zip", m_DstRoot, _proposed_arcname, i);
+        const std::expected<VFSStat, Error> stat = m_DstVFS->Stat(fn, VFSFlags::F_NoFollow);
+        if( stat )
+            continue;
+        if( m_DstVFS->ClassifyError(stat.error()) == vfs::HostErrorKind::Missing )
             return fn;
+        m_TargetWriteError(stat.error(), fn, *m_DstVFS);
+        return {};
     }
     return {};
 }

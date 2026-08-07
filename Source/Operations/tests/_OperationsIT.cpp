@@ -4,4 +4,5 @@
 #include "Copying_IT.cpp"
 #include "Deletion_IT.cpp"
 #include "DirectoryCreations_IT.cpp"
+#include "EmptyFileCreation_IT.cpp"
 #include "Linkage_IT.cpp"

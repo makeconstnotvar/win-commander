@@ -102,30 +102,62 @@ TEST_CASE(PREFIX "stable command ids")
     using namespace nc::core::command_ids;
 
     CHECK(FileOpen == "file.open");
+    CHECK(FilePreview == "file.preview");
+    CHECK(FileGetInfo == "file.getInfo");
     CHECK(NavigationBack == "navigation.back");
     CHECK(NavigationForward == "navigation.forward");
     CHECK(NavigationUp == "navigation.up");
     CHECK(NavigationRefresh == "navigation.refresh");
     CHECK(FileCopy == "file.copy");
     CHECK(FileCut == "file.cut");
+    CHECK(FilePaste == "file.paste");
+    CHECK(FileNewFolder == "file.newFolder");
+    CHECK(FileNewFile == "file.newFile");
+    CHECK(FileDuplicate == "file.duplicate");
+    CHECK(FileCopyPath == "file.copyPath");
+    CHECK(FileCalculateSizes == "file.calculateSizes");
+    CHECK(FileBatchRename == "file.batchRename");
     CHECK(FileRename == "file.rename");
+    CHECK(FileTrash == "file.trash");
+    CHECK(FileDelete == "file.delete");
     CHECK(ViewToggleHiddenFiles == "view.toggleHiddenFiles");
+    CHECK(ViewTogglePreviewPane == "view.togglePreviewPane");
+    CHECK(PaneSelectAll == "pane.selectAll");
+    CHECK(PaneInvertSelection == "pane.invertSelection");
     CHECK(OperationCancel == "operation.cancel");
     CHECK(OperationCenterOpen == "operationCenter.open");
+    CHECK(ArchiveCreate == "archive.create");
+    CHECK(ArchiveExtract == "archive.extract");
 
     const std::set<std::string_view> ids{
         FileOpen,
+        FilePreview,
+        FileGetInfo,
         NavigationBack,
         NavigationForward,
         NavigationUp,
         NavigationRefresh,
         FileCopy,
         FileCut,
+        FilePaste,
+        FileNewFolder,
+        FileNewFile,
+        FileDuplicate,
+        FileCopyPath,
+        FileCalculateSizes,
+        FileBatchRename,
         FileRename,
+        FileTrash,
+        FileDelete,
         ViewToggleHiddenFiles,
+        ViewTogglePreviewPane,
+        PaneSelectAll,
+        PaneInvertSelection,
         OperationCancel,
-        OperationCenterOpen};
-    CHECK(ids.size() == 11);
+        OperationCenterOpen,
+        ArchiveCreate,
+        ArchiveExtract};
+    CHECK(ids.size() == 27);
 }
 
 TEST_CASE(PREFIX "operation.cancel context is a value-only projection of one immutable record")

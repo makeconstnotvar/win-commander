@@ -225,55 +225,60 @@ std::optional<PersistentLocation> PanelDataPersistency::JSONToLocation(const jso
     if( !_json.HasMember(g_StackHostsKey) )
         return std::move(result);
 
-    if( _json.HasMember(g_StackHostsKey) && _json[g_StackHostsKey].IsArray() ) {
-        auto &hosts = _json[g_StackHostsKey];
-        for( auto i = hosts.Begin(), e = hosts.End(); i != e; ++i ) {
-            auto &h = *i;
-            const auto has_string = [&h](const char *_key) { return h.HasMember(_key) && h[_key].IsString(); };
+    auto &hosts = _json[g_StackHostsKey];
+    if( !hosts.IsArray() )
+        return std::nullopt;
+    for( auto i = hosts.Begin(), e = hosts.End(); i != e; ++i ) {
+        auto &h = *i;
+        if( !h.IsObject() )
+            return std::nullopt;
+        const auto has_string = [&h](const char *_key) { return h.HasMember(_key) && h[_key].IsString(); };
 
-            if( !has_string(g_HostInfoTypeKey) )
+        if( !has_string(g_HostInfoTypeKey) )
+            return std::nullopt; // invalid data
+        const auto tag = std::string_view{h[g_HostInfoTypeKey].GetString()};
+
+        if( tag == VFSNativeHost::UniqueTag ) {
+            result.hosts.emplace_back(Native{});
+        }
+        else if( tag == vfs::PSHost::UniqueTag ) {
+            result.hosts.emplace_back(PSFS{});
+        }
+        else if( tag == vfs::XAttrHost::UniqueTag ) {
+            if( !has_string(g_HostInfoJunctionKey) )
                 return std::nullopt; // invalid data
-            const auto tag = std::string_view{h[g_HostInfoTypeKey].GetString()};
+            if( result.hosts.empty() )
+                return std::nullopt; // invalid data
 
-            if( tag == VFSNativeHost::UniqueTag ) {
-                result.hosts.emplace_back(Native{});
-            }
-            else if( tag == vfs::PSHost::UniqueTag ) {
-                result.hosts.emplace_back(PSFS{});
-            }
-            else if( tag == vfs::XAttrHost::UniqueTag ) {
-                if( !has_string(g_HostInfoJunctionKey) )
-                    return std::nullopt; // invalid data
-                if( result.hosts.empty() )
-                    return std::nullopt; // invalid data
+            result.hosts.emplace_back(XAttr{h[g_HostInfoJunctionKey].GetString()});
+        }
+        else if( tag == g_HostInfoTypeNetworkValue ) {
+            if( !has_string(g_HostInfoUuidKey) )
+                return std::nullopt; // invalid data
+            const auto uuid = base::UUID::FromString(h[g_HostInfoUuidKey].GetString());
+            if( !uuid )
+                return std::nullopt; // invalid data
 
-                result.hosts.emplace_back(XAttr{h[g_HostInfoJunctionKey].GetString()});
-            }
-            else if( tag == g_HostInfoTypeNetworkValue ) {
-                if( !has_string(g_HostInfoUuidKey) )
-                    return std::nullopt; // invalid data
-                const auto uuid = base::UUID::FromString(h[g_HostInfoUuidKey].GetString());
-                if( !uuid )
-                    return std::nullopt; // invalid data
+            result.hosts.emplace_back(Network{*uuid});
+        }
+        else if( tag == vfs::ArchiveHost::UniqueTag ) {
+            if( !has_string(g_HostInfoJunctionKey) )
+                return std::nullopt; // invalid data
+            if( result.hosts.empty() )
+                return std::nullopt; // invalid data
 
-                result.hosts.emplace_back(Network{*uuid});
-            }
-            else if( tag == vfs::ArchiveHost::UniqueTag ) {
-                if( !has_string(g_HostInfoJunctionKey) )
-                    return std::nullopt; // invalid data
-                if( result.hosts.empty() )
-                    return std::nullopt; // invalid data
+            result.hosts.emplace_back(ArcLA{h[g_HostInfoJunctionKey].GetString()});
+        }
+        else if( tag == vfs::ArchiveRawHost::UniqueTag ) {
+            if( !has_string(g_HostInfoJunctionKey) )
+                return std::nullopt; // invalid data
+            if( result.hosts.empty() )
+                return std::nullopt; // invalid data
 
-                result.hosts.emplace_back(ArcLA{h[g_HostInfoJunctionKey].GetString()});
-            }
-            else if( tag == vfs::ArchiveRawHost::UniqueTag ) {
-                if( !has_string(g_HostInfoJunctionKey) )
-                    return std::nullopt; // invalid data
-                if( result.hosts.empty() )
-                    return std::nullopt; // invalid data
-
-                result.hosts.emplace_back(ArcLARaw{h[g_HostInfoJunctionKey].GetString()});
-            }
+            result.hosts.emplace_back(ArcLARaw{h[g_HostInfoJunctionKey].GetString()});
+        }
+        else {
+            return std::nullopt;
         }
     }
 
@@ -514,7 +519,8 @@ VFSHostPtr PanelDataPersistency::FindFitting(const std::vector<std::weak_ptr<VFS
 
 // TODO: CancelChecker support???
 std::expected<VFSHostPtr, Error> PanelDataPersistency::CreateVFSFromLocation(const PersistentLocation &_state,
-                                                                             core::VFSInstanceManager &_inst_mgr)
+                                                                             core::VFSInstanceManager &_inst_mgr,
+                                                                             const VFSRestoreOptions _options)
 {
     if( _state.hosts.empty() ) {
         // short path for most common case - native vfs
@@ -548,7 +554,7 @@ std::expected<VFSHostPtr, Error> PanelDataPersistency::CreateVFSFromLocation(con
             }
             else if( auto network = std::any_cast<Network>(&h) ) {
                 if( auto conn = m_ConnectionsManager.ConnectionByUUID(network->connection) ) {
-                    if( auto host = m_ConnectionsManager.SpawnHostFromConnection(*conn) )
+                    if( auto host = m_ConnectionsManager.SpawnHostFromConnection(*conn, _options.allow_password_ui) )
                         vfs.emplace_back(host);
                     else
                         return std::unexpected(Error{Error::POSIX, EINVAL}); // failed to spawn connection

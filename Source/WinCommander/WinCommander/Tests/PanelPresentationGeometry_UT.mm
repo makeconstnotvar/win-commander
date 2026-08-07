@@ -2,9 +2,13 @@
 #include "Tests.h"
 #include <Base/dispatch_cpp.h>
 #include <Cocoa/Cocoa.h>
+#include <CUI/CommandPopover.h>
+#include <Config/ConfigImpl.h>
+#include <Config/NonPersistentOverwritesStorage.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <VFS/VFSListingInput.h>
 #include <Utility/ByteCountFormatter.h>
+#include <Panel/UI/PanelTabBarView.h>
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/FileCutCommand.h>
 #include <WinCommander/Core/Commands/OperationCancelCommand.h>
@@ -12,17 +16,22 @@
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
 #include <WinCommander/Core/Errors/FileManagerErrorAdapter.h>
 #include <WinCommander/Core/Pane/PaneSnapshot.h>
+#include <WinCommander/Core/Theming/ThemesManager.h>
 #include <WinCommander/States/Explorer/NCExplorerBreadcrumbControl.h>
 #include <WinCommander/States/Explorer/NCExplorerCommandBarView.h>
 #include <WinCommander/States/Explorer/NCExplorerPanePresentationModel.h>
 #include <WinCommander/States/Explorer/NCExplorerToolbarDelegate.h>
+#include <WinCommander/States/FilePanels/ContextMenu.h>
 #include <WinCommander/States/FilePanels/PanelController.h>
 #include <WinCommander/States/FilePanels/PanelControllerActionsDispatcher.h>
 #include <WinCommander/States/FilePanels/PanelViewFooter.h>
+#include <WinCommander/States/FilePanels/Brief/PanelBriefViewCollectionViewItem.h>
+#include <WinCommander/States/FilePanels/Gallery/PanelGalleryCollectionViewItem.h>
 #include <WinCommander/States/FilePanels/Gallery/Layout.h>
 #include <WinCommander/States/FilePanels/Helpers/Pasteboard.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewGeometry.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewProjection.h>
+#include <WinCommander/States/FilePanels/List/PanelListViewRowView.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -87,6 +96,18 @@ std::vector<VFSListingItem> NativeItems(const std::vector<std::string> &_filenam
     return items;
 }
 
+void EnsureExplorerItemTheme()
+{
+    static const auto *const storage =
+        new std::shared_ptr<nc::config::NonPersistentOverwritesStorage>(
+            std::make_shared<nc::config::NonPersistentOverwritesStorage>(""));
+    static auto *const config = new nc::config::ConfigImpl{
+        R"({"current":"accessibility-test","themes":{"themes_v1":[{"themeName":"accessibility-test"}]}})",
+        *storage};
+    static const auto *const themes = new nc::ThemesManager{*config, "current", "themes"};
+    static_cast<void>(themes);
+}
+
 VFSListingPtr ExplorerPresentationUniformListing(const VFSHostPtr &_host, std::string _directory)
 {
     nc::vfs::ListingInput input;
@@ -131,8 +152,7 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
     return nc::core::PaneId{91};
 }
 
-- (std::expected<void, nc::Error>)GoToDirWithContext:
-    (std::shared_ptr<nc::panel::DirectoryChangeRequest>)_request
+- (std::expected<void, nc::Error>)GoToDirWithContext:(std::shared_ptr<nc::panel::DirectoryChangeRequest>)_request
 {
     m_CapturedRequest = std::move(_request);
     return {};
@@ -186,8 +206,8 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 }
 
 - (nc::core::CommandState)navigationBackCommandStateForAvailability:
-    (std::optional<nc::core::PaneHistoryAvailability>)_availability
-                                                               source:(nc::core::CommandInvocationSource)_source
+                              (std::optional<nc::core::PaneHistoryAvailability>)_availability
+                                                             source:(nc::core::CommandInvocationSource)_source
 {
     m_LastBackAvailability = _availability;
     m_LastSource = _source;
@@ -205,8 +225,8 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 }
 
 - (nc::core::CommandState)navigationForwardCommandStateForAvailability:
-    (std::optional<nc::core::PaneHistoryAvailability>)_availability
-                                                                  source:(nc::core::CommandInvocationSource)_source
+                              (std::optional<nc::core::PaneHistoryAvailability>)_availability
+                                                                source:(nc::core::CommandInvocationSource)_source
 {
     m_LastForwardAvailability = _availability;
     m_LastSource = _source;
@@ -224,8 +244,8 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 }
 
 - (nc::core::CommandState)navigationUpCommandStateForAvailability:
-    (std::optional<nc::core::NavigationUpAvailability>)_availability
-                                                       source:(nc::core::CommandInvocationSource)_source
+                              (std::optional<nc::core::NavigationUpAvailability>)_availability
+                                                           source:(nc::core::CommandInvocationSource)_source
 {
     m_LastUpAvailability = _availability;
     m_LastSource = _source;
@@ -242,8 +262,8 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 }
 
 - (nc::core::CommandState)navigationRefreshCommandStateForAvailability:
-    (std::optional<nc::core::NavigationRefreshAvailability>)_availability
-                                                            source:(nc::core::CommandInvocationSource)_source
+                              (std::optional<nc::core::NavigationRefreshAvailability>)_availability
+                                                                source:(nc::core::CommandInvocationSource)_source
 {
     m_LastRefreshAvailability = _availability;
     m_LastSource = _source;
@@ -379,20 +399,114 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 
 @implementation ExplorerOperationMenuTestActionsDispatcher
 
-- (nc::core::CommandState)fileCopyCommandStateFromSource:
-    (nc::core::CommandInvocationSource) [[maybe_unused]] _source
+- (nc::core::CommandState)fileCopyCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
 {
     return {.enabled = false};
 }
 
-- (nc::core::CommandState)fileCutCommandStateFromSource:
-    (nc::core::CommandInvocationSource) [[maybe_unused]] _source
+- (nc::core::CommandState)fileCutCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
 {
     return {.enabled = false};
 }
 
-- (nc::core::CommandState)fileRenameCommandStateFromSource:
-    (nc::core::CommandInvocationSource) [[maybe_unused]] _source
+- (nc::core::CommandState)filePasteCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileRenameCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileGetInfoCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)filePreviewCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileNewFolderCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileNewFileCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileTrashCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)archiveCreateCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)archiveExtractCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                   [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileDuplicateCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileCopyPathCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                 [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileCalculateSizesCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                       [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)fileBatchRenameCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                    [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)paneSelectAllCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)paneInvertSelectionCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                        [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)viewToggleHiddenFilesCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                          [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)viewTogglePreviewPaneCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                          [[maybe_unused]] _source
+{
+    return {.enabled = false};
+}
+
+- (nc::core::CommandState)navigationRefreshCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                      [[maybe_unused]] _source
 {
     return {.enabled = false};
 }
@@ -400,6 +514,404 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 - (bool)validateActionBySelector:(SEL) [[maybe_unused]] _selector
 {
     return false;
+}
+
+@end
+
+@interface ExplorerFileCommandMenuTestActionsDispatcher : ExplorerOperationMenuTestActionsDispatcher
+@property(nonatomic) bool commandsEnabled;
+@property(nonatomic, readonly) int archiveCreateExecutions;
+@property(nonatomic, readonly) int archiveExtractExecutions;
+@property(nonatomic, readonly) int duplicateExecutions;
+@property(nonatomic, readonly) int copyPathExecutions;
+@property(nonatomic, readonly) int calculateSizesExecutions;
+@property(nonatomic, readonly) int batchRenameExecutions;
+@property(nonatomic, readonly) int previewExecutions;
+@property(nonatomic, readonly) int getInfoExecutions;
+@property(nonatomic, readonly) nc::core::CommandInvocationSource lastSource;
+@property(nonatomic, readonly) nc::core::CommandInvocationSource lastRosterStateSource;
+@property(nonatomic, readonly) NSArray<NSString *> *rosterExecutions;
+@end
+
+@implementation ExplorerFileCommandMenuTestActionsDispatcher {
+    bool m_CommandsEnabled;
+    int m_ArchiveCreateExecutions;
+    int m_ArchiveExtractExecutions;
+    int m_DuplicateExecutions;
+    int m_CopyPathExecutions;
+    int m_CalculateSizesExecutions;
+    int m_BatchRenameExecutions;
+    int m_PreviewExecutions;
+    int m_GetInfoExecutions;
+    nc::core::CommandInvocationSource m_LastSource;
+    nc::core::CommandInvocationSource m_LastRosterStateSource;
+    NSMutableArray<NSString *> *m_RosterExecutions;
+}
+
+@synthesize commandsEnabled = m_CommandsEnabled;
+
+- (nc::core::CommandState)testCommandState
+{
+    nc::core::CommandState state;
+    state.enabled = m_CommandsEnabled;
+    if( !state.enabled ) {
+        state.disabled_reason = nc::core::DisabledReason{
+            .code = "fixture.disabled",
+            .user_message_key = "commands.disabled.generic",
+            .technical_message = "Explorer file command fixture is disabled.",
+        };
+    }
+    return state;
+}
+
+- (nc::core::CommandState)archiveCreateCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)archiveExtractCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                   [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)fileDuplicateCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)fileCopyPathCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                 [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)fileCalculateSizesCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                       [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)fileBatchRenameCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                    [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)filePreviewCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)fileGetInfoCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)filePasteCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)fileNewFolderCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)paneSelectAllCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)paneInvertSelectionCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    return [self testCommandState];
+}
+
+- (nc::core::CommandState)viewToggleHiddenFilesCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    nc::core::CommandState state = [self testCommandState];
+    state.check_state = nc::core::CommandCheckState::On;
+    return state;
+}
+
+- (nc::core::CommandState)viewToggleHiddenFilesCommandStateForVisibility:(std::optional<bool>)
+                                                                             [[maybe_unused]] _visibility
+                                                                  source:(nc::core::CommandInvocationSource)_source
+{
+    return [self viewToggleHiddenFilesCommandStateFromSource:_source];
+}
+
+- (nc::core::CommandState)viewTogglePreviewPaneCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    nc::core::CommandState state = [self testCommandState];
+    state.check_state = nc::core::CommandCheckState::On;
+    return state;
+}
+
+- (nc::core::CommandState)navigationRefreshCommandStateFromSource:(nc::core::CommandInvocationSource)_source
+{
+    m_LastRosterStateSource = _source;
+    return [self testCommandState];
+}
+
+- (void)recordRosterExecution:(NSString *)_command source:(nc::core::CommandInvocationSource)_source
+{
+    if( !m_RosterExecutions )
+        m_RosterExecutions = [NSMutableArray new];
+    [m_RosterExecutions addObject:_command];
+    m_LastSource = _source;
+}
+
+- (void)executeFilePasteCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                   sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"file.paste" source:_source];
+}
+
+- (void)executeFileNewFolderCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                       sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"file.newFolder" source:_source];
+}
+
+- (void)executePaneSelectAllCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                       sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"pane.selectAll" source:_source];
+}
+
+- (void)executePaneInvertSelectionCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                             sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"pane.invertSelection" source:_source];
+}
+
+- (void)executeViewToggleHiddenFilesCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                               sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"view.toggleHiddenFiles" source:_source];
+}
+
+- (void)executeViewTogglePreviewPaneCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                               sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"view.togglePreviewPane" source:_source];
+}
+
+- (void)executeNavigationRefreshCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                           sender:(id) [[maybe_unused]] _sender
+{
+    [self recordRosterExecution:@"navigation.refresh" source:_source];
+}
+
+- (void)executeArchiveCreateCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                       sender:(id) [[maybe_unused]] _sender
+{
+    ++m_ArchiveCreateExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeArchiveExtractCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                        sender:(id) [[maybe_unused]] _sender
+{
+    ++m_ArchiveExtractExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeFileDuplicateCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                       sender:(id) [[maybe_unused]] _sender
+{
+    ++m_DuplicateExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeFileCopyPathCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                      sender:(id) [[maybe_unused]] _sender
+{
+    ++m_CopyPathExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeFileCalculateSizesCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                            sender:(id) [[maybe_unused]] _sender
+{
+    ++m_CalculateSizesExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeFileBatchRenameCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                         sender:(id) [[maybe_unused]] _sender
+{
+    ++m_BatchRenameExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeFilePreviewCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                     sender:(id) [[maybe_unused]] _sender
+{
+    ++m_PreviewExecutions;
+    m_LastSource = _source;
+}
+
+- (void)executeFileGetInfoCommandFromSource:(nc::core::CommandInvocationSource)_source
+                                     sender:(id) [[maybe_unused]] _sender
+{
+    ++m_GetInfoExecutions;
+    m_LastSource = _source;
+}
+
+- (int)archiveCreateExecutions
+{
+    return m_ArchiveCreateExecutions;
+}
+- (int)archiveExtractExecutions
+{
+    return m_ArchiveExtractExecutions;
+}
+- (int)duplicateExecutions
+{
+    return m_DuplicateExecutions;
+}
+- (int)copyPathExecutions
+{
+    return m_CopyPathExecutions;
+}
+- (int)calculateSizesExecutions
+{
+    return m_CalculateSizesExecutions;
+}
+- (int)batchRenameExecutions
+{
+    return m_BatchRenameExecutions;
+}
+- (int)previewExecutions
+{
+    return m_PreviewExecutions;
+}
+- (int)getInfoExecutions
+{
+    return m_GetInfoExecutions;
+}
+- (nc::core::CommandInvocationSource)lastSource
+{
+    return m_LastSource;
+}
+- (nc::core::CommandInvocationSource)lastRosterStateSource
+{
+    return m_LastRosterStateSource;
+}
+- (NSArray<NSString *> *)rosterExecutions
+{
+    return m_RosterExecutions ? [m_RosterExecutions copy] : @[];
+}
+
+@end
+
+@interface ExplorerNewPopoverTestActionsDispatcher : ExplorerOperationMenuTestActionsDispatcher
+@property(nonatomic) bool newFolderEnabled;
+@property(nonatomic) bool newFileEnabled;
+@property(nonatomic, readonly) int newFolderExecutionCount;
+@property(nonatomic, readonly) int newFileExecutionCount;
+@property(nonatomic, readonly) nc::core::CommandInvocationSource newFolderExecutionSource;
+@property(nonatomic, readonly) nc::core::CommandInvocationSource newFileExecutionSource;
+@property(nonatomic, readonly, weak) id newFolderSender;
+@property(nonatomic, readonly, weak) id newFileSender;
+@end
+
+@implementation ExplorerNewPopoverTestActionsDispatcher {
+    bool m_NewFolderEnabled;
+    bool m_NewFileEnabled;
+    int m_NewFolderExecutionCount;
+    int m_NewFileExecutionCount;
+    nc::core::CommandInvocationSource m_NewFolderExecutionSource;
+    nc::core::CommandInvocationSource m_NewFileExecutionSource;
+    __weak id m_NewFolderSender;
+    __weak id m_NewFileSender;
+}
+
+@synthesize newFolderEnabled = m_NewFolderEnabled;
+@synthesize newFileEnabled = m_NewFileEnabled;
+
+- (nc::core::CommandState)fileNewFolderCommandStateFromSource:(nc::core::CommandInvocationSource)
+                                                                  [[maybe_unused]] _source
+{
+    nc::core::CommandState state;
+    state.enabled = self.newFolderEnabled;
+    if( !state.enabled ) {
+        state.disabled_reason = nc::core::DisabledReason{
+            .code = "destination.readOnly",
+            .user_message_key = "commands.file.newFolder.disabled.destinationReadOnly",
+            .technical_message = "New Folder fixture is disabled.",
+        };
+    }
+    return state;
+}
+
+- (void)executeFileNewFolderCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender
+{
+    ++m_NewFolderExecutionCount;
+    m_NewFolderExecutionSource = _source;
+    m_NewFolderSender = _sender;
+}
+
+- (nc::core::CommandState)fileNewFileCommandStateFromSource:(nc::core::CommandInvocationSource) [[maybe_unused]] _source
+{
+    nc::core::CommandState state;
+    state.enabled = self.newFileEnabled;
+    if( !state.enabled ) {
+        state.disabled_reason = nc::core::DisabledReason{
+            .code = "destination.readOnly",
+            .user_message_key = "commands.file.newFile.disabled.destinationReadOnly",
+            .technical_message = "New File fixture is disabled.",
+        };
+    }
+    return state;
+}
+
+- (void)executeFileNewFileCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender
+{
+    ++m_NewFileExecutionCount;
+    m_NewFileExecutionSource = _source;
+    m_NewFileSender = _sender;
+}
+
+- (int)newFolderExecutionCount
+{
+    return m_NewFolderExecutionCount;
+}
+
+- (int)newFileExecutionCount
+{
+    return m_NewFileExecutionCount;
+}
+
+- (nc::core::CommandInvocationSource)newFolderExecutionSource
+{
+    return m_NewFolderExecutionSource;
+}
+
+- (nc::core::CommandInvocationSource)newFileExecutionSource
+{
+    return m_NewFileExecutionSource;
+}
+
+- (id)newFolderSender
+{
+    return m_NewFolderSender;
+}
+
+- (id)newFileSender
+{
+    return m_NewFileSender;
 }
 
 @end
@@ -459,9 +971,17 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 
 @interface NCExplorerCommandBarView (ExplorerOperationMenuTests)
 - (NSMenu *)buildMoreMenu;
+- (void)performMoreMenuAction:(id)_sender;
+- (NCCommandPopover *)buildNewPopover;
+- (NCCommandPopover *)buildViewPopover;
+- (void)performPopoverAction:(id)_sender;
 - (void)performOperationCancel:(id)_sender;
 - (void)performOperationCenterOpen:(id)_sender;
 - (void)performOperationCenterSnapshotCancel:(id)_sender;
+@end
+
+@interface NCCommandPopover (ExplorerNewPopoverTests)
+- (std::span<NCCommandPopoverItem *const>)commandItems;
 @end
 
 @interface NCExplorerOperationCancelMenuTarget : NSObject
@@ -512,8 +1032,7 @@ nc::core::FileManagerError ExplorerFailure()
 struct ExplorerOperationMenuTestDirectory final {
     ExplorerOperationMenuTestDirectory()
     {
-        std::string pattern =
-            (std::filesystem::temp_directory_path() / "explorer-operation-menu-ut-XXXXXX").string();
+        std::string pattern = (std::filesystem::temp_directory_path() / "explorer-operation-menu-ut-XXXXXX").string();
         REQUIRE(::mkdtemp(pattern.data()) != nullptr);
         path = std::filesystem::canonical(pattern).string();
     }
@@ -529,10 +1048,11 @@ nc::ops::OperationPlan ExplorerOperationMenuPlan(std::string _plan_id)
         {.plan_id = std::move(_plan_id),
          .type = nc::ops::OperationPlanType::Copy,
          .sources = {nc::ops::OperationPlanSourceInput{"native", "/source"}},
-         .destination = nc::ops::OperationPlanDestinationInput{
-             "native", "/destination", nc::ops::OperationPlanDestinationKind::Directory},
+         .destination = nc::ops::OperationPlanDestinationInput{"native",
+                                                               "/destination",
+                                                               nc::ops::OperationPlanDestinationKind::Directory},
          .conflict_policy = nc::ops::OperationPlanConflictPolicy{nc::ops::OperationPlanConflictDecision::Ask,
-                                                                  nc::ops::OperationPlanConflictScope::ThisItem},
+                                                                 nc::ops::OperationPlanConflictScope::ThisItem},
          .created_at = nc::ops::OperationPlan::TimePoint{std::chrono::seconds{1'700'000'000}}});
     REQUIRE(plan);
     return std::move(*plan);
@@ -562,7 +1082,8 @@ ExplorerOperationMenuCoordinatorWithTerminalRecord(ExplorerOperationMenuTestDire
     REQUIRE(admission);
     auto running = journal->TransitionToRunning(std::move(*admission));
     REQUIRE(running);
-    REQUIRE(journal->Finalize(std::move(*running), ExplorerOperationMenuSuccess(), nc::ops::OperationJournalState::Completed));
+    REQUIRE(journal->Finalize(
+        std::move(*running), ExplorerOperationMenuSuccess(), nc::ops::OperationJournalState::Completed));
 
     auto coordinator = nc::ops::OperationCenterCoordinator::Create(*journal);
     REQUIRE(coordinator);
@@ -659,9 +1180,29 @@ TEST_CASE(PREFIX "footer renders only PaneStore snapshot status")
 {
     auto footer = [[NCPanelViewFooter alloc] initWithFrame:NSMakeRect(0, 0, 600, 24)
                                                      theme:std::make_unique<ExplorerFooterTheme>()
-                                         explorerAppearance:true];
+                                        explorerAppearance:true];
     NSTextField *const items = [footer valueForKey:@"m_ItemsLabel"];
     NSTextField *const selection = [footer valueForKey:@"m_SelectionLabel"];
+    NSTextField *const volume = [footer valueForKey:@"m_VolumeLabel"];
+    NSButton *const details = [footer valueForKey:@"m_DetailsButton"];
+    NSButton *const icons = [footer valueForKey:@"m_IconsButton"];
+    NSButton *const content = [footer valueForKey:@"m_ContentButton"];
+
+    CHECK([footer.accessibilityIdentifier isEqualToString:@"wincommander.explorer.status"]);
+    CHECK([footer.accessibilityRole isEqualToString:NSAccessibilityGroupRole]);
+    CHECK(footer.accessibilityLabel.length > 0);
+    CHECK([items.accessibilityIdentifier isEqualToString:@"wincommander.explorer.status.items"]);
+    CHECK([selection.accessibilityIdentifier isEqualToString:@"wincommander.explorer.status.selection"]);
+    CHECK([volume.accessibilityIdentifier isEqualToString:@"wincommander.explorer.status.volume"]);
+    for( NSButton *button in @[details, icons, content] ) {
+        CHECK(button.accessibilityIdentifier.length > 0);
+        CHECK(button.accessibilityLabel.length > 0);
+        CHECK(button.accessibilityHelp.length > 0);
+    }
+    [footer updateExplorerLayoutKind:NCPanelViewFooterLayoutKindDetails];
+    CHECK([details.accessibilityValue isEqualToString:@"Selected"]);
+    CHECK([icons.accessibilityValue isEqualToString:@"Not selected"]);
+    CHECK([content.accessibilityValue isEqualToString:@"Not selected"]);
 
     nc::core::PaneSnapshot snapshot;
     snapshot.pane_id = nc::core::PaneId{91};
@@ -686,6 +1227,8 @@ TEST_CASE(PREFIX "footer renders only PaneStore snapshot status")
         @"%d selected (%@)", "Explorer status bar, number and total size of currently selected items");
     const auto selection_size = ByteCountFormatter::Instance().ToNSString(1536, ByteCountFormatter::Adaptive6);
     CHECK([selection.stringValue isEqual:[NSString stringWithFormat:selection_format, 2, selection_size]]);
+    CHECK([static_cast<NSString *>(footer.accessibilityValue) containsString:items.stringValue]);
+    CHECK([static_cast<NSString *>(footer.accessibilityValue) containsString:selection.stringValue]);
 
     const nc::panel::data::Statistics legacy_stats{
         .total_entries_amount = 99,
@@ -709,6 +1252,205 @@ TEST_CASE(PREFIX "footer renders only PaneStore snapshot status")
     [footer applyExplorerPaneSnapshot:snapshot];
     CHECK(items.stringValue.length > 0);
     CHECK(selection.stringValue.length == 0);
+}
+
+TEST_CASE(PREFIX "tab bar exposes stable VoiceOver controls and selected state")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    NSWindow *const window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 480, 160)
+                                                          styleMask:NSWindowStyleMaskBorderless
+                                                            backing:NSBackingStoreBuffered
+                                                              defer:false];
+    NCPanelTabBarView *const bar = [[NCPanelTabBarView alloc] initWithFrame:NSMakeRect(0, 0, 480, 24)];
+    [window.contentView addSubview:bar];
+
+    NSTabView *const tab_view = [[NSTabView alloc] initWithFrame:NSMakeRect(0, 30, 480, 120)];
+    [window.contentView addSubview:tab_view];
+    NSTabViewItem *const first = [[NSTabViewItem alloc] initWithIdentifier:@(101)];
+    first.label = @"Documents";
+    first.view = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
+    NSTabViewItem *const second = [[NSTabViewItem alloc] initWithIdentifier:@(202)];
+    second.label = @"Downloads";
+    second.view = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
+    [tab_view addTabViewItem:first];
+    [tab_view addTabViewItem:second];
+    bar.tabView = tab_view;
+    tab_view.delegate = bar;
+    [bar reloadTabs];
+    [bar layoutSubtreeIfNeeded];
+
+    CHECK([bar.accessibilityIdentifier isEqualToString:@"wincommander.tabs"]);
+    CHECK([bar.accessibilityRole isEqualToString:NSAccessibilityTabGroupRole]);
+    CHECK(bar.accessibilityLabel.length > 0);
+    NSButton *const add = bar.addTabButton;
+    REQUIRE(add);
+    CHECK([add.accessibilityIdentifier isEqualToString:@"wincommander.tabs.add"]);
+    CHECK(add.accessibilityLabel.length > 0);
+    CHECK(add.accessibilityHelp.length > 0);
+
+    NSButton *const first_close = [bar closeButtonOfTabViewItem:first];
+    NSButton *const second_close = [bar closeButtonOfTabViewItem:second];
+    REQUIRE(first_close);
+    REQUIRE(second_close);
+    CHECK_FALSE(first_close.hidden);
+    CHECK([first_close.accessibilityIdentifier isEqualToString:@"wincommander.tabs.close.101"]);
+    CHECK(first_close.accessibilityLabel.length > 0);
+    CHECK(first_close.accessibilityHelp.length > 0);
+
+    NSView *const first_tab = first_close.superview;
+    NSView *const second_tab = second_close.superview;
+    REQUIRE(first_tab);
+    REQUIRE(second_tab);
+    CHECK([first_tab.accessibilityIdentifier isEqualToString:@"wincommander.tabs.tab.101"]);
+    CHECK([first_tab.accessibilityRole isEqualToString:NSAccessibilityRadioButtonRole]);
+    CHECK([first_tab.accessibilityLabel isEqualToString:@"Documents"]);
+    CHECK(first_tab.accessibilitySelected);
+    CHECK_FALSE(first_tab.accessibilityFocused);
+    CHECK(static_cast<NSString *>(first_tab.accessibilityValue).length > 0);
+
+    CHECK([second_tab.accessibilityIdentifier isEqualToString:@"wincommander.tabs.tab.202"]);
+    CHECK_FALSE(second_tab.accessibilitySelected);
+    CHECK([second_tab accessibilityPerformPress]);
+    CHECK(tab_view.selectedTabViewItem == second);
+    CHECK(second_tab.accessibilitySelected);
+    CHECK_FALSE(second_close.hidden);
+    REQUIRE([window makeFirstResponder:second.view]);
+    CHECK(window.firstResponder == second.view);
+    CHECK_FALSE(second_tab.accessibilityFocused);
+
+    id const first_controller = first_close.target;
+    REQUIRE([first_controller isKindOfClass:NSCollectionViewItem.class]);
+    [static_cast<NSCollectionViewItem *>(first_controller) prepareForReuse];
+    CHECK_FALSE(first_tab.accessibilityElement);
+    CHECK(first_tab.accessibilityIdentifier == nil);
+    CHECK(first_tab.accessibilityLabel == nil);
+    CHECK_FALSE(first_tab.accessibilitySelected);
+    CHECK_FALSE(first_tab.accessibilityFocused);
+    CHECK(first_tab.accessibilityValue == nil);
+    CHECK_FALSE(first_close.accessibilityElement);
+    CHECK(first_close.accessibilityIdentifier == nil);
+    CHECK(first_close.accessibilityLabel == nil);
+}
+
+TEST_CASE(PREFIX "virtualized List items rebind accessibility state without stale selection")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    EnsureExplorerItemTheme();
+    const std::vector<VFSListingItem> items = NativeItems({"fixture.txt", "replacement.txt"});
+    REQUIRE(items.size() == 2);
+
+    PanelListViewRowView *const list = [[PanelListViewRowView alloc] initWithItem:items.front()];
+    CHECK([list.accessibilityIdentifier isEqualToString:@"wincommander.explorer.list.item"]);
+    CHECK([list.accessibilityRole isEqualToString:NSAccessibilityRowRole]);
+    CHECK([list.accessibilityLabel isEqualToString:@"fixture.txt"]);
+    CHECK_FALSE(list.accessibilitySelected);
+    CHECK_FALSE(list.accessibilityFocused);
+    list.panelActive = true;
+    list.selected = true;
+    CHECK(list.accessibilitySelected);
+    CHECK(list.accessibilityFocused);
+    CHECK([static_cast<NSString *>(list.accessibilityValue) containsString:@"focused"]);
+
+    list.item = VFSListingItem{};
+    CHECK_FALSE(list.accessibilityElement);
+    CHECK_FALSE(list.accessibilitySelected);
+    CHECK_FALSE(list.accessibilityFocused);
+    CHECK(list.accessibilityLabel.length == 0);
+    CHECK([list.accessibilityValue isEqualToString:@""]);
+
+    list.item = items.back();
+    CHECK(list.accessibilityElement);
+    CHECK([list.accessibilityLabel isEqualToString:@"replacement.txt"]);
+    CHECK_FALSE(list.accessibilitySelected);
+    CHECK_FALSE(list.accessibilityFocused);
+
+    nc::panel::data::ItemVolatileData marked;
+    marked.toggle_selected(true);
+    list.vd = marked;
+    CHECK(list.accessibilitySelected);
+    CHECK_FALSE(list.accessibilityFocused);
+    CHECK([list.accessibilityValue isEqualToString:@"Selected"]);
+}
+
+TEST_CASE(PREFIX "virtualized Brief items clear and rebind production accessibility state")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    EnsureExplorerItemTheme();
+    const std::vector<VFSListingItem> items = NativeItems({"fixture.txt", "replacement.txt"});
+    REQUIRE(items.size() == 2);
+
+    PanelBriefViewItem *const brief = [[PanelBriefViewItem alloc] initWithNibName:nil bundle:nil];
+    NSView *const element = brief.view;
+    CHECK([element.accessibilityIdentifier isEqualToString:@"wincommander.explorer.brief.item"]);
+    CHECK([element.accessibilityRole isEqualToString:NSAccessibilityRowRole]);
+    CHECK_FALSE(element.accessibilityElement);
+
+    [brief setItem:items.front()];
+    brief.panelActive = true;
+    brief.selected = true;
+    CHECK([element.accessibilityLabel isEqualToString:@"fixture.txt"]);
+    CHECK(element.accessibilityElement);
+    CHECK(element.accessibilitySelected);
+    CHECK(element.accessibilityFocused);
+    CHECK([static_cast<NSString *>(element.accessibilityValue) containsString:@"focused"]);
+
+    [brief prepareForReuse];
+    CHECK_FALSE(element.accessibilityElement);
+    CHECK_FALSE(element.accessibilitySelected);
+    CHECK_FALSE(element.accessibilityFocused);
+    CHECK(element.accessibilityLabel.length == 0);
+    CHECK([element.accessibilityValue isEqualToString:@""]);
+
+    [brief setItem:items.back()];
+    nc::panel::data::ItemVolatileData marked;
+    marked.toggle_selected(true);
+    [brief setVD:marked];
+    CHECK(element.accessibilityElement);
+    CHECK([element.accessibilityLabel isEqualToString:@"replacement.txt"]);
+    CHECK(element.accessibilitySelected);
+    CHECK_FALSE(element.accessibilityFocused);
+    CHECK([element.accessibilityValue isEqualToString:@"Selected"]);
+}
+
+TEST_CASE(PREFIX "virtualized Gallery items clear and rebind production accessibility state")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    EnsureExplorerItemTheme();
+    const std::vector<VFSListingItem> items = NativeItems({"fixture.txt", "replacement.txt"});
+    REQUIRE(items.size() == 2);
+
+    NCPanelGalleryCollectionViewItem *const gallery =
+        [[NCPanelGalleryCollectionViewItem alloc] initWithNibName:nil bundle:nil];
+    NSView *const element = gallery.view;
+    CHECK([element.accessibilityIdentifier isEqualToString:@"wincommander.explorer.gallery.item"]);
+    CHECK([element.accessibilityRole isEqualToString:NSAccessibilityRowRole]);
+    CHECK_FALSE(element.accessibilityElement);
+
+    gallery.item = items.front();
+    gallery.panelActive = true;
+    gallery.selected = true;
+    CHECK([element.accessibilityLabel isEqualToString:@"fixture.txt"]);
+    CHECK(element.accessibilityElement);
+    CHECK(element.accessibilitySelected);
+    CHECK(element.accessibilityFocused);
+    CHECK([static_cast<NSString *>(element.accessibilityValue) containsString:@"focused"]);
+
+    [gallery prepareForReuse];
+    CHECK_FALSE(element.accessibilityElement);
+    CHECK_FALSE(element.accessibilitySelected);
+    CHECK_FALSE(element.accessibilityFocused);
+    CHECK(element.accessibilityLabel.length == 0);
+    CHECK([element.accessibilityValue isEqualToString:@""]);
+
+    gallery.item = items.back();
+    nc::panel::data::ItemVolatileData marked;
+    marked.toggle_selected(true);
+    gallery.vd = marked;
+    CHECK(element.accessibilityElement);
+    CHECK([element.accessibilityLabel isEqualToString:@"replacement.txt"]);
+    CHECK(element.accessibilitySelected);
+    CHECK_FALSE(element.accessibilityFocused);
+    CHECK([element.accessibilityValue isEqualToString:@"Selected"]);
 }
 
 TEST_CASE(PREFIX "Details uses a readable 28 point row")
@@ -892,16 +1634,14 @@ TEST_CASE(PREFIX "pane model caches navigation availability only for its exact s
     CHECK(presentation.Apply(snapshot));
     REQUIRE(presentation.NavigationAvailability());
     CHECK(*presentation.NavigationAvailability() ==
-          PaneNavigationAvailability{NavigationUpAvailability::Available,
-                                     NavigationRefreshAvailability::Available});
+          PaneNavigationAvailability{NavigationUpAvailability::Available, NavigationRefreshAvailability::Available});
 
     snapshot.state.path = "/";
     snapshot.state.listing = ExplorerPresentationUniformListing(host, snapshot.state.path);
     CHECK(presentation.Apply(snapshot));
     REQUIRE(presentation.NavigationAvailability());
     CHECK(*presentation.NavigationAvailability() ==
-          PaneNavigationAvailability{NavigationUpAvailability::AtTop,
-                                     NavigationRefreshAvailability::Available});
+          PaneNavigationAvailability{NavigationUpAvailability::AtTop, NavigationRefreshAvailability::Available});
 
     snapshot.state.is_uniform = false;
     snapshot.state.path.clear();
@@ -918,8 +1658,7 @@ TEST_CASE(PREFIX "pane model caches navigation availability only for its exact s
     CHECK(presentation.Apply(snapshot));
     REQUIRE(presentation.NavigationAvailability());
     CHECK(*presentation.NavigationAvailability() ==
-          PaneNavigationAvailability{NavigationUpAvailability::Busy,
-                                     NavigationRefreshAvailability::Busy});
+          PaneNavigationAvailability{NavigationUpAvailability::Busy, NavigationRefreshAvailability::Busy});
 
     snapshot.pane_id = PaneId{92};
     CHECK_FALSE(presentation.Apply(snapshot));
@@ -931,35 +1670,58 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     REQUIRE(nc::dispatch_is_main_queue());
     ExplorerBreadcrumbTestPanelController *const panel = [ExplorerBreadcrumbTestPanelController new];
     ExplorerToolbarTestActionsDispatcher *const dispatcher = [ExplorerToolbarTestActionsDispatcher new];
-    NCExplorerToolbarDelegate *const delegate =
-        [[NCExplorerToolbarDelegate alloc] initWithPanelController:panel actionsDispatcher:dispatcher];
+    NCExplorerToolbarDelegate *const delegate = [[NCExplorerToolbarDelegate alloc] initWithPanelController:panel
+                                                                                         actionsDispatcher:dispatcher];
 
     NSToolbarItem *const back_item = [delegate toolbar:delegate.toolbar
-                            itemForItemIdentifier:@"explorer_back"
-                         willBeInsertedIntoToolbar:true];
+                                 itemForItemIdentifier:@"explorer_back"
+                             willBeInsertedIntoToolbar:true];
     NSToolbarItem *const forward_item = [delegate toolbar:delegate.toolbar
-                               itemForItemIdentifier:@"explorer_forward"
-                            willBeInsertedIntoToolbar:true];
+                                    itemForItemIdentifier:@"explorer_forward"
+                                willBeInsertedIntoToolbar:true];
     NSToolbarItem *const up_item = [delegate toolbar:delegate.toolbar
-                          itemForItemIdentifier:@"explorer_up"
-                       willBeInsertedIntoToolbar:true];
+                               itemForItemIdentifier:@"explorer_up"
+                           willBeInsertedIntoToolbar:true];
     NSToolbarItem *const refresh_item = [delegate toolbar:delegate.toolbar
-                               itemForItemIdentifier:@"explorer_refresh"
-                            willBeInsertedIntoToolbar:true];
+                                    itemForItemIdentifier:@"explorer_refresh"
+                                willBeInsertedIntoToolbar:true];
     NSToolbarItem *const breadcrumb_item = [delegate toolbar:delegate.toolbar
-                                  itemForItemIdentifier:@"explorer_breadcrumb"
-                               willBeInsertedIntoToolbar:true];
+                                       itemForItemIdentifier:@"explorer_breadcrumb"
+                                   willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const commander_item = [delegate toolbar:delegate.toolbar
+                                      itemForItemIdentifier:@"explorer_commander_mode"
+                                  willBeInsertedIntoToolbar:true];
     REQUIRE([back_item.view isKindOfClass:NSButton.class]);
     REQUIRE([forward_item.view isKindOfClass:NSButton.class]);
     REQUIRE([up_item.view isKindOfClass:NSButton.class]);
     REQUIRE([refresh_item.view isKindOfClass:NSButton.class]);
     REQUIRE([breadcrumb_item.view isKindOfClass:NCExplorerBreadcrumbControl.class]);
+    REQUIRE([commander_item.view isKindOfClass:NSButton.class]);
     NSButton *const back = static_cast<NSButton *>(back_item.view);
     NSButton *const forward = static_cast<NSButton *>(forward_item.view);
     NSButton *const up = static_cast<NSButton *>(up_item.view);
     NSButton *const refresh = static_cast<NSButton *>(refresh_item.view);
-    NCExplorerBreadcrumbControl *const breadcrumb =
-        static_cast<NCExplorerBreadcrumbControl *>(breadcrumb_item.view);
+    NCExplorerBreadcrumbControl *const breadcrumb = static_cast<NCExplorerBreadcrumbControl *>(breadcrumb_item.view);
+    NSButton *const commander = static_cast<NSButton *>(commander_item.view);
+    const NSArray<NSButton *> *const buttons = @[back, forward, up, refresh, commander];
+    const NSArray<NSString *> *const identifiers = @[
+        @"wincommander.explorer.toolbar.back",
+        @"wincommander.explorer.toolbar.forward",
+        @"wincommander.explorer.toolbar.up",
+        @"wincommander.explorer.toolbar.refresh",
+        @"wincommander.explorer.toolbar.commanderMode",
+    ];
+    for( NSUInteger index = 0; index != buttons.count; ++index ) {
+        NSButton *const button = buttons[index];
+        CHECK([button.accessibilityIdentifier isEqualToString:identifiers[index]]);
+        CHECK(button.accessibilityLabel.length > 0);
+        CHECK(button.accessibilityHelp.length > 0);
+        CHECK(button.toolTip.length > 0);
+    }
+    CHECK([breadcrumb.accessibilityIdentifier isEqualToString:@"wincommander.explorer.toolbar.path"]);
+    CHECK(breadcrumb.accessibilityElement);
+    CHECK(breadcrumb.accessibilityLabel.length > 0);
+    CHECK(breadcrumb.accessibilityHelp.length > 0);
     CHECK_FALSE(back.enabled);
     CHECK_FALSE(forward.enabled);
     CHECK_FALSE(up.enabled);
@@ -995,8 +1757,10 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
             CHECK(dispatcher.lastBackAvailability->can_go_forward == can_go_forward);
             CHECK(dispatcher.lastForwardAvailability == dispatcher.lastBackAvailability);
             CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
-            CHECK((back.toolTip == nil) == can_go_back);
-            CHECK((forward.toolTip == nil) == can_go_forward);
+            CHECK(back.toolTip.length > 0);
+            CHECK(forward.toolTip.length > 0);
+            CHECK(back.accessibilityHelp.length > 0);
+            CHECK(forward.accessibilityHelp.length > 0);
         }
     }
     CHECK([breadcrumb.accessibilityValue isEqual:@"/fixture/"]);
@@ -1038,8 +1802,8 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     CHECK(*dispatcher.lastRefreshAvailability == nc::core::NavigationRefreshAvailability::Available);
     CHECK(up.toolTip != nil);
     CHECK(up.accessibilityHelp != nil);
-    CHECK(refresh.toolTip == nil);
-    CHECK(refresh.accessibilityHelp == nil);
+    CHECK(refresh.toolTip.length > 0);
+    CHECK(refresh.accessibilityHelp.length > 0);
 
     snapshot.state.is_uniform = false;
     snapshot.state.path.clear();
@@ -1054,8 +1818,8 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     CHECK(*dispatcher.lastRefreshAvailability == nc::core::NavigationRefreshAvailability::Available);
     CHECK(up.toolTip != nil);
     CHECK(up.accessibilityHelp != nil);
-    CHECK(refresh.toolTip == nil);
-    CHECK(refresh.accessibilityHelp == nil);
+    CHECK(refresh.toolTip.length > 0);
+    CHECK(refresh.accessibilityHelp.length > 0);
 
     snapshot.state.is_uniform = true;
     snapshot.state.path = "/fixture/";
@@ -1068,10 +1832,10 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     REQUIRE(dispatcher.lastRefreshAvailability);
     CHECK(*dispatcher.lastUpAvailability == nc::core::NavigationUpAvailability::Available);
     CHECK(*dispatcher.lastRefreshAvailability == nc::core::NavigationRefreshAvailability::Available);
-    CHECK(up.toolTip == nil);
-    CHECK(refresh.toolTip == nil);
-    CHECK(up.accessibilityHelp == nil);
-    CHECK(refresh.accessibilityHelp == nil);
+    CHECK(up.toolTip.length > 0);
+    CHECK(refresh.toolTip.length > 0);
+    CHECK(up.accessibilityHelp.length > 0);
+    CHECK(refresh.accessibilityHelp.length > 0);
     [up performClick:nil];
     [refresh performClick:nil];
     CHECK(dispatcher.upExecutionCount == 1);
@@ -1112,6 +1876,53 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     CHECK(dispatcher.refreshExecutionCount == 1);
 }
 
+TEST_CASE(PREFIX "Explorer toolbar rebind retires old snapshot state before the new pane publishes")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerBreadcrumbTestPanelController *const first = [ExplorerBreadcrumbTestPanelController new];
+    ExplorerToolbarTestActionsDispatcher *const first_dispatcher = [ExplorerToolbarTestActionsDispatcher new];
+    ExplorerToolbarTestActionsDispatcher *const second_dispatcher = [ExplorerToolbarTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const second =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:second_dispatcher];
+    NCExplorerToolbarDelegate *const delegate =
+        [[NCExplorerToolbarDelegate alloc] initWithPanelController:first actionsDispatcher:first_dispatcher];
+
+    NSToolbarItem *const back_item = [delegate toolbar:delegate.toolbar
+                                 itemForItemIdentifier:@"explorer_back"
+                             willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const refresh_item = [delegate toolbar:delegate.toolbar
+                                    itemForItemIdentifier:@"explorer_refresh"
+                                willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const breadcrumb_item = [delegate toolbar:delegate.toolbar
+                                       itemForItemIdentifier:@"explorer_breadcrumb"
+                                   willBeInsertedIntoToolbar:true];
+    NSButton *const back = static_cast<NSButton *>(back_item.view);
+    NSButton *const refresh = static_cast<NSButton *>(refresh_item.view);
+    NCExplorerBreadcrumbControl *const breadcrumb = static_cast<NCExplorerBreadcrumbControl *>(breadcrumb_item.view);
+
+    const VFSHostPtr host = std::make_shared<NativePasteboardTestHost>();
+    auto snapshot = ExplorerSnapshot(nc::core::PaneLoadPhase::Loaded, host);
+    snapshot.state.history_availability.can_go_back = true;
+    snapshot.state.listing = ExplorerPresentationUniformListing(snapshot.state.host, snapshot.state.path);
+    [delegate applyPaneSnapshot:snapshot];
+    REQUIRE(back.enabled);
+    REQUIRE(refresh.enabled);
+    REQUIRE([breadcrumb.accessibilityValue isEqual:@"/fixture/"]);
+
+    [delegate rebindToPanelController:second];
+
+    CHECK(delegate.panelController == second);
+    CHECK(back.target == second_dispatcher);
+    CHECK(refresh.target == second_dispatcher);
+    CHECK_FALSE(back.enabled);
+    CHECK_FALSE(refresh.enabled);
+    CHECK(back.toolTip != nil);
+    CHECK(refresh.toolTip != nil);
+    CHECK([breadcrumb.accessibilityValue isEqual:@""]);
+    CHECK_FALSE([second_dispatcher lastBackAvailability].has_value());
+    CHECK_FALSE([second_dispatcher lastRefreshAvailability].has_value());
+}
+
 TEST_CASE(PREFIX "compact Operations menu fails closed when its services are absent")
 {
     REQUIRE(nc::dispatch_is_main_queue());
@@ -1119,7 +1930,7 @@ TEST_CASE(PREFIX "compact Operations menu fails closed when its services are abs
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel];
+                                                                          panelController:panel];
 
     NSMenu *const menu = [bar buildMoreMenu];
     NSMenuItem *const section = ExplorerOperationsMenuSection(menu);
@@ -1130,6 +1941,328 @@ TEST_CASE(PREFIX "compact Operations menu fails closed when its services are abs
     CHECK_FALSE(unavailable.hidden);
     CHECK(unavailable.toolTip.length > 0);
     CHECK([unavailable.accessibilityHelp isEqual:unavailable.toolTip]);
+}
+
+TEST_CASE(PREFIX "Explorer More projects payload Registry state with Toolbar execution")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerFileCommandMenuTestActionsDispatcher *const dispatcher = [ExplorerFileCommandMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                          panelController:panel];
+
+    dispatcher.commandsEnabled = false;
+    NSMenu *const disabled_menu = [bar buildMoreMenu];
+    NSMenuItem *const disabled_preview = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"commands.file.preview.title", "Preview command title"));
+    NSMenuItem *const disabled_get_info = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"commands.file.getInfo.title", "Get Info command title"));
+    NSMenuItem *const disabled_archive = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"Compress", "Explorer command bar - More menu item"));
+    NSMenuItem *const disabled_extract = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"commands.archive.extract.title", "Extract archive command title"));
+    NSMenuItem *const disabled_duplicate = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"Duplicate", "Explorer command bar - More menu item"));
+    NSMenuItem *const disabled_copy_path = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"Copy Path", "Explorer command bar - More menu item"));
+    NSMenuItem *const disabled_calculate_sizes = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"Calculate Sizes", "Explorer command bar - More menu item"));
+    NSMenuItem *const disabled_batch_rename = ExplorerOperationsMenuItemNamed(
+        disabled_menu, NSLocalizedString(@"Batch Rename", "Explorer command bar - More menu item"));
+    for( NSMenuItem *const &item : std::array{disabled_preview,
+                                              disabled_get_info,
+                                              disabled_archive,
+                                              disabled_extract,
+                                              disabled_duplicate,
+                                              disabled_copy_path,
+                                              disabled_calculate_sizes,
+                                              disabled_batch_rename} ) {
+        REQUIRE(item);
+        CHECK_FALSE(item.enabled);
+        CHECK(item.target == nil);
+        CHECK(item.action == nil);
+        CHECK(item.toolTip.length > 0);
+        CHECK([item.accessibilityHelp isEqual:item.toolTip]);
+    }
+
+    dispatcher.commandsEnabled = true;
+    NSMenu *const enabled_menu = [bar buildMoreMenu];
+    NSMenuItem *const preview = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"commands.file.preview.title", "Preview command title"));
+    NSMenuItem *const get_info = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"commands.file.getInfo.title", "Get Info command title"));
+    NSMenuItem *const archive = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"Compress", "Explorer command bar - More menu item"));
+    NSMenuItem *const extract = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"commands.archive.extract.title", "Extract archive command title"));
+    NSMenuItem *const duplicate = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"Duplicate", "Explorer command bar - More menu item"));
+    NSMenuItem *const copy_path = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"Copy Path", "Explorer command bar - More menu item"));
+    NSMenuItem *const calculate_sizes = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"Calculate Sizes", "Explorer command bar - More menu item"));
+    NSMenuItem *const batch_rename = ExplorerOperationsMenuItemNamed(
+        enabled_menu, NSLocalizedString(@"Batch Rename", "Explorer command bar - More menu item"));
+    for( NSMenuItem *const &item :
+         std::array{preview, get_info, archive, extract, duplicate, copy_path, calculate_sizes, batch_rename} ) {
+        REQUIRE(item);
+        CHECK(item.enabled);
+        CHECK(item.target == bar);
+        CHECK(item.action == @selector(performMoreMenuAction:));
+    }
+    CHECK([archive.representedObject isEqual:NSStringFromSelector(@selector(onCompressItemsHere:))]);
+    CHECK([extract.representedObject isEqual:NSStringFromSelector(@selector(onExtractArchiveHere:))]);
+
+    [bar performMoreMenuAction:preview];
+    CHECK(dispatcher.previewExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+    [bar performMoreMenuAction:get_info];
+    CHECK(dispatcher.getInfoExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+
+    [bar performMoreMenuAction:archive];
+    CHECK(dispatcher.archiveCreateExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+    [bar performMoreMenuAction:extract];
+    CHECK(dispatcher.archiveExtractExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+    [bar performMoreMenuAction:duplicate];
+    CHECK(dispatcher.duplicateExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+    [bar performMoreMenuAction:copy_path];
+    CHECK(dispatcher.copyPathExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+    [bar performMoreMenuAction:calculate_sizes];
+    CHECK(dispatcher.calculateSizesExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+    [bar performMoreMenuAction:batch_rename];
+    CHECK(dispatcher.batchRenameExecutions == 1);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+}
+
+TEST_CASE(PREFIX "background context menu projects the pane Registry roster without an item payload")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerFileCommandMenuTestActionsDispatcher *const dispatcher = [ExplorerFileCommandMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NSArray<NSString *> *const titles = @[
+        NSLocalizedString(@"commands.file.paste.title", "Paste command title"),
+        NSLocalizedString(@"commands.file.newFolder.title", "New Folder command title"),
+        NSLocalizedString(@"commands.pane.selectAll.title", "Select All command title"),
+        NSLocalizedString(@"commands.pane.invertSelection.title", "Invert Selection command title"),
+        NSLocalizedString(@"commands.view.toggleHiddenFiles.title", "Show hidden files command title"),
+        NSLocalizedString(@"commands.navigation.refresh.title", "Refresh command title")
+    ];
+    dispatcher.commandsEnabled = false;
+    NCPanelContextMenu *const disabled_menu = [[NCPanelContextMenu alloc] initForBackgroundOfPanel:panel];
+    REQUIRE(disabled_menu);
+    CHECK(disabled_menu.items.empty());
+    for( NSString *const title in titles ) {
+        NSMenuItem *const item = ExplorerOperationsMenuItemNamed(disabled_menu, title);
+        REQUIRE(item);
+        CHECK_FALSE(item.enabled);
+        CHECK(item.target == nil);
+        CHECK(item.action == nil);
+        CHECK(item.toolTip.length > 0);
+        CHECK([item.accessibilityHelp isEqual:item.toolTip]);
+    }
+    CHECK(dispatcher.lastRosterStateSource == nc::core::CommandInvocationSource::ContextMenu);
+
+    dispatcher.commandsEnabled = true;
+    NCPanelContextMenu *const enabled_menu = [[NCPanelContextMenu alloc] initForBackgroundOfPanel:panel];
+    REQUIRE(enabled_menu);
+    for( NSString *const title in titles ) {
+        NSMenuItem *const item = ExplorerOperationsMenuItemNamed(enabled_menu, title);
+        REQUIRE(item);
+        CHECK(item.enabled);
+        CHECK(item.target == enabled_menu);
+        CHECK(item.action != nil);
+        const IMP action = [item.target methodForSelector:item.action];
+        REQUIRE(action);
+        reinterpret_cast<void (*)(id, SEL, id)>(action)(item.target, item.action, item);
+    }
+    NSMenuItem *const hidden_files = ExplorerOperationsMenuItemNamed(enabled_menu, titles[4]);
+    REQUIRE(hidden_files);
+    CHECK(hidden_files.state == NSControlStateValueOn);
+    CHECK([dispatcher.rosterExecutions isEqualToArray:@[
+        @"file.paste",
+        @"file.newFolder",
+        @"pane.selectAll",
+        @"pane.invertSelection",
+        @"view.toggleHiddenFiles",
+        @"navigation.refresh"
+    ]]);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::ContextMenu);
+}
+
+TEST_CASE(PREFIX "Explorer More exposes the background Registry roster with Toolbar execution")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerFileCommandMenuTestActionsDispatcher *const dispatcher = [ExplorerFileCommandMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                          panelController:panel];
+    NSArray<NSString *> *const titles = @[
+        NSLocalizedString(@"commands.file.paste.title", "Paste command title"),
+        NSLocalizedString(@"commands.file.newFolder.title", "New Folder command title"),
+        NSLocalizedString(@"commands.pane.selectAll.title", "Select All command title"),
+        NSLocalizedString(@"commands.pane.invertSelection.title", "Invert Selection command title"),
+        NSLocalizedString(@"commands.view.toggleHiddenFiles.title", "Show hidden files command title"),
+        NSLocalizedString(@"commands.view.togglePreviewPane.title", "Show Details Pane command title"),
+        NSLocalizedString(@"commands.navigation.refresh.title", "Refresh command title")
+    ];
+    NSArray<NSString *> *const selectors = @[
+        NSStringFromSelector(@selector(paste:)),
+        NSStringFromSelector(@selector(OnQuickNewFolder:)),
+        NSStringFromSelector(@selector(selectAll:)),
+        NSStringFromSelector(@selector(OnMenuInvertSelection:)),
+        NSStringFromSelector(@selector(ToggleViewHiddenFiles:)),
+        NSStringFromSelector(@selector(OnTogglePreviewPane:)),
+        NSStringFromSelector(@selector(OnRefreshPanel:))
+    ];
+
+    dispatcher.commandsEnabled = false;
+    NSMenu *const disabled_menu = [bar buildMoreMenu];
+    for( NSString *const title in titles ) {
+        NSMenuItem *const item = ExplorerOperationsMenuItemNamed(disabled_menu, title);
+        REQUIRE(item);
+        CHECK_FALSE(item.enabled);
+        CHECK(item.target == nil);
+        CHECK(item.action == nil);
+        CHECK(item.toolTip.length > 0);
+        CHECK([item.accessibilityHelp isEqual:item.toolTip]);
+    }
+
+    dispatcher.commandsEnabled = true;
+    NSMenu *const enabled_menu = [bar buildMoreMenu];
+    for( NSUInteger index = 0; index < titles.count; ++index ) {
+        NSString *const title = titles[index];
+        NSMenuItem *const item = ExplorerOperationsMenuItemNamed(enabled_menu, title);
+        REQUIRE(item);
+        CHECK(item.enabled);
+        CHECK(item.target == bar);
+        CHECK(item.action == @selector(performMoreMenuAction:));
+        CHECK([item.representedObject isEqual:selectors[index]]);
+        [bar performMoreMenuAction:item];
+    }
+    NSMenuItem *const hidden_files = ExplorerOperationsMenuItemNamed(enabled_menu, titles[4]);
+    REQUIRE(hidden_files);
+    CHECK(hidden_files.state == NSControlStateValueOn);
+    CHECK([dispatcher.rosterExecutions isEqualToArray:@[
+        @"file.paste",
+        @"file.newFolder",
+        @"pane.selectAll",
+        @"pane.invertSelection",
+        @"view.toggleHiddenFiles",
+        @"view.togglePreviewPane",
+        @"navigation.refresh"
+    ]]);
+    CHECK(dispatcher.lastRosterStateSource == nc::core::CommandInvocationSource::Toolbar);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+}
+
+TEST_CASE(PREFIX "Explorer View projects and executes the details pane Registry command")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerFileCommandMenuTestActionsDispatcher *const dispatcher = [ExplorerFileCommandMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                          panelController:panel];
+    const auto find_details = [](NCCommandPopover *const _popover) -> NCCommandPopoverItem * {
+        const auto items = _popover.commandItems;
+        const auto it = std::ranges::find_if(items, [](NCCommandPopoverItem *const _item) {
+            return [_item.representedObject isEqual:NSStringFromSelector(@selector(OnTogglePreviewPane:))];
+        });
+        return it != items.end() ? *it : nil;
+    };
+
+    dispatcher.commandsEnabled = false;
+    NCCommandPopoverItem *const disabled = find_details([bar buildViewPopover]);
+    REQUIRE(disabled);
+    CHECK([disabled.title
+        isEqual:NSLocalizedString(@"commands.view.togglePreviewPane.title", "Show Details Pane command title")]);
+    CHECK(disabled.target == nil);
+    CHECK(disabled.action == nil);
+    CHECK(disabled.toolTip.length > 0);
+
+    dispatcher.commandsEnabled = true;
+    NCCommandPopoverItem *const enabled = find_details([bar buildViewPopover]);
+    REQUIRE(enabled);
+    CHECK(enabled.target == bar);
+    CHECK(enabled.action == @selector(performPopoverAction:));
+    CHECK(enabled.image != nil);
+    [bar performPopoverAction:enabled];
+    CHECK([dispatcher.rosterExecutions isEqualToArray:@[@"view.togglePreviewPane"]]);
+    CHECK(dispatcher.lastRosterStateSource == nc::core::CommandInvocationSource::Toolbar);
+    CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+}
+
+TEST_CASE(PREFIX "New popover projects creation Registry states and keeps Toolbar execution source")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerNewPopoverTestActionsDispatcher *const dispatcher = [ExplorerNewPopoverTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
+                                                                          panelController:panel];
+
+    dispatcher.newFolderEnabled = false;
+    dispatcher.newFileEnabled = false;
+    NCCommandPopover *const disabled_popover = [bar buildNewPopover];
+    const auto disabled_items = disabled_popover.commandItems;
+    REQUIRE(disabled_items.size() == 2);
+    const auto disabled_it = std::ranges::find_if(disabled_items, [](NCCommandPopoverItem *const _item) {
+        return [_item.representedObject isEqual:NSStringFromSelector(@selector(OnQuickNewFolder:))];
+    });
+    REQUIRE(disabled_it != disabled_items.end());
+    NCCommandPopoverItem *const disabled = *disabled_it;
+    CHECK([disabled.title isEqual:NSLocalizedString(@"commands.file.newFolder.title", "New Folder command title")]);
+    CHECK(disabled.target == nil);
+    CHECK(disabled.action == nil);
+    CHECK(disabled.toolTip.length > 0);
+    const auto disabled_file_it = std::ranges::find_if(disabled_items, [](NCCommandPopoverItem *const _item) {
+        return [_item.representedObject isEqual:NSStringFromSelector(@selector(OnQuickNewFile:))];
+    });
+    REQUIRE(disabled_file_it != disabled_items.end());
+    CHECK([(*disabled_file_it).title
+        isEqual:NSLocalizedString(@"commands.file.newFile.title", "New File command title")]);
+    CHECK((*disabled_file_it).target == nil);
+    CHECK((*disabled_file_it).action == nil);
+    CHECK((*disabled_file_it).toolTip.length > 0);
+
+    dispatcher.newFolderEnabled = true;
+    dispatcher.newFileEnabled = true;
+    NCCommandPopover *const enabled_popover = [bar buildNewPopover];
+    const auto enabled_items = enabled_popover.commandItems;
+    const auto enabled_it = std::ranges::find_if(enabled_items, [](NCCommandPopoverItem *const _item) {
+        return [_item.representedObject isEqual:NSStringFromSelector(@selector(OnQuickNewFolder:))];
+    });
+    REQUIRE(enabled_it != enabled_items.end());
+    NCCommandPopoverItem *const enabled = *enabled_it;
+    CHECK(enabled.target == bar);
+    CHECK(enabled.action == @selector(performPopoverAction:));
+    CHECK(enabled.toolTip == nil);
+    [bar performPopoverAction:enabled];
+    CHECK(dispatcher.newFolderExecutionCount == 1);
+    CHECK(dispatcher.newFolderExecutionSource == nc::core::CommandInvocationSource::Toolbar);
+    CHECK(dispatcher.newFolderSender == enabled);
+
+    const auto enabled_file_it = std::ranges::find_if(enabled_items, [](NCCommandPopoverItem *const _item) {
+        return [_item.representedObject isEqual:NSStringFromSelector(@selector(OnQuickNewFile:))];
+    });
+    REQUIRE(enabled_file_it != enabled_items.end());
+    NCCommandPopoverItem *const enabled_file = *enabled_file_it;
+    CHECK(enabled_file.target == bar);
+    CHECK(enabled_file.action == @selector(performPopoverAction:));
+    CHECK(enabled_file.toolTip == nil);
+    [bar performPopoverAction:enabled_file];
+    CHECK(dispatcher.newFileExecutionCount == 1);
+    CHECK(dispatcher.newFileExecutionSource == nc::core::CommandInvocationSource::Toolbar);
+    CHECK(dispatcher.newFileSender == enabled_file);
 }
 
 TEST_CASE(PREFIX "compact Operations menu omits terminal records and reports no active operations")
@@ -1147,9 +2280,9 @@ TEST_CASE(PREFIX "compact Operations menu omits terminal records and reports no 
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel
-                                                                  operationCenterCoordinator:coordinator
-                                                                             commandRegistry:&registry];
+                                                                          panelController:panel
+                                                               operationCenterCoordinator:coordinator
+                                                                          commandRegistry:&registry];
 
     NSMenu *const menu = [bar buildMoreMenu];
     NSMenuItem *const section = ExplorerOperationsMenuSection(menu);
@@ -1179,9 +2312,9 @@ TEST_CASE(PREFIX "compact Operations menu keeps an unknown cancel command visibl
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel
-                                                                  operationCenterCoordinator:coordinator
-                                                                             commandRegistry:&registry];
+                                                                          panelController:panel
+                                                               operationCenterCoordinator:coordinator
+                                                                          commandRegistry:&registry];
 
     NSMenu *const menu = [bar buildMoreMenu];
     NSMenuItem *const record_item = ExplorerOperationsMenuRecordItem(menu, records.front());
@@ -1194,8 +2327,8 @@ TEST_CASE(PREFIX "compact Operations menu keeps an unknown cancel command visibl
     CHECK(cancel.action == nil);
     NSString *const key = @"commands.operation.cancel.disabled.controlUnavailable";
     NSString *const localized = [NSBundle.mainBundle localizedStringForKey:key value:nil table:nil];
-    NSString *const expected = localized.length && ![localized isEqual:key] ? localized
-                                                                              : @"This command is currently unavailable";
+    NSString *const expected =
+        localized.length && ![localized isEqual:key] ? localized : @"This command is currently unavailable";
     CHECK([cancel.toolTip isEqual:expected]);
     CHECK([cancel.accessibilityHelp isEqual:cancel.toolTip]);
 }
@@ -1211,18 +2344,16 @@ TEST_CASE(PREFIX "compact Operations menu binds Cancel to an immutable Menu valu
     const nc::ops::OperationRecord record = records.front();
 
     nc::core::CommandRegistry registry;
-    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand(
-                         [](nc::ops::OperationId, uint64_t) {
-                             return nc::ops::OperationCenterCancelResult{
-                                 .code = nc::ops::OperationCenterCancelResultCode::Accepted};
-                         })) == nc::core::CommandRegistry::RegisterResult::Registered);
+    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand([](nc::ops::OperationId, uint64_t) {
+        return nc::ops::OperationCenterCancelResult{.code = nc::ops::OperationCenterCancelResultCode::Accepted};
+    })) == nc::core::CommandRegistry::RegisterResult::Registered);
     ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel
-                                                                  operationCenterCoordinator:coordinator
-                                                                             commandRegistry:&registry];
+                                                                          panelController:panel
+                                                               operationCenterCoordinator:coordinator
+                                                                          commandRegistry:&registry];
 
     NSMenu *const menu = [bar buildMoreMenu];
     NSMenuItem *const record_item = ExplorerOperationsMenuRecordItem(menu, record);
@@ -1266,34 +2397,32 @@ TEST_CASE(PREFIX "Operation Center opens one copied value snapshot with terminal
     std::optional<nc::ops::OperationId> cancelled_id;
     uint64_t cancelled_revision = 0;
     nc::core::CommandRegistry registry;
-    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand(
-                         [&](const nc::ops::OperationId _operation_id, const uint64_t _expected_revision) {
-                             ++cancel_calls;
-                             cancelled_id = _operation_id;
-                             cancelled_revision = _expected_revision;
-                             return nc::ops::OperationCenterCancelResult{
-                                 .code = nc::ops::OperationCenterCancelResultCode::Accepted};
-                         })) == nc::core::CommandRegistry::RegisterResult::Registered);
+    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand([&](const nc::ops::OperationId _operation_id,
+                                                                       const uint64_t _expected_revision) {
+        ++cancel_calls;
+        cancelled_id = _operation_id;
+        cancelled_revision = _expected_revision;
+        return nc::ops::OperationCenterCancelResult{.code = nc::ops::OperationCenterCancelResultCode::Accepted};
+    })) == nc::core::CommandRegistry::RegisterResult::Registered);
     auto provider_snapshot = std::make_shared<std::vector<nc::ops::OperationRecord>>(initial_records);
     REQUIRE(registry.Register(nc::core::MakeOperationCenterOpenCommand(
-                         [provider_snapshot]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
-                             return *provider_snapshot;
-                         },
-                         [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
-                             if( _native_target == nullptr )
-                                 return false;
-                             NCExplorerCommandBarView *const command_bar =
-                                 (__bridge NCExplorerCommandBarView *)_native_target;
-                             return [command_bar presentOperationCenterSnapshot:std::move(_snapshot)];
-                         })) == nc::core::CommandRegistry::RegisterResult::Registered);
+                [provider_snapshot]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                    return *provider_snapshot;
+                },
+                [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
+                    if( _native_target == nullptr )
+                        return false;
+                    NCExplorerCommandBarView *const command_bar = (__bridge NCExplorerCommandBarView *)_native_target;
+                    return [command_bar presentOperationCenterSnapshot:std::move(_snapshot)];
+                })) == nc::core::CommandRegistry::RegisterResult::Registered);
 
     ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel
-                                                                  operationCenterCoordinator:fixture.coordinator
-                                                                             commandRegistry:&registry];
+                                                                          panelController:panel
+                                                               operationCenterCoordinator:fixture.coordinator
+                                                                          commandRegistry:&registry];
 
     NSMenu *const menu = [bar buildMoreMenu];
     NSMenuItem *const open = ExplorerOperationsMenuItemNamed(
@@ -1313,7 +2442,8 @@ TEST_CASE(PREFIX "Operation Center opens one copied value snapshot with terminal
     CHECK(snapshot_panel.visible);
     CHECK([snapshot_text.string rangeOfString:ExplorerOperationIdentifier(*terminal)].location != NSNotFound);
     CHECK([snapshot_text.string rangeOfString:ExplorerOperationIdentifier(*queued)].location != NSNotFound);
-    CHECK([snapshot_text.string rangeOfString:NSLocalizedString(@"explorer.operations.state.queued", "Explorer operation menu")]
+    CHECK([snapshot_text.string
+              rangeOfString:NSLocalizedString(@"explorer.operations.state.queued", "Explorer operation menu")]
               .location != NSNotFound);
 
     REQUIRE(snapshot_controls.arrangedSubviews.count == 1);
@@ -1336,9 +2466,11 @@ TEST_CASE(PREFIX "Operation Center opens one copied value snapshot with terminal
     });
     REQUIRE(mutable_queued != provider_snapshot->end());
     mutable_queued->state = nc::ops::OperationRecordState::Running;
-    CHECK([snapshot_text.string rangeOfString:NSLocalizedString(@"explorer.operations.state.queued", "Explorer operation menu")]
+    CHECK([snapshot_text.string
+              rangeOfString:NSLocalizedString(@"explorer.operations.state.queued", "Explorer operation menu")]
               .location != NSNotFound);
-    CHECK([snapshot_text.string rangeOfString:NSLocalizedString(@"explorer.operations.state.running", "Explorer operation menu")]
+    CHECK([snapshot_text.string
+              rangeOfString:NSLocalizedString(@"explorer.operations.state.running", "Explorer operation menu")]
               .location == NSNotFound);
     [snapshot_panel orderOut:nil];
 }
@@ -1348,20 +2480,18 @@ TEST_CASE(PREFIX "Operation Center retained Cancel control keeps its original ID
     REQUIRE(nc::dispatch_is_main_queue());
     ExplorerOperationMenuTestDirectory directory;
     auto fixture = ExplorerOperationCenterSnapshotWithTerminalAndQueuedRecords(directory);
-    auto replacement_staging = fixture.coordinator->StageAdmission(*fixture.journal, ExplorerOperationMenuPlan("replacement"));
+    auto replacement_staging =
+        fixture.coordinator->StageAdmission(*fixture.journal, ExplorerOperationMenuPlan("replacement"));
     REQUIRE(replacement_staging);
     REQUIRE(fixture.coordinator->CommitAdmission(*fixture.journal, std::move(*replacement_staging)));
 
     const auto records = fixture.coordinator->Model().Snapshot();
-    const auto terminal = std::ranges::find_if(records, [](const nc::ops::OperationRecord &record) {
-        return record.plan_id.Value() == "terminal";
-    });
-    const auto queued = std::ranges::find_if(records, [](const nc::ops::OperationRecord &record) {
-        return record.plan_id.Value() == "queued";
-    });
-    const auto replacement = std::ranges::find_if(records, [](const nc::ops::OperationRecord &record) {
-        return record.plan_id.Value() == "replacement";
-    });
+    const auto terminal = std::ranges::find_if(
+        records, [](const nc::ops::OperationRecord &record) { return record.plan_id.Value() == "terminal"; });
+    const auto queued = std::ranges::find_if(
+        records, [](const nc::ops::OperationRecord &record) { return record.plan_id.Value() == "queued"; });
+    const auto replacement = std::ranges::find_if(
+        records, [](const nc::ops::OperationRecord &record) { return record.plan_id.Value() == "replacement"; });
     REQUIRE(terminal != records.end());
     REQUIRE(queued != records.end());
     REQUIRE(replacement != records.end());
@@ -1373,32 +2503,30 @@ TEST_CASE(PREFIX "Operation Center retained Cancel control keeps its original ID
     std::vector<nc::ops::OperationId> cancelled_ids;
     std::vector<uint64_t> cancelled_revisions;
     nc::core::CommandRegistry registry;
-    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand(
-                         [&](const nc::ops::OperationId _operation_id, const uint64_t _expected_revision) {
-                             cancelled_ids.emplace_back(_operation_id);
-                             cancelled_revisions.emplace_back(_expected_revision);
-                             return nc::ops::OperationCenterCancelResult{
-                                 .code = nc::ops::OperationCenterCancelResultCode::Accepted};
-                         })) == nc::core::CommandRegistry::RegisterResult::Registered);
+    REQUIRE(registry.Register(nc::core::MakeOperationCancelCommand([&](const nc::ops::OperationId _operation_id,
+                                                                       const uint64_t _expected_revision) {
+        cancelled_ids.emplace_back(_operation_id);
+        cancelled_revisions.emplace_back(_expected_revision);
+        return nc::ops::OperationCenterCancelResult{.code = nc::ops::OperationCenterCancelResultCode::Accepted};
+    })) == nc::core::CommandRegistry::RegisterResult::Registered);
     REQUIRE(registry.Register(nc::core::MakeOperationCenterOpenCommand(
-                         [provider_snapshot]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
-                             return *provider_snapshot;
-                         },
-                         [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
-                             if( _native_target == nullptr )
-                                 return false;
-                             NCExplorerCommandBarView *const command_bar =
-                                 (__bridge NCExplorerCommandBarView *)_native_target;
-                             return [command_bar presentOperationCenterSnapshot:std::move(_snapshot)];
-                         })) == nc::core::CommandRegistry::RegisterResult::Registered);
+                [provider_snapshot]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                    return *provider_snapshot;
+                },
+                [](void *const _native_target, std::vector<nc::ops::OperationRecord> _snapshot) {
+                    if( _native_target == nullptr )
+                        return false;
+                    NCExplorerCommandBarView *const command_bar = (__bridge NCExplorerCommandBarView *)_native_target;
+                    return [command_bar presentOperationCenterSnapshot:std::move(_snapshot)];
+                })) == nc::core::CommandRegistry::RegisterResult::Registered);
 
     ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel
-                                                                  operationCenterCoordinator:fixture.coordinator
-                                                                             commandRegistry:&registry];
+                                                                          panelController:panel
+                                                               operationCenterCoordinator:fixture.coordinator
+                                                                          commandRegistry:&registry];
     [bar performOperationCenterOpen:nil];
     NSStackView *const controls = [bar valueForKey:@"m_OperationCenterSnapshotControls"];
     REQUIRE(controls);
@@ -1443,24 +2571,24 @@ TEST_CASE(PREFIX "Operation Center open is disabled when its weak coordinator is
     int snapshot_calls = 0;
     nc::core::CommandRegistry registry;
     REQUIRE(registry.Register(nc::core::MakeOperationCenterOpenCommand(
-                         [weak_coordinator, &snapshot_calls]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
-                             ++snapshot_calls;
-                             const auto coordinator = weak_coordinator.lock();
-                             if( !coordinator )
-                                 return std::nullopt;
-                             return coordinator->Model().Snapshot();
-                         },
-                         [](void *, std::vector<nc::ops::OperationRecord>) { return true; },
-                         [weak_coordinator] { return !weak_coordinator.expired(); })) ==
+                [weak_coordinator, &snapshot_calls]() -> std::optional<std::vector<nc::ops::OperationRecord>> {
+                    ++snapshot_calls;
+                    const auto coordinator = weak_coordinator.lock();
+                    if( !coordinator )
+                        return std::nullopt;
+                    return coordinator->Model().Snapshot();
+                },
+                [](void *, std::vector<nc::ops::OperationRecord>) { return true; },
+                [weak_coordinator] { return !weak_coordinator.expired(); })) ==
             nc::core::CommandRegistry::RegisterResult::Registered);
 
     ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
     ExplorerOperationMenuTestPanelController *const panel =
         [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
     NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 800, 32)
-                                                                            panelController:panel
-                                                                  operationCenterCoordinator:weak_coordinator
-                                                                             commandRegistry:&registry];
+                                                                          panelController:panel
+                                                               operationCenterCoordinator:weak_coordinator
+                                                                          commandRegistry:&registry];
 
     NSMenu *const menu = [bar buildMoreMenu];
     NSMenuItem *const open = ExplorerOperationsMenuItemNamed(
@@ -1664,8 +2792,7 @@ TEST_CASE(PREFIX "file.cut propagates a pasteboard staging failure")
     REQUIRE(registry.Register(registration) == nc::core::CommandRegistry::RegisterResult::Registered);
 
     CHECK_THROWS_AS(
-        registry.Execute(nc::core::CommandId{nc::core::command_ids::FileCut},
-                         nc::core::CommandContext{.items = items}),
+        registry.Execute(nc::core::CommandId{nc::core::command_ids::FileCut}, nc::core::CommandContext{.items = items}),
         nc::core::FileCutWriteError);
     CHECK(pasteboard.changeCount == original_change_count);
     CHECK([[pasteboard stringForType:NSPasteboardTypeString] isEqualToString:@"existing clipboard payload"]);
@@ -1701,8 +2828,7 @@ TEST_CASE(PREFIX "breadcrumb keeps address callbacks current and distinguishes a
     REQUIRE(nc::dispatch_is_main_queue());
     ExplorerBreadcrumbTestPanelController *const panel = [ExplorerBreadcrumbTestPanelController new];
     NCExplorerBreadcrumbControl *const control =
-        [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0.0, 0.0, 600.0, 27.0)
-                                               panelController:panel];
+        [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0.0, 0.0, 600.0, 27.0) panelController:panel];
     const VFSHostPtr host = std::make_shared<NativePasteboardTestHost>();
     [control applyPaneSnapshot:ExplorerSnapshot(nc::core::PaneLoadPhase::Loaded, host)];
 
@@ -1719,9 +2845,8 @@ TEST_CASE(PREFIX "breadcrumb keeps address callbacks current and distinguishes a
     CHECK(panel.capturedRequest == request);
     const nc::Error request_error{nc::Error::POSIX, ENOENT};
     const auto adapted_request_error = nc::core::FileManagerErrorAdapter::FromError(request_error);
-    request->LoadingResultCallback(std::unexpected(request_error),
-                                   nc::panel::DirectoryChangeResultSource::Fetch,
-                                   [] { return true; });
+    request->LoadingResultCallback(
+        std::unexpected(request_error), nc::panel::DirectoryChangeResultSource::Fetch, [] { return true; });
     REQUIRE(RunExplorerPresentationMainLoopUntil([control] { return control.requestErrorMessage.length != 0; }));
     NSString *const adapter_fallback = [NSString stringWithUTF8String:adapted_request_error.user_message.c_str()];
     CHECK(([control.requestErrorMessage isEqualToString:@"The item or location could not be found."] ||
@@ -1750,18 +2875,15 @@ TEST_CASE(PREFIX "breadcrumb keeps address callbacks current and distinguishes a
     REQUIRE(provider_busy_request);
     REQUIRE(provider_busy_request->LoadingResultCallback);
     const nc::Error provider_busy_error{nc::Error::POSIX, EBUSY};
-    const auto adapted_provider_busy_error =
-        nc::core::FileManagerErrorAdapter::FromError(provider_busy_error);
-    provider_busy_request->LoadingResultCallback(std::unexpected(provider_busy_error),
-                                                 nc::panel::DirectoryChangeResultSource::Fetch,
-                                                 [] { return true; });
+    const auto adapted_provider_busy_error = nc::core::FileManagerErrorAdapter::FromError(provider_busy_error);
+    provider_busy_request->LoadingResultCallback(
+        std::unexpected(provider_busy_error), nc::panel::DirectoryChangeResultSource::Fetch, [] { return true; });
     REQUIRE(control.requestErrorMessage.length != 0);
     NSString *const provider_busy_fallback =
         [NSString stringWithUTF8String:adapted_provider_busy_error.user_message.c_str()];
     CHECK(([control.requestErrorMessage isEqualToString:@"The item or resource is currently in use."] ||
            [control.requestErrorMessage isEqualToString:provider_busy_fallback]));
-    CHECK_FALSE([control.requestErrorMessage
-        isEqualToString:@"Another folder request is already in progress."]);
+    CHECK_FALSE([control.requestErrorMessage isEqualToString:@"Another folder request is already in progress."]);
 
     [control navigateToPath:"/unavailable/" host:host];
     CHECK(control.requestErrorMessage == nil);

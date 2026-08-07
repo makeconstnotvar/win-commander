@@ -14,7 +14,7 @@
 namespace nc::core {
 class CommandRegistry;
 struct PaneSnapshot;
-}
+} // namespace nc::core
 
 namespace nc::ops {
 class OperationCenterCoordinator;
@@ -36,13 +36,18 @@ class OperationCenterCoordinator;
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel;
 
+@property(nonatomic, readonly) PanelController *panelController;
+
+/** Retargets every command and context observer to the newly active Explorer pane. */
+- (void)rebindToPanelController:(PanelController *)_panel;
+
 #ifdef __cplusplus
 /**
  * Injects the app-owned value-model coordinator and Registry for the compact Operations menu.
  * The coordinator is weak; each cancel invocation contains only an immutable ID/revision target.
  */
 - (instancetype)initWithFrame:(NSRect)frameRect
-              panelController:(PanelController *)_panel
+               panelController:(PanelController *)_panel
     operationCenterCoordinator:(std::weak_ptr<nc::ops::OperationCenterCoordinator>)_operation_center
                commandRegistry:(nc::core::CommandRegistry *)_command_registry;
 

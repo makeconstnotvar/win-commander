@@ -1,7 +1,6 @@
 // Copyright (C) 2018-2024 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "ServicesHandler.h"
 #include <WinCommander/States/MainWindowController.h>
-#include <WinCommander/States/FilePanels/MainWindowFilePanelState.h>
 #include <WinCommander/States/FilePanels/PanelController.h>
 #include <Utility/StringExtras.h>
 
@@ -46,7 +45,7 @@ void ServicesHandler::GoToFolder(const std::string &_path)
         ctx->RequestedDirectory = _path;
         ctx->VFS = m_NativeHost;
         ctx->InitiatedByUser = true;
-        [wnd.filePanelsState.activePanelController GoToDirWithContext:ctx];
+        [wnd.visibleActivePanelController GoToDirWithContext:ctx];
     }
 }
 
@@ -126,7 +125,7 @@ void ServicesHandler::RevealItems(const std::vector<std::string> &_paths)
         if( filenames.size() > 1 )
             ctx->RequestSelectedEntries = filenames;
         ctx->InitiatedByUser = true;
-        [wnd.filePanelsState.activePanelController GoToDirWithContext:ctx];
+        [wnd.visibleActivePanelController GoToDirWithContext:ctx];
     }
 }
 

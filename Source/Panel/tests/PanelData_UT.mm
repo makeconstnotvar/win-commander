@@ -5,6 +5,8 @@
 #include "PanelData.h"
 #include "PanelDataItemVolatileData.h"
 #include "PanelDataSelection.h"
+#include <atomic>
+#include <future>
 #include <memory>
 #include <set>
 #include "Tests.h"
@@ -96,6 +98,56 @@ TEST_CASE(PREFIX "Load")
     CHECK(model.ListingPtr() == listing);
     CHECK(model.RawEntriesCount() == 6);
     CHECK(model.SortedEntriesCount() == 6);
+}
+
+TEST_CASE(PREFIX "detached preparation preserves presentation and selection semantics")
+{
+    Model live;
+    live.Load(ProduceDummyListing(std::vector<std::string>{"seed"}), Model::PanelType::Directory);
+
+    auto sort = live.SortMode();
+    sort.sort = data::SortMode::SortByNameRev;
+    sort.collation = data::SortMode::Collation::Natural;
+    live.SetSortMode(sort);
+
+    auto hard_filter = live.HardFiltering();
+    hard_filter.show_hidden = false;
+    live.SetHardFiltering(hard_filter);
+
+    data::TextualFilter soft_filter;
+    soft_filter.text = @"keep";
+    soft_filter.type = data::TextualFilter::Beginning;
+    live.SetSoftFiltering(soft_filter);
+
+    const auto options = live.CapturePreparationOptions();
+    REQUIRE(live.MatchesPreparationOptions(options));
+
+    const auto listing = ProduceDummyListing(
+        std::vector<std::string>{"..", ".hidden", "drop", "keep-2", "keep-10"});
+    const std::vector<std::string> requested_selection{"keep-2"};
+    std::atomic_bool prepared_off_main = false;
+    auto future = std::async(std::launch::async, [&] {
+        prepared_off_main.store(!NSThread.isMainThread, std::memory_order_release);
+        return Model::PrepareDetached(
+            listing, Model::PanelType::Directory, options, requested_selection);
+    });
+    auto prepared = future.get();
+
+    REQUIRE(prepared);
+    CHECK(prepared_off_main.load(std::memory_order_acquire));
+    CHECK(prepared->ListingPtr() == listing);
+    CHECK(prepared->SortMode() == sort);
+    CHECK(prepared->HardFiltering() == hard_filter);
+    CHECK(prepared->SoftFiltering() == soft_filter);
+    CHECK(prepared->SortedIndexForName(".hidden") == -1);
+    REQUIRE(prepared->EntriesBySoftFiltering().size() == 3); // dot-dot plus both matching names
+    const auto selected = prepared->SelectedEntriesSorted();
+    REQUIRE(selected.size() == 1);
+    CHECK(selected.front().Filename() == "keep-2");
+
+    sort.sort = data::SortMode::SortByName;
+    live.SetSortMode(sort);
+    CHECK_FALSE(live.MatchesPreparationOptions(options));
 }
 
 TEST_CASE(PREFIX "RawIndicesForName")

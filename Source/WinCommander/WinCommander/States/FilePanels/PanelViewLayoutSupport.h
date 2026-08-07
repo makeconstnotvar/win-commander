@@ -10,7 +10,9 @@
 #include <vector>
 #include <memory>
 #include <variant>
+#ifdef __OBJC__
 #include <Cocoa/Cocoa.h>
+#endif
 
 namespace nc::config {
 class Config;
@@ -60,6 +62,9 @@ struct PanelViewLayout {
     // Layout configuration, specific to its type
     LayoutVariant layout;
 };
+
+/** Validates a concrete active presentation layout. Disabled and malformed layouts are rejected. */
+[[nodiscard]] bool IsValidPanelViewLayout(const PanelViewLayout &_layout) noexcept;
 
 // supposed to be thread-safe
 class PanelViewLayoutsStorage : public base::ObservableBase
@@ -123,8 +128,10 @@ private:
 
 } // namespace nc::panel
 
+#ifdef __OBJC__
 @interface PanelViewLayoutsMenuDelegate : NSObject <NSMenuDelegate>
 
 - (id)initWithStorage:(nc::panel::PanelViewLayoutsStorage &)_storage;
 
 @end
+#endif

@@ -16,8 +16,12 @@
                 <outlet property="TargetFilename" destination="112" id="133"/>
                 <outlet property="abortButton" destination="30" id="tIW-Wq-C7u"/>
                 <outlet property="appendButton" destination="15" id="xAp-s2-EQy"/>
+                <outlet property="conflictTitle" destination="119" id="Q18-CF-TTL"/>
+                <outlet property="existingItemLabel" destination="60" id="Q18-CF-DST"/>
                 <outlet property="keepBothButton" destination="0Kp-zw-kW9" id="wLA-Jx-LOu"/>
+                <outlet property="sourceItemLabel" destination="56" id="Q18-CF-SRC"/>
                 <outlet property="overwriteButton" destination="B89-N8-gQP" id="LDb-4f-Mq8"/>
+                <outlet property="replaceOptionsButton" destination="JQp-jj-wv1" id="Q18-CF-OPT"/>
                 <outlet property="skipButton" destination="10" id="LuV-ry-lOX"/>
                 <outlet property="window" destination="1" id="3"/>
             </connections>
@@ -137,7 +141,7 @@
                     </textField>
                     <button toolTip="^O" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="B89-N8-gQP">
                         <rect key="frame" x="396" y="13" width="94" height="32"/>
-                        <buttonCell key="cell" type="push" title="Overwrite" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="8Xz-24-O4V">
+                        <buttonCell key="cell" type="push" title="Replace" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="8Xz-24-O4V">
                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="system"/>
                             <string key="keyEquivalent" base64-UTF8="YES">
@@ -176,7 +180,7 @@ DQ
                                     <menuItem hidden="YES" toolTip="Otherwise the item will be skipped" id="0un-JC-4pV">
                                         <modifierMask key="keyEquivalentModifierMask"/>
                                     </menuItem>
-                                    <menuItem title="Overwrite Older" toolTip="Otherwise the item will be skipped" id="2O5-JQ-7Zs">
+                                    <menuItem title="Replace Older" toolTip="Otherwise the item will be skipped" id="2O5-JQ-7Zs">
                                         <modifierMask key="keyEquivalentModifierMask"/>
                                         <connections>
                                             <action selector="OnOverwriteOlder:" target="-2" id="j8P-8O-UXn"/>

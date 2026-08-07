@@ -12,6 +12,7 @@
 #include <WinCommander/Core/Pane/PaneSnapshot.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <cstdint>
 #include "../Explorer/NCPanelControllerHostingState.h"
 
 @class PanelController;
@@ -42,6 +43,10 @@ class NativeHost;
 
 namespace panel {
 
+namespace actions {
+enum class InlineRenameStatus : uint8_t;
+}
+
 namespace data {
 struct SortMode;
 struct HardFilter;
@@ -50,6 +55,7 @@ class Model;
 
 class History;
 struct PersistentLocation;
+struct PanelViewLayout;
 class PanelViewLayoutsStorage;
 
 class DirectoryAccessProvider
@@ -123,15 +129,13 @@ struct DirectoryChangeRequest {
     bool InitiatedByUser = false;
 
     /**
-     * Called on the submitting thread for immediate admission rejection, or on the worker thread
-     * for a VFS fetch result. The source distinguishes controller admission failures from provider
-     * errors that happen to use the same native error code. The validity predicate must be checked
-     * again at the point where an asynchronously dispatched UI or recovery action is applied: a
-     * newer navigation can supersede this result after the callback starts.
-     *
-     * A successful fetch can still be cancelled before model commit; the validity predicate then
-     * becomes false. Accepted-request failures that occur before a fetch result exists are reported
-     * by the pane lifecycle boundary.
+     * Called on the submitting thread for immediate admission rejection, on the worker thread for
+     * a failed VFS fetch, or on the main thread after an accepted successful model commit. The
+     * source distinguishes controller admission failures from provider errors that happen to use
+     * the same native error code. The validity predicate must be checked again at the point where
+     * an asynchronously dispatched UI or recovery action is applied: a newer navigation can
+     * supersede a committed result after the callback starts. A fetched result rejected by an exact
+     * content/options fence is reported as ECANCELED with a false validity predicate.
      */
     std::function<void(const std::expected<void, Error> &,
                        DirectoryChangeResultSource _source,
@@ -174,8 +178,16 @@ using PaneLifecycleSubscription = core::PaneLifecycleProducer::Subscription;
 @property(nonatomic, readonly) nc::panel::PanelViewLayoutsStorage &layoutStorage;
 @property(nonatomic, readonly) nc::core::VFSInstanceManager &vfsInstanceManager;
 @property(nonatomic, readonly) bool isDoingBackgroundLoading;
+@property(nonatomic, readonly) bool isDirectorySizeCalculationBusy;
 // Defaults to PanelViewHeader. Explorer replaces it with a floating presenter.
 @property(nonatomic, weak) id<NCPanelQuickSearchPresentation> quickSearchPresentation;
+
+/**
+ * Applies a pane-owned presentation layout without changing the configured shared preset.
+ * The slot must currently contain an enabled layout of the same presentation type.
+ */
+- (bool)applyPaneLocalPresentationLayout:(const nc::panel::PanelViewLayout &)_layout
+                        atConfiguredSlot:(int)_slot;
 
 /**
  * The injected Config, VFS manager, access provider, native FS manager and native host are retained
@@ -211,6 +223,15 @@ using PaneLifecycleSubscription = core::PaneLifecycleProducer::Subscription;
     (std::function<void(const nc::panel::CancelableLoadingTaskContext &)>)_task;
 
 /**
+ * Runs recovery work independently of the controller-owned serial queue. The work captures only
+ * the claimed content-intent generation; a main-queue commit is admitted through a weak controller
+ * reference while that generation is still current. This keeps non-cooperative recovery providers
+ * from extending controller teardown.
+ */
+- (void)commitDetachedCancelableLoadingTask:
+    (std::function<void(const nc::panel::CancelableLoadingTaskContext &)>)_task;
+
+/**
  * Will copy view options and sorting options.
  */
 - (void)copyOptionsFromController:(PanelController *)_pc;
@@ -234,7 +255,7 @@ using PaneLifecycleSubscription = core::PaneLifecycleProducer::Subscription;
 - (void)setEntriesSelection:(const std::vector<bool> &)_selection;
 - (void)setSelectionForItemAtIndex:(int)_index selected:(bool)_selected;
 
-- (void)calculateSizesOfItems:(const std::vector<VFSListingItem> &)_items;
+- (bool)calculateSizesOfItems:(const std::vector<VFSListingItem> &)_items;
 
 /**
  * This is the main directory loading facility for an external code,
@@ -262,7 +283,8 @@ using PaneLifecycleSubscription = core::PaneLifecycleProducer::Subscription;
  */
 - (void)scheduleDelayedFocusing:(const nc::panel::DelayedFocusing &)request;
 
-- (void)requestQuickRenamingOfItem:(VFSListingItem)_item to:(const std::string &)_new_filename;
+- (nc::panel::actions::InlineRenameStatus)requestQuickRenamingOfItem:(VFSListingItem)_item
+                                                                  to:(const std::string &)_new_filename;
 
 // Tells PanelController that the underground VFS was changed.
 // If the current VFS doesn't provide change notifications ->

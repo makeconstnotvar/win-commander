@@ -14,13 +14,33 @@ class Operation;
 
 namespace nc::panel::actions {
 
+enum class ArchiveCreateSubmissionResult {
+    Presented,
+    PaneUnavailable,
+    WindowUnavailable,
+    Loading,
+    SelectionUnavailable,
+    ParentEntryUnsupported,
+    SourceUnreadable,
+    SourceNameCollision,
+    DestinationUnavailable,
+    DestinationReadOnly,
+    ProviderUnsupported,
+    StaleContext
+};
+
+[[nodiscard]] ArchiveCreateSubmissionResult
+EvaluateArchiveCreateSubmission(std::span<const VFSListingItem> _items, PanelController *_target);
+[[nodiscard]] ArchiveCreateSubmissionResult PresentArchiveCreate(std::span<const VFSListingItem> _items,
+                                                                PanelController *_target,
+                                                                nc::config::Config &_config);
+
 class CompressBase
 {
 public:
     CompressBase(nc::config::Config &_config);
-
-protected:
     void AddDeselectorIfNeeded(nc::ops::Operation &_with_operation, PanelController *_to_target) const;
+    [[nodiscard]] nc::config::Config &Config() const noexcept { return m_Config; }
 
 private:
     [[nodiscard]] bool ShouldAutomaticallyDeselect() const;

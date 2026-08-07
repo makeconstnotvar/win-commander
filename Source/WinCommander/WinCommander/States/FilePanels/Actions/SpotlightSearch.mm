@@ -1,5 +1,6 @@
 // Copyright (C) 2017-2025 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "SpotlightSearch.h"
+#include <WinCommander/States/Explorer/NCExplorerSearchPresenting.h>
 #include <Base/algo.h>
 #include <VFS/Native.h>
 #include <VFS/VFSListingInput.h>
@@ -101,6 +102,16 @@ static VFSListingPtr FetchSearchResultsAsListing(const std::vector<std::string> 
 
 void SpotlightSearch::Perform(PanelController *_target, id /*_sender*/) const
 {
+    id const state = _target.state;
+    if( [state conformsToProtocol:@protocol(NCExplorerSearchPresenting)] ) {
+        id<NCExplorerSearchPresenting> const presenter = static_cast<id<NCExplorerSearchPresenting>>(state);
+        if( [presenter canPresentSearchForPanel:_target] )
+            [presenter presentSearchForPanel:_target
+                                initialQuery:nil
+                              preferredScope:NCExplorerSearchPreferredScopeSpotlightWholeMac];
+        return;
+    }
+
     const auto view = [[SpotlightSearchPopupViewController alloc] init];
     __weak PanelController *wp = _target;
     view.handler = [wp](const std::string &_query) {

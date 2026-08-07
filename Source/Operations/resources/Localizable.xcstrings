@@ -362,6 +362,17 @@
         }
       }
     },
+    "Creating an empty file “%@”" : {
+      "comment" : "Creating an empty file “%@”",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Создание пустого файла “%@”"
+          }
+        }
+      }
+    },
     "Creating a new hard link" : {
       "localizations" : {
         "ru" : {
@@ -483,6 +494,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Не удалось создать папку"
+          }
+        }
+      }
+    },
+    "Failed to create an empty file" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось создать пустой файл"
           }
         }
       }

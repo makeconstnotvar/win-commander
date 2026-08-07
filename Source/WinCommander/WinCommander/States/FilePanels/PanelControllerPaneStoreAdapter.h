@@ -1,8 +1,10 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #pragma once
 
+#include <Panel/PanelDataSortMode.h>
 #include <WinCommander/Core/Pane/PaneStoreAdapter.h>
 #include <memory>
+#include <optional>
 
 @class PanelController;
 
@@ -12,11 +14,13 @@ struct PanelViewLayout;
 
 namespace data {
 class Model;
-struct SortMode;
 }
 
 /** Maps the legacy panel ordering bits into the toolkit-independent pane read model. */
 [[nodiscard]] core::PaneSortState ProjectPaneSortState(data::SortMode _sort_mode) noexcept;
+
+/** Strict inverse of ProjectPaneSortState; incomplete or contradictory semantic states fail closed. */
+[[nodiscard]] std::optional<data::SortMode> RestorePanelSortMode(const core::PaneSortState &_sort_state) noexcept;
 
 /** Derives the active grouping key from the legacy ordering only while grouping is enabled. */
 [[nodiscard]] core::PaneGroupingState ProjectPaneGroupingState(data::SortMode _sort_mode,

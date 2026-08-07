@@ -42,7 +42,8 @@ class ControllerStateJSONDecoder
 public:
     ControllerStateJSONDecoder(const utility::NativeFSManager &_fs_manager,
                                nc::core::VFSInstanceManager &_vfs_instance_manager,
-                               PanelDataPersistency &_persistency);
+                               PanelDataPersistency &_persistency,
+                               PanelDataPersistency::VFSRestoreOptions _vfs_restore_options = {});
 
     void Decode(const config::Value &_state, PanelController *_panel);
 
@@ -55,6 +56,7 @@ private:
     const utility::NativeFSManager &m_NativeFSManager;
     nc::core::VFSInstanceManager &m_VFSInstanceManager;
     PanelDataPersistency &m_Persistency;
+    PanelDataPersistency::VFSRestoreOptions m_VFSRestoreOptions;
 };
 
 } // namespace nc::panel

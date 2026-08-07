@@ -96,7 +96,16 @@ TEST_CASE(PREFIX "projects loading and refreshing without discarding committed r
     CHECK(loading.status.kind == PaneStatusVisualKind::Loading);
     CHECK(loading.status.shows_activity);
 
-    const PaneVisualState refreshing = VisualStateMapper::MapPane(Pane(PaneLoadPhase::Refreshing));
+    PaneSnapshot refreshing_snapshot = Pane(PaneLoadPhase::Refreshing);
+    const PaneVisualState malformed_refreshing = VisualStateMapper::MapPane(refreshing_snapshot);
+    CHECK(malformed_refreshing.kind == PaneVisualKind::Loading);
+    CHECK_FALSE(malformed_refreshing.content_visible);
+    CHECK_FALSE(malformed_refreshing.breadcrumb.editable);
+    CHECK(malformed_refreshing.breadcrumb.shows_activity);
+    CHECK(malformed_refreshing.status.kind == PaneStatusVisualKind::Loading);
+
+    refreshing_snapshot.state.listing = VFSListing::EmptyListing();
+    const PaneVisualState refreshing = VisualStateMapper::MapPane(refreshing_snapshot);
     CHECK(refreshing.kind == PaneVisualKind::Refreshing);
     CHECK(refreshing.priority == VisualPriority::Activity);
     CHECK(refreshing.content_visible);
@@ -138,12 +147,19 @@ TEST_CASE(PREFIX "maps blocking errors by category and lets them dominate loadin
     constexpr auto cases = std::to_array<Case>({
         {FileManagerErrorCategory::PermissionError, PaneVisualKind::PermissionBlocked},
         {FileManagerErrorCategory::PathNotFoundError, PaneVisualKind::PathNotFound},
-        {FileManagerErrorCategory::VolumeUnavailableError, PaneVisualKind::ProviderUnavailable},
-        {FileManagerErrorCategory::NetworkError, PaneVisualKind::ProviderUnavailable},
-        {FileManagerErrorCategory::TimeoutError, PaneVisualKind::ProviderUnavailable},
-        {FileManagerErrorCategory::AuthenticationError, PaneVisualKind::ProviderUnavailable},
-        {FileManagerErrorCategory::RateLimitError, PaneVisualKind::ProviderUnavailable},
+        {FileManagerErrorCategory::VolumeUnavailableError, PaneVisualKind::VolumeDisconnected},
+        {FileManagerErrorCategory::NetworkError, PaneVisualKind::RemoteUnavailable},
+        {FileManagerErrorCategory::TimeoutError, PaneVisualKind::RemoteUnavailable},
+        {FileManagerErrorCategory::AuthenticationError, PaneVisualKind::RemoteUnavailable},
+        {FileManagerErrorCategory::RateLimitError, PaneVisualKind::RemoteUnavailable},
         {FileManagerErrorCategory::ProviderUnsupportedError, PaneVisualKind::Unsupported},
+        {FileManagerErrorCategory::ConflictError, PaneVisualKind::Error},
+        {FileManagerErrorCategory::ValidationError, PaneVisualKind::Error},
+        {FileManagerErrorCategory::InsufficientSpaceError, PaneVisualKind::Error},
+        {FileManagerErrorCategory::FileBusyError, PaneVisualKind::Error},
+        {FileManagerErrorCategory::ReadOnlyError, PaneVisualKind::Error},
+        {FileManagerErrorCategory::ChecksumMismatchError, PaneVisualKind::Error},
+        {FileManagerErrorCategory::PartialFailureError, PaneVisualKind::Error},
         {FileManagerErrorCategory::UnknownError, PaneVisualKind::Error},
     });
 

@@ -127,6 +127,10 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     }
 }
 
+@interface NCPanelViewFooter ()
+- (void)updateExplorerAccessibilityValue;
+@end
+
 @implementation NCPanelViewFooter {
     NSColor *m_Background;
     ColoredSeparatorLine *m_SeparatorLine;
@@ -167,6 +171,13 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
         m_ExplorerAppearance = _explorer_appearance;
         m_ItemMTime = 0;
         m_Theme = std::move(_theme);
+
+        if( m_ExplorerAppearance ) {
+            self.accessibilityElement = true;
+            self.accessibilityRole = NSAccessibilityGroupRole;
+            self.accessibilityIdentifier = @"wincommander.explorer.status";
+            self.accessibilityLabel = NSLocalizedString(@"Folder status", "Explorer status accessibility label");
+        }
 
         [self createControls];
         [self setupPresentation];
@@ -298,6 +309,12 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     [m_VolumeLabel setContentCompressionResistancePriority:40 forOrientation:NSLayoutConstraintOrientationHorizontal];
 
     if( m_ExplorerAppearance ) {
+        m_ItemsLabel.accessibilityIdentifier = @"wincommander.explorer.status.items";
+        m_ItemsLabel.accessibilityLabel = NSLocalizedString(@"Items", "Explorer status accessibility label");
+        m_SelectionLabel.accessibilityIdentifier = @"wincommander.explorer.status.selection";
+        m_SelectionLabel.accessibilityLabel = NSLocalizedString(@"Selection", "Explorer status accessibility label");
+        m_VolumeLabel.accessibilityIdentifier = @"wincommander.explorer.status.volume";
+        m_VolumeLabel.accessibilityLabel = NSLocalizedString(@"Available space", "Explorer status accessibility label");
         m_DetailsButton = [self makeExplorerViewButtonWithSymbol:@"list.bullet"
                                                            label:NSLocalizedString(@"Details", "Explorer status bar view")
                                                           action:@selector(onToggleViewLayout2:)];
@@ -307,6 +324,9 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
         m_ContentButton = [self makeExplorerViewButtonWithSymbol:@"rectangle.grid.1x2"
                                                            label:NSLocalizedString(@"Content", "Explorer status bar view")
                                                           action:@selector(onToggleViewLayout5:)];
+        m_DetailsButton.accessibilityIdentifier = @"wincommander.explorer.status.view.details";
+        m_IconsButton.accessibilityIdentifier = @"wincommander.explorer.status.view.icons";
+        m_ContentButton.accessibilityIdentifier = @"wincommander.explorer.status.view.content";
     }
     else {
         m_VSeparatorLine1 = [[ColoredSeparatorLine alloc] initWithFrame:NSRect()];
@@ -334,6 +354,8 @@ static NSString *FormHumanReadableBytesAndFiles(uint64_t _sz,
     button.contentTintColor = NSColor.secondaryLabelColor;
     button.toolTip = _label;
     button.accessibilityLabel = _label;
+    button.accessibilityHelp = [NSString
+        stringWithFormat:NSLocalizedString(@"Switch to the %@ view", "Explorer view button accessibility help"), _label];
     [button setContentHuggingPriority:NSLayoutPriorityRequired
                       forOrientation:NSLayoutConstraintOrientationHorizontal];
     [button setContentCompressionResistancePriority:NSLayoutPriorityRequired
@@ -620,6 +642,22 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
         m_VolumeInfoFetcher.SetTarget(_snapshot.state.listing);
         [self updateVolumeInfo];
     }
+    [self updateExplorerAccessibilityValue];
+}
+
+- (void)updateExplorerAccessibilityValue
+{
+    if( !m_ExplorerAppearance )
+        return;
+    NSMutableArray<NSString *> *const components = [NSMutableArray arrayWithCapacity:3];
+    for( NSTextField *label in @[m_ItemsLabel, m_SelectionLabel, m_VolumeLabel] ) {
+        label.accessibilityValue = label.stringValue;
+        if( label.stringValue.length > 0 ) {
+            [components addObject:label.stringValue];
+        }
+    }
+    self.accessibilityValue = [components componentsJoinedByString:@", "];
+    NSAccessibilityPostNotification(self, NSAccessibilityValueChangedNotification);
 }
 
 - (void)updateVolumeInfo
@@ -630,6 +668,7 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
         const auto fmt = NSLocalizedString(@"%@ available", "Explorer status bar, free space available on volume");
         m_VolumeLabel.stringValue = [NSString stringWithFormat:fmt, avail];
         m_VolumeLabel.toolTip = [NSString stringWithUTF8StdString:m_VolumeInfoFetcher.Current().volume_name];
+        [self updateExplorerAccessibilityValue];
         return;
     }
 
@@ -649,7 +688,8 @@ static NSString *ComposeFooterFileNameForEntry(const VFSListingItem &_dirent)
     const auto update = ^(NSButton *_button, bool _selected) {
       _button.state = _selected ? NSControlStateValueOn : NSControlStateValueOff;
       _button.contentTintColor = _selected ? NSColor.controlAccentColor : NSColor.secondaryLabelColor;
-      _button.accessibilityValue = _selected ? NSLocalizedString(@"Selected", "Accessibility value") : @"";
+      _button.accessibilityValue = _selected ? NSLocalizedString(@"Selected", "Accessibility value")
+                                             : NSLocalizedString(@"Not selected", "Accessibility value");
     };
     update(m_DetailsButton, _layout_kind == NCPanelViewFooterLayoutKindDetails);
     update(m_IconsButton, _layout_kind == NCPanelViewFooterLayoutKindIcons);

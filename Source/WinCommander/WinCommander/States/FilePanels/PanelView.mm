@@ -24,11 +24,52 @@
 #include <VFS/ProviderCapabilities.h>
 #include "PanelViewDummyPresentation.h"
 #include "PanelControllerActionsDispatcher.h"
+#include "Actions/InlineRename.h"
 
 using namespace nc::panel;
 using nc::vfsicon::IconRepository;
 
 NSNotificationName const NCPanelViewContextDidChangeNotification = @"NCPanelViewContextDidChangeNotification";
+
+static NSString *InlineRenameValidationMessage(nc::panel::actions::InlineRenameStatus _status,
+                                               const std::string &_filename)
+{
+    using nc::panel::actions::InlineRenameStatus;
+    switch( _status ) {
+        case InlineRenameStatus::InvalidName: {
+            NSString *const format = NSLocalizedString(@"The name “%@” can’t be used.",
+                                                       "Inline rename invalid filename message");
+            return [NSString stringWithFormat:format, [NSString stringWithUTF8StdString:_filename]];
+        }
+        case InlineRenameStatus::Loading:
+            return NSLocalizedString(@"Wait for the folder to finish loading, then try again.",
+                                     "Inline rename loading message");
+        case InlineRenameStatus::DestinationReadOnly:
+            return NSLocalizedString(@"You don’t have permission to rename items in this folder.",
+                                     "Inline rename read-only destination message");
+        case InlineRenameStatus::ProviderUnsupported:
+            return NSLocalizedString(@"This location doesn’t support renaming.",
+                                     "Inline rename unsupported provider message");
+        case InlineRenameStatus::CaseSensitivityUnavailable:
+            return NSLocalizedString(@"The location couldn’t verify this name safely.",
+                                     "Inline rename unknown case-sensitivity message");
+        case InlineRenameStatus::DestinationExists:
+            return NSLocalizedString(@"An item with this name already exists.",
+                                     "Inline rename destination collision message");
+        case InlineRenameStatus::UnsafeCaseOnlyRename:
+            return NSLocalizedString(@"This location can’t safely change only the letter case.",
+                                     "Inline rename unsafe case-only message");
+        case InlineRenameStatus::PaneUnavailable:
+        case InlineRenameStatus::WindowUnavailable:
+        case InlineRenameStatus::ListingUnavailable:
+        case InlineRenameStatus::StaleSource:
+            return NSLocalizedString(@"The folder contents changed. Start the rename again.",
+                                     "Inline rename stale context message");
+        case InlineRenameStatus::Ready:
+        case InlineRenameStatus::Unchanged:
+            return nil;
+    }
+}
 
 namespace nc::panel {
 
@@ -74,6 +115,10 @@ struct StateStorage {
     bool m_ExplorerDetailsGroupingEnabled;
     nc::utility::NSEventModifierFlagsHolder m_KeyboardModifierFlags;
     CursorSelectionType m_KeyboardCursorSelectionType;
+
+    std::unique_ptr<DragReceiver> m_ValidatedDragReceiver;
+    __weak id<NSDraggingInfo> m_ValidatedDraggingInfo;
+    int m_ValidatedDraggingIndex;
 }
 
 @synthesize headerView = m_HeaderView;
@@ -92,6 +137,7 @@ struct StateStorage {
         m_Data = nullptr;
         m_CursorPos = -1;
         m_ExplorerDetailsGroupingEnabled = false;
+        m_ValidatedDraggingIndex = -2;
         m_HeaderTitle = @"";
         m_IconRepository = std::move(_icon_repository);
         m_NativeHost = _native_vfs.SharedPtr();
@@ -714,7 +760,7 @@ struct StateStorage {
 {
     if( _sorted_index >= 0 )
         return [self.delegate panelView:self requestsContextMenuForItemNo:_sorted_index];
-    return nil;
+    return [self.delegate panelView:self requestsContextMenuForItemNo:-1];
 }
 
 - (VFSListingItem)item
@@ -979,13 +1025,21 @@ struct StateStorage {
     m_RenamingEditor = [[NCPanelViewFieldEditor alloc] initWithItem:item];
     __weak PanelView *weak_self = self;
     __weak NSResponder *current_responder = self.window.firstResponder;
-    m_RenamingEditor.onTextEntered = ^(const std::string &_new_filename) {
+    m_RenamingEditor.onTextEntered = ^bool(const std::string &_new_filename) {
       if( auto sself = weak_self ) {
           if( !sself->m_RenamingEditor )
-              return;
+              return false;
 
-          [sself.controller requestQuickRenamingOfItem:sself->m_RenamingEditor.originalItem to:_new_filename];
+          const auto status =
+              [sself.controller requestQuickRenamingOfItem:sself->m_RenamingEditor.originalItem to:_new_filename];
+          using nc::panel::actions::InlineRenameStatus;
+          if( status == InlineRenameStatus::Ready || status == InlineRenameStatus::Unchanged )
+              return true;
+          [sself->m_RenamingEditor setValidationMessage:InlineRenameValidationMessage(status, _new_filename)];
+          NSBeep();
+          return false;
       }
+      return false;
     };
     m_RenamingEditor.onEditingFinished = ^{
       if( auto sself = weak_self ) {
@@ -1052,7 +1106,10 @@ struct StateStorage {
     dispatch_assert_main_queue();
     std::optional<int> renaming_item_ind;
     if( m_RenamingEditor ) {
-        const auto new_item_ind = [self findSortedIndexOfForeignListingItem:m_RenamingEditor.originalItem];
+        const bool same_listing =
+            m_RenamingEditor.originalItem.Listing().get() == m_Data->ListingPtr().get();
+        const auto new_item_ind =
+            same_listing ? [self findSortedIndexOfForeignListingItem:m_RenamingEditor.originalItem] : -1;
         if( new_item_ind >= 0 ) {
             renaming_item_ind = new_item_ind;
             [m_RenamingEditor stash];
@@ -1246,12 +1303,30 @@ struct StateStorage {
 - (NSDragOperation)panelItem:(int)_sorted_index operationForDragging:(id<NSDraggingInfo>)_dragging
 {
     auto receiver = [self.delegate panelView:self requestsDragReceiverForDragging:_dragging onItem:_sorted_index];
-    return receiver->Validate();
+    const NSDragOperation operation = receiver->Validate();
+    if( operation == NSDragOperationNone ) {
+        m_ValidatedDragReceiver.reset();
+        m_ValidatedDraggingInfo = nil;
+        m_ValidatedDraggingIndex = -2;
+    }
+    else {
+        m_ValidatedDragReceiver = std::move(receiver);
+        m_ValidatedDraggingInfo = _dragging;
+        m_ValidatedDraggingIndex = _sorted_index;
+    }
+    return operation;
 }
 
 - (bool)panelItem:(int)_sorted_index performDragOperation:(id<NSDraggingInfo>)_dragging
 {
-    auto receiver = [self.delegate panelView:self requestsDragReceiverForDragging:_dragging onItem:_sorted_index];
+    if( !m_ValidatedDragReceiver || m_ValidatedDraggingInfo != _dragging ||
+        m_ValidatedDraggingIndex != _sorted_index ) {
+        return false;
+    }
+
+    auto receiver = std::move(m_ValidatedDragReceiver);
+    m_ValidatedDraggingInfo = nil;
+    m_ValidatedDraggingIndex = -2;
     return receiver->Receive();
 }
 

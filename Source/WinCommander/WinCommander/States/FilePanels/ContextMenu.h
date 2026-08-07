@@ -16,6 +16,8 @@ class FileOpener;
 
 @interface NCPanelContextMenu : NSMenu <NSMenuDelegate, NSMenuItemValidation>
 
+- (instancetype)initForBackgroundOfPanel:(PanelController *)_panel;
+
 - (instancetype)initWithItems:(std::vector<VFSListingItem>)_items
                       ofPanel:(PanelController *)_panel
                withFileOpener:(nc::panel::FileOpener &)_file_opener

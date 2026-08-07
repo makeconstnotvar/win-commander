@@ -18,6 +18,7 @@
 #include <memory>
 #include <pstld/pstld.h>
 #include <ranges>
+#include <tuple>
 
 // TODO: remove this global dependency
 #include <WinCommander/Bootstrap/AppDelegate.h>
@@ -37,11 +38,23 @@ using namespace nc::panel;
     NSMutableArray *m_ShareItemsURLs;
     NCPanelOpenWithMenuDelegate *m_OpenWithDelegate;
     std::unique_ptr<actions::PanelAction> m_CopyPathnameAction;
-    std::unique_ptr<actions::PanelAction> m_MoveToTrashAction;
-    std::unique_ptr<actions::PanelAction> m_DeletePermanentlyAction;
     std::unique_ptr<actions::PanelAction> m_DuplicateAction;
     std::unique_ptr<actions::PanelAction> m_CompressHereAction;
     std::unique_ptr<actions::PanelAction> m_CompressToOppositeAction;
+}
+
+- (instancetype)initForBackgroundOfPanel:(PanelController *)_panel
+{
+    if( !_panel )
+        return nil;
+    self = [super init];
+    if( self ) {
+        m_Panel = _panel;
+        self.delegate = self;
+        self.minimumWidth = 230;
+        [self doBackgroundStuffing];
+    }
+    return self;
 }
 
 - (instancetype)initWithItems:(std::vector<VFSListingItem>)_items
@@ -61,8 +74,6 @@ using namespace nc::panel;
         auto &global_config = NCAppDelegate.me.globalConfig;
 
         m_CopyPathnameAction = std::make_unique<actions::context::CopyPathname>(m_Items);
-        m_MoveToTrashAction = std::make_unique<actions::context::MoveToTrash>(m_Items);
-        m_DeletePermanentlyAction = std::make_unique<actions::context::DeletePermanently>(m_Items);
         m_DuplicateAction = std::make_unique<actions::context::Duplicate>(global_config, m_Items);
         m_CompressHereAction = std::make_unique<actions::context::CompressHere>(global_config, m_Items);
         m_CompressToOppositeAction = std::make_unique<actions::context::CompressToOpposite>(global_config, m_Items);
@@ -73,6 +84,52 @@ using namespace nc::panel;
         [self doStuffing];
     }
     return self;
+}
+
+- (void)doBackgroundStuffing
+{
+    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
+    const auto add_registry_item = [&](NSString *const _title,
+                                       const SEL _selector,
+                                       const nc::core::CommandState &_state) {
+        NSMenuItem *const item = [[NSMenuItem alloc] initWithTitle:_title action:nil keyEquivalent:@""];
+        const bool enabled = nc::presentation::CommandPresentationAdapter::Apply(_state, item);
+        item.enabled = enabled;
+        if( enabled ) {
+            item.target = self;
+            item.action = _selector;
+        }
+        if( !item.hidden )
+            [self addItem:item];
+    };
+
+    add_registry_item(NSLocalizedString(@"commands.file.paste.title", "Paste command title"),
+                      @selector(OnBackgroundPaste:),
+                      [dispatcher filePasteCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu]);
+    add_registry_item(
+        NSLocalizedString(@"commands.file.newFolder.title", "New Folder command title"),
+        @selector(OnBackgroundNewFolder:),
+        [dispatcher fileNewFolderCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu]);
+    [self addItem:NSMenuItem.separatorItem];
+
+    add_registry_item(
+        NSLocalizedString(@"commands.pane.selectAll.title", "Select All command title"),
+        @selector(OnBackgroundSelectAll:),
+        [dispatcher paneSelectAllCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu]);
+    add_registry_item(
+        NSLocalizedString(@"commands.pane.invertSelection.title", "Invert Selection command title"),
+        @selector(OnBackgroundInvertSelection:),
+        [dispatcher paneInvertSelectionCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu]);
+    [self addItem:NSMenuItem.separatorItem];
+
+    add_registry_item(
+        NSLocalizedString(@"commands.view.toggleHiddenFiles.title", "Show hidden files command title"),
+        @selector(OnBackgroundToggleHiddenFiles:),
+        [dispatcher viewToggleHiddenFilesCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu]);
+    add_registry_item(
+        NSLocalizedString(@"commands.navigation.refresh.title", "Refresh command title"),
+        @selector(OnBackgroundRefresh:),
+        [dispatcher navigationRefreshCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu]);
 }
 
 - (void)menuDidClose:(NSMenu *)menu
@@ -124,6 +181,18 @@ using namespace nc::panel;
         always_openwith.keyEquivalentModifierMask = NSEventModifierFlagOption;
         [self addItem:always_openwith];
 
+        NSMenuItem *const preview_item = [NSMenuItem new];
+        preview_item.title = NSLocalizedString(@"commands.file.preview.title", "Preview command title");
+        preview_item.target = self;
+        preview_item.action = @selector(OnPreview:);
+        preview_item.keyEquivalent = @"";
+        const auto preview_state = [m_Panel.view.actionsDispatcher
+            filePreviewCommandStateForItems:m_Items
+                                      source:nc::core::CommandInvocationSource::ContextMenu];
+        [[maybe_unused]] const bool preview_applied =
+            nc::presentation::CommandPresentationAdapter::Apply(preview_state, preview_item);
+        [self addItem:preview_item];
+
         if( m_Items.size() == 1 ) {
             NSMenuItem *const rename_item = [NSMenuItem new];
             rename_item.title = NSLocalizedString(@"commands.file.rename.title", "Rename command title");
@@ -132,6 +201,18 @@ using namespace nc::panel;
             rename_item.keyEquivalent = @"";
             [self addItem:rename_item];
         }
+
+        NSMenuItem *const get_info_item = [NSMenuItem new];
+        get_info_item.title = NSLocalizedString(@"commands.file.getInfo.title", "Get Info command title");
+        get_info_item.target = self;
+        get_info_item.action = @selector(OnGetInfo:);
+        get_info_item.keyEquivalent = @"";
+        const auto get_info_state = [m_Panel.view.actionsDispatcher
+            fileGetInfoCommandStateForItems:m_Items
+                                      source:nc::core::CommandInvocationSource::ContextMenu];
+        [[maybe_unused]] const bool get_info_applied =
+            nc::presentation::CommandPresentationAdapter::Apply(get_info_state, get_info_item);
+        [self addItem:get_info_item];
 
         [self addItem:NSMenuItem.separatorItem];
     }
@@ -143,7 +224,10 @@ using namespace nc::panel;
         @"Move to Trash", @"FilePanelsContextMenu", "Menu item title to move to trash, for English is 'Move to Trash'");
     trash_item.target = self;
     trash_item.action = @selector(OnMoveToTrash:);
-    trash_item.hidden = !m_MoveToTrashAction->Predicate(m_Panel);
+    const auto trash_state = [m_Panel.view.actionsDispatcher
+        fileTrashCommandStateForItems:m_Items
+                               source:nc::core::CommandInvocationSource::ContextMenu];
+    const bool trash_enabled = nc::presentation::CommandPresentationAdapter::Apply(trash_state, trash_item);
     trash_item.keyEquivalent = @"";
     [self addItem:trash_item];
 
@@ -154,9 +238,9 @@ using namespace nc::panel;
                                    "Menu item title to delete file, for English is 'Delete Permanently'");
     delete_item.target = self;
     delete_item.action = @selector(OnDeletePermanently:);
-    delete_item.alternate = !trash_item.hidden;
+    delete_item.alternate = trash_enabled;
     delete_item.keyEquivalent = @"";
-    delete_item.keyEquivalentModifierMask = trash_item.hidden ? 0 : NSEventModifierFlagOption;
+    delete_item.keyEquivalentModifierMask = trash_enabled ? NSEventModifierFlagOption : 0;
     [self addItem:delete_item];
 
     [self addItem:NSMenuItem.separatorItem];
@@ -181,6 +265,14 @@ using namespace nc::panel;
     compress_in_opposite_item.keyEquivalentModifierMask = NSEventModifierFlagOption;
     [self addItem:compress_in_opposite_item];
 
+    const auto extract_here_item = [NSMenuItem new];
+    extract_here_item.title =
+        NSLocalizedString(@"commands.archive.extract.title", "Extract archive command title");
+    extract_here_item.target = self;
+    extract_here_item.action = @selector(OnExtractArchiveHere:);
+    extract_here_item.keyEquivalent = @"";
+    [self addItem:extract_here_item];
+
     //////////////////////////////////////////////////////////////////////
     // Duplicate stuff
     const auto duplicate_item = [NSMenuItem new];
@@ -188,6 +280,19 @@ using namespace nc::panel;
     duplicate_item.target = self;
     duplicate_item.action = @selector(OnDuplicateItem:);
     [self addItem:duplicate_item];
+
+    const auto calculate_sizes_item = [NSMenuItem new];
+    calculate_sizes_item.title =
+        NSLocalizedString(@"commands.file.calculateSizes.title", "Calculate directory sizes command title");
+    calculate_sizes_item.target = self;
+    calculate_sizes_item.action = @selector(OnCalculateSizes:);
+    [self addItem:calculate_sizes_item];
+
+    const auto batch_rename_item = [NSMenuItem new];
+    batch_rename_item.title = NSLocalizedString(@"commands.file.batchRename.title", "Batch rename command title");
+    batch_rename_item.target = self;
+    batch_rename_item.action = @selector(OnBatchRename:);
+    [self addItem:batch_rename_item];
 
     //////////////////////////////////////////////////////////////////////
     // Share stuff
@@ -287,6 +392,25 @@ using namespace nc::panel;
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item
 {
+    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
+    if( item.action == @selector(OnBackgroundPaste:) )
+        return nc::presentation::CommandPresentationAdapter::Apply(
+            [dispatcher filePasteCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu], item);
+    if( item.action == @selector(OnBackgroundNewFolder:) )
+        return nc::presentation::CommandPresentationAdapter::Apply(
+            [dispatcher fileNewFolderCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu], item);
+    if( item.action == @selector(OnBackgroundSelectAll:) )
+        return nc::presentation::CommandPresentationAdapter::Apply(
+            [dispatcher paneSelectAllCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu], item);
+    if( item.action == @selector(OnBackgroundInvertSelection:) )
+        return nc::presentation::CommandPresentationAdapter::Apply(
+            [dispatcher paneInvertSelectionCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu], item);
+    if( item.action == @selector(OnBackgroundToggleHiddenFiles:) )
+        return nc::presentation::CommandPresentationAdapter::Apply(
+            [dispatcher viewToggleHiddenFilesCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu], item);
+    if( item.action == @selector(OnBackgroundRefresh:) )
+        return nc::presentation::CommandPresentationAdapter::Apply(
+            [dispatcher navigationRefreshCommandStateFromSource:nc::core::CommandInvocationSource::ContextMenu], item);
     if( item.action == @selector(OnCut:) ) {
         actions::UpdateCutToPasteboardMenuItemTitle(m_Items, item);
         const auto state = [m_Panel.view.actionsDispatcher
@@ -307,16 +431,68 @@ using namespace nc::panel;
                                      source:nc::core::CommandInvocationSource::ContextMenu];
         return nc::presentation::CommandPresentationAdapter::Apply(state, item);
     }
-    if( item.action == @selector(OnCopyPathname:) )
-        return m_CopyPathnameAction->ValidateMenuItem(m_Panel, item);
-    if( item.action == @selector(OnMoveToTrash:) )
-        return m_MoveToTrashAction->ValidateMenuItem(m_Panel, item);
-    if( item.action == @selector(OnDeletePermanently:) )
-        return m_DeletePermanentlyAction->ValidateMenuItem(m_Panel, item);
-    if( item.action == @selector(OnDuplicateItem:) )
-        return m_DuplicateAction->ValidateMenuItem(m_Panel, item);
-    if( item.action == @selector(OnCompressToCurrentPanel:) )
-        return m_CompressHereAction->ValidateMenuItem(m_Panel, item);
+    if( item.action == @selector(OnPreview:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            filePreviewCommandStateForItems:m_Items
+                                      source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnGetInfo:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileGetInfoCommandStateForItems:m_Items
+                                      source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnCopyPathname:) ) {
+        std::ignore = m_CopyPathnameAction->ValidateMenuItem(m_Panel, item);
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileCopyPathCommandStateForItems:m_Items
+                                      source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnMoveToTrash:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileTrashCommandStateForItems:m_Items
+                                   source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnDeletePermanently:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileDeleteCommandStateForItems:m_Items
+                                    source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnDuplicateItem:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileDuplicateCommandStateForItems:m_Items
+                                       source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnCalculateSizes:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileCalculateSizesCommandStateForItems:m_Items
+                                             source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnBatchRename:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            fileBatchRenameCommandStateForItems:m_Items
+                                          source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnCompressToCurrentPanel:) ) {
+        std::ignore = m_CompressHereAction->ValidateMenuItem(m_Panel, item);
+        const auto state = [m_Panel.view.actionsDispatcher
+            archiveCreateCommandStateForItems:m_Items
+                                        source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
+    if( item.action == @selector(OnExtractArchiveHere:) ) {
+        const auto state = [m_Panel.view.actionsDispatcher
+            archiveExtractCommandStateForItems:m_Items
+                                         source:nc::core::CommandInvocationSource::ContextMenu];
+        return nc::presentation::CommandPresentationAdapter::Apply(state, item);
+    }
     if( item.action == @selector(OnCompressToOppositePanel:) )
         return m_CompressToOppositeAction->ValidateMenuItem(m_Panel, item);
     if( item.action == @selector(OnRegularOpen:) ) {
@@ -329,6 +505,48 @@ using namespace nc::panel;
     return true;
 }
 
+- (void)OnBackgroundPaste:(id)sender
+{
+    [m_Panel.view.actionsDispatcher
+        executeFilePasteCommandFromSource:nc::core::CommandInvocationSource::ContextMenu
+                                   sender:sender];
+}
+
+- (void)OnBackgroundNewFolder:(id)sender
+{
+    [m_Panel.view.actionsDispatcher
+        executeFileNewFolderCommandFromSource:nc::core::CommandInvocationSource::ContextMenu
+                                       sender:sender];
+}
+
+- (void)OnBackgroundSelectAll:(id)sender
+{
+    [m_Panel.view.actionsDispatcher
+        executePaneSelectAllCommandFromSource:nc::core::CommandInvocationSource::ContextMenu
+                                      sender:sender];
+}
+
+- (void)OnBackgroundInvertSelection:(id)sender
+{
+    [m_Panel.view.actionsDispatcher
+        executePaneInvertSelectionCommandFromSource:nc::core::CommandInvocationSource::ContextMenu
+                                             sender:sender];
+}
+
+- (void)OnBackgroundToggleHiddenFiles:(id)sender
+{
+    [m_Panel.view.actionsDispatcher
+        executeViewToggleHiddenFilesCommandFromSource:nc::core::CommandInvocationSource::ContextMenu
+                                               sender:sender];
+}
+
+- (void)OnBackgroundRefresh:(id)sender
+{
+    [m_Panel.view.actionsDispatcher
+        executeNavigationRefreshCommandFromSource:nc::core::CommandInvocationSource::ContextMenu
+                                           sender:sender];
+}
+
 - (void)OnRegularOpen:(id)sender
 {
     [m_Panel.view.actionsDispatcher executeFileOpenCommandWithItems:m_Items
@@ -338,12 +556,16 @@ using namespace nc::panel;
 
 - (void)OnMoveToTrash:(id)sender
 {
-    m_MoveToTrashAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeFileTrashCommandWithItems:m_Items
+                                                               source:nc::core::CommandInvocationSource::ContextMenu
+                                                               sender:sender];
 }
 
 - (void)OnDeletePermanently:(id)sender
 {
-    m_DeletePermanentlyAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeFileDeleteCommandWithItems:m_Items
+                                                                source:nc::core::CommandInvocationSource::ContextMenu
+                                                                sender:sender];
 }
 
 - (void)OnCopyPaths:(id)sender
@@ -367,9 +589,25 @@ using namespace nc::panel;
                                                                sender:sender];
 }
 
+- (void)OnPreview:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeFilePreviewCommandWithItems:m_Items
+                                                                 source:nc::core::CommandInvocationSource::ContextMenu
+                                                                 sender:sender];
+}
+
+- (void)OnGetInfo:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeFileGetInfoCommandWithItems:m_Items
+                                                                 source:nc::core::CommandInvocationSource::ContextMenu
+                                                                 sender:sender];
+}
+
 - (void)OnCopyPathname:(id)sender
 {
-    m_CopyPathnameAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeFileCopyPathCommandWithItems:m_Items
+                                                                 source:nc::core::CommandInvocationSource::ContextMenu
+                                                                 sender:sender];
 }
 
 - (void)OnCompressToOppositePanel:(id)sender
@@ -379,7 +617,16 @@ using namespace nc::panel;
 
 - (void)OnCompressToCurrentPanel:(id)sender
 {
-    m_CompressHereAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeArchiveCreateCommandWithItems:m_Items
+                                                                   source:nc::core::CommandInvocationSource::ContextMenu
+                                                                   sender:sender];
+}
+
+- (void)OnExtractArchiveHere:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeArchiveExtractCommandWithItems:m_Items
+                                                                   source:nc::core::CommandInvocationSource::ContextMenu
+                                                                   sender:sender];
 }
 
 - (void)OnShareWithService:(id)sender
@@ -394,7 +641,23 @@ using namespace nc::panel;
 
 - (void)OnDuplicateItem:(id)sender
 {
-    m_DuplicateAction->Perform(m_Panel, sender);
+    [m_Panel.view.actionsDispatcher executeFileDuplicateCommandWithItems:m_Items
+                                                                  source:nc::core::CommandInvocationSource::ContextMenu
+                                                                  sender:sender];
+}
+
+- (void)OnCalculateSizes:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeFileCalculateSizesCommandWithItems:m_Items
+                                                                        source:nc::core::CommandInvocationSource::ContextMenu
+                                                                        sender:sender];
+}
+
+- (void)OnBatchRename:(id)sender
+{
+    [m_Panel.view.actionsDispatcher executeFileBatchRenameCommandWithItems:m_Items
+                                                                     source:nc::core::CommandInvocationSource::ContextMenu
+                                                                     sender:sender];
 }
 
 - (void)onTagItem:(id)_sender

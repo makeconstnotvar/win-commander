@@ -27,7 +27,8 @@ enum class PaneVisualKind : uint8_t {
     EmptyFolder,
     PermissionBlocked,
     PathNotFound,
-    ProviderUnavailable,
+    VolumeDisconnected,
+    RemoteUnavailable,
     Unsupported,
     Error
 };

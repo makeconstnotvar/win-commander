@@ -206,7 +206,7 @@ TEST_CASE(PREFIX "maps semantic check state to menu item state")
     CHECK(item.state == NSControlStateValueOff);
 }
 
-TEST_CASE(PREFIX "restores the shared Edit Cut and Copy items when their menu closes")
+TEST_CASE(PREFIX "restores the shared Edit Cut, Copy and Paste items when their menu closes")
 {
     REQUIRE(nc::dispatch_is_main_queue());
     NSMenu *const menu = [[NSMenu alloc] initWithTitle:@"Edit"];
@@ -214,10 +214,19 @@ TEST_CASE(PREFIX "restores the shared Edit Cut and Copy items when their menu cl
         [[NSMenuItem alloc] initWithTitle:@"Вырезать" action:@selector(cut:) keyEquivalent:@"x"];
     NSMenuItem *const copy_item =
         [[NSMenuItem alloc] initWithTitle:@"Копировать" action:@selector(copy:) keyEquivalent:@"c"];
+    NSMenuItem *const paste_item =
+        [[NSMenuItem alloc] initWithTitle:@"Вставить" action:@selector(paste:) keyEquivalent:@"v"];
+    NSMenuItem *const select_all_item =
+        [[NSMenuItem alloc] initWithTitle:@"Выбрать все" action:@selector(selectAll:) keyEquivalent:@"a"];
     [menu addItem:cut_item];
     [menu addItem:copy_item];
+    [menu addItem:paste_item];
+    [menu addItem:select_all_item];
     NCEditMenuPresentationDelegate *const delegate =
-        [[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item copyMenuItem:copy_item];
+        [[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item
+                                                      copyMenuItem:copy_item
+                                                     pasteMenuItem:paste_item
+                                                 selectAllMenuItem:select_all_item];
     REQUIRE(delegate != nil);
 
     cut_item.title = @"Cut 2 Items";
@@ -228,6 +237,14 @@ TEST_CASE(PREFIX "restores the shared Edit Cut and Copy items when their menu cl
     copy_item.hidden = true;
     copy_item.toolTip = @"Select an item";
     copy_item.accessibilityHelp = @"Select an item";
+    paste_item.title = @"Paste Files";
+    paste_item.hidden = true;
+    paste_item.toolTip = @"Choose a writable folder";
+    paste_item.accessibilityHelp = @"Choose a writable folder";
+    select_all_item.title = @"Select 7 Items";
+    select_all_item.hidden = true;
+    select_all_item.toolTip = @"No visible items";
+    select_all_item.accessibilityHelp = @"No visible items";
     [delegate menuDidClose:menu];
 
     CHECK([cut_item.title isEqualToString:@"Вырезать"]);
@@ -238,6 +255,14 @@ TEST_CASE(PREFIX "restores the shared Edit Cut and Copy items when their menu cl
     CHECK_FALSE(copy_item.hidden);
     CHECK(copy_item.toolTip == nil);
     CHECK(copy_item.accessibilityHelp == nil);
+    CHECK([paste_item.title isEqualToString:@"Вставить"]);
+    CHECK_FALSE(paste_item.hidden);
+    CHECK(paste_item.toolTip == nil);
+    CHECK(paste_item.accessibilityHelp == nil);
+    CHECK([select_all_item.title isEqualToString:@"Выбрать все"]);
+    CHECK_FALSE(select_all_item.hidden);
+    CHECK(select_all_item.toolTip == nil);
+    CHECK(select_all_item.accessibilityHelp == nil);
 }
 
 TEST_CASE(PREFIX "rejects a missing shared menu item")
@@ -247,8 +272,26 @@ TEST_CASE(PREFIX "rejects a missing shared menu item")
         [[NSMenuItem alloc] initWithTitle:@"Cut" action:@selector(cut:) keyEquivalent:@"x"];
     NSMenuItem *const copy_item =
         [[NSMenuItem alloc] initWithTitle:@"Copy" action:@selector(copy:) keyEquivalent:@"c"];
-    CHECK([[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:nil copyMenuItem:copy_item] == nil);
-    CHECK([[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item copyMenuItem:nil] == nil);
+    NSMenuItem *const paste_item =
+        [[NSMenuItem alloc] initWithTitle:@"Paste" action:@selector(paste:) keyEquivalent:@"v"];
+    NSMenuItem *const select_all_item =
+        [[NSMenuItem alloc] initWithTitle:@"Select All" action:@selector(selectAll:) keyEquivalent:@"a"];
+    CHECK([[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:nil
+                                                        copyMenuItem:copy_item
+                                                       pasteMenuItem:paste_item
+                                                   selectAllMenuItem:select_all_item] == nil);
+    CHECK([[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item
+                                                        copyMenuItem:nil
+                                                       pasteMenuItem:paste_item
+                                                   selectAllMenuItem:select_all_item] == nil);
+    CHECK([[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item
+                                                        copyMenuItem:copy_item
+                                                       pasteMenuItem:nil
+                                                   selectAllMenuItem:select_all_item] == nil);
+    CHECK([[NCEditMenuPresentationDelegate alloc] initWithCutMenuItem:cut_item
+                                                        copyMenuItem:copy_item
+                                                       pasteMenuItem:paste_item
+                                                   selectAllMenuItem:nil] == nil);
 }
 
 TEST_CASE(PREFIX "recognizes only a matching key equivalent as a shortcut invocation")

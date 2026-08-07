@@ -9,12 +9,15 @@
 #include "../MainWindowFilePanelState.h"
 #include "../../MainWindowController.h"
 #include <Operations/Copying.h>
+#include <VFS/ProviderCapabilities.h>
 #include <unordered_set>
 #include <Base/dispatch_cpp.h>
 #include <Config/Config.h>
 #include "Helpers.h"
 #include <ankerl/unordered_dense.h>
 #include <fmt/format.h>
+#include <algorithm>
+#include <tuple>
 
 namespace nc::panel::actions {
 
@@ -27,7 +30,9 @@ static ankerl::unordered_dense::set<std::string> ExtractFilenames(const VFSListi
 static std::string ProduceFormCLowercase(std::string_view _string);
 static std::string FindFreeFilenameToDuplicateIn(const VFSListingItem &_item,
                                                  const ankerl::unordered_dense::set<std::string> &_filenames);
-static void CommonPerform(PanelController *_target, const std::vector<VFSListingItem> &_items, bool _add_deselector);
+static DuplicateSubmissionResult CommonPerform(PanelController *_target,
+                                               std::span<const VFSListingItem> _items,
+                                               bool _add_deselector);
 
 Duplicate::Duplicate(nc::config::Config &_config) : m_Config(_config)
 {
@@ -35,35 +40,90 @@ Duplicate::Duplicate(nc::config::Config &_config) : m_Config(_config)
 
 bool Duplicate::Predicate(PanelController *_target) const
 {
-    if( !_target.isUniform )
+    if( !_target )
         return false;
-
-    if( !_target.vfs->IsWritable() )
-        return false;
-
-    const auto i = _target.view.item;
-    if( !i )
-        return false;
-
-    return !i.IsDotDot() || _target.data.Stats().selected_entries_amount > 0;
+    const auto items = _target.selectedEntriesOrFocusedEntry;
+    return EvaluateDuplicateSubmission(items, _target) == DuplicateSubmissionResult::Submitted;
 }
 
-static void CommonPerform(PanelController *_target, const std::vector<VFSListingItem> &_items, bool _add_deselector)
+DuplicateSubmissionResult EvaluateDuplicateSubmission(const std::span<const VFSListingItem> _items,
+                                                      PanelController *_target)
 {
+    if( !_target )
+        return DuplicateSubmissionResult::PaneUnavailable;
+    if( !_target.mainWindowController )
+        return DuplicateSubmissionResult::WindowUnavailable;
+    if( _target.isDoingBackgroundLoading )
+        return DuplicateSubmissionResult::Loading;
+    if( _items.empty() )
+        return DuplicateSubmissionResult::SelectionUnavailable;
+    if( std::ranges::any_of(_items, [](const VFSListingItem &_item) { return _item.IsDotDot(); }) )
+        return DuplicateSubmissionResult::ParentEntryUnsupported;
+
+    try {
+        const VFSListingPtr listing = _target.data.ListingPtr();
+        if( !_target.isUniform || !_target.vfs || !listing )
+            return DuplicateSubmissionResult::DestinationUnavailable;
+        if( std::ranges::any_of(_items, [&](const VFSListingItem &_item) {
+                return !_item.Host() || _item.Listing().get() != listing.get();
+            }) ) {
+            return DuplicateSubmissionResult::StaleContext;
+        }
+
+        const std::string destination_path = _target.currentDirectoryPath;
+        const vfs::ProviderCapabilities destination =
+            vfs::ProviderCapabilitiesResolver::Resolve(*_target.vfs, destination_path);
+        if( !destination.can_write )
+            return DuplicateSubmissionResult::DestinationReadOnly;
+
+        for( const VFSListingItem &item : _items ) {
+            if( !vfs::ProviderCapabilitiesResolver::Resolve(*item.Host(), item.Directory()).can_read )
+                return DuplicateSubmissionResult::SourceUnreadable;
+            const bool supported = item.IsSymlink() ? destination.can_create_symlink
+                                   : item.IsDir()   ? destination.can_create_folder
+                                   : item.IsReg()   ? destination.can_create_file
+                                                    : false;
+            if( !supported )
+                return DuplicateSubmissionResult::ProviderUnsupported;
+        }
+    } catch( ... ) {
+        return DuplicateSubmissionResult::DestinationUnavailable;
+    }
+    return DuplicateSubmissionResult::Submitted;
+}
+
+static DuplicateSubmissionResult CommonPerform(PanelController *_target,
+                                               const std::span<const VFSListingItem> _items,
+                                               const bool _add_deselector)
+{
+    const DuplicateSubmissionResult live = EvaluateDuplicateSubmission(_items, _target);
+    if( live != DuplicateSubmissionResult::Submitted )
+        return live;
+
     auto directory_filenames = ExtractFilenames(_target.data.Listing());
+    std::vector<std::pair<VFSListingItem, std::string>> planned;
+    planned.reserve(_items.size());
 
     for( const auto &item : _items ) {
         auto duplicate = FindFreeFilenameToDuplicateIn(item, directory_filenames);
         if( duplicate.empty() )
-            return;
+            return DuplicateSubmissionResult::NameUnavailable;
         directory_filenames.emplace(duplicate);
+
+        planned.emplace_back(item, std::move(duplicate));
+    }
+
+    if( EvaluateDuplicateSubmission(_items, _target) != DuplicateSubmissionResult::Submitted )
+        return DuplicateSubmissionResult::StaleContext;
+
+    for( const auto &[item, duplicate] : planned ) {
 
         const auto options = MakeDefaultFileCopyOptions();
 
         const auto op = std::make_shared<ops::Copying>(
             std::vector<VFSListingItem>{item}, item.Directory() + duplicate, item.Host(), options);
 
-        if( &item == &_items.front() ) {
+        if( &item == &planned.front().first ) {
             __weak PanelController *weak_panel = _target;
             auto finish_handler = [weak_panel, duplicate] {
                 dispatch_to_main_queue([weak_panel, duplicate] {
@@ -86,11 +146,20 @@ static void CommonPerform(PanelController *_target, const std::vector<VFSListing
 
         [_target.mainWindowController enqueueOperation:op];
     }
+    return DuplicateSubmissionResult::Submitted;
+}
+
+DuplicateSubmissionResult SubmitDuplicateItems(const std::span<const VFSListingItem> _items,
+                                               PanelController *_target,
+                                               nc::config::Config &_config)
+{
+    return CommonPerform(_target, _items, _config.GetBool(g_DeselectConfigFlag));
 }
 
 void Duplicate::Perform(PanelController *_target, id /*_sender*/) const
 {
-    CommonPerform(_target, _target.selectedEntriesOrFocusedEntry, m_Config.GetBool(g_DeselectConfigFlag));
+    const auto items = _target.selectedEntriesOrFocusedEntry;
+    std::ignore = SubmitDuplicateItems(items, _target, m_Config);
 }
 
 context::Duplicate::Duplicate(nc::config::Config &_config, const std::vector<VFSListingItem> &_items)
@@ -100,15 +169,12 @@ context::Duplicate::Duplicate(nc::config::Config &_config, const std::vector<VFS
 
 bool context::Duplicate::Predicate(PanelController *_target) const
 {
-    if( !_target.isUniform )
-        return false;
-
-    return _target.vfs->IsWritable();
+    return EvaluateDuplicateSubmission(m_Items, _target) == DuplicateSubmissionResult::Submitted;
 }
 
 void context::Duplicate::Perform(PanelController *_target, id /*_sender*/) const
 {
-    CommonPerform(_target, m_Items, m_Config.GetBool(g_DeselectConfigFlag));
+    std::ignore = SubmitDuplicateItems(m_Items, _target, m_Config);
 }
 
 static std::pair<int, std::string> ExtractExistingDuplicateInfo(const std::string &_filename)

@@ -5,7 +5,13 @@
         "findWithSpotlightPopup": {},
         "selectWithMaskPopup": {},
         "batchRename": {},
-        "favorites": {}
+        "favorites": {},
+        "explorer": {
+            "viewSettingsByLocation_v1": {
+                "schema": 1,
+                "entries": []
+            }
+        }
     },
     "viewer": {
     }

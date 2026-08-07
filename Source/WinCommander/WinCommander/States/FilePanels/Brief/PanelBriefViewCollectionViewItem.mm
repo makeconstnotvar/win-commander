@@ -6,8 +6,13 @@
 #include "PanelBriefViewItemCarrier.h"
 #include "PanelBriefViewCollectionViewItem.h"
 #include "../Helpers/Pasteboard.h"
+#include "../PanelItemAccessibility.h"
 
 using namespace nc::panel;
+
+@interface PanelBriefViewItem ()
+- (void)updateAccessibilityPresentation;
+@end
 
 @implementation PanelBriefViewItem {
     VFSListingItem m_Item;
@@ -28,6 +33,7 @@ using namespace nc::panel;
     self.carrier.tagAccentColor = nil;
     self.carrier.qsHighlight = {};
     self.view.alphaValue = 1.0;
+    [self updateAccessibilityPresentation];
 }
 
 - (instancetype)initWithNibName:(nullable NSString *) [[maybe_unused]] nibNameOrNil
@@ -39,7 +45,11 @@ using namespace nc::panel;
         const auto rc = NSMakeRect(0, 0, 10, 10);
         PanelBriefViewItemCarrier *v = [[PanelBriefViewItemCarrier alloc] initWithFrame:rc];
         v.controller = self;
+        v.accessibilityElement = true;
+        v.accessibilityRole = NSAccessibilityRowRole;
+        v.accessibilityIdentifier = @"wincommander.explorer.brief.item";
         self.view = v;
+        [self updateAccessibilityPresentation];
         [NSNotificationCenter.defaultCenter addObserver:self
                                                selector:@selector(pasteboardCutStateDidChange:)
                                                    name:NCPanelPasteboardCutStateDidChangeNotification
@@ -70,6 +80,7 @@ using namespace nc::panel;
     self.carrier.isSymlink = m_Item.IsSymlink();
     [self updateCutAppearance];
     [self updateItemLayout];
+    [self updateAccessibilityPresentation];
 }
 
 - (void)pasteboardCutStateDidChange:(NSNotification *) [[maybe_unused]] _notification
@@ -98,6 +109,7 @@ using namespace nc::panel;
     [self updateBackgroundColor];
     [self updateForegroundColor];
     [self updateAccentColor];
+    [self updateAccessibilityPresentation];
 }
 
 - (void)setSelected:(BOOL)selected
@@ -109,6 +121,7 @@ using namespace nc::panel;
     [self updateBackgroundColor];
     [self updateForegroundColor];
     [self updateAccentColor];
+    [self updateAccessibilityPresentation];
 }
 
 - (NSColor *)selectedBackgroundColor
@@ -214,6 +227,15 @@ using namespace nc::panel;
     [self updateAccentColor];
     self.carrier.qsHighlight = _vd.highlight;
     self.carrier.highlighted = _vd.is_highlighted();
+    [self updateAccessibilityPresentation];
+}
+
+- (void)updateAccessibilityPresentation
+{
+    NSView *const element = self.carrier;
+    const bool focused = self.selected && m_PanelActive;
+    const bool selected = self.selected || m_VD.is_selected();
+    UpdatePanelItemAccessibility(element, m_Item, selected, focused);
 }
 
 - (void)setIcon:(NSImage *)_icon

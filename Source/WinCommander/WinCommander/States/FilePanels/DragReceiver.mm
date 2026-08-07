@@ -17,6 +17,7 @@
 #include <Base/dispatch_cpp.h>
 #include "../MainWindowController.h"
 #include <VFS/Native.h>
+#include <VFS/ProviderCapabilities.h>
 #include <map>
 #include <filesystem>
 #include <expected>
@@ -40,6 +41,71 @@ static std::expected<std::vector<VFSListingItem>, Error> FetchListingItems(NSArr
 static void AddPanelRefreshIfNecessary(PanelController *_target, ops::Operation &_operation);
 static void AddPanelRefreshIfNecessary(PanelController *_target, PanelController *_source, ops::Operation &_operation);
 
+static DragDropModifierState ModifiersFromOperationMask(const NSDragOperation _mask) noexcept
+{
+    if( _mask == NSDragOperationCopy )
+        return {.force_copy = true};
+    if( _mask == NSDragOperationMove )
+        return {.force_move = true};
+    if( _mask == NSDragOperationLink || _mask == (NSDragOperationCopy | NSDragOperationGeneric) )
+        return {.force_link = true};
+
+    const NSEventModifierFlags flags = NSEvent.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    const bool option = (flags & NSEventModifierFlagOption) != 0;
+    const bool command = (flags & NSEventModifierFlagCommand) != 0;
+    if( option && command )
+        return (_mask & NSDragOperationLink) != 0 ? DragDropModifierState{.force_link = true}
+                                                 : DragDropModifierState{.force_copy = true, .force_move = true};
+    if( option )
+        return (_mask & NSDragOperationCopy) != 0 ? DragDropModifierState{.force_copy = true}
+                                                 : DragDropModifierState{.force_copy = true, .force_move = true};
+    if( command )
+        return (_mask & NSDragOperationMove) != 0 ? DragDropModifierState{.force_move = true}
+                                                 : DragDropModifierState{.force_copy = true, .force_move = true};
+
+    if( _mask == NSDragOperationGeneric || (_mask & NSDragOperationGeneric) != 0 )
+        return {};
+    return {.force_copy = true, .force_move = true};
+}
+
+static NSDragOperation AppKitOperation(const DragDropOperation _operation) noexcept
+{
+    switch( _operation ) {
+        case DragDropOperation::Copy:
+            return NSDragOperationCopy;
+        case DragDropOperation::Move:
+            return NSDragOperationMove;
+        case DragDropOperation::Link:
+            return NSDragOperationLink;
+        case DragDropOperation::Forbidden:
+            return NSDragOperationNone;
+    }
+}
+
+static DragDropPathCapabilities PolicyCapabilities(const vfs::ProviderCapabilities &_capabilities) noexcept
+{
+    return DragDropPathCapabilities{
+        .can_read = _capabilities.can_read,
+        .can_write = _capabilities.can_write,
+        .can_create_file = _capabilities.can_create_file,
+        .can_create_folder = _capabilities.can_create_folder,
+        .can_create_symlink = _capabilities.can_create_symlink,
+        .can_rename = _capabilities.can_rename,
+        .can_delete_permanently = _capabilities.can_delete_permanently,
+    };
+}
+
+static DragDropItemKind PolicyItemKind(const VFSListingItem &_item) noexcept
+{
+    if( _item.IsSymlink() )
+        return DragDropItemKind::SymbolicLink;
+    if( _item.IsDir() )
+        return DragDropItemKind::Directory;
+    if( _item.IsReg() )
+        return DragDropItemKind::RegularFile;
+    return DragDropItemKind::Other;
+}
+
 DragReceiver::DragReceiver(PanelController *_target,
                            id<NSDraggingInfo> _dragging,
                            int _dragging_over_index,
@@ -60,11 +126,19 @@ DragReceiver::~DragReceiver() = default;
 
 NSDragOperation DragReceiver::Validate()
 {
+    m_DraggingOperationsMask = m_Dragging.draggingSourceOperationMask;
+    m_ValidatedLocalDecision.reset();
+    m_ValidatedTargetListing.reset();
+    m_ValidatedTargetGeneration = 0;
     if( m_ItemUnderDrag ) {
-        if( m_DraggingOverDirectory && !DraggingIntoFoldersAllowed() )
+        if( m_DraggingOverDirectory && !DraggingIntoFoldersAllowed() ) {
+            UpdateValidDropNumber(m_Dragging, 0, NSDragOperationNone);
             return NSDragOperationNone;
-        if( !m_DraggingOverDirectory )
+        }
+        if( !m_DraggingOverDirectory ) {
+            UpdateValidDropNumber(m_Dragging, 0, NSDragOperationNone);
             return NSDragOperationNone;
+        }
     }
 
     int valid_items = 0;
@@ -78,7 +152,17 @@ NSDragOperation DragReceiver::Validate()
     else
         panel::Log::Trace("DragReceiver::Validate() - dragging over an empty destination");
 
-    if( destination && destination.Host()->IsWritable() ) {
+    bool destination_writable = false;
+    if( destination ) {
+        try {
+            destination_writable =
+                vfs::ProviderCapabilitiesResolver::Resolve(*destination.Host(), destination.Path()).can_write;
+        } catch( ... ) {
+            destination_writable = false;
+        }
+    }
+
+    if( destination && destination_writable && m_Target.mainWindowController && !m_Target.isDoingBackgroundLoading ) {
         if( const auto source = objc_cast<FilesDraggingSource>(m_Dragging.draggingSource) )
             std::tie(operation, valid_items) = ScanLocalSource(source, destination);
         else if( [m_Dragging.draggingPasteboard.types containsObject:URLs_UTI()] )
@@ -99,13 +183,25 @@ NSDragOperation DragReceiver::Validate()
     UpdateValidDropNumber(m_Dragging, valid_items, operation);
     m_Dragging.draggingFormation = NSDraggingFormationList;
 
+    if( operation != NSDragOperationNone ) {
+        m_ValidatedTargetListing = m_Target.data.IsLoaded() ? m_Target.data.ListingPtr() : VFSListingPtr{};
+        m_ValidatedTargetGeneration = m_Target.dataGeneration;
+    }
+
     return operation;
 }
 
 bool DragReceiver::Receive()
 {
     const auto destination = ComposeDestination();
-    if( !destination || !destination.Host()->IsWritable() )
+    if( !destination || !m_Target.mainWindowController || m_Target.isDoingBackgroundLoading ||
+        m_Dragging.draggingSourceOperationMask != m_DraggingOperationsMask ||
+        !m_ValidatedTargetListing || !m_Target.data.IsLoaded() ||
+        m_Target.data.ListingPtr() != m_ValidatedTargetListing ||
+        m_Target.dataGeneration != m_ValidatedTargetGeneration )
+        return false;
+    if( m_DraggingOverIndex >= 0 &&
+        m_Target.data.EntryAtSortPosition(m_DraggingOverIndex) != m_ItemUnderDrag )
         return false;
 
     if( const auto source = objc_cast<FilesDraggingSource>(m_Dragging.draggingSource) )
@@ -119,35 +215,14 @@ bool DragReceiver::Receive()
 }
 
 std::pair<NSDragOperation, int> DragReceiver::ScanLocalSource(FilesDraggingSource *_source,
-                                                              const vfs::VFSPath &_dest) const
+                                                              const vfs::VFSPath &_dest)
 {
     const auto valid_items = static_cast<int>(_source.items.size());
-    NSDragOperation operation = NSDragOperationNone;
-    if( _source.sourceController == m_Target && !m_DraggingOverDirectory )
-        operation = NSDragOperationNone; // we can't drag into the same dir on the same panel
-    else
-        operation = BuildOperationForLocal(_source, _dest);
-
-    // check that we dont drag an item to the same folder in other panel
-    if( operation != NSDragOperationNone ) {
-        const auto same_folder = any_of(begin(_source.items), end(_source.items), [&](auto &_i) {
-            return _i.item.Directory() == _dest.Path() && _i.item.Host() == _dest.Host();
-        });
-        if( same_folder )
-            operation = NSDragOperationNone;
-    }
-
-    // check that we dont drag a folder into itself
-    if( operation != NSDragOperationNone && m_DraggingOverDirectory ) {
-        // filenames are stored without trailing slashes, so have to add it
-        for( const auto &item : _source.items )
-            if( item.item.Host() == _dest.Host() && item.item.IsDir() && _dest.Path() == item.item.Path() + "/" ) {
-                operation = NSDragOperationNone;
-                break;
-            }
-    }
-
-    return {operation, valid_items};
+    m_ValidatedLocalDecision = BuildDecisionForLocal(_source, _dest);
+    const NSDragOperation operation = m_ValidatedLocalDecision
+                                          ? AppKitOperation(m_ValidatedLocalDecision->Operation())
+                                          : NSDragOperationNone;
+    return {operation, operation == NSDragOperationNone ? 0 : valid_items};
 }
 
 std::pair<NSDragOperation, int> DragReceiver::ScanURLsSource(NSArray<NSURL *> *_urls,
@@ -213,41 +288,62 @@ vfs::VFSPath DragReceiver::ComposeDestination() const
     }
 }
 
-NSDragOperation DragReceiver::BuildOperationForLocal(FilesDraggingSource *_source,
-                                                     const vfs::VFSPath &_destination) const
+std::optional<DragDropPolicyDecision>
+DragReceiver::BuildDecisionForLocal(FilesDraggingSource *_source, const vfs::VFSPath &_destination) const
 {
-    if( m_DraggingOperationsMask == NSDragOperationCopy )
-        return NSDragOperationCopy;
+    if( !_source || !_destination || ![_source matchesCurrentSourceContext] || _source.items.empty() )
+        return std::nullopt;
 
-    const auto src_and_dst_native = _destination.Host()->IsNativeFS() && _source.areAllHostsNative;
-    if( src_and_dst_native ) {
-        if( m_DraggingOperationsMask == NSDragOperationLink ||
-            m_DraggingOperationsMask == (NSDragOperationCopy | NSDragOperationGeneric) )
-            return NSDragOperationLink;
+    try {
+        DragDropPolicyInput input;
+        input.modifiers = ModifiersFromOperationMask(m_DraggingOperationsMask);
+        input.sources.reserve(_source.items.size());
 
-        if( m_DraggingOperationsMask == NSDragOperationGeneric )
-            return NSDragOperationMove;
+        for( PanelDraggingItem *const &dragging_item : _source.items ) {
+            const VFSListingItem &item = dragging_item.item;
+            if( !item || !item.Host() )
+                return std::nullopt;
 
-        if( m_DraggingOperationsMask & NSDragOperationGeneric ) {
-            const auto v1 = m_NativeFSManager.VolumeFromPath(_destination.Path());
-            const auto v2 = m_NativeFSManager.VolumeFromPath(_source.items.front().item.Directory());
-            const auto same_native_fs = (v1 != nullptr && v1 == v2);
-            return same_native_fs ? NSDragOperationMove : NSDragOperationCopy;
+            const auto host = item.Host();
+            const bool native = host->IsNativeFS();
+            uintptr_t volume_identity = 0;
+            if( native ) {
+                const auto volume = m_NativeFSManager.VolumeFromPath(item.Path());
+                volume_identity = reinterpret_cast<uintptr_t>(volume.get());
+            }
+
+            input.sources.emplace_back(DragDropSourceFacts{
+                .provider_identity = reinterpret_cast<uintptr_t>(host.get()),
+                .volume_identity = volume_identity,
+                .native_namespace = native,
+                .kind = PolicyItemKind(item),
+                .path = item.Path(),
+                .directory = item.Directory(),
+                .capabilities = PolicyCapabilities(
+                    vfs::ProviderCapabilitiesResolver::Resolve(*host, item.Directory())),
+            });
         }
+
+        const auto destination_host = _destination.Host();
+        const bool destination_native = destination_host->IsNativeFS();
+        uintptr_t destination_volume_identity = 0;
+        if( destination_native ) {
+            const auto volume = m_NativeFSManager.VolumeFromPath(_destination.Path());
+            destination_volume_identity = reinterpret_cast<uintptr_t>(volume.get());
+        }
+        input.destination = DragDropDestinationFacts{
+            .provider_identity = reinterpret_cast<uintptr_t>(destination_host.get()),
+            .volume_identity = destination_volume_identity,
+            .native_namespace = destination_native,
+            .directory = _destination.Path(),
+            .capabilities = PolicyCapabilities(
+                vfs::ProviderCapabilitiesResolver::Resolve(*destination_host, _destination.Path())),
+        };
+
+        return EvaluateDragDropPolicy(std::move(input));
+    } catch( ... ) {
+        return std::nullopt;
     }
-    else {
-        if( _source.commonHost == _destination.Host() ) {
-            if( m_DraggingOperationsMask & NSDragOperationGeneric )
-                return _source.areAllHostsWriteable ? NSDragOperationMove : NSDragOperationCopy;
-        }
-        else {
-            if( m_DraggingOperationsMask == NSDragOperationGeneric )
-                return _source.areAllHostsWriteable ? NSDragOperationMove : NSDragOperationCopy;
-            if( m_DraggingOperationsMask & NSDragOperationGeneric )
-                return NSDragOperationCopy;
-        }
-    }
-    return NSDragOperationNone;
 }
 
 NSDragOperation DragReceiver::BuildOperationForURLs(NSArray<NSURL *> *_source, const vfs::VFSPath &_destination) const
@@ -283,26 +379,39 @@ NSDragOperation DragReceiver::BuildOperationForURLs(NSArray<NSURL *> *_source, c
 
 bool DragReceiver::PerformWithLocalSource(FilesDraggingSource *_source, const vfs::VFSPath &_destination)
 {
+    if( !m_ValidatedLocalDecision || !m_ValidatedLocalDecision->Allowed() ||
+        ![_source matchesCurrentSourceContext] ) {
+        return false;
+    }
+
+    const auto current_decision = BuildDecisionForLocal(_source, _destination);
+    if( !current_decision || !current_decision->Allowed() ||
+        current_decision->Operation() != m_ValidatedLocalDecision->Operation() ||
+        current_decision->Input() != m_ValidatedLocalDecision->Input() ) {
+        return false;
+    }
+
     const auto files = ExtractListingItems(_source);
     if( files.empty() )
         return false;
 
-    const auto operation = BuildOperationForLocal(_source, _destination);
-    if( operation == NSDragOperationCopy ) {
+    const auto operation = current_decision->Operation();
+    if( operation == DragDropOperation::Copy ) {
         const auto opts = MakeDefaultFileCopyOptions();
         const auto op = std::make_shared<ops::Copying>(files, _destination.Path(), _destination.Host(), opts);
         AddPanelRefreshIfNecessary(m_Target, *op);
         [m_Target.mainWindowController enqueueOperation:op];
         return true;
     }
-    else if( operation == NSDragOperationMove ) {
+    else if( operation == DragDropOperation::Move ) {
         const auto opts = MakeDefaultFileMoveOptions();
         const auto op = std::make_shared<ops::Copying>(files, _destination.Path(), _destination.Host(), opts);
         AddPanelRefreshIfNecessary(m_Target, _source.sourceController, *op);
         [m_Target.mainWindowController enqueueOperation:op];
         return true;
     }
-    else if( operation == NSDragOperationLink && _source.areAllHostsNative && _destination.Host()->IsNativeFS() ) {
+    else if( operation == DragDropOperation::Link && _source.areAllHostsNative &&
+             _destination.Host()->IsNativeFS() ) {
         for( const auto &file : files ) {
             const auto source_path = file.Path();
             const auto dest_path = std::filesystem::path(_destination.Path()) / file.Filename();
@@ -403,6 +512,7 @@ NSArray<NSString *> *DragReceiver::AcceptedUTIs()
 
 static void UpdateValidDropNumber(id<NSDraggingInfo> _dragging, int _valid_number, NSDragOperation _operation)
 {
+    static_cast<void>(_operation);
     // prevent setting of a same value to DraggingInfo, since it causes weird blinking
     static __weak id last_updated = nil;
     static int last_set = 0;
@@ -410,15 +520,13 @@ static void UpdateValidDropNumber(id<NSDraggingInfo> _dragging, int _valid_numbe
     if( last_updated == _dragging ) {
         if( last_set != _valid_number ) {
             last_set = _valid_number;
-            if( _operation != NSDragOperationNone )
-                _dragging.numberOfValidItemsForDrop = last_set;
+            _dragging.numberOfValidItemsForDrop = last_set;
         }
     }
     else {
         last_updated = _dragging;
         last_set = _valid_number;
-        if( _operation != NSDragOperationNone )
-            _dragging.numberOfValidItemsForDrop = last_set;
+        _dragging.numberOfValidItemsForDrop = last_set;
     }
 }
 

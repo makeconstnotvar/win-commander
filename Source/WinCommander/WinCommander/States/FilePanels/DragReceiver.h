@@ -2,6 +2,8 @@
 #pragma once
 #include <VFS/VFS.h>
 #include <Cocoa/Cocoa.h>
+#include "DragDropPolicy.h"
+#include <optional>
 
 @class PanelController;
 @class FilesDraggingSource;
@@ -34,12 +36,12 @@ public:
 private:
     [[nodiscard]] vfs::VFSPath ComposeDestination() const;
     [[nodiscard]] std::pair<NSDragOperation, int> ScanLocalSource(FilesDraggingSource *_source,
-                                                                  const vfs::VFSPath &_dest) const;
+                                                                  const vfs::VFSPath &_dest);
     [[nodiscard]] std::pair<NSDragOperation, int> ScanURLsSource(NSArray<NSURL *> *_urls,
                                                                  const vfs::VFSPath &_dest) const;
     [[nodiscard]] std::pair<NSDragOperation, int> ScanURLsPromiseSource(const vfs::VFSPath &_dest) const;
-    [[nodiscard]] NSDragOperation BuildOperationForLocal(FilesDraggingSource *_source,
-                                                         const vfs::VFSPath &_destination) const;
+    [[nodiscard]] std::optional<DragDropPolicyDecision>
+    BuildDecisionForLocal(FilesDraggingSource *_source, const vfs::VFSPath &_destination) const;
     [[nodiscard]] NSDragOperation BuildOperationForURLs(NSArray<NSURL *> *_source,
                                                         const vfs::VFSPath &_destination) const;
     bool PerformWithLocalSource(FilesDraggingSource *_source, const vfs::VFSPath &_dest);
@@ -52,6 +54,9 @@ private:
     int m_DraggingOverIndex;
     VFSListingItem m_ItemUnderDrag; // may be nullptr for whole panel
     bool m_DraggingOverDirectory;
+    VFSListingPtr m_ValidatedTargetListing;
+    unsigned long m_ValidatedTargetGeneration{0};
+    std::optional<DragDropPolicyDecision> m_ValidatedLocalDecision;
     nc::utility::NativeFSManager &m_NativeFSManager;
     nc::vfs::NativeHost &m_NativeHost;
 };

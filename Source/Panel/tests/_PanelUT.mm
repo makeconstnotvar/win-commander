@@ -4,5 +4,6 @@
 #include "ItemVolatileData_UT.mm"
 #include "PanelData_UT.mm"
 #include "PanelDataFilter_UT.mm"
+#include "PanelViewFieldEditor_UT.mm"
 #include "QuickSearch_UT.mm"
 #include "UI/TagsPresentation_UT.mm"

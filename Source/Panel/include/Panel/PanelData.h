@@ -5,8 +5,11 @@
 #include "PanelDataSortMode.h"
 #include "PanelDataStatistics.h"
 #include "PanelDataFilter.h"
+#include "PanelDataItemVolatileData.h"
 
 #include <vector>
+#include <memory>
+#include <functional>
 #include <string_view>
 #include <span>
 #include <cstdint>
@@ -36,6 +39,34 @@ public:
         Temporary = 1
     };
 
+    /**
+     * A small owning snapshot of the presentation options required to prepare a replacement
+     * model without reading the live Model from a worker thread.
+     */
+    struct PreparationOptions {
+        struct SortMode sort_mode;
+        HardFilter hard_filter;
+        TextualFilter soft_filter;
+        uint64_t generation = 0;
+        bool operator==(const PreparationOptions &) const = default;
+    };
+
+    /**
+     * An owning main-thread snapshot used to prepare a replacement Model without reading the live
+     * instance from a worker. Copying the two flat arrays is the only O(N) work on the main queue;
+     * filtering, sorting, reload reconciliation and statistics are performed by the detached path.
+     */
+    struct PreparationSnapshot {
+        VFSListingPtr listing;
+        std::vector<ItemVolatileData> volatile_data;
+        std::vector<unsigned> entries_by_raw_name;
+        PanelType type = PanelType::Directory;
+        PreparationOptions options;
+        uint64_t selection_projection_generation = 0;
+    };
+
+    using PreparationCancelChecker = std::function<bool()>;
+
     // creates a Model with an empty listing
     Model();
 
@@ -51,6 +82,43 @@ public:
     // Initializes a new model with _listing, allocates fresh volatile data, builds search indices,
     // updates statistics.
     void Load(const VFSListingPtr &_listing, PanelType _type);
+
+    /**
+     * Captures the exact options needed by PrepareDetached(). The returned value owns its filter
+     * strings and can safely outlive the live model.
+     */
+    [[nodiscard]] PreparationOptions CapturePreparationOptions() const;
+
+    [[nodiscard]] PreparationSnapshot CapturePreparationSnapshot() const;
+
+    /**
+     * Builds a fresh, owning model on a non-main worker while keeping Load() main-thread-only.
+     * Requested names receive the same exact visible-selection semantics as the synchronous path.
+     */
+    [[nodiscard]] static std::unique_ptr<Model>
+    PrepareDetached(const VFSListingPtr &_listing,
+                    PanelType _type,
+                    PreparationOptions _options,
+                    std::span<const std::string> _requested_selection = {},
+                    PreparationCancelChecker _is_cancelled = {});
+
+    /** Builds a replacement for the same listing while preserving exact volatile item data. */
+    [[nodiscard]] static std::unique_ptr<Model>
+    PrepareDetachedFromSnapshot(const PreparationSnapshot &_snapshot,
+                                PreparationOptions _options,
+                                PreparationCancelChecker _is_cancelled = {});
+
+    /** Reconciles a refreshed listing with a captured source while preserving matching volatile data. */
+    [[nodiscard]] static std::unique_ptr<Model>
+    PrepareDetachedReload(const PreparationSnapshot &_snapshot,
+                          const VFSListingPtr &_listing,
+                          PreparationOptions _options,
+                          PreparationCancelChecker _is_cancelled = {});
+
+    /**
+     * Validates that no newer sort/filter preference replaced a captured preparation snapshot.
+     */
+    [[nodiscard]] bool MatchesPreparationOptions(const PreparationOptions &_options) const noexcept;
 
     void ReLoad(const VFSListingPtr &_listing);
 
@@ -281,11 +349,16 @@ public:
 
 private:
     void AdvanceSelectionProjectionGeneration() noexcept;
-    void DoSortWithHardFiltering();
+    void AdvancePreparationOptionsGeneration() noexcept;
+    void LoadImpl(const VFSListingPtr &_listing,
+                  PanelType _type,
+                  const PreparationCancelChecker *_is_cancelled = nullptr);
+    void ReLoadImpl(const VFSListingPtr &_listing, const PreparationCancelChecker *_is_cancelled);
+    void DoSortWithHardFiltering(const PreparationCancelChecker *_is_cancelled = nullptr);
     void CustomFlagsSelectRaw(int _at_raw_pos, bool _is_selected);
     void ClearSelectedFlagsFromHiddenElements();
-    void UpdateStatictics();
-    void BuildSoftFilteringIndeces();
+    void UpdateStatictics(const PreparationCancelChecker *_is_cancelled = nullptr);
+    void BuildSoftFilteringIndeces(const PreparationCancelChecker *_is_cancelled = nullptr);
     void FinalizeSettingCalculatedSizes();
 
     // m_Listing container will change every time directory change/reloads,
@@ -312,6 +385,7 @@ private:
     Statistics m_Stats;
     PanelType m_Type;
     uint64_t m_SelectionProjectionGeneration = 0;
+    uint64_t m_PreparationOptionsGeneration = 0;
 };
 
 } // namespace nc::panel::data

@@ -439,6 +439,104 @@ TEST_CASE(PREFIX "maps every legacy sort mode into semantic pane state")
     CHECK(invalid_grouping.key == PaneGroupingKey::Unknown);
 }
 
+TEST_CASE(PREFIX "strictly restores every projected legacy sort mode")
+{
+    using SortMode = nc::panel::data::SortMode;
+    constexpr std::array modes{
+        SortMode::SortNoSort,
+        SortMode::SortByRawCName,
+        SortMode::SortByName,
+        SortMode::SortByNameRev,
+        SortMode::SortByExt,
+        SortMode::SortByExtRev,
+        SortMode::SortBySize,
+        SortMode::SortBySizeRev,
+        SortMode::SortByModTime,
+        SortMode::SortByModTimeRev,
+        SortMode::SortByBirthTime,
+        SortMode::SortByBirthTimeRev,
+        SortMode::SortByAddTime,
+        SortMode::SortByAddTimeRev,
+        SortMode::SortByAccessTime,
+        SortMode::SortByAccessTimeRev,
+    };
+    constexpr std::array collations{
+        SortMode::Collation::Natural,
+        SortMode::Collation::CaseInsensitive,
+        SortMode::Collation::CaseSensitive,
+    };
+
+    for( size_t mode_index = 0; mode_index < modes.size(); ++mode_index ) {
+        for( const SortMode::Collation collation : collations ) {
+            SortMode original;
+            original.sort = modes[mode_index];
+            original.collation = collation;
+            original.sep_dirs = (mode_index & 1U) != 0;
+            original.extensionless_dirs = (mode_index & 2U) != 0;
+            CAPTURE(static_cast<int>(original.sort), static_cast<int>(original.collation));
+
+            const auto restored = nc::panel::RestorePanelSortMode(nc::panel::ProjectPaneSortState(original));
+            REQUIRE(restored);
+            CHECK(*restored == original);
+        }
+    }
+}
+
+TEST_CASE(PREFIX "rejects incomplete contradictory and unknown semantic sort states")
+{
+    const auto rejects = [](const nc::core::PaneSortState &_state) {
+        CHECK_FALSE(nc::panel::RestorePanelSortMode(_state));
+    };
+
+    nc::core::PaneSortState state{
+        .key = PaneSortKey::Name,
+        .direction = PaneSortDirection::Ascending,
+        .collation = PaneTextCollation::Natural,
+        .separates_directories = true,
+        .extensionless_directories = true,
+    };
+
+    state.key = PaneSortKey::Unknown;
+    rejects(state);
+    state.key = static_cast<PaneSortKey>(255);
+    rejects(state);
+
+    state.key = PaneSortKey::Unsorted;
+    state.direction = PaneSortDirection::Ascending;
+    rejects(state);
+
+    state.key = PaneSortKey::RawName;
+    state.direction = PaneSortDirection::Descending;
+    rejects(state);
+
+    state.key = PaneSortKey::Name;
+    state.direction = PaneSortDirection::None;
+    rejects(state);
+
+    state.key = PaneSortKey::Extension;
+    rejects(state);
+    state.key = PaneSortKey::Size;
+    rejects(state);
+    state.key = PaneSortKey::ModifiedTime;
+    rejects(state);
+    state.key = PaneSortKey::CreatedTime;
+    rejects(state);
+    state.key = PaneSortKey::AddedTime;
+    rejects(state);
+    state.key = PaneSortKey::AccessedTime;
+    rejects(state);
+
+    state.key = PaneSortKey::Name;
+    state.direction = static_cast<PaneSortDirection>(255);
+    rejects(state);
+
+    state.direction = PaneSortDirection::Ascending;
+    state.collation = PaneTextCollation::Unknown;
+    rejects(state);
+    state.collation = static_cast<PaneTextCollation>(255);
+    rejects(state);
+}
+
 TEST_CASE(PREFIX "maps actual presentation layouts and only validated layout indexes")
 {
     nc::panel::PanelViewLayout icons;

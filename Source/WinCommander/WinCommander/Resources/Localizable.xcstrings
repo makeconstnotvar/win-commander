@@ -18,6 +18,272 @@
         }
       }
     },
+    "commands.archive.create.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a ZIP archive from the selected items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать ZIP-архив из выбранных объектов" } }
+      }
+    },
+    "commands.archive.create.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create Archive" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать архив" } }
+      }
+    },
+    "commands.archive.extract.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Extract one archive into the current folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Распаковать архив в текущую папку" } }
+      }
+    },
+    "commands.archive.extract.disabled.caseSensitivityUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The destination filename rules are unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Правила имён файлов в папке назначения недоступны" } }
+      }
+    },
+    "commands.archive.extract.disabled.loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for the current location to finish loading" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дождитесь загрузки текущего расположения" } }
+      }
+    },
+    "commands.archive.extract.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.archive.extract.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Safe archive extraction is unavailable for this location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Безопасная распаковка архивов недоступна для этого расположения" } }
+      }
+    },
+    "commands.archive.extract.disabled.selectionUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select one archive file" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите один файл архива" } }
+      }
+    },
+    "commands.archive.extract.disabled.sourceUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The selected file is not a supported archive" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбранный файл не относится к поддерживаемым архивам" } }
+      }
+    },
+    "commands.archive.extract.disabled.windowUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation queue is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очередь операций недоступна" } }
+      }
+    },
+    "commands.archive.extract.failure.destination" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The extraction destination is no longer safe" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Папка назначения больше не подходит для безопасной распаковки" } }
+      }
+    },
+    "commands.archive.extract.failure.empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The archive is empty" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Архив пуст" } }
+      }
+    },
+    "commands.archive.extract.failure.invalidArchive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The archive cannot be opened" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось открыть архив" } }
+      }
+    },
+    "commands.archive.extract.failure.manifest" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The archive contains an unsafe filename layout" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Архив содержит небезопасную структуру имён" } }
+      }
+    },
+    "commands.archive.extract.failure.read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The archive could not be read" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось прочитать архив" } }
+      }
+    },
+    "commands.archive.extract.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Extract Here" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Распаковать здесь" } }
+      }
+    },
+    "commands.file.copyPath.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy the selected item paths to the clipboard" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скопировать пути выбранных объектов в буфер обмена" } }
+      }
+    },
+    "commands.file.copyPath.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Path" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать путь" } }
+      }
+    },
+    "commands.file.duplicate.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create copies of the selected items in the current folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать копии выбранных объектов в текущей папке" } }
+      }
+    },
+    "commands.file.duplicate.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Duplicate" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дублировать" } }
+      }
+    },
+    "commands.file.calculateSizes.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Calculate the sizes of the selected or focused folders" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Рассчитать размеры выбранных папок или папки в фокусе" } }
+      }
+    },
+    "commands.file.calculateSizes.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Calculate Sizes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Рассчитать размеры" } }
+      }
+    },
+    "commands.file.calculateSizes.disabled.directoryRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select at least one folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите хотя бы одну папку" } }
+      }
+    },
+    "commands.file.calculateSizes.disabled.busy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A folder-size calculation is already running" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расчёт размеров папок уже выполняется" } }
+      }
+    },
+    "commands.file.batchRename.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Review and rename multiple selected items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверить новые имена и переименовать выбранные объекты" } }
+      }
+    },
+    "commands.file.batchRename.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Batch Rename" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пакетное переименование" } }
+      }
+    },
+    "commands.file.batchRename.disabled.mixedProviders" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All items must be in the current folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Все объекты должны находиться в текущей папке" } }
+      }
+    },
+    "commands.file.batchRename.disabled.invalidPlan" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The reviewed rename plan is invalid" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверенный план переименования некорректен" } }
+      }
+    },
+    "commands.file.batchRename.disabled.destinationConflict" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A destination name conflicts with the current folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Имя назначения конфликтует с содержимым текущей папки" } }
+      }
+    },
+    "commands.file.operation.disabled.clipboardUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The clipboard is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Буфер обмена недоступен" } }
+      }
+    },
+    "commands.file.operation.disabled.destinationReadOnly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The current folder is read-only" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущая папка доступна только для чтения" } }
+      }
+    },
+    "commands.file.operation.disabled.destinationUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The destination folder is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Папка назначения недоступна" } }
+      }
+    },
+    "commands.file.operation.disabled.loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for the current location to finish loading" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дождитесь загрузки текущего расположения" } }
+      }
+    },
+    "commands.file.operation.disabled.nameUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A unique destination name is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подобрать уникальное имя назначения" } }
+      }
+    },
+    "commands.file.operation.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This operation is unavailable for the selected items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Эта операция недоступна для выбранных объектов" } }
+      }
+    },
+    "commands.file.operation.disabled.sourceNameCollision" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected items must have distinct archive names" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Имена выбранных объектов в архиве должны различаться" } }
+      }
+    },
+    "commands.file.operation.disabled.sourceUnreadable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "One or more selected items are unreadable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Один или несколько выбранных объектов недоступны для чтения" } }
+      }
+    },
+    "commands.file.operation.disabled.windowUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation queue is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очередь операций недоступна" } }
+      }
+    },
     "commands.file.copy.description" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -169,6 +435,356 @@
             "value" : "Вырезать"
           }
         }
+      }
+    },
+    "commands.file.delete.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Permanently delete the selected items after review" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Безвозвратно удалить выбранные объекты после подтверждения" } }
+      }
+    },
+    "commands.file.delete.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Permanent deletion is unavailable for this location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Безвозвратное удаление недоступно для этого расположения" } }
+      }
+    },
+    "commands.file.delete.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Permanently" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить безвозвратно" } }
+      }
+    },
+    "commands.file.mutation.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.file.mutation.disabled.parentEntryUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The parent folder entry cannot be deleted" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переход к родительской папке нельзя удалить" } }
+      }
+    },
+    "commands.file.mutation.disabled.providerUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The item provider is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Источник объекта недоступен" } }
+      }
+    },
+    "commands.file.mutation.disabled.providerReadOnly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This location is read-only" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это расположение доступно только для чтения" } }
+      }
+    },
+    "commands.file.mutation.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select at least one item" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите хотя бы один объект" } }
+      }
+    },
+    "commands.file.mutation.disabled.stale" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The selection changed; review the items and try again" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбор изменился; проверьте объекты и повторите попытку" } }
+      }
+    },
+    "commands.file.paste.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste clipboard files into the current folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вставить файлы из буфера обмена в текущую папку" } }
+      }
+    },
+    "commands.file.paste.disabled.clipboardBusy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The clipboard move is already in progress" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещение из буфера обмена уже выполняется" } }
+      }
+    },
+    "commands.file.paste.disabled.clipboardChanged" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The clipboard changed; review it and paste again" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Буфер обмена изменился; проверьте его и повторите вставку" } }
+      }
+    },
+    "commands.file.paste.disabled.clipboardUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The clipboard does not contain files to paste" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В буфере обмена нет файлов для вставки" } }
+      }
+    },
+    "commands.file.paste.disabled.destinationReadOnly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The current folder is read-only" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущая папка доступна только для чтения" } }
+      }
+    },
+    "commands.file.paste.disabled.destinationUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A writable destination folder is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Папка назначения для записи недоступна" } }
+      }
+    },
+    "commands.file.paste.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.file.paste.disabled.sourceUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "One or more clipboard items are unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Один или несколько объектов из буфера обмена недоступны" } }
+      }
+    },
+    "commands.file.paste.disabled.windowUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation queue is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очередь операций недоступна" } }
+      }
+    },
+    "commands.file.paste.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вставить" } }
+      }
+    },
+    "commands.file.newFolder.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a folder in the current location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать папку в текущем расположении" } }
+      }
+    },
+    "commands.file.newFolder.disabled.destinationReadOnly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This location is read-only" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это расположение доступно только для чтения" } }
+      }
+    },
+    "commands.file.newFolder.disabled.destinationUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The destination location is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Целевое расположение недоступно" } }
+      }
+    },
+    "commands.file.newFolder.disabled.loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for the current location to finish loading" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дождитесь загрузки текущего расположения" } }
+      }
+    },
+    "commands.file.newFolder.disabled.nameUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A new folder name is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подобрать имя новой папки" } }
+      }
+    },
+    "commands.file.newFolder.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.file.newFolder.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder creation is unavailable for this location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создание папок недоступно для этого расположения" } }
+      }
+    },
+    "commands.file.newFolder.disabled.stale" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The destination changed before the folder was created" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Целевое расположение изменилось до создания папки" } }
+      }
+    },
+    "commands.file.newFolder.disabled.windowUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation queue is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очередь операций недоступна" } }
+      }
+    },
+    "commands.file.newFolder.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новая папка" } }
+      }
+    },
+    "commands.file.newFile.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create an empty file in the current location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать пустой файл в текущем расположении" } }
+      }
+    },
+    "commands.file.newFile.disabled.destinationReadOnly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This location is read-only" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это расположение доступно только для чтения" } }
+      }
+    },
+    "commands.file.newFile.disabled.destinationUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The destination location is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Целевое расположение недоступно" } }
+      }
+    },
+    "commands.file.newFile.disabled.loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for the current location to finish loading" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дождитесь загрузки текущего расположения" } }
+      }
+    },
+    "commands.file.newFile.disabled.nameUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "A new file name is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подобрать имя нового файла" } }
+      }
+    },
+    "commands.file.newFile.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.file.newFile.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File creation is unavailable for this location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создание файлов недоступно для этого расположения" } }
+      }
+    },
+    "commands.file.newFile.disabled.stale" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The destination changed before the file was created" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Целевое расположение изменилось до создания файла" } }
+      }
+    },
+    "commands.file.newFile.disabled.windowUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operation queue is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Очередь операций недоступна" } }
+      }
+    },
+    "commands.file.newFile.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New File" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый файл" } }
+      }
+    },
+    "commands.pane.invertSelection.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invert selection for visible items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инвертировать выбор видимых объектов" } }
+      }
+    },
+    "commands.pane.invertSelection.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invert Selection" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Инвертировать выбор" } }
+      }
+    },
+    "commands.pane.selectAll.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select all visible items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать все видимые объекты" } }
+      }
+    },
+    "commands.pane.selectAll.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select All" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать все" } }
+      }
+    },
+    "commands.pane.selection.disabled.empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "There are no visible items to select" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет видимых объектов для выбора" } }
+      }
+    },
+    "commands.pane.selection.disabled.listingUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The current file list is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущий список файлов недоступен" } }
+      }
+    },
+    "commands.pane.selection.disabled.loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for the current location to finish loading" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дождитесь загрузки текущего расположения" } }
+      }
+    },
+    "commands.pane.selection.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.file.trash.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move the selected items to Trash" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переместить выбранные объекты в Корзину" } }
+      }
+    },
+    "commands.file.trash.disabled.providerUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Trash is unavailable for this location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Корзина недоступна для этого расположения" } }
+      }
+    },
+    "commands.file.trash.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Move to Trash" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переместить в Корзину" } }
       }
     },
     "commands.file.open.description" : {
@@ -339,6 +955,111 @@
             "value" : "Открыть"
           }
         }
+      }
+    },
+    "commands.file.getInfo.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show properties for the selected items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать свойства выбранных объектов" } }
+      }
+    },
+    "commands.file.getInfo.disabled.invalidItem" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose available items to inspect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите доступные объекты для просмотра свойств" } }
+      }
+    },
+    "commands.file.getInfo.disabled.paneTargetRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Properties are available in Explorer panes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свойства доступны в панелях Проводника" } }
+      }
+    },
+    "commands.file.getInfo.disabled.parentEntryUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a file or folder to inspect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите файл или папку для просмотра свойств" } }
+      }
+    },
+    "commands.file.getInfo.disabled.presentationRejected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Properties changed before they could be shown" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свойства изменились до открытия панели" } }
+      }
+    },
+    "commands.file.getInfo.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select at least one item to inspect" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите хотя бы один объект для просмотра свойств" } }
+      }
+    },
+    "commands.file.getInfo.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Get Info" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свойства" } }
+      }
+    },
+    "commands.file.preview.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview the selected item with Quick Look" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпросмотр выбранного объекта через Quick Look" } }
+      }
+    },
+    "commands.file.preview.disabled.invalidItem" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose an available item to preview" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите доступный объект для предпросмотра" } }
+      }
+    },
+    "commands.file.preview.disabled.paneTargetRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The file pane is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель файлов недоступна" } }
+      }
+    },
+    "commands.file.preview.disabled.parentEntryUnsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a file or folder to preview" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите файл или папку для предпросмотра" } }
+      }
+    },
+    "commands.file.preview.disabled.previewUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The item changed before Quick Look could open" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Объект изменился до открытия Quick Look" } }
+      }
+    },
+    "commands.file.preview.disabled.selectionEmpty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select one item to preview" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите один объект для предпросмотра" } }
+      }
+    },
+    "commands.file.preview.disabled.singleItemRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose one item to preview" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выберите один объект для предпросмотра" } }
+      }
+    },
+    "commands.file.preview.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quick Look" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Быстрый просмотр" } }
       }
     },
     "commands.file.rename.description" : {
@@ -1174,6 +1895,573 @@
         }
       }
     },
+    "explorer.search.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search mode" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим поиска" } }
+      }
+    },
+    "explorer.search.backend.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search backend" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Система поиска" } }
+      }
+    },
+    "explorer.search.backend.direct" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Direct scan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прямое сканирование" } }
+      }
+    },
+    "explorer.search.backend.indexUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "index unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "индекс недоступен" } }
+      }
+    },
+    "explorer.search.backend.spotlight" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight" } }
+      }
+    },
+    "explorer.search.backend.unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "недоступно" } }
+      }
+    },
+    "explorer.search.backend.unsupported" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "unsupported" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "не поддерживается" } }
+      }
+    },
+    "explorer.search.cancel" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отменить" } }
+      }
+    },
+    "explorer.search.close" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Закрыть" } }
+      }
+    },
+    "explorer.search.content.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File content query" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск по содержимому файла" } }
+      }
+    },
+    "explorer.search.content.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File content" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Содержимое файла" } }
+      }
+    },
+    "explorer.search.counts" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scanned: %llu · Found: %llu" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Просмотрено: %llu · Найдено: %llu" } }
+      }
+    },
+    "explorer.search.counts.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search counts" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Счетчики поиска" } }
+      }
+    },
+    "explorer.search.extension.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File extension" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширение файла" } }
+      }
+    },
+    "explorer.search.extension.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Extension" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расширение" } }
+      }
+    },
+    "explorer.search.fileType.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File type" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Тип объекта" } }
+      }
+    },
+    "explorer.search.fileType.any" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Files & Folders" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Файлы и папки" } }
+      }
+    },
+    "explorer.search.fileType.files" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Files" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Файлы" } }
+      }
+    },
+    "explorer.search.fileType.folders" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folders" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Папки" } }
+      }
+    },
+    "explorer.search.includeHidden" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Include Hidden" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включая скрытые" } }
+      }
+    },
+    "explorer.search.includeHidden.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Include hidden items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включать скрытые объекты" } }
+      }
+    },
+    "explorer.search.limitation.content" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Content search is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск по содержимому недоступен" } }
+      }
+    },
+    "explorer.search.limitation.disk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disk-wide search is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск по всему диску недоступен" } }
+      }
+    },
+    "explorer.search.limitation.fullDiskAccess" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Full Disk Access is required for complete results" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для полных результатов требуется полный доступ к диску" } }
+      }
+    },
+    "explorer.search.limitation.hidden" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Hidden items are excluded" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрытые объекты исключены" } }
+      }
+    },
+    "explorer.search.limitation.metadata" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Metadata filters are unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фильтры метаданных недоступны" } }
+      }
+    },
+    "explorer.search.limitation.permissionDenied" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Some locations could not be read" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Некоторые расположения не удалось прочитать" } }
+      }
+    },
+    "explorer.search.limitation.resultPaths" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Some results changed before they could be displayed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Некоторые результаты изменились до отображения" } }
+      }
+    },
+    "explorer.search.limitation.provider" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The current provider cannot search" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущий провайдер не поддерживает поиск" } }
+      }
+    },
+    "explorer.search.limitation.recursive" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subfolder search is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск во вложенных папках недоступен" } }
+      }
+    },
+    "explorer.search.limitation.spotlight" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight недоступен" } }
+      }
+    },
+    "explorer.search.limitation.spotlightIndex" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight indexing is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Индекс Spotlight недоступен" } }
+      }
+    },
+    "explorer.search.limitation.wholeMac" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Whole Mac search requires Spotlight" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для поиска по всему Mac требуется Spotlight" } }
+      }
+    },
+    "explorer.search.limitations.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search limitations" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ограничения поиска" } }
+      }
+    },
+    "explorer.search.location" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Location: %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расположение: %@" } }
+      }
+    },
+    "explorer.search.location.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущее расположение" } }
+      }
+    },
+    "explorer.search.match.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Name matching" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сопоставление имени" } }
+      }
+    },
+    "explorer.search.match.contains" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contains" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Содержит" } }
+      }
+    },
+    "explorer.search.match.exact" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Exact" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Точное" } }
+      }
+    },
+    "explorer.search.maximumSize.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Maximum size in bytes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Максимальный размер в байтах" } }
+      }
+    },
+    "explorer.search.maximumSize.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Max bytes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Макс. байт" } }
+      }
+    },
+    "explorer.search.minimumSize.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Minimum size in bytes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Минимальный размер в байтах" } }
+      }
+    },
+    "explorer.search.minimumSize.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Min bytes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Мин. байт" } }
+      }
+    },
+    "explorer.search.modifiedAfter.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Modified at or after Unix time" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменен не раньше указанного времени Unix" } }
+      }
+    },
+    "explorer.search.modifiedAfter.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Modified after (Unix)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменен после (Unix)" } }
+      }
+    },
+    "explorer.search.modifiedBefore.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Modified at or before Unix time" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменен не позже указанного времени Unix" } }
+      }
+    },
+    "explorer.search.modifiedBefore.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Modified before (Unix)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменен до (Unix)" } }
+      }
+    },
+    "explorer.search.progress.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search progress" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прогресс поиска" } }
+      }
+    },
+    "explorer.search.progress.indeterminate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Indeterminate" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неопределенный" } }
+      }
+    },
+    "explorer.search.query.accessibility.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Press Return to start searching" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нажмите Return, чтобы начать поиск" } }
+      }
+    },
+    "explorer.search.query.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search query" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поисковый запрос" } }
+      }
+    },
+    "explorer.search.query.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Name or pattern" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Имя или шаблон" } }
+      }
+    },
+    "explorer.search.reveal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reveal Original" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать оригинал" } }
+      }
+    },
+    "explorer.search.scope.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search scope" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Область поиска" } }
+      }
+    },
+    "explorer.search.scope.currentDisk" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This Disk" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Этот диск" } }
+      }
+    },
+    "explorer.search.scope.currentFolder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current Folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущая папка" } }
+      }
+    },
+    "explorer.search.scope.subfolders" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subfolders" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вложенные папки" } }
+      }
+    },
+    "explorer.search.scope.wholeMac" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight / Whole Mac" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight / весь Mac" } }
+      }
+    },
+    "explorer.search.start" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Найти" } }
+      }
+    },
+    "explorer.search.state.backendUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search is unavailable for this location" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск в этом расположении недоступен" } }
+      }
+    },
+    "explorer.search.state.cancelled" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search cancelled" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск отменен" } }
+      }
+    },
+    "explorer.search.state.completed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search completed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск завершен" } }
+      }
+    },
+    "explorer.search.state.failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search failed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка поиска" } }
+      }
+    },
+    "explorer.search.state.failed.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search failed: %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка поиска: %@" } }
+      }
+    },
+    "explorer.search.state.indexUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotlight index is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Индекс Spotlight недоступен" } }
+      }
+    },
+    "explorer.search.state.noResults" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No results found" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ничего не найдено" } }
+      }
+    },
+    "explorer.search.state.partial" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Partial results" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неполные результаты" } }
+      }
+    },
+    "explorer.search.state.permissionLimited" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Results are limited by permissions" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Результаты ограничены правами доступа" } }
+      }
+    },
+    "explorer.search.state.preparing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preparing search…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Подготовка поиска…" } }
+      }
+    },
+    "explorer.search.state.ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to search" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово к поиску" } }
+      }
+    },
+    "explorer.search.state.running" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Searching…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск…" } }
+      }
+    },
+    "explorer.search.state.tooManyResults" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Too many results; refine the search" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Слишком много результатов; уточните запрос" } }
+      }
+    },
+    "explorer.search.status.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search status" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Состояние поиска" } }
+      }
+    },
+    "explorer.operationProgress.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File operation progress" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прогресс файловой операции" } }
+      }
+    },
+    "explorer.operationProgress.additional" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "+%zu more" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "+ещё %zu" } }
+      }
+    },
+    "explorer.operationProgress.currentItem.accessibility.label" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current file" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Текущий файл" } }
+      }
+    },
+    "explorer.operationProgress.eta" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ remaining" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "осталось %@" } }
+      }
+    },
+    "explorer.operationProgress.items.processed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%llu items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%llu объектов" } }
+      }
+    },
+    "explorer.operationProgress.items.speed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%.1f items/s" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%.1f объектов/с" } }
+      }
+    },
+    "explorer.operationProgress.items.total" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%llu / %llu items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%llu / %llu объектов" } }
+      }
+    },
+    "explorer.operationProgress.state.waiting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting for a decision" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ожидание решения" } }
+      }
+    },
     "explorer.operations.cancel" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1835,6 +3123,118 @@
             "value" : "Показывать скрытые файлы"
           }
         }
+      }
+    },
+    "commands.view.togglePreviewPane.description" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show or hide the preview pane in Explorer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать или скрыть панель предпросмотра в Проводнике" } }
+      }
+    },
+    "commands.view.togglePreviewPane.disabled.paneUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The preview pane is available in Explorer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель предпросмотра доступна в Проводнике" } }
+      }
+    },
+    "commands.view.togglePreviewPane.disabled.stateChanged" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The preview pane changed; try again" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Состояние панели предпросмотра изменилось; повторите действие" } }
+      }
+    },
+    "commands.view.togglePreviewPane.disabled.stateUnavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The preview pane state is unavailable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Состояние панели предпросмотра недоступно" } }
+      }
+    },
+    "commands.view.togglePreviewPane.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview Pane" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель предпросмотра" } }
+      }
+    },
+    "Drive is disconnected." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drive is disconnected." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Диск отключён." } }
+      }
+    },
+    "Folder is empty." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder is empty." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Папка пуста." } }
+      }
+    },
+    "Folder state" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder state" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Состояние папки" } }
+      }
+    },
+    "Folder status" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder status" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Статус папки" } }
+      }
+    },
+    "Folder was not found." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder was not found." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Папка не найдена." } }
+      }
+    },
+    "Loading folder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Загрузка папки" } }
+      }
+    },
+    "Loading…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Загрузка…" } }
+      }
+    },
+    "Permission denied." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Permission denied." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Доступ запрещён." } }
+      }
+    },
+    "Remote location is unavailable." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remote location is unavailable." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалённое расположение недоступно." } }
+      }
+    },
+    "This location is not supported." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This location is not supported." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это расположение не поддерживается." } }
+      }
+    },
+    "Unable to show this folder." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to show this folder." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось показать эту папку." } }
       }
     },
     "visualState.folder.empty" : {
@@ -2661,6 +4061,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Избранное"
+          }
+        }
+      }
+    },
+    "File Attributes" : {
+      "comment" : "Explorer command bar - More menu item",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Атрибуты файлов"
           }
         }
       }
@@ -3755,6 +5166,48 @@
         }
       }
     },
+    "An item with this name already exists." : {
+      "comment" : "Inline rename destination collision message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Объект с таким именем уже существует." } }
+      }
+    },
+    "The folder contents changed. Start the rename again." : {
+      "comment" : "Inline rename stale context message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Содержимое папки изменилось. Начните переименование заново." } }
+      }
+    },
+    "The location couldn’t verify this name safely." : {
+      "comment" : "Inline rename unknown case-sensitivity message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расположение не смогло безопасно проверить это имя." } }
+      }
+    },
+    "This location can’t safely change only the letter case." : {
+      "comment" : "Inline rename unsafe case-only message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это расположение не поддерживает безопасное изменение только регистра букв." } }
+      }
+    },
+    "This location doesn’t support renaming." : {
+      "comment" : "Inline rename unsupported provider message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это расположение не поддерживает переименование." } }
+      }
+    },
+    "Wait for the folder to finish loading, then try again." : {
+      "comment" : "Inline rename loading message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Дождитесь загрузки папки и повторите попытку." } }
+      }
+    },
+    "You don’t have permission to rename items in this folder." : {
+      "comment" : "Inline rename read-only destination message",
+      "localizations" : {
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "У вас нет разрешения на переименование объектов в этой папке." } }
+      }
+    },
     "The application has running operations. Do you want to stop all operations and quit?" : {
       "comment" : "Asking user for quitting app with activity",
       "localizations" : {
@@ -4170,6 +5623,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Превышено время ожидания операции."
+          }
+        }
+      }
+    },
+    "errors.volumeUnavailable" : {
+      "comment" : "User-facing message when the exact previously committed native volume disappeared",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The drive is disconnected."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Диск отключён."
           }
         }
       }

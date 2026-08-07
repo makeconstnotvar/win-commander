@@ -41,8 +41,7 @@ bool IsAddressEditable(const BreadcrumbPresentationState &_state)
 
 bool HasAddressLocation(const BreadcrumbPresentationState &_state)
 {
-    return _state.is_uniform && _state.host != nullptr && _state.host != VFSHost::DummyHost() &&
-           !_state.path.empty();
+    return _state.is_uniform && _state.host != nullptr && _state.host != VFSHost::DummyHost() && !_state.path.empty();
 }
 
 bool HasSameAddressContext(const BreadcrumbPresentationState &_lhs, const BreadcrumbPresentationState &_rhs)
@@ -83,11 +82,9 @@ NSString *_Nullable NavigationRequestErrorText(const Error &_error,
                 return NSLocalizedString(@"Another folder request is already in progress.",
                                          "Explorer navigation admission error");
             case ENODEV:
-                return NSLocalizedString(@"Folder navigation is unavailable.",
-                                         "Explorer navigation admission error");
+                return NSLocalizedString(@"Folder navigation is unavailable.", "Explorer navigation admission error");
             case EINVAL:
-                return NSLocalizedString(@"The folder path is invalid.",
-                                         "Explorer navigation admission error");
+                return NSLocalizedString(@"The folder path is invalid.", "Explorer navigation admission error");
         }
     }
 
@@ -178,12 +175,15 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     std::optional<BreadcrumbPresentationState> m_PresentationState;
 }
 
+@synthesize panelController = m_Panel;
+
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
 {
     self = [super initWithFrame:frameRect];
     if( self ) {
         m_Panel = _panel;
         self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        self.accessibilityElement = true;
         self.accessibilityRole = NSAccessibilityGroupRole;
         self.accessibilityLabel = NSLocalizedString(@"Address bar", "Explorer accessibility label");
         [self buildLayout];
@@ -191,12 +191,45 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     return self;
 }
 
+- (void)rebindToPanelController:(PanelController *)_panel
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    if( !_panel || m_Panel == _panel )
+        return;
+
+    ++m_NavigationGeneration;
+    ++m_CompletionGeneration;
+    if( m_CompletionCancellation )
+        m_CompletionCancellation->store(true);
+    m_CompletionCancellation.reset();
+    m_Completions = @[];
+    [m_PathEditor reloadData];
+    m_PathEditor.hidden = true;
+    m_PathEditor.textColor = NSColor.labelColor;
+    m_PathEditor.toolTip = nil;
+    m_RequestErrorMessage = nil;
+    m_LocationGeneration.reset();
+    m_PresentationState.reset();
+    m_SegmentTargets = [NSMutableArray new];
+    for( NSView *view in [m_PathStack.arrangedSubviews copy] ) {
+        [m_PathStack removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+    m_PathStack.hidden = true;
+    m_FallbackLabel.hidden = false;
+    m_FallbackLabel.stringValue = @"";
+    self.accessibilityValue = @"";
+    [m_BusyIndicator stopAnimation:nil];
+    [self applyVisibleErrorText:nil priority:core::VisualPriority::Normal];
+    m_Panel = _panel;
+}
+
 - (void)buildLayout
 {
     m_LocationButton = [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:@"folder.fill"
-                                                                 accessibilityDescription:nil]
-                                         target:self
-                                         action:@selector(onEditPath:)];
+                                                           accessibilityDescription:nil]
+                                          target:self
+                                          action:@selector(onEditPath:)];
     m_LocationButton.bezelStyle = NSBezelStyleInline;
     m_LocationButton.bordered = false;
     m_LocationButton.toolTip = NSLocalizedString(@"Edit path (Command-L)", "Explorer address bar");
@@ -317,8 +350,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     m_ErrorLabel.accessibilityValue = _error_text;
     m_ErrorLabel.accessibilityHelp = _error_text;
     self.accessibilityHelp = _error_text;
-    m_ErrorLabel.textColor = _priority >= core::VisualPriority::Blocking ? NSColor.systemRedColor
-                                                                         : NSColor.systemOrangeColor;
+    m_ErrorLabel.textColor =
+        _priority >= core::VisualPriority::Blocking ? NSColor.systemRedColor : NSColor.systemOrangeColor;
     if( changed && _error_text.length != 0 )
         NSAccessibilityPostNotification(m_ErrorLabel, NSAccessibilityValueChangedNotification);
 }
@@ -330,9 +363,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     const core::PaneState &state = _snapshot.state;
     const bool location_generation_changed =
         !m_LocationGeneration || *m_LocationGeneration != state.location_generation;
-    if( !state.visible_error &&
-        (state.load_phase == core::PaneLoadPhase::Loading ||
-         state.load_phase == core::PaneLoadPhase::Refreshing || location_generation_changed) ) {
+    if( !state.visible_error && (state.load_phase == core::PaneLoadPhase::Loading ||
+                                 state.load_phase == core::PaneLoadPhase::Refreshing || location_generation_changed) ) {
         m_RequestErrorMessage = nil;
         m_PathEditor.textColor = NSColor.labelColor;
         m_PathEditor.toolTip = nil;
@@ -469,9 +501,9 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     [m_PathStack addArrangedSubview:segment];
 
     NSButton *const siblings = [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:@"chevron.right"
-                                                                             accessibilityDescription:nil]
-                                                   target:self
-                                                   action:@selector(onSiblingMenu:)];
+                                                                   accessibilityDescription:nil]
+                                                  target:self
+                                                  action:@selector(onSiblingMenu:)];
     siblings.bezelStyle = NSBezelStyleInline;
     siblings.bordered = false;
     siblings.imageScaling = NSImageScaleProportionallyDown;
@@ -497,8 +529,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
 
     NSMenu *const menu = [NSMenu new];
     NSMenuItem *const loading = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Loading…", "Explorer address bar")
-                                                          action:nil
-                                                   keyEquivalent:@""];
+                                                           action:nil
+                                                    keyEquivalent:@""];
     loading.enabled = false;
     [menu addItem:loading];
 
@@ -531,10 +563,10 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
                 return;
             [menu removeAllItems];
             if( directories.empty() ) {
-                NSMenuItem *const empty = [[NSMenuItem alloc]
-                    initWithTitle:NSLocalizedString(@"No folders", "Explorer address bar")
-                           action:nil
-                    keyEquivalent:@""];
+                NSMenuItem *const empty =
+                    [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"No folders", "Explorer address bar")
+                                               action:nil
+                                        keyEquivalent:@""];
                 empty.enabled = false;
                 [menu addItem:empty];
                 return;
@@ -543,8 +575,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
                 NSString *const title = [NSString stringWithUTF8String:name.c_str()];
                 const std::string path = EnsureTrailingSlash(parent + name);
                 NSMenuItem *const item = [[NSMenuItem alloc] initWithTitle:title
-                                                                   action:@selector(onSiblingSelected:)
-                                                            keyEquivalent:@""];
+                                                                    action:@selector(onSiblingSelected:)
+                                                             keyEquivalent:@""];
                 item.target = strong_self;
                 item.representedObject = [[NCExplorerBreadcrumbTarget alloc] initWithTitle:title path:path host:host];
                 [menu addItem:item];
@@ -731,7 +763,7 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
 }
 
 - (BOOL)control:(NSControl *)_control
-    textView:(NSTextView *) [[maybe_unused]] _text_view
+               textView:(NSTextView *) [[maybe_unused]] _text_view
     doCommandBySelector:(SEL)_selector
 {
     if( _control == m_PathEditor && _selector == @selector(cancelOperation:) ) {
@@ -760,8 +792,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     const std::string expanded = [m_Panel expandPath:_string.fileSystemRepresentation];
     NSString *const normalized_prefix = [NSString stringWithUTF8String:expanded.c_str()];
     for( NSString *candidate in m_Completions )
-        if( [candidate rangeOfString:normalized_prefix
-                             options:NSAnchoredSearch | NSCaseInsensitiveSearch].location != NSNotFound )
+        if( [candidate rangeOfString:normalized_prefix options:NSAnchoredSearch | NSCaseInsensitiveSearch].location !=
+            NSNotFound )
             return candidate;
     return nil;
 }

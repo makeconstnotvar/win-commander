@@ -16,6 +16,9 @@
 
 @property(nonatomic, readonly) PanelController *panelController;
 
+/** Rebuilds pane-bound actions and selection tests for a newly active Explorer tab. */
+- (void)rebindToPanelController:(PanelController *)_panel;
+
 /**
  * Rebuilds all sections from the current app-wide storages.
  * Called automatically once at construction time.

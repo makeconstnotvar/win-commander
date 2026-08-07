@@ -22,6 +22,8 @@ class QuickLookVFSBridge;
                   QLVFSBridge:(nc::panel::QuickLookVFSBridge &)_ql_vfs_bridge;
 
 - (void)showVFSItem:(VFSListingItem)_item;
+/** Clears published content and invalidates every outstanding asynchronous preview request. */
+- (void)clearPreview;
 
 @property(nonatomic) NSColor *backgroundColor;
 

@@ -2,10 +2,34 @@
 #pragma once
 
 #include "DefaultAction.h"
+#include <VFS/VFS.h>
+#include <cstdint>
+#include <span>
 
 @class PanelController;
 
 namespace nc::panel::actions {
+
+enum class BatchRenameSubmissionResult : uint8_t {
+    Presented,
+    PaneUnavailable,
+    WindowUnavailable,
+    Loading,
+    ListingUnavailable,
+    SelectionUnavailable,
+    ParentEntryUnsupported,
+    MixedProviders,
+    ProviderUnsupported,
+    StaleContext,
+    InvalidPlan,
+    DestinationConflict
+};
+
+[[nodiscard]] BatchRenameSubmissionResult
+EvaluateBatchRenameSubmission(std::span<const VFSListingItem> _items, PanelController *_target);
+
+[[nodiscard]] BatchRenameSubmissionResult
+PresentBatchRename(std::span<const VFSListingItem> _items, PanelController *_target);
 
 struct BatchRename final : PanelAction {
     [[nodiscard]] bool Predicate(PanelController *_target) const override;

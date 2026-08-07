@@ -129,6 +129,13 @@
 		B80000000000000000000003 /* ProviderConditionalCopyOperationTesting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ProviderConditionalCopyOperationTesting.h; path = source/ProviderConditionalCopyOperationTesting.h; sourceTree = "<group>"; };
 		B80000000000000000000004 /* ProviderConditionalCopyOperation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ProviderConditionalCopyOperation.cpp; path = source/ProviderConditionalCopyOperation.cpp; sourceTree = "<group>"; };
 		B80000000000000000000005 /* ProviderConditionalCopyOperation_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ProviderConditionalCopyOperation_UT.cpp; sourceTree = "<group>"; };
+		Q18000000000000000000001 /* FileAlreadyExistDialog_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = FileAlreadyExistDialog_UT.mm; sourceTree = "<group>"; };
+		EFC100000000000000000001 /* EmptyFileCreation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EmptyFileCreation.h; sourceTree = "<group>"; };
+		EFC100000000000000000002 /* EmptyFileCreation.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = EmptyFileCreation.mm; sourceTree = "<group>"; };
+		EFC100000000000000000003 /* EmptyFileCreationJob.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EmptyFileCreationJob.h; sourceTree = "<group>"; };
+		EFC100000000000000000004 /* EmptyFileCreationJob.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EmptyFileCreationJob.cpp; sourceTree = "<group>"; };
+		EFC100000000000000000005 /* EmptyFileCreation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = EmptyFileCreation.h; path = include/Operations/EmptyFileCreation.h; sourceTree = "<group>"; };
+		EFC100000000000000000006 /* EmptyFileCreation_IT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EmptyFileCreation_IT.cpp; sourceTree = "<group>"; };
 		CF197C261FB4381E009F6C59 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/CopyingDialogDisclosedView.xib; sourceTree = "<group>"; };
 		CF22F0D5258F43610033E850 /* OperationsUT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = OperationsUT; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF22F0F4258F43A80033E850 /* Deletion_UT.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Deletion_UT.cpp; sourceTree = "<group>"; };
@@ -441,6 +448,18 @@
 			name = DirectoryCreation;
 			sourceTree = "<group>";
 		};
+		EFC100000000000000000007 /* EmptyFileCreation */ = {
+			isa = PBXGroup;
+			children = (
+				EFC100000000000000000001 /* EmptyFileCreation.h */,
+				EFC100000000000000000002 /* EmptyFileCreation.mm */,
+				EFC100000000000000000004 /* EmptyFileCreationJob.cpp */,
+				EFC100000000000000000003 /* EmptyFileCreationJob.h */,
+			);
+			name = EmptyFileCreation;
+			path = source/EmptyFileCreation;
+			sourceTree = SOURCE_ROOT;
+		};
 		CFC4F90E1F0745170000B3EE /* Base */ = {
 			isa = PBXGroup;
 			children = (
@@ -531,6 +550,7 @@
 				CF4BCEE21F1D9C9A005F8414 /* Copying */,
 				CFC4F9161F09D9620000B3EE /* Deletion */,
 				CFC4F9031F0625090000B3EE /* DirectoryCreation */,
+				EFC100000000000000000007 /* EmptyFileCreation */,
 				CFC4F9851F0F22700000B3EE /* Linkage */,
 			);
 			name = Operations;
@@ -613,6 +633,7 @@
 				CFAB6D7D258A742D00397DB5 /* CopyingFindNonExistingItemPath_UT.cpp */,
 				CFC4F9211F09DFD80000B3EE /* Deletion_IT.cpp */,
 				CF22F0F4258F43A80033E850 /* Deletion_UT.cpp */,
+				Q18000000000000000000001 /* FileAlreadyExistDialog_UT.mm */,
 				A10000000000000000000010 /* LegacyOperationFactory_UT.cpp */,
 				A20000000000000000000005 /* NativeCreateCopy_UT.cpp */,
 				A30000000000000000000005 /* ReviewedOperationFactory_UT.cpp */,
@@ -627,6 +648,7 @@
 					A1000000000000000000000C /* VFSOperationPlanningProbes_UT.cpp */,
 				CFC4F90C1F0628CC0000B3EE /* DirectoryCreations_IT.cpp */,
 				CF2C102422A4116B00A5359D /* DirectoryPathAutoCompetion_IT.mm */,
+				EFC100000000000000000006 /* EmptyFileCreation_IT.cpp */,
 				CF3ABD8223BA1B2800D1878B /* Environment.h */,
 				CF40237B256D9F1A0028E0B3 /* Linkage_IT.cpp */,
 				CF287FDB26EE0A5600FC24B5 /* Pool_UT.mm */,
@@ -669,6 +691,7 @@
 				CFC4F9931F0F22900000B3EE /* DeletionDialog.h */,
 				CFC4F92C1F0B49C00000B3EE /* DirectoryCreation.h */,
 				CFC4F9561F0CB0260000B3EE /* DirectoryCreationDialog.h */,
+				EFC100000000000000000005 /* EmptyFileCreation.h */,
 				CF2C102222A2F02E00A5359D /* FilenameTextControl.h */,
 				CFF53B8C1EE24F9E00F567C4 /* Job.h */,
 				A1000000000000000000000D /* LegacyOperationFactory.h */,

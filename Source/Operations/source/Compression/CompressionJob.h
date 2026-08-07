@@ -75,7 +75,7 @@ private:
     StepResult ProcessRegularItem(int _index, const std::string &_relative_path, const std::string &_full_path);
     StepResult ProcessSymlinkItem(int _index, const std::string &_relative_path, const std::string &_full_path);
 
-    std::string FindSuitableFilename(const std::string &_proposed_arcname) const;
+    std::string FindSuitableFilename(const std::string &_proposed_arcname);
     bool IsEncrypted() const noexcept;
 
     static ssize_t WriteCallback(struct archive *_archive, void *_client_data, const void *_buffer, size_t _length);

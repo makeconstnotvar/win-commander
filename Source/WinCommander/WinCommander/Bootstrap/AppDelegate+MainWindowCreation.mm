@@ -48,11 +48,7 @@ static const auto g_ConfigRestoreLastWindowState = "filePanel.general.restoreLas
 
 namespace {
 
-enum class CreationContext : uint8_t {
-    Default,
-    ManualRestoration,
-    SystemRestoration
-};
+using nc::bootstrap::MainWindowCreationKind;
 
 nc::core::PaneId NextPaneId() noexcept
 {
@@ -149,8 +145,10 @@ static std::vector<std::string> CommaSeparatedStrings(const nc::config::Config &
 
 - (nc::panel::ControllerStateJSONDecoder &)controllerStateJSONDecoder
 {
-    static auto decoder =
-        nc::panel::ControllerStateJSONDecoder(self.nativeFSManager, self.vfsInstanceManager, self.panelDataPersistency);
+    static auto decoder = nc::panel::ControllerStateJSONDecoder(self.nativeFSManager,
+                                                                self.vfsInstanceManager,
+                                                                self.panelDataPersistency,
+                                                                {.allow_password_ui = false});
     return decoder;
 }
 
@@ -235,11 +233,11 @@ static PanelController *PanelFactory()
 }
 
 - (MainWindowFilePanelState *)allocateFilePanelsWithFrame:(NSRect)_frame
-                                                inContext:(CreationContext)_context
+                                                inContext:(MainWindowCreationKind)_context
                                               withOpsPool:(nc::ops::Pool &)_operations_pool
 {
     auto &ctrl_state_json_decoder = self.controllerStateJSONDecoder;
-    if( _context == CreationContext::Default ) {
+    if( _context == MainWindowCreationKind::Default ) {
         return [[MainWindowFilePanelState alloc] initWithFrame:_frame
                                                        andPool:_operations_pool
                                             loadDefaultContent:true
@@ -247,7 +245,7 @@ static PanelController *PanelFactory()
                                     controllerStateJSONDecoder:ctrl_state_json_decoder
                                                 QLPanelAdaptor:self.QLPanelAdaptor];
     }
-    else if( _context == CreationContext::ManualRestoration ) {
+    else if( _context == MainWindowCreationKind::ManualRestoration ) {
         if( NCMainWindowController.canRestoreDefaultWindowStateFromLastOpenedWindow ) {
             auto state = [[MainWindowFilePanelState alloc] initWithFrame:_frame
                                                                  andPool:_operations_pool
@@ -260,23 +258,20 @@ static PanelController *PanelFactory()
             return state;
         }
         else if( GlobalConfig().GetBool(g_ConfigRestoreLastWindowState) ) {
-            auto state = [[MainWindowFilePanelState alloc] initWithFrame:_frame
-                                                                 andPool:_operations_pool
-                                                      loadDefaultContent:false
-                                                            panelFactory:PanelFactory
-                                              controllerStateJSONDecoder:ctrl_state_json_decoder
-                                                          QLPanelAdaptor:self.QLPanelAdaptor];
-            if( ![NCMainWindowController restoreDefaultWindowStateFromConfig:state] )
-                [state loadDefaultPanelContent];
-            return state;
+            return [[MainWindowFilePanelState alloc] initWithFrame:_frame
+                                                           andPool:_operations_pool
+                                                loadDefaultContent:false
+                                                      panelFactory:PanelFactory
+                                        controllerStateJSONDecoder:ctrl_state_json_decoder
+                                                    QLPanelAdaptor:self.QLPanelAdaptor];
         }
         else { // if we can't restore a window - fall back into a default creation context
             return [self allocateFilePanelsWithFrame:_frame
-                                           inContext:CreationContext::Default
+                                           inContext:MainWindowCreationKind::Default
                                          withOpsPool:_operations_pool];
         }
     }
-    else if( _context == CreationContext::SystemRestoration ) {
+    else if( _context == MainWindowCreationKind::SystemRestoration ) {
         return [[MainWindowFilePanelState alloc] initWithFrame:_frame
                                                        andPool:_operations_pool
                                             loadDefaultContent:false
@@ -287,8 +282,10 @@ static PanelController *PanelFactory()
     return nil;
 }
 
-- (NCMainWindowController *)allocateMainWindowInContext:(CreationContext)_context
+- (NCMainWindowController *)allocateMainWindowInContext:(MainWindowCreationKind)_context
 {
+    const bool can_copy_last_window = NCMainWindowController.canRestoreDefaultWindowStateFromLastOpenedWindow;
+    const bool restore_stored_session = GlobalConfig().GetBool(g_ConfigRestoreLastWindowState);
     const auto window = [self allocateMainWindow];
     const auto frame = window.contentView.frame;
     const auto operations_pool = nc::ops::Pool::Make();
@@ -314,23 +311,36 @@ static PanelController *PanelFactory()
 
     window_controller.filePanelsState = file_state;
 
+    const nc::bootstrap::DefaultExplorerStartupPlan startup_plan =
+        nc::bootstrap::PlanDefaultExplorerStartup(_context, can_copy_last_window, restore_stored_session);
+    if( startup_plan.restore_stored_session ) {
+        const bool restored = [window_controller restoreDefaultWindowStateFromConfig];
+        if( nc::bootstrap::ShouldEnsureDefaultExplorer(startup_plan, restored) ) {
+            [file_state loadDefaultPanelContent];
+            [window_controller ensureExplorerMode];
+        }
+    }
+    else if( nc::bootstrap::ShouldEnsureDefaultExplorer(startup_plan) ) {
+        [window_controller ensureExplorerMode];
+    }
+
     [self addMainWindow:window_controller];
     return window_controller;
 }
 
 - (NCMainWindowController *)allocateDefaultMainWindow
 {
-    return [self allocateMainWindowInContext:CreationContext::Default];
+    return [self allocateMainWindowInContext:MainWindowCreationKind::Default];
 }
 
 - (NCMainWindowController *)allocateMainWindowRestoredManually
 {
-    return [self allocateMainWindowInContext:CreationContext::ManualRestoration];
+    return [self allocateMainWindowInContext:MainWindowCreationKind::ManualRestoration];
 }
 
 - (NCMainWindowController *)allocateMainWindowRestoredBySystem
 {
-    return [self allocateMainWindowInContext:CreationContext::SystemRestoration];
+    return [self allocateMainWindowInContext:MainWindowCreationKind::SystemRestoration];
 }
 
 - (nc::panel::QuickLookVFSBridge &)QLVFSBridge
@@ -364,6 +374,8 @@ static PanelController *PanelFactory()
 - (nc::panel::ContextMenuProvider)makePanelContextMenuProvider
 {
     auto provider = [self](std::vector<VFSListingItem> _items, PanelController *_panel) -> NCPanelContextMenu * {
+        if( _items.empty() )
+            return [[NCPanelContextMenu alloc] initForBackgroundOfPanel:_panel];
         return [[NCPanelContextMenu alloc] initWithItems:std::move(_items)
                                                  ofPanel:_panel
                                           withFileOpener:self.fileOpener

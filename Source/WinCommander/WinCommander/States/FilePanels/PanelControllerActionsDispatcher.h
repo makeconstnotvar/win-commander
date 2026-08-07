@@ -51,6 +51,24 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
                                  source:(nc::core::CommandInvocationSource)_source
                                  sender:(id)_sender;
 
+- (nc::core::CommandState)fileGetInfoCommandState;
+- (nc::core::CommandState)fileGetInfoCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileGetInfoCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                   source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileGetInfoCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileGetInfoCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                    source:(nc::core::CommandInvocationSource)_source
+                                    sender:(id)_sender;
+
+- (nc::core::CommandState)filePreviewCommandState;
+- (nc::core::CommandState)filePreviewCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)filePreviewCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                   source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFilePreviewCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFilePreviewCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                    source:(nc::core::CommandInvocationSource)_source
+                                    sender:(id)_sender;
+
 - (nc::core::CommandState)fileCutCommandState;
 - (nc::core::CommandState)fileCutCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
 - (nc::core::CommandState)fileCutCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
@@ -59,6 +77,98 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
 - (void)executeFileCutCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
                                 source:(nc::core::CommandInvocationSource)_source
                                 sender:(id)_sender;
+
+- (nc::core::CommandState)filePasteCommandState;
+- (nc::core::CommandState)filePasteCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (void)executeFilePasteCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)fileNewFolderCommandState;
+- (nc::core::CommandState)fileNewFolderCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileNewFolderCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)fileNewFileCommandState;
+- (nc::core::CommandState)fileNewFileCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileNewFileCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)paneSelectAllCommandState;
+- (nc::core::CommandState)paneSelectAllCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (void)executePaneSelectAllCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)paneInvertSelectionCommandState;
+- (nc::core::CommandState)paneInvertSelectionCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (void)executePaneInvertSelectionCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)archiveCreateCommandState;
+- (nc::core::CommandState)archiveCreateCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)archiveCreateCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                      source:(nc::core::CommandInvocationSource)_source;
+- (void)executeArchiveCreateCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeArchiveCreateCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                       source:(nc::core::CommandInvocationSource)_source
+                                       sender:(id)_sender;
+
+- (nc::core::CommandState)archiveExtractCommandState;
+- (nc::core::CommandState)archiveExtractCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)archiveExtractCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                       source:(nc::core::CommandInvocationSource)_source;
+- (void)executeArchiveExtractCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeArchiveExtractCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                        source:(nc::core::CommandInvocationSource)_source
+                                        sender:(id)_sender;
+
+- (nc::core::CommandState)fileDuplicateCommandState;
+- (nc::core::CommandState)fileDuplicateCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileDuplicateCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                      source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileDuplicateCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileDuplicateCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                       source:(nc::core::CommandInvocationSource)_source
+                                       sender:(id)_sender;
+
+- (nc::core::CommandState)fileCopyPathCommandState;
+- (nc::core::CommandState)fileCopyPathCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileCopyPathCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                     source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileCopyPathCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileCopyPathCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                      source:(nc::core::CommandInvocationSource)_source
+                                      sender:(id)_sender;
+
+- (nc::core::CommandState)fileCalculateSizesCommandState;
+- (nc::core::CommandState)fileCalculateSizesCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileCalculateSizesCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                            source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileCalculateSizesCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileCalculateSizesCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                             source:(nc::core::CommandInvocationSource)_source
+                                             sender:(id)_sender;
+
+- (nc::core::CommandState)fileBatchRenameCommandState;
+- (nc::core::CommandState)fileBatchRenameCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileBatchRenameCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                         source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileBatchRenameCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileBatchRenameCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                          source:(nc::core::CommandInvocationSource)_source
+                                          sender:(id)_sender;
+
+- (nc::core::CommandState)fileTrashCommandState;
+- (nc::core::CommandState)fileTrashCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileTrashCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                 source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileTrashCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileTrashCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                  source:(nc::core::CommandInvocationSource)_source
+                                  sender:(id)_sender;
+
+- (nc::core::CommandState)fileDeleteCommandState;
+- (nc::core::CommandState)fileDeleteCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)fileDeleteCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
+                                                  source:(nc::core::CommandInvocationSource)_source;
+- (void)executeFileDeleteCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+- (void)executeFileDeleteCommandWithItems:(std::span<const nc::vfs::ListingItem>)_items
+                                   source:(nc::core::CommandInvocationSource)_source
+                                   sender:(id)_sender;
 
 - (nc::core::CommandState)fileRenameCommandState;
 - (nc::core::CommandState)fileRenameCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
@@ -75,6 +185,14 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
 - (nc::core::CommandState)viewToggleHiddenFilesCommandStateForVisibility:(std::optional<bool>)_shows_hidden_files
                                                                   source:(nc::core::CommandInvocationSource)_source;
 - (void)executeViewToggleHiddenFilesCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
+
+- (nc::core::CommandState)viewTogglePreviewPaneCommandState;
+- (nc::core::CommandState)viewTogglePreviewPaneCommandStateFromSource:
+    (nc::core::CommandInvocationSource)_source;
+- (nc::core::CommandState)viewTogglePreviewPaneCommandStateForVisibility:
+    (std::optional<bool>)_preview_pane_visible
+                                                                  source:(nc::core::CommandInvocationSource)_source;
+- (void)executeViewTogglePreviewPaneCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender;
 
 - (nc::core::CommandState)navigationBackCommandState;
 - (nc::core::CommandState)navigationBackCommandStateFromSource:(nc::core::CommandInvocationSource)_source;
@@ -113,6 +231,7 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
 - (IBAction)onAlwaysOpenFileWith:(id)sender;
 - (IBAction)onCompressItems:(id)sender;
 - (IBAction)onCompressItemsHere:(id)sender;
+- (IBAction)onExtractArchiveHere:(id)sender;
 - (IBAction)OnDuplicate:(id)sender;
 - (IBAction)OnGoBack:(id)sender;
 - (IBAction)OnGoForward:(id)sender;
@@ -199,7 +318,9 @@ using PanelActionsMap = ankerl::unordered_dense::map<SEL, std::unique_ptr<const 
 - (IBAction)OnCreateSymbolicLinkCommand:(id)sender;
 - (IBAction)OnEditSymbolicLinkCommand:(id)sender;
 - (IBAction)OnCreateHardLinkCommand:(id)sender;
+- (IBAction)OnFileGetInfo:(id)sender;
 - (IBAction)OnFileViewCommand:(id)sender;
+- (IBAction)OnTogglePreviewPane:(id)sender;
 - (IBAction)onFollowSymlink:(id)sender;
 - (IBAction)onShowContextMenu:(id)sender;
 

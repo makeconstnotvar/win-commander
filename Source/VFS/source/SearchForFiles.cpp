@@ -22,6 +22,8 @@ SearchForFiles::SearchForFiles()
         m_Callback = nullptr;
         m_LookingInCallback = nullptr;
         m_SpawnArchiveCallback = nullptr;
+        m_SkippedLocationCallback = nullptr;
+        m_DescendPredicate = nullptr;
         m_SearchOptions = 0;
         if( m_FinishCallback ) {
             m_FinishCallback();
@@ -74,7 +76,9 @@ bool SearchForFiles::Go(const std::string &_from_path,
                         FoundCallback _found_callback,
                         std::function<void()> _finish_callback,
                         LookingInCallback _looking_in_callback,
-                        SpawnArchiveCallback _spawn_archive_callback)
+                        SpawnArchiveCallback _spawn_archive_callback,
+                        SkippedLocationCallback _skipped_location_callback,
+                        DescendPredicate _descend_predicate)
 {
     if( IsRunning() )
         return false;
@@ -85,6 +89,8 @@ bool SearchForFiles::Go(const std::string &_from_path,
     m_FinishCallback = std::move(_finish_callback);
     m_SpawnArchiveCallback = std::move(_spawn_archive_callback);
     m_LookingInCallback = std::move(_looking_in_callback);
+    m_SkippedLocationCallback = std::move(_skipped_location_callback);
+    m_DescendPredicate = std::move(_descend_predicate);
     m_SearchOptions = _options;
     m_DirsFIFO = {};
 
@@ -114,16 +120,26 @@ void SearchForFiles::NotifyLookingIn(const char *_path, VFSHost &_in_host) const
         m_LookingInCallback(_path, _in_host);
 }
 
+void SearchForFiles::ReportItemFailure(const char *_path, VFSHost &_in_host, const Error &_error) const
+{
+    if( m_SkippedLocationCallback && !m_Queue.IsStopped() ) {
+        const SkippedLocation skipped{
+            _path, _in_host.SharedPtr(), _error, SkippedLocation::Context::Item};
+        m_SkippedLocationCallback(skipped);
+    }
+}
+
 void SearchForFiles::AsyncProc(const char *_from_path, VFSHost &_in_host)
 {
-    m_DirsFIFO.emplace(_in_host.SharedPtr(), _from_path);
+    m_DirsFIFO.emplace(VFSPath{_in_host.SharedPtr(), _from_path}, SkippedLocation::Context::Root);
 
     while( !m_DirsFIFO.empty() ) {
         if( m_Queue.IsStopped() )
             break;
 
-        auto path = std::move(m_DirsFIFO.front());
+        auto pending = std::move(m_DirsFIFO.front());
         m_DirsFIFO.pop();
+        auto &path = pending.first;
 
         NotifyLookingIn(path.Path().c_str(), *path.Host());
 
@@ -141,8 +157,11 @@ void SearchForFiles::AsyncProc(const char *_from_path, VFSHost &_in_host)
             return true;
         };
 
-        // Deliberately ignoring the errors here
-        std::ignore = path.Host()->IterateDirectoryListing(path.Path(), callback);
+        const std::expected<void, Error> result = path.Host()->IterateDirectoryListing(path.Path(), callback);
+        if( !result && m_SkippedLocationCallback && !m_Queue.IsStopped() ) {
+            const SkippedLocation skipped{path.Path(), path.Host(), result.error(), pending.second};
+            m_SkippedLocationCallback(skipped);
+        }
     }
 }
 
@@ -192,12 +211,14 @@ void SearchForFiles::ProcessDirent(const char *_full_path,
 
     if( m_SearchOptions & Options::GoIntoSubDirs )
         if( _dirent.type == VFSDirEnt::Dir )
-            m_DirsFIFO.emplace(_in_host.SharedPtr(), _full_path);
+            if( !m_DescendPredicate || m_DescendPredicate(_full_path, _dirent, _in_host) )
+                m_DirsFIFO.emplace(VFSPath{_in_host.SharedPtr(), _full_path},
+                                   SkippedLocation::Context::Descendant);
 
     if( m_SearchOptions & Options::LookInArchives )
         if( _dirent.type == VFSDirEnt::Reg && m_SpawnArchiveCallback )
             if( auto archive_host = m_SpawnArchiveCallback(_full_path, _in_host) )
-                m_DirsFIFO.emplace(archive_host, "/");
+                m_DirsFIFO.emplace(VFSPath{archive_host, "/"}, SkippedLocation::Context::Descendant);
 }
 
 bool SearchForFiles::FilterByContent(const char *_full_path, VFSHost &_in_host, CFRange &_r)
@@ -206,17 +227,24 @@ bool SearchForFiles::FilterByContent(const char *_full_path, VFSHost &_in_host, 
     _r = CFRangeMake(-1, 0);
 
     const std::expected<std::shared_ptr<VFSFile>, Error> file = _in_host.CreateFile(_full_path);
-    if( !file )
+    if( !file ) {
+        ReportItemFailure(_full_path, _in_host, file.error());
         return false;
+    }
 
-    if( !(*file)->Open(VFSFlags::OF_Read) )
+    const std::expected<void, Error> opened = (*file)->Open(VFSFlags::OF_Read);
+    if( !opened ) {
+        ReportItemFailure(_full_path, _in_host, opened.error());
         return false;
+    }
 
     NotifyLookingIn(_full_path, _in_host);
 
     nc::vfs::FileWindow fw;
-    if( !fw.Attach(*file) )
+    if( !fw.Attach(*file) ) {
+        ReportItemFailure(_full_path, _in_host, Error{Error::POSIX, EIO});
         return false;
+    }
 
     utility::Encoding encoding = m_FilterContent->encoding;
     if( const utility::Encoding xattr_enc = EncodingFromXAttr(*file); xattr_enc != utility::Encoding::ENCODING_INVALID )
@@ -242,9 +270,15 @@ bool SearchForFiles::FilterByContent(const char *_full_path, VFSHost &_in_host, 
         _r = CFRangeMake(result.location->offset, result.location->bytes_len);
         return !m_FilterContent->not_containing;
     }
-    if( result.response == SearchInFile::Response::NotFound ) {
+    if( result.response == SearchInFile::Response::NotFound ||
+        result.response == SearchInFile::Response::EndOfFile ) {
         return m_FilterContent->not_containing;
     }
+
+    if( result.response == SearchInFile::Response::IOErr )
+        ReportItemFailure(_full_path, _in_host, Error{Error::POSIX, EIO});
+    else if( result.response == SearchInFile::Response::Invalid )
+        ReportItemFailure(_full_path, _in_host, Error{Error::POSIX, EINVAL});
 
     return false;
 }

@@ -18,6 +18,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel;
 
+/** Cancels pane-local work and binds every subsequent action to the supplied controller. */
+- (void)rebindToPanelController:(PanelController *)_panel;
+
+@property(nonatomic, readonly) PanelController *panelController;
+
 #ifdef __cplusplus
 /** Renders immutable pane state. Must be called on the main queue. */
 - (void)applyPaneSnapshot:(const nc::core::PaneSnapshot &)_snapshot;

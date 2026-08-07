@@ -45,6 +45,7 @@ private class TabBarItemView: NSView {
     private var hovered: Bool = false
     
     private var hoverredCallback: (() -> Void)?
+    private var accessibilityPressCallback: (() -> Bool)?
     
     public var isHovered : Bool {
         get { hovered }
@@ -52,6 +53,14 @@ private class TabBarItemView: NSView {
     
     public func setHoverredCallback(_ callback: @escaping () -> Void) {
         self.hoverredCallback = callback
+    }
+
+    public func setAccessibilityPressCallback(_ callback: @escaping () -> Bool) {
+        accessibilityPressCallback = callback
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        return accessibilityPressCallback?() ?? false
     }
     
     private var trackingArea: NSTrackingArea?
@@ -219,6 +228,7 @@ private class TabBarItem: NSCollectionViewItem {
         didSet {
             if isActive == oldValue { return }
             updateColors()
+            updateAccessibility()
         }
     }
     
@@ -256,10 +266,12 @@ private class TabBarItem: NSCollectionViewItem {
                     if let newTitle = change.newValue {
                         Task { @MainActor in
                             self.titleField.stringValue = newTitle
+                            self.updateAccessibility()
                         }
                     }
                 }
             }
+            updateAccessibility()
         }
     }
     
@@ -275,6 +287,11 @@ private class TabBarItem: NSCollectionViewItem {
         let v = TabBarItemView()
         v.setHoverredCallback { [weak self] in
             self?.hoverChanged()
+        }
+        v.setAccessibilityPressCallback { [weak self] in
+            guard let self, let item = self.tabViewItem, let tabBar = self.tabBarView else { return false }
+            tabBar.selectTabViewItem(item)
+            return true
         }
         self.view = v
     }
@@ -295,12 +312,15 @@ private class TabBarItem: NSCollectionViewItem {
             titleField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
             titleField.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
+        titleField.setAccessibilityElement(false)
+        updateAccessibility()
     }
     
     public override var isSelected: Bool {
         didSet {
             if isSelected == oldValue { return }
             updateColors()
+            updateAccessibility()
         }
     }
     
@@ -309,16 +329,12 @@ private class TabBarItem: NSCollectionViewItem {
         if view.isHovered {
             isHovered = true
             updateColors()
-            if let tabViewItem = tabViewItem, let tabBarView = tabBarView,
-               tabBarView.tabBarItemShouldShowCloseButton(tabViewItem) {
-                self.closeButton.isHidden = false
-            }
         }
         else {
             isHovered = false
             updateColors()
-            self.closeButton.isHidden = true
         }
+        updateCloseButtonVisibility()
     }
     
     public override func viewWillAppear() {
@@ -393,6 +409,68 @@ private class TabBarItem: NSCollectionViewItem {
     
     @objc public func configure(with title: String) {
         titleField.stringValue = title
+        updateAccessibility()
+    }
+
+    private func updateCloseButtonVisibility() {
+        let canClose = tabViewItem.map { tabBarView?.tabBarItemShouldShowCloseButton($0) ?? false } ?? false
+        closeButton.isHidden = !(canClose && (isSelected || isHovered))
+    }
+
+    private func accessibilityIdentifierSuffix() -> String {
+        if let number = tabViewItem?.identifier as? NSNumber {
+            return number.stringValue
+        }
+        if let item = tabViewItem, let index = tabBarView?.indexOfTabViewItem(item), index != NSNotFound {
+            return String(index)
+        }
+        return "unknown"
+    }
+
+    private func updateAccessibility() {
+        guard isViewLoaded else { return }
+        guard tabViewItem != nil else {
+            view.setAccessibilityElement(false)
+            view.setAccessibilityIdentifier(nil)
+            view.setAccessibilityLabel(nil)
+            view.setAccessibilityHelp(nil)
+            view.setAccessibilitySelected(false)
+            view.setAccessibilityFocused(false)
+            view.setAccessibilityValue(nil)
+            closeButton.setAccessibilityElement(false)
+            closeButton.setAccessibilityIdentifier(nil)
+            closeButton.setAccessibilityLabel(nil)
+            closeButton.setAccessibilityHelp(nil)
+            closeButton.toolTip = nil
+            closeButton.isHidden = true
+            return
+        }
+        let title = titleField.stringValue
+        let suffix = accessibilityIdentifierSuffix()
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.radioButton)
+        view.setAccessibilityIdentifier("wincommander.tabs.tab.\(suffix)")
+        view.setAccessibilityLabel(title)
+        view.setAccessibilityHelp(String(
+            format: NSLocalizedString("Switch to the %@ tab", comment: "Tab bar accessibility help"),
+            title
+        ))
+        view.setAccessibilitySelected(isSelected)
+        // `isActive` means that the selected tab's content owns the window's first responder.
+        // It is not accessibility focus on this radio button; publishing it as such would make
+        // both the tab and an element inside its content appear focused at the same time.
+        view.setAccessibilityFocused(false)
+        view.setAccessibilityValue(isSelected ? NSLocalizedString("Selected", comment: "Accessibility value") : "")
+
+        closeButton.setAccessibilityElement(true)
+        closeButton.setAccessibilityIdentifier("wincommander.tabs.close.\(suffix)")
+        closeButton.setAccessibilityLabel(String(
+            format: NSLocalizedString("Close %@", comment: "Tab bar accessibility label"),
+            title
+        ))
+        closeButton.setAccessibilityHelp(NSLocalizedString("Close this tab", comment: "Tab bar accessibility help"))
+        closeButton.toolTip = closeButton.accessibilityLabel()
+        updateCloseButtonVisibility()
     }
     
     @objc private func closeTapped() {
@@ -410,6 +488,7 @@ private class TabBarItem: NSCollectionViewItem {
         isActive = false
         updateColors()
         self.closeButton.isHidden = true
+        updateAccessibility()
         (self.view as? TabBarItemView)?.prepareForReuse()
     }
     
@@ -759,6 +838,10 @@ public class NCPanelTabBarView: NSView,
     
     private func setupViews() {
         wantsLayer = true
+        setAccessibilityElement(true)
+        setAccessibilityRole(.tabGroup)
+        setAccessibilityIdentifier("wincommander.tabs")
+        setAccessibilityLabel(NSLocalizedString("Tabs", comment: "Tab bar accessibility label"))
         
         flowLayout.scrollDirection = .horizontal
         flowLayout.minimumInteritemSpacing = 0
@@ -787,9 +870,9 @@ public class NCPanelTabBarView: NSView,
             guard let self else { return NSCollectionViewItem() }
             let cell = cv.makeItem(withIdentifier: identifier, for: indexPath)
             if let barItem = cell as? TabBarItem {
-                barItem.configure(with: tabViewItem.label)
-                barItem.tabViewItem = tabViewItem
                 barItem.tabBarView = self
+                barItem.tabViewItem = tabViewItem
+                barItem.configure(with: tabViewItem.label)
                 updateTabBarItemFromTheme(barItem)
             }
             return cell
@@ -822,6 +905,13 @@ public class NCPanelTabBarView: NSView,
         addTabPlusButton.longPressAction = #selector(addTabButtonLongPressed)
         addTabPlusButton.target = self
         addTabPlusButton.translatesAutoresizingMaskIntoConstraints = false
+        addTabPlusButton.setAccessibilityIdentifier("wincommander.tabs.add")
+        addTabPlusButton.setAccessibilityLabel(NSLocalizedString("New tab", comment: "Tab bar accessibility label"))
+        addTabPlusButton.setAccessibilityHelp(
+            NSLocalizedString("Create a new tab. Press and hold to choose a location.",
+                              comment: "Tab bar accessibility help")
+        )
+        addTabPlusButton.toolTip = addTabPlusButton.accessibilityLabel()
         addSubview(addTabPlusButton)
         
         NSLayoutConstraint.activate([

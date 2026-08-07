@@ -11,6 +11,7 @@
 #include "Terminal/ExternalEditorState.h"
 #include "InternalViewer/MainWindowInternalViewerState.h"
 #include "Explorer/NCExplorerState.h"
+#include "Explorer/ExplorerSessionPersistency.h"
 #include <Utility/NativeFSManager.h>
 #include "MainWindow.h"
 #include "../Bootstrap/AppDelegate.h"
@@ -26,6 +27,7 @@
 #include <Utility/ObjCpp.h>
 #include <Viewer/ViewerViewController.h>
 #include <Viewer/InternalViewerWindowController.h>
+#include <algorithm>
 
 using namespace nc;
 
@@ -39,6 +41,12 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
 @interface NCMainWindowController ()
 
 @property(nonatomic, readonly) bool toolbarVisible;
+
+- (instancetype)initForTestingWithWindow:(NCMainWindow *)_window;
+- (nc::config::Value)encodeWindowSessionState;
+- (bool)restoreWindowSessionState:(const nc::config::Value &)_state;
+- (NCExplorerState *)makeExplorerState;
+- (NCTermShellState *)makeTerminalState;
 
 @end
 
@@ -90,6 +98,17 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
     return self;
 }
 
+- (instancetype)initForTestingWithWindow:(NCMainWindow *)window
+{
+    if( !window )
+        return nil;
+    self = [super initWithWindow:window];
+    if( !self )
+        return nil;
+    window.delegate = self;
+    return self;
+}
+
 - (void)dealloc
 {
     [NSNotificationCenter.defaultCenter removeObserver:self];
@@ -111,10 +130,10 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
 
 - (void)encodeRestorableStateWithCoder:(NSCoder *)coder
 {
-    if( auto panels_state = [m_PanelState encodeRestorableState]; panels_state.GetType() != rapidjson::kNullType ) {
+    if( auto session_state = [self encodeWindowSessionState]; session_state.GetType() != rapidjson::kNullType ) {
         rapidjson::StringBuffer buffer;
         rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-        panels_state.Accept(writer);
+        session_state.Accept(writer);
         [coder encodeObject:[NSString stringWithUTF8String:buffer.GetString()]
                      forKey:g_CocoaRestorationFilePanelsStateKey];
     }
@@ -124,17 +143,12 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
 
 - (bool)restoreDefaultWindowStateFromConfig
 {
-    return [self.class restoreDefaultWindowStateFromConfig:m_PanelState];
-}
-
-+ (bool)restoreDefaultWindowStateFromConfig:(MainWindowFilePanelState *)_state
-{
     // supposed to be called when windows are restored upon app start
-    const auto panels_state = StateConfig().Get(g_JSONRestorationFilePanelsStateKey);
-    if( panels_state.IsNull() )
+    const auto session_state = StateConfig().Get(g_JSONRestorationFilePanelsStateKey);
+    if( session_state.IsNull() )
         return false;
 
-    return [_state decodeRestorableState:panels_state];
+    return [self restoreWindowSessionState:session_state];
 }
 
 - (void)restoreDefaultWindowStateFromLastOpenedWindow
@@ -156,15 +170,88 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
 
 - (void)restoreStateWithCoder:(NSCoder *)coder
 {
+    bool restored = false;
     const id encoded_state = [coder decodeObjectOfClass:NSString.class forKey:g_CocoaRestorationFilePanelsStateKey];
     if( auto json = objc_cast<NSString>(encoded_state) ) {
         nc::config::Document state;
         rapidjson::ParseResult ok = state.Parse<rapidjson::kParseCommentsFlag>(json.UTF8String);
         if( ok )
-            [m_PanelState decodeRestorableState:state];
+            restored = [self restoreWindowSessionState:state];
+    }
+
+    if( !restored )
+        restored = [self restoreDefaultWindowStateFromConfig];
+    if( !restored ) {
+        [m_PanelState loadDefaultPanelContent];
+        [self ensureExplorerMode];
     }
 
     [super restoreStateWithCoder:coder];
+}
+
+- (nc::config::Value)encodeWindowSessionState
+{
+    if( !m_PanelState )
+        return nc::config::Value{rapidjson::kNullType};
+
+    nc::explorer::ExplorerWindowSession session;
+    session.commander_state = [m_PanelState encodeRestorableState];
+    if( session.commander_state.IsNull() )
+        return nc::config::Value{rapidjson::kNullType};
+
+    const bool explorer_mode =
+        m_Explorer != nil && std::ranges::find(m_WindowState, m_Explorer) != m_WindowState.end();
+    if( explorer_mode ) {
+        session.mode = nc::explorer::ExplorerWindowSessionMode::Explorer;
+        session.explorer = [m_Explorer captureTabsSession];
+    }
+    else {
+        session.mode = nc::explorer::ExplorerWindowSessionMode::Commander;
+        session.explorer = std::nullopt;
+    }
+
+    nc::explorer::ExplorerSessionPersistency codec{NCAppDelegate.me.panelDataPersistency};
+    return codec.Encode(session);
+}
+
+- (bool)restoreWindowSessionState:(const nc::config::Value &)_state
+{
+    dispatch_assert_main_queue();
+    if( !m_PanelState || m_Explorer != nil )
+        return false;
+
+    nc::explorer::ExplorerSessionPersistency codec{NCAppDelegate.me.panelDataPersistency};
+    auto session = codec.Decode(_state);
+    if( !session )
+        return false;
+    if( ![m_PanelState decodeRestorableState:session->commander_state] ) {
+        // The higher-precedence envelope was structurally valid and is now the selected source.
+        // Recover its base in place rather than decoding a lower-precedence document into an
+        // already-mutated controller topology.
+        [m_PanelState loadDefaultPanelContent];
+    }
+
+    if( session->mode == nc::explorer::ExplorerWindowSessionMode::Commander )
+        return true;
+    if( !session->explorer )
+        return false;
+
+    NCExplorerState *const explorer = [self makeExplorerState];
+    if( !explorer )
+        return true;
+    if( ![explorer restoreTabsFromSession:*session->explorer] ) {
+        // The envelope explicitly selected Explorer, but its tab payload could not be restored.
+        // Fall back to a fresh Explorer state while retaining the decoded Commander base solely
+        // as the permanent compatibility layer.
+        m_Explorer = [self makeExplorerState];
+        if( m_Explorer )
+            [self pushState:m_Explorer];
+        return true;
+    }
+
+    m_Explorer = explorer;
+    [self pushState:m_Explorer];
+    return true;
 }
 
 - (bool)currentStateNeedWindowTitle
@@ -204,8 +291,13 @@ static int CountMainWindows()
 {
     // the are the last main window - need to save current state as "default" in state config
     if( CountMainWindows() == 1 ) {
-        if( auto panels_state = [m_PanelState encodeRestorableState]; panels_state.GetType() != rapidjson::kNullType )
-            StateConfig().Set(g_JSONRestorationFilePanelsStateKey, panels_state);
+        const auto stored_state = StateConfig().Get(g_JSONRestorationFilePanelsStateKey);
+        if( nc::explorer::ExplorerSessionPersistency::CanReplaceStoredSession(stored_state) ) {
+            if( auto session_state = [self encodeWindowSessionState];
+                session_state.GetType() != rapidjson::kNullType ) {
+                StateConfig().Set(g_JSONRestorationFilePanelsStateKey, session_state);
+            }
+        }
         [m_PanelState saveDefaultInitialState];
     }
 
@@ -257,14 +349,44 @@ static int CountMainWindows()
 
     if( self.topmostState == m_Explorer ) {
         [self ResignAsWindowState:m_Explorer];
+        [self invalidateRestorableState];
         return;
     }
 
+    [self ensureExplorerMode];
+}
+
+- (NCExplorerState *)makeExplorerState
+{
+    if( !m_OperationsPool )
+        return nil;
+    return [[NCExplorerState alloc] initWithFrame:self.window.contentView.frame operationsPool:self.operationsPool];
+}
+
+- (NCTermShellState *)makeTerminalState
+{
+    return [[NCTermShellState alloc] initWithFrame:self.window.contentView.frame
+                                   nativeFSManager:NCAppDelegate.me.nativeFSManager
+                           actionsShortcutsManager:NCAppDelegate.me.actionsShortcutsManager];
+}
+
+- (BOOL)ensureExplorerMode
+{
+    dispatch_assert_main_queue();
+
+    if( self.topmostState == m_Explorer )
+        return YES;
+    if( !m_PanelState || self.topmostState != m_PanelState )
+        return NO;
+
     if( m_Explorer == nil )
-        m_Explorer = [[NCExplorerState alloc] initWithFrame:self.window.contentView.frame
-                                            operationsPool:self.operationsPool];
+        m_Explorer = [self makeExplorerState];
+    if( m_Explorer == nil )
+        return NO;
 
     [self pushState:m_Explorer];
+    [self invalidateRestorableState];
+    return YES;
 }
 
 - (void)onConfigShowToolbarChanged
@@ -415,18 +537,25 @@ static int CountMainWindows()
 {
     dispatch_assert_main_queue();
 
+    std::optional<std::string> visible_native_cwd;
+    if( PanelController *const panel = self.visibleActivePanelController )
+        if( panel.isUniform && panel.vfs && panel.vfs->IsNativeFS() )
+            if( std::string path = panel.currentDirectoryPath; !path.empty() )
+                visible_native_cwd = std::move(path);
+
     if( m_Terminal == nil ) {
-        const auto state = [[NCTermShellState alloc] initWithFrame:self.window.contentView.frame
-                                                   nativeFSManager:NCAppDelegate.me.nativeFSManager
-                                           actionsShortcutsManager:NCAppDelegate.me.actionsShortcutsManager];
-        if( PanelController *pc = m_PanelState.activePanelController )
-            if( pc.isUniform && pc.vfs->IsNativeFS() )
-                state.initialWD = pc.currentDirectoryPath;
+        const auto state = [self makeTerminalState];
+        if( !state )
+            return;
+        if( visible_native_cwd )
+            state.initialWD = *visible_native_cwd;
         [self pushState:state];
         m_Terminal = state;
     }
     else {
         [self pushState:m_Terminal];
+        if( visible_native_cwd )
+            [m_Terminal chDir:*visible_native_cwd];
     }
 
     [m_Terminal executeWithFullPath:_binary_path andArguments:_params];
@@ -447,6 +576,16 @@ static int CountMainWindows()
 - (id<NCMainWindowState>)topmostState
 {
     return m_WindowState.empty() ? nil : m_WindowState.back();
+}
+
+- (PanelController *)visibleActivePanelController
+{
+    const id<NCMainWindowState> state = self.topmostState;
+    if( state == m_Explorer )
+        return m_Explorer.panelController;
+    if( state == m_PanelState )
+        return m_PanelState.activePanelController;
+    return nil;
 }
 
 static const auto g_HideToolbarTitle = NSLocalizedString(@"Hide Toolbar", "Menu item title");

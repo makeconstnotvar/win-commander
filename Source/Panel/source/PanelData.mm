@@ -17,7 +17,19 @@ namespace nc::panel::data {
 // Don't bother with parallelism unless we have at least 10'000 items in a listing
 constexpr inline size_t g_ParallelSortThresh = 10'000;
 
-static void DoRawSort(const VFSListing &_from, std::vector<unsigned> &_to);
+class PreparationCancelled final : public std::exception
+{
+};
+
+static void ThrowIfCancelled(const Model::PreparationCancelChecker *_is_cancelled)
+{
+    if( _is_cancelled && *_is_cancelled && (*_is_cancelled)() )
+        throw PreparationCancelled{};
+}
+
+static void DoRawSort(const VFSListing &_from,
+                      std::vector<unsigned> &_to,
+                      const Model::PreparationCancelChecker *_is_cancelled = nullptr);
 
 static inline SortMode DefaultSortMode()
 {
@@ -104,6 +116,7 @@ Model &Model::operator=(Model &&_rhs) noexcept
     // Assignment replaces this object's exact projection while retaining a destination-local,
     // monotonic generation sequence.
     AdvanceSelectionProjectionGeneration();
+    AdvancePreparationOptionsGeneration();
     return *this;
 }
 
@@ -112,11 +125,15 @@ bool Model::IsLoaded() const noexcept
     return m_Listing != VFSListing::EmptyListing();
 }
 
-static void InitVolatileDataWithListing(std::vector<ItemVolatileData> &_vd, const VFSListing &_listing)
+static void InitVolatileDataWithListing(std::vector<ItemVolatileData> &_vd,
+                                        const VFSListing &_listing,
+                                        const Model::PreparationCancelChecker *_is_cancelled = nullptr)
 {
     _vd.clear();
     _vd.resize(_listing.Count());
     for( unsigned i = 0, e = _listing.Count(); i != e; ++i ) {
+        if( (i & 1023U) == 0 )
+            ThrowIfCancelled(_is_cancelled);
         if( _listing.IsDir(i) ) {
             if( _listing.HasSize(i) ) {
                 const auto sz = _listing.Size(i);
@@ -134,10 +151,20 @@ void Model::Load(const VFSListingPtr &_listing, PanelType _type)
 {
     assert(dispatch_is_main_queue()); // STA api design
 
+    LoadImpl(_listing, _type);
+}
+
+void Model::LoadImpl(const VFSListingPtr &_listing,
+                     PanelType _type,
+                     const PreparationCancelChecker *_is_cancelled)
+{
     if( !_listing )
         throw std::logic_error("PanelData::Load: listing can't be nullptr");
 
+    ThrowIfCancelled(_is_cancelled);
+
     AdvanceSelectionProjectionGeneration();
+    AdvancePreparationOptionsGeneration();
 
     Log::Info("Loading {} listing, {} entries, {}",
               magic_enum::enum_name(_type),
@@ -146,19 +173,149 @@ void Model::Load(const VFSListingPtr &_listing, PanelType _type)
 
     m_Listing = _listing;
     m_Type = _type;
-    InitVolatileDataWithListing(m_VolatileData, *m_Listing);
+    InitVolatileDataWithListing(m_VolatileData, *m_Listing, _is_cancelled);
 
     m_HardFiltering.text.OnPanelDataLoad();
     m_SoftFiltering.OnPanelDataLoad();
 
-    // now sort our new data
-    const base::DispatchGroup exec_group{base::DispatchGroup::High};
-    exec_group.Run([this] { DoRawSort(*m_Listing, m_EntriesByRawName); });
-    exec_group.Run([this] { DoSortWithHardFiltering(); });
-    exec_group.Wait();
-    BuildSoftFilteringIndeces();
+    // The main-thread compatibility path retains the established parallel implementation. A
+    // detached cancellable preparation uses serial cancellable stages so a cancellation exception
+    // never crosses a parallel-algorithm or DispatchGroup boundary.
+    if( _is_cancelled ) {
+        DoRawSort(*m_Listing, m_EntriesByRawName, _is_cancelled);
+        DoSortWithHardFiltering(_is_cancelled);
+    }
+    else {
+        const base::DispatchGroup exec_group{base::DispatchGroup::High};
+        exec_group.Run([this] { DoRawSort(*m_Listing, m_EntriesByRawName); });
+        exec_group.Run([this] { DoSortWithHardFiltering(); });
+        exec_group.Wait();
+    }
+    BuildSoftFilteringIndeces(_is_cancelled);
     // update stats
-    UpdateStatictics();
+    UpdateStatictics(_is_cancelled);
+}
+
+Model::PreparationOptions Model::CapturePreparationOptions() const
+{
+    assert(dispatch_is_main_queue());
+
+    PreparationOptions options{
+        .sort_mode = m_CustomSortMode,
+        .hard_filter = m_HardFiltering,
+        .soft_filter = m_SoftFiltering,
+        .generation = m_PreparationOptionsGeneration,
+    };
+    options.hard_filter.text.text = [m_HardFiltering.text.text copy];
+    options.soft_filter.text = [m_SoftFiltering.text copy];
+    return options;
+}
+
+Model::PreparationSnapshot Model::CapturePreparationSnapshot() const
+{
+    assert(dispatch_is_main_queue());
+    return PreparationSnapshot{
+        .listing = m_Listing,
+        .volatile_data = m_VolatileData,
+        .entries_by_raw_name = m_EntriesByRawName,
+        .type = m_Type,
+        .options = CapturePreparationOptions(),
+        .selection_projection_generation = m_SelectionProjectionGeneration,
+    };
+}
+
+std::unique_ptr<Model> Model::PrepareDetached(const VFSListingPtr &_listing,
+                                              const PanelType _type,
+                                              PreparationOptions _options,
+                                              const std::span<const std::string> _requested_selection,
+                                              PreparationCancelChecker _is_cancelled)
+{
+    assert(!dispatch_is_main_queue());
+
+    try {
+        auto model = std::make_unique<Model>();
+        model->m_CustomSortMode = _options.sort_mode;
+        model->m_HardFiltering = std::move(_options.hard_filter);
+        model->m_SoftFiltering = std::move(_options.soft_filter);
+        model->m_PreparationOptionsGeneration = _options.generation;
+        model->LoadImpl(_listing, _type, _is_cancelled ? &_is_cancelled : nullptr);
+        for( const auto &name : _requested_selection ) {
+            ThrowIfCancelled(_is_cancelled ? &_is_cancelled : nullptr);
+            model->CustomFlagsSelectSorted(model->SortedIndexForName(name), true);
+        }
+        return model;
+    } catch( const PreparationCancelled & ) {
+        return nullptr;
+    }
+}
+
+std::unique_ptr<Model> Model::PrepareDetachedFromSnapshot(const PreparationSnapshot &_snapshot,
+                                                          PreparationOptions _options,
+                                                          PreparationCancelChecker _is_cancelled)
+{
+    assert(!dispatch_is_main_queue());
+    const auto *const cancellation = _is_cancelled ? &_is_cancelled : nullptr;
+    try {
+        ThrowIfCancelled(cancellation);
+        if( !_snapshot.listing )
+            throw std::logic_error("PanelData::PrepareDetachedFromSnapshot: listing can't be nullptr");
+        if( _snapshot.volatile_data.size() != _snapshot.listing->Count() )
+            throw std::logic_error("PanelData::PrepareDetachedFromSnapshot: invalid volatile data");
+
+        auto model = std::make_unique<Model>();
+        model->m_Listing = _snapshot.listing;
+        model->m_VolatileData = _snapshot.volatile_data;
+        model->m_EntriesByRawName = _snapshot.entries_by_raw_name;
+        model->m_Type = _snapshot.type;
+        model->m_CustomSortMode = _options.sort_mode;
+        model->m_HardFiltering = std::move(_options.hard_filter);
+        model->m_SoftFiltering = std::move(_options.soft_filter);
+        model->m_PreparationOptionsGeneration = _options.generation;
+        ThrowIfCancelled(cancellation);
+        model->DoSortWithHardFiltering(cancellation);
+        if( model->m_HardFiltering != _snapshot.options.hard_filter )
+            model->ClearSelectedFlagsFromHiddenElements();
+        model->BuildSoftFilteringIndeces(cancellation);
+        model->UpdateStatictics(cancellation);
+        return model;
+    } catch( const PreparationCancelled & ) {
+        return nullptr;
+    }
+}
+
+std::unique_ptr<Model> Model::PrepareDetachedReload(const PreparationSnapshot &_snapshot,
+                                                    const VFSListingPtr &_listing,
+                                                    PreparationOptions _options,
+                                                    PreparationCancelChecker _is_cancelled)
+{
+    assert(!dispatch_is_main_queue());
+    const auto *const cancellation = _is_cancelled ? &_is_cancelled : nullptr;
+    try {
+        ThrowIfCancelled(cancellation);
+        if( !_snapshot.listing || _snapshot.volatile_data.size() != _snapshot.listing->Count() )
+            throw std::logic_error("PanelData::PrepareDetachedReload: invalid source snapshot");
+
+        auto model = std::make_unique<Model>();
+        model->m_Listing = _snapshot.listing;
+        model->m_VolatileData = _snapshot.volatile_data;
+        model->m_EntriesByRawName = _snapshot.entries_by_raw_name;
+        model->m_Type = _snapshot.type;
+        model->m_CustomSortMode = _options.sort_mode;
+        model->m_HardFiltering = std::move(_options.hard_filter);
+        model->m_SoftFiltering = std::move(_options.soft_filter);
+        model->m_PreparationOptionsGeneration = _options.generation;
+        model->ReLoadImpl(_listing, cancellation);
+        return model;
+    } catch( const PreparationCancelled & ) {
+        return nullptr;
+    }
+}
+
+bool Model::MatchesPreparationOptions(const PreparationOptions &_options) const noexcept
+{
+    return m_PreparationOptionsGeneration == _options.generation &&
+           m_CustomSortMode == _options.sort_mode && m_HardFiltering == _options.hard_filter &&
+           m_SoftFiltering == _options.soft_filter;
 }
 
 static void UpdateWithExisingVD(ItemVolatileData &_new_vd, const ItemVolatileData &_ex_vd)
@@ -177,16 +334,25 @@ void Model::ReLoad(const VFSListingPtr &_listing)
 {
     assert(dispatch_is_main_queue()); // STA api design
 
+    ReLoadImpl(_listing, nullptr);
+}
+
+void Model::ReLoadImpl(const VFSListingPtr &_listing, const PreparationCancelChecker *_is_cancelled)
+{
+    if( !_listing )
+        throw std::logic_error("PanelData::ReLoad: listing can't be nullptr");
+    ThrowIfCancelled(_is_cancelled);
+
     Log::Info("ReLoading listing, {} entries, {}",
               _listing->Count(),
               _listing->IsUniform() ? _listing->Directory().c_str() : "N/A");
 
     // sort new entries by raw c name for sync-swapping needs
     std::vector<unsigned> dirbyrawcname;
-    DoRawSort(*_listing, dirbyrawcname);
+    DoRawSort(*_listing, dirbyrawcname, _is_cancelled);
 
     std::vector<ItemVolatileData> new_vd;
-    InitVolatileDataWithListing(new_vd, *_listing);
+    InitVolatileDataWithListing(new_vd, *_listing, _is_cancelled);
 
     if( _listing->IsUniform() && m_Listing->IsUniform() ) {
         // transfer custom data to new array using sorted indeces arrays based in raw C filename.
@@ -196,6 +362,8 @@ void Model::ReLoad(const VFSListingPtr &_listing)
         unsigned src_i = 0;
         const unsigned src_e = m_Listing->Count();
         for( ; src_i != src_e && dst_i != dst_e; ++src_i ) {
+            if( (src_i & 1023U) == 0 )
+                ThrowIfCancelled(_is_cancelled);
             const int src = m_EntriesByRawName[src_i];
         check:
             const int dst = dirbyrawcname[dst_i];
@@ -228,6 +396,8 @@ void Model::ReLoad(const VFSListingPtr &_listing)
         unsigned src_i = 0;
         const unsigned src_e = static_cast<unsigned>(src_keys.size());
         for( ; src_i != src_e && dst_i != dst_e; ++src_i ) {
+            if( (src_i & 1023U) == 0 )
+                ThrowIfCancelled(_is_cancelled);
             const int src = src_keys_ind[src_i];
         check2:
             const int dst = dst_keys_ind[dst_i];
@@ -255,9 +425,9 @@ void Model::ReLoad(const VFSListingPtr &_listing)
     m_EntriesByRawName = std::move(dirbyrawcname);
 
     // now sort our new data with custom sortings
-    DoSortWithHardFiltering();
-    BuildSoftFilteringIndeces();
-    UpdateStatictics();
+    DoSortWithHardFiltering(_is_cancelled);
+    BuildSoftFilteringIndeces(_is_cancelled);
+    UpdateStatictics(_is_cancelled);
 }
 
 const std::shared_ptr<VFSHost> &Model::Host() const
@@ -428,11 +598,26 @@ std::string Model::VerboseDirectoryFullPath() const
     return s;
 }
 
-static void DoRawSort(const VFSListing &_from, std::vector<unsigned> &_to)
+static void DoRawSort(const VFSListing &_from,
+                      std::vector<unsigned> &_to,
+                      const Model::PreparationCancelChecker *_is_cancelled)
 {
     _to.resize(_from.Count());
     std::ranges::iota(_to, 0);
-    std::ranges::sort(_to, [&_from](unsigned _1, unsigned _2) { return _from.Filename(_1) < _from.Filename(_2); });
+    ThrowIfCancelled(_is_cancelled);
+    if( _is_cancelled ) {
+        auto comparisons = std::make_shared<uint32_t>(0);
+        std::ranges::sort(_to, [&_from, _is_cancelled, comparisons](unsigned _1, unsigned _2) {
+            if( (++*comparisons & 255U) == 0 )
+                ThrowIfCancelled(_is_cancelled);
+            return _from.Filename(_1) < _from.Filename(_2);
+        });
+        ThrowIfCancelled(_is_cancelled);
+    }
+    else {
+        std::ranges::sort(
+            _to, [&_from](unsigned _1, unsigned _2) { return _from.Filename(_1) < _from.Filename(_2); });
+    }
 }
 
 void Model::SetSortMode(struct SortMode _mode)
@@ -441,6 +626,7 @@ void Model::SetSortMode(struct SortMode _mode)
         return;
 
     AdvanceSelectionProjectionGeneration();
+    AdvancePreparationOptionsGeneration();
     m_CustomSortMode = _mode;
     DoSortWithHardFiltering();
     BuildSoftFilteringIndeces();
@@ -460,7 +646,7 @@ SortMode Model::SortMode() const
     return m_CustomSortMode;
 }
 
-void Model::UpdateStatictics()
+void Model::UpdateStatictics(const PreparationCancelChecker *_is_cancelled)
 {
     m_Stats = Statistics{};
     if( m_Listing.get() == nullptr )
@@ -472,14 +658,21 @@ void Model::UpdateStatictics()
         m_Stats.total_entries_amount--;
 
     // calculate totals for directory
-    for( const auto &i : *m_Listing )
+    unsigned raw_index = 0;
+    for( const auto &i : *m_Listing ) {
+        if( (raw_index++ & 1023U) == 0 )
+            ThrowIfCancelled(_is_cancelled);
         if( i.IsReg() ) {
             m_Stats.bytes_in_raw_reg_files += i.Size();
             m_Stats.raw_reg_files_amount++;
         }
+    }
 
     // calculate totals for selected. look only for entries which is visible (sorted/filtered ones)
+    unsigned sorted_index = 0;
     for( auto n : m_EntriesByCustomSort ) {
+        if( (sorted_index++ & 1023U) == 0 )
+            ThrowIfCancelled(_is_cancelled);
         const auto &vd = m_VolatileData[n];
         if( vd.is_selected() ) {
             m_Stats.bytes_in_selected_entries += vd.is_size_calculated() ? vd.size : 0;
@@ -655,6 +848,13 @@ void Model::AdvanceSelectionProjectionGeneration() noexcept
     ++m_SelectionProjectionGeneration;
 }
 
+void Model::AdvancePreparationOptionsGeneration() noexcept
+{
+    if( m_PreparationOptionsGeneration == std::numeric_limits<uint64_t>::max() )
+        std::terminate();
+    ++m_PreparationOptionsGeneration;
+}
+
 bool Model::SetCalculatedSizeForDirectory(std::string_view _filename, std::string_view _directory, uint64_t _size)
 {
     if( _filename.empty() || _directory.empty() || _size == ItemVolatileData::invalid_size )
@@ -789,6 +989,7 @@ bool Model::ClearTextFiltering()
         return false;
 
     const bool hard_filter_changed = m_HardFiltering.text.text != nil;
+    AdvancePreparationOptionsGeneration();
     m_SoftFiltering.text = nil;
     m_HardFiltering.text.text = nil;
 
@@ -811,6 +1012,7 @@ void Model::SetHardFiltering(const HardFilter &_filter)
         return;
 
     AdvanceSelectionProjectionGeneration();
+    AdvancePreparationOptionsGeneration();
     m_HardFiltering = _filter;
 
     DoSortWithHardFiltering();
@@ -824,7 +1026,7 @@ HardFilter Model::HardFiltering() const
     return m_HardFiltering;
 }
 
-void Model::DoSortWithHardFiltering()
+void Model::DoSortWithHardFiltering(const PreparationCancelChecker *_is_cancelled)
 {
     m_EntriesByCustomSort.clear();
     m_ReverseToCustomSort.clear();
@@ -835,7 +1037,10 @@ void Model::DoSortWithHardFiltering()
         return;
 
     m_EntriesByCustomSort.reserve(size);
+    unsigned volatile_index = 0;
     for( auto &vd : m_VolatileData ) {
+        if( (volatile_index++ & 1023U) == 0 )
+            ThrowIfCancelled(_is_cancelled);
         vd.highlight = {};
         vd.toggle_shown(true);
     }
@@ -849,10 +1054,21 @@ void Model::DoSortWithHardFiltering()
             return {};
         };
         std::vector<std::optional<QuickSearchHighlight>> found_ranges(size);
-        pstld::transform(m_Listing->begin(), m_Listing->end(), found_ranges.begin(), filter);
+        if( _is_cancelled ) {
+            for( unsigned i = 0; i != size; ++i ) {
+                if( (i & 255U) == 0 )
+                    ThrowIfCancelled(_is_cancelled);
+                found_ranges[i] = filter(m_Listing->Item(i));
+            }
+        }
+        else {
+            pstld::transform(m_Listing->begin(), m_Listing->end(), found_ranges.begin(), filter);
+        }
 
         const bool hightlight_results = m_HardFiltering.text.hightlight_results;
         for( unsigned i = 0; i != size; ++i ) {
+            if( (i & 1023U) == 0 )
+                ThrowIfCancelled(_is_cancelled);
             if( !found_ranges[i] ) {
                 m_VolatileData[i].toggle_shown(false);
             }
@@ -877,7 +1093,17 @@ void Model::DoSortWithHardFiltering()
     const auto first = std::next(m_EntriesByCustomSort.begin(), m_Listing->IsDotDot(0) ? 1 : 0);
     const auto last = std::end(m_EntriesByCustomSort);
 
-    if( m_EntriesByCustomSort.size() < g_ParallelSortThresh )
+    if( _is_cancelled ) {
+        auto comparisons = std::make_shared<uint32_t>(0);
+        const auto comparator = IndirectListingComparator{*m_Listing, m_VolatileData, m_CustomSortMode};
+        std::sort(first, last, [_is_cancelled, comparisons, comparator](const auto _1, const auto _2) mutable {
+            if( (++*comparisons & 255U) == 0 )
+                ThrowIfCancelled(_is_cancelled);
+            return comparator(_1, _2);
+        });
+        ThrowIfCancelled(_is_cancelled);
+    }
+    else if( m_EntriesByCustomSort.size() < g_ParallelSortThresh )
         std::sort(first, last, IndirectListingComparator{*m_Listing, m_VolatileData, m_CustomSortMode});
     else
         pstld::sort(first, last, IndirectListingComparator{*m_Listing, m_VolatileData, m_CustomSortMode});
@@ -885,6 +1111,8 @@ void Model::DoSortWithHardFiltering()
     m_ReverseToCustomSort.resize(size);
     std::ranges::fill(m_ReverseToCustomSort, std::numeric_limits<unsigned>::max());
     for( unsigned i = 0, e = static_cast<unsigned>(m_EntriesByCustomSort.size()); i != e; ++i ) {
+        if( (i & 1023U) == 0 )
+            ThrowIfCancelled(_is_cancelled);
         const unsigned forward_index = m_EntriesByCustomSort[i];
         assert(forward_index < size);
         m_ReverseToCustomSort[forward_index] = i;
@@ -893,6 +1121,10 @@ void Model::DoSortWithHardFiltering()
 
 void Model::SetSoftFiltering(const TextualFilter &_filter)
 {
+    if( m_SoftFiltering == _filter )
+        return;
+
+    AdvancePreparationOptionsGeneration();
     m_SoftFiltering = _filter;
     BuildSoftFilteringIndeces();
 }
@@ -907,7 +1139,7 @@ const std::vector<unsigned> &Model::EntriesBySoftFiltering() const noexcept
     return m_EntriesBySoftFiltering;
 }
 
-void Model::BuildSoftFilteringIndeces()
+void Model::BuildSoftFilteringIndeces(const PreparationCancelChecker *_is_cancelled)
 {
     if( m_SoftFiltering.IsFiltering() ) {
         m_EntriesBySoftFiltering.clear();
@@ -916,6 +1148,8 @@ void Model::BuildSoftFilteringIndeces()
         int i = 0;
         const int e = static_cast<int>(m_EntriesByCustomSort.size());
         for( ; i != e; ++i ) {
+            if( (static_cast<unsigned>(i) & 255U) == 0 )
+                ThrowIfCancelled(_is_cancelled);
             QuickSearchHighlight found_range;
             const int raw_index = m_EntriesByCustomSort[i];
             if( m_SoftFiltering.IsValidItem(m_Listing->Item(raw_index), found_range) )
@@ -927,8 +1161,10 @@ void Model::BuildSoftFilteringIndeces()
         }
     }
     else {
+        ThrowIfCancelled(_is_cancelled);
         m_EntriesBySoftFiltering.resize(m_EntriesByCustomSort.size());
         std::ranges::iota(m_EntriesBySoftFiltering, 0);
+        ThrowIfCancelled(_is_cancelled);
     }
 }
 

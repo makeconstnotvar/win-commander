@@ -416,6 +416,16 @@ NSString *MkdirFailedToCreateDirectoryMessage()
     return NSLocalizedString(@"Failed to create a directory", "");
 }
 
+NSString *EmptyFileCreatingTitle()
+{
+    return NSLocalizedString(@"Creating an empty file \u201c%@\u201d", "Creating an empty file \u201c%@\u201d");
+}
+
+NSString *EmptyFileFailedToCreateMessage()
+{
+    return NSLocalizedString(@"Failed to create an empty file", "");
+}
+
 NSString *LinkSymbolicLinkPointsAtMessage()
 {
     return NSLocalizedString(@"Symbolic link \'%@\' points at:", "");

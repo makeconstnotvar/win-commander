@@ -49,10 +49,13 @@ config::Value ControllerStateJSONEncoder::Encode(ControllerStateEncoding::Option
     return json;
 }
 
-ControllerStateJSONDecoder::ControllerStateJSONDecoder(const utility::NativeFSManager &_fs_manager,
-                                                       nc::core::VFSInstanceManager &_vfs_instance_manager,
-                                                       PanelDataPersistency &_persistency)
-    : m_NativeFSManager(_fs_manager), m_VFSInstanceManager(_vfs_instance_manager), m_Persistency(_persistency)
+ControllerStateJSONDecoder::ControllerStateJSONDecoder(
+    const utility::NativeFSManager &_fs_manager,
+    nc::core::VFSInstanceManager &_vfs_instance_manager,
+    PanelDataPersistency &_persistency,
+    const PanelDataPersistency::VFSRestoreOptions _vfs_restore_options)
+    : m_NativeFSManager(_fs_manager), m_VFSInstanceManager(_vfs_instance_manager), m_Persistency(_persistency),
+      m_VFSRestoreOptions(_vfs_restore_options)
 {
 }
 
@@ -136,7 +139,7 @@ bool ControllerStateJSONDecoder::AllowSyncRecovery(const PersistentLocation &_lo
 void ControllerStateJSONDecoder::RecoverSavedContentSync(const PersistentLocation &_location, PanelController *_panel)
 {
     const std::expected<VFSHostPtr, Error> exp_host =
-        m_Persistency.CreateVFSFromLocation(_location, m_VFSInstanceManager);
+        m_Persistency.CreateVFSFromLocation(_location, m_VFSInstanceManager, m_VFSRestoreOptions);
     if( !exp_host ) {
         EnsureNonEmptyState(_panel);
         return;
@@ -183,7 +186,7 @@ void ControllerStateJSONDecoder::RecoverSavedContentAsync(PersistentLocation _lo
     auto workload =
         [this, _panel, location = std::move(_location)](const CancelableLoadingTaskContext &_context) {
             const std::expected<VFSHostPtr, Error> exp_host =
-                m_Persistency.CreateVFSFromLocation(location, m_VFSInstanceManager);
+                m_Persistency.CreateVFSFromLocation(location, m_VFSInstanceManager, m_VFSRestoreOptions);
             if( exp_host && *exp_host != nullptr ) {
                 // the VFS was recovered, lets go inside it.
                 const VFSHostPtr &host = *exp_host;

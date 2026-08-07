@@ -28,10 +28,13 @@
 @property(nonatomic, readonly) bool areAllHostsNative;
 @property(nonatomic, readonly) const VFSHostPtr &commonHost;
 @property(nonatomic, readonly) const std::vector<PanelDraggingItem *> &items;
+@property(nonatomic, readonly) const VFSListingPtr &sourceListing;
+@property(nonatomic, readonly) unsigned long sourceGeneration;
 
 - (FilesDraggingSource *)initWithSourceController:(PanelController *)_controller
                                        nativeHost:(nc::vfs::NativeHost &)_native_vfs;
 - (void)writeURLsPBoard:(NSPasteboard *)_sender;
 - (void)addItem:(PanelDraggingItem *)_item;
+- (bool)matchesCurrentSourceContext;
 
 @end

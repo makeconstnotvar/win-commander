@@ -3,12 +3,17 @@
 #include "PanelGalleryView.h"
 #include "PanelGalleryCollectionViewItemCarrier.h"
 #include "../Helpers/Pasteboard.h"
+#include "../PanelItemAccessibility.h"
 #include <Panel/UI/PanelViewPresentationItemsColoringFilter.h>
 #include <WinCommander/Core/Theming/Theme.h>
 #include <Utility/ObjCpp.h>
 #include <cassert>
 
 using namespace nc::panel::gallery;
+
+@interface NCPanelGalleryCollectionViewItem ()
+- (void)updateAccessibilityPresentation;
+@end
 
 @implementation NCPanelGalleryCollectionViewItem {
     VFSListingItem m_Item;
@@ -25,7 +30,11 @@ using namespace nc::panel::gallery;
         const auto rc = NSMakeRect(0, 0, 10, 10);
         const auto carrier = [[NCPanelGalleryCollectionViewItemCarrier alloc] initWithFrame:rc];
         carrier.controller = self;
+        carrier.accessibilityElement = true;
+        carrier.accessibilityRole = NSAccessibilityRowRole;
+        carrier.accessibilityIdentifier = @"wincommander.explorer.gallery.item";
         self.view = carrier;
+        [self updateAccessibilityPresentation];
         [NSNotificationCenter.defaultCenter addObserver:self
                                                selector:@selector(pasteboardCutStateDidChange:)
                                                    name:nc::panel::NCPanelPasteboardCutStateDidChangeNotification
@@ -49,6 +58,7 @@ using namespace nc::panel::gallery;
     //    self.carrier.backgroundColor = nil;
     self.carrier.qsHighlight = {};
     self.view.alphaValue = 1.0;
+    [self updateAccessibilityPresentation];
 }
 
 - (NCPanelGalleryCollectionViewItemCarrier *)carrier
@@ -62,6 +72,7 @@ using namespace nc::panel::gallery;
     [super setSelected:selected];
     [self updateForegroundColor];
     [self updateBackgroundColor];
+    [self updateAccessibilityPresentation];
 }
 
 - (void)setIcon:(NSImage *)_icon
@@ -95,6 +106,7 @@ using namespace nc::panel::gallery;
     self.carrier.filename = m_Item.DisplayNameNS();
     self.carrier.isSymlink = m_Item.IsSymlink();
     [self updateCutAppearance];
+    [self updateAccessibilityPresentation];
 }
 
 - (void)pasteboardCutStateDidChange:(NSNotification *) [[maybe_unused]] _notification
@@ -118,6 +130,7 @@ using namespace nc::panel::gallery;
     [self updateBackgroundColor];
     self.carrier.qsHighlight = _vd.highlight;
     self.carrier.highlighted = _vd.is_highlighted();
+    [self updateAccessibilityPresentation];
 }
 
 - (nc::panel::data::ItemVolatileData)vd
@@ -189,11 +202,20 @@ using namespace nc::panel::gallery;
 
     [self updateForegroundColor];
     [self updateBackgroundColor];
+    [self updateAccessibilityPresentation];
 }
 
 - (bool)panelActive
 {
     return m_PanelActive;
+}
+
+- (void)updateAccessibilityPresentation
+{
+    NSView *const element = self.carrier;
+    const bool focused = self.selected && m_PanelActive;
+    const bool selected = self.selected || m_VD.is_selected();
+    nc::panel::UpdatePanelItemAccessibility(element, m_Item, selected, focused);
 }
 
 - (int)itemIndex

@@ -86,6 +86,8 @@ NSString *DeletionDialogDoYouWantToDeleteSingleMessage();
 NSString *DeletionDialogDoYouWantToDeleteMultiMessage();
 NSString *MkdirCreatingDirectoryTitle();
 NSString *MkdirFailedToCreateDirectoryMessage();
+NSString *EmptyFileCreatingTitle();
+NSString *EmptyFileFailedToCreateMessage();
 NSString *LinkSymbolicLinkPointsAtMessage();
 NSString *LinkCreateHardlinkOfMessage();
 NSString *LinkFailedToCreateSymlinkMessage();

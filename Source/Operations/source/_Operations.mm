@@ -28,6 +28,7 @@
 #include "Deletion/DeletionDialog.mm"
 #include "DirectoryCreation/DirectoryCreation.mm"
 #include "DirectoryCreation/DirectoryCreationDialog.mm"
+#include "EmptyFileCreation/EmptyFileCreation.mm"
 #include "Linkage/AlterSymlinkDialog.mm"
 #include "Linkage/CreateHardlinkDialog.mm"
 #include "Linkage/CreateSymlinkDialog.mm"

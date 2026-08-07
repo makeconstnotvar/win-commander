@@ -8,11 +8,13 @@
 #include "../PanelView.h"
 #include <Operations/Deletion.h>
 #include <Operations/DeletionDialog.h>
+#include <VFS/ProviderCapabilities.h>
 #include "../../MainWindowController.h"
 #include <ankerl/unordered_dense.h>
 #include <Base/dispatch_cpp.h>
 
 #include <algorithm>
+#include <sys/stat.h>
 
 namespace nc::panel::actions {
 
@@ -21,6 +23,11 @@ static bool AllAreNative(const std::vector<VFSListingItem> &_c);
 static ankerl::unordered_dense::set<std::string> ExtractDirectories(const std::vector<VFSListingItem> &_c);
 static bool TryTrash(const std::vector<VFSListingItem> &_c, utility::NativeFSManager &_fsman);
 static void AddPanelRefreshEpilog(PanelController *_target, nc::ops::Operation &_operation);
+static bool SupportsDeletion(std::span<const VFSListingItem> _items, bool _trash);
+static bool DeletionContextIsCurrent(std::span<const VFSListingItem> _items,
+                                     PanelController *_target,
+                                     bool _trash);
+static void PresentStaleDeletionAlert(PanelController *_target);
 
 Delete::Delete(nc::utility::NativeFSManager &_nat_fsman, bool _permanently)
     : m_NativeFSManager{_nat_fsman}, m_Permanently(_permanently)
@@ -67,6 +74,47 @@ void Delete::Perform(PanelController *_target, id /*_sender*/) const
 
 MoveToTrash::MoveToTrash(nc::utility::NativeFSManager &_nat_fsman) : m_NativeFSManager{_nat_fsman}
 {
+}
+
+bool SubmitItemsToTrash(const std::span<const VFSListingItem> _items, PanelController *_target)
+{
+    if( !DeletionContextIsCurrent(_items, _target, true) )
+        return false;
+
+    std::vector<VFSListingItem> items{_items.begin(), _items.end()};
+    const auto operation = std::make_shared<nc::ops::Deletion>(std::move(items), nc::ops::DeletionType::Trash);
+    AddPanelRefreshEpilog(_target, *operation);
+    [_target.mainWindowController enqueueOperation:operation];
+    return true;
+}
+
+bool PresentPermanentDeletion(const std::span<const VFSListingItem> _items,
+                              PanelController *_target)
+{
+    if( !DeletionContextIsCurrent(_items, _target, false) )
+        return false;
+
+    auto items = std::make_shared<std::vector<VFSListingItem>>(_items.begin(), _items.end());
+    const auto sheet = [[NCOpsDeletionDialog alloc] initWithItems:items];
+    sheet.allowMoveToTrash = false;
+    sheet.defaultType = nc::ops::DeletionType::Permanent;
+
+    __weak PanelController *weak_target = _target;
+    auto sheet_handler = ^(NSModalResponse returnCode) {
+      PanelController *const target = weak_target;
+      if( returnCode != NSModalResponseOK )
+          return;
+      if( !DeletionContextIsCurrent(std::span<const VFSListingItem>{*items}, target, false) ) {
+          PresentStaleDeletionAlert(target);
+          return;
+      }
+
+      const auto operation = std::make_shared<nc::ops::Deletion>(*items, nc::ops::DeletionType::Permanent);
+      AddPanelRefreshEpilog(target, *operation);
+      [target.mainWindowController enqueueOperation:operation];
+    };
+    [_target.mainWindowController beginSheet:sheet.window completionHandler:sheet_handler];
+    return true;
 }
 
 bool MoveToTrash::Predicate(PanelController *_target) const
@@ -138,6 +186,56 @@ static bool CommonDeletePredicate(PanelController *_target)
     if( !i || !i.Host()->IsWritable() )
         return false;
     return !i.IsDotDot() || _target.data.Stats().selected_entries_amount > 0;
+}
+
+static bool SupportsDeletion(const std::span<const VFSListingItem> _items, const bool _trash)
+{
+    if( _items.empty() )
+        return false;
+    return std::ranges::all_of(_items, [_trash](const VFSListingItem &_item) {
+        if( _item.IsDotDot() || !_item.Host() )
+            return false;
+        const vfs::ProviderCapabilities capabilities =
+            vfs::ProviderCapabilitiesResolver::Resolve(*_item.Host(), _item.Directory());
+        return _trash ? capabilities.can_trash : capabilities.can_delete_permanently;
+    });
+}
+
+static bool DeletionContextIsCurrent(const std::span<const VFSListingItem> _items,
+                                     PanelController *_target,
+                                     const bool _trash)
+{
+    if( !_target || !_target.mainWindowController || _target.isDoingBackgroundLoading ||
+        !SupportsDeletion(_items, _trash) ) {
+        return false;
+    }
+
+    const VFSListing &current_listing = _target.data.Listing();
+    return std::ranges::all_of(_items, [&](const VFSListingItem &_item) {
+        if( _item.Listing().get() != &current_listing )
+            return false;
+        if( !_item.Host()->IsNativeFS() )
+            return true;
+        if( !_item.HasInode() )
+            return false;
+        struct stat current {};
+        return lstat(_item.Path().c_str(), &current) == 0 &&
+               static_cast<uint64_t>(current.st_ino) == _item.Inode();
+    });
+}
+
+static void PresentStaleDeletionAlert(PanelController *_target)
+{
+    if( !_target || !_target.mainWindowController ) {
+        NSBeep();
+        return;
+    }
+    const auto alert = [NSAlert new];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = NSLocalizedString(@"commands.file.mutation.disabled.stale",
+                                          "Stale deletion review message");
+    [alert addButtonWithTitle:NSLocalizedString(@"OK", "Alert confirmation button")];
+    [alert beginSheetModalForWindow:_target.mainWindowController.window completionHandler:nil];
 }
 
 static bool AllAreNative(const std::vector<VFSListingItem> &_c)

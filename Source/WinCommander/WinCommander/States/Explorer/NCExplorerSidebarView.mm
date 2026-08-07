@@ -40,8 +40,7 @@ static bool IsPathInsideMount(const std::string &_path, const std::string &_moun
     if( _mount_path == "/" )
         return _path.starts_with('/');
     return _path == _mount_path ||
-           (_path.size() > _mount_path.size() && _path.starts_with(_mount_path) &&
-            _path[_mount_path.size()] == '/');
+           (_path.size() > _mount_path.size() && _path.starts_with(_mount_path) && _path[_mount_path.size()] == '/');
 }
 
 static std::optional<std::string> CurrentNativeDirectory(PanelController *_panel)
@@ -70,12 +69,14 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
 @interface NCExplorerSidebarNode : NSObject
 
-- (instancetype)initSectionWithTitle:(NSString *)_title identifier:(NSString *)_identifier children:(NSArray *)_children;
+- (instancetype)initSectionWithTitle:(NSString *)_title
+                          identifier:(NSString *)_identifier
+                            children:(NSArray *)_children;
 - (instancetype)initItemWithTitle:(NSString *)_title
-                              icon:(NSImage *)_icon
-                           tooltip:(NSString *)_tooltip
-                            action:(std::function<void()>)_action
-                       currentTest:(std::function<bool()>)_current_test;
+                             icon:(NSImage *)_icon
+                          tooltip:(NSString *)_tooltip
+                           action:(std::function<void()>)_action
+                      currentTest:(std::function<bool()>)_current_test;
 
 @property(nonatomic, readonly) NSString *title;
 @property(nonatomic, readonly) NSString *nodeIdentifier;
@@ -120,10 +121,10 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 }
 
 - (instancetype)initItemWithTitle:(NSString *)_title
-                              icon:(NSImage *)_icon
-                           tooltip:(NSString *)_tooltip
-                            action:(std::function<void()>)_action
-                       currentTest:(std::function<bool()>)_current_test
+                             icon:(NSImage *)_icon
+                          tooltip:(NSString *)_tooltip
+                           action:(std::function<void()>)_action
+                      currentTest:(std::function<bool()>)_current_test
 {
     self = [super init];
     if( self ) {
@@ -176,8 +177,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 @end
 
 @interface NCExplorerSidebarView () <NSOutlineViewDataSource,
-                                      NSOutlineViewDelegate,
-                                      NCExplorerOutlineViewSelectionDelegate>
+                                     NSOutlineViewDelegate,
+                                     NCExplorerOutlineViewSelectionDelegate>
 @end
 
 @implementation NCExplorerSidebarView {
@@ -202,12 +203,26 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         m_Panel = _panel;
         m_LastActivatedRow = -1;
         self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+        self.accessibilityElement = true;
+        self.accessibilityRole = NSAccessibilityGroupRole;
+        self.accessibilityIdentifier = @"wincommander.explorer.sidebar";
+        self.accessibilityLabel = NSLocalizedString(@"Locations", "Explorer sidebar accessibility label");
 
         [self buildScaffold];
         [self startObservingSources];
         [self reloadData];
     }
     return self;
+}
+
+- (void)rebindToPanelController:(PanelController *)_panel
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    if( !_panel || m_Panel == _panel )
+        return;
+    m_Panel = _panel;
+    [self reloadData];
+    [self panelPathChanged];
 }
 
 - (void)dealloc
@@ -236,6 +251,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     m_OutlineView.floatsGroupRows = false;
     m_OutlineView.delegate = self;
     m_OutlineView.dataSource = self;
+    m_OutlineView.accessibilityIdentifier = @"wincommander.explorer.sidebar.locations";
     m_OutlineView.accessibilityLabel = NSLocalizedString(@"Locations", "Explorer sidebar accessibility label");
     if( @available(macOS 11.0, *) )
         m_OutlineView.style = NSTableViewStyleSourceList;
@@ -268,8 +284,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
             favorites->ObserveFavoritesChanges(nc::objc_callback_to_main_queue(self, @selector(sourceChanged)));
 
     if( const auto &network = NCAppDelegate.me.networkConnectionsManager )
-        m_NetworkObservation =
-            network->ObserveChanges(nc::objc_callback_to_main_queue(self, @selector(sourceChanged)));
+        m_NetworkObservation = network->ObserveChanges(nc::objc_callback_to_main_queue(self, @selector(sourceChanged)));
 
     m_TagsObservation =
         NCAppDelegate.me.tagsStorage.ObserveChanges(nc::objc_callback_to_main_queue(self, @selector(sourceChanged)));
@@ -277,14 +292,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         "filePanel.FinderTags.enable", nc::objc_callback_to_main_queue(self, @selector(sourceChanged)));
 
     NSNotificationCenter *const center = NSWorkspace.sharedWorkspace.notificationCenter;
-    [center addObserver:self
-               selector:@selector(volumesChanged:)
-                   name:NSWorkspaceDidMountNotification
-                 object:nil];
-    [center addObserver:self
-               selector:@selector(volumesChanged:)
-                   name:NSWorkspaceDidUnmountNotification
-                 object:nil];
+    [center addObserver:self selector:@selector(volumesChanged:) name:NSWorkspaceDidMountNotification object:nil];
+    [center addObserver:self selector:@selector(volumesChanged:) name:NSWorkspaceDidUnmountNotification object:nil];
     [center addObserver:self
                selector:@selector(volumesChanged:)
                    name:NSWorkspaceDidRenameVolumeNotification
@@ -384,9 +393,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         const auto representation = nc::panel::loc_fmt::VolumeFormatter::Render(g_RenderOptions, *volume);
         const std::string path = NormalizedDirectory(volume->mounted_at_path);
         const std::any context = volume->mounted_at_path;
-        auto action = [panel, network, context] {
-            nc::panel::actions::NavigateToLocation(panel, *network, context);
-        };
+        auto action = [panel, network, context] { nc::panel::actions::NavigateToLocation(panel, *network, context); };
         auto currentTest = [panel, path, mountPaths] {
             const auto current = CurrentNativeDirectory(panel);
             if( !current || !IsPathInsideMount(*current, path) )
@@ -424,12 +431,9 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     NSMutableArray<NCExplorerSidebarNode *> *const children = [NSMutableArray array];
     PanelController *const panel = m_Panel;
     for( const nc::panel::NetworkConnectionsManager::Connection &connection : network->AllConnectionsByMRU() ) {
-        const auto representation =
-            nc::panel::loc_fmt::NetworkConnectionFormatter::Render(g_RenderOptions, connection);
+        const auto representation = nc::panel::loc_fmt::NetworkConnectionFormatter::Render(g_RenderOptions, connection);
         const std::any context = connection;
-        auto action = [panel, network, context] {
-            nc::panel::actions::NavigateToLocation(panel, *network, context);
-        };
+        auto action = [panel, network, context] { nc::panel::actions::NavigateToLocation(panel, *network, context); };
         auto currentTest = [panel, network, connection] {
             if( !panel.data.IsLoaded() || !panel.isUniform )
                 return false;
@@ -465,9 +469,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     for( const nc::utility::Tags::Tag &tag : NCAppDelegate.me.tagsStorage.Get() ) {
         const auto representation = nc::panel::loc_fmt::VFSFinderTagsFormatter::Render(g_RenderOptions, tag);
         const std::any context = tag;
-        auto action = [panel, network, context] {
-            nc::panel::actions::NavigateToLocation(panel, *network, context);
-        };
+        auto action = [panel, network, context] { nc::panel::actions::NavigateToLocation(panel, *network, context); };
         auto currentTest = [panel, tag] {
             return panel.data.IsLoaded() && !panel.isUniform && panel.data.Listing().Title() == tag.Label();
         };
@@ -481,10 +483,10 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
     if( children.count == 0 )
         return;
-    auto section = [[NCExplorerSidebarNode alloc]
-        initSectionWithTitle:NSLocalizedString(@"Tags", "Explorer sidebar section title")
-                  identifier:@"tags"
-                    children:children];
+    auto section =
+        [[NCExplorerSidebarNode alloc] initSectionWithTitle:NSLocalizedString(@"Tags", "Explorer sidebar section title")
+                                                 identifier:@"tags"
+                                                   children:children];
     [_sections addObject:section];
 }
 
@@ -505,7 +507,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     m_IgnoreSelectionChange = true;
     if( matchingRow >= 0 )
         [m_OutlineView selectRowIndexes:[NSIndexSet indexSetWithIndex:static_cast<NSUInteger>(matchingRow)]
-                  byExtendingSelection:false];
+                   byExtendingSelection:false];
     else
         [m_OutlineView deselectAll:self];
     m_LastActivatedRow = matchingRow;
@@ -530,8 +532,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
 - (void)activateSelectedRow:(NSOutlineView *)_outline_view
 {
-    if( m_IgnoreSelectionChange || _outline_view.selectedRow < 0 ||
-        _outline_view.selectedRow == m_LastActivatedRow )
+    if( m_IgnoreSelectionChange || _outline_view.selectedRow < 0 || _outline_view.selectedRow == m_LastActivatedRow )
         return;
 
     m_LastActivatedRow = _outline_view.selectedRow;
@@ -543,8 +544,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
 #pragma mark - NSOutlineViewDataSource
 
-- (NSInteger)outlineView:(NSOutlineView *) [[maybe_unused]] _outline_view
-    numberOfChildrenOfItem:(id)_item
+- (NSInteger)outlineView:(NSOutlineView *) [[maybe_unused]] _outline_view numberOfChildrenOfItem:(id)_item
 {
     if( _item == nil )
         return static_cast<NSInteger>(m_RootNodes.count);
@@ -585,8 +585,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 }
 
 - (NSView *)outlineView:(NSOutlineView *)_outline_view
-      viewForTableColumn:(NSTableColumn *) [[maybe_unused]] _table_column
-                    item:(id)_item
+     viewForTableColumn:(NSTableColumn *) [[maybe_unused]] _table_column
+                   item:(id)_item
 {
     auto node = nc::objc_cast<NCExplorerSidebarNode>(_item);
     if( !node )
@@ -596,6 +596,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         NSTextField *const label = [NSTextField labelWithString:node.title];
         label.font = [NSFont boldSystemFontOfSize:NSFont.smallSystemFontSize];
         label.textColor = NSColor.secondaryLabelColor;
+        label.accessibilityIdentifier = @"wincommander.explorer.sidebar.section";
         label.accessibilityLabel = node.title;
         return label;
     }
@@ -631,6 +632,7 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     cell.textField.stringValue = node.title;
     cell.imageView.image = node.icon;
     cell.toolTip = node.tooltip;
+    cell.accessibilityIdentifier = @"wincommander.explorer.sidebar.location";
     cell.accessibilityLabel = node.title;
     cell.accessibilityHelp = node.tooltip;
     return cell;

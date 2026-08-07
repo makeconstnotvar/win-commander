@@ -29,6 +29,7 @@
 #include "Actions/OpenFile.h"
 #include "Actions/GoToFolder.h"
 #include "Actions/Enter.h"
+#include "Actions/InlineRename.h"
 #include <Operations/Copying.h>
 #include <Panel/CursorBackup.h>
 #include <Panel/QuickSearch.h>
@@ -65,10 +66,14 @@ namespace {
 
 constexpr std::string_view g_PanelNavigationErrorDomain = "PanelController.Navigation";
 constexpr std::string_view g_PanelRefreshErrorDomain = "PanelController.Refresh";
+constexpr int g_LargeModelPreparationThreshold = 10'000;
 static_assert(std::is_nothrow_move_assignable_v<data::Model>);
+static_assert(std::is_nothrow_move_constructible_v<data::Model>);
 
 struct NavigationFetchOutcome {
     VFSListingPtr listing;
+    std::unique_ptr<data::Model> prepared_model;
+    std::optional<data::Model::PreparationOptions> preparation_options;
     std::optional<Error> error;
     std::exception_ptr exception;
     bool cancelled = false;
@@ -90,23 +95,42 @@ struct NavigationAdmissionState {
 [[nodiscard]] NavigationFetchOutcome FetchNavigationRequestDetached(
     const std::shared_ptr<DirectoryChangeRequest> &_request,
     const unsigned long _fetch_flags,
-    const std::shared_ptr<std::atomic_bool> &_callback_allowed)
+    const std::shared_ptr<std::atomic_bool> &_callback_allowed,
+    data::Model::PreparationOptions _preparation_options)
 {
     NavigationFetchOutcome outcome;
     try {
-        const auto canceller = VFSCancelChecker(
-            [_callback_allowed] { return !_callback_allowed->load(std::memory_order_acquire); });
+        const auto is_cancelled =
+            [_callback_allowed] { return !_callback_allowed->load(std::memory_order_acquire); };
+        const auto canceller = VFSCancelChecker(is_cancelled);
         const std::expected<VFSListingPtr, Error> listing =
             _request->VFS->FetchDirectoryListing(_request->RequestedDirectory, _fetch_flags, canceller);
 
-        if( listing )
+        if( listing ) {
             outcome.listing = *listing;
-        else
+            if( _callback_allowed->load(std::memory_order_acquire) ) {
+                outcome.preparation_options = _preparation_options;
+                outcome.prepared_model = data::Model::PrepareDetached(
+                    outcome.listing,
+                    data::Model::PanelType::Directory,
+                    std::move(_preparation_options),
+                    _request->RequestSelectedEntries,
+                    is_cancelled);
+            }
+        }
+        else {
             outcome.error = listing.error();
-        outcome.cancelled = !_callback_allowed->load(std::memory_order_acquire) ||
+        }
+        outcome.cancelled = is_cancelled() ||
+                            (outcome.listing && !outcome.prepared_model) ||
                             (outcome.error && IsCancellationError(*outcome.error));
+        if( outcome.cancelled )
+            outcome.prepared_model.reset();
     } catch( ... ) {
-        outcome.exception = std::current_exception();
+        if( !_callback_allowed->load(std::memory_order_acquire) )
+            outcome.cancelled = true;
+        else
+            outcome.exception = std::current_exception();
     }
     return outcome;
 }
@@ -115,6 +139,37 @@ struct ControllerLoadingWorkFacts {
     bool has_external_work = false;
     std::optional<PaneRequestId> correlated_navigation_worker;
 };
+
+/**
+ * Exact NativeFSManager identity captured with one committed listing. A remount at the same path
+ * receives a different Info object and therefore cannot satisfy the previous listing's claim.
+ */
+struct CommittedNativeVolumeBinding {
+    VFSListingPtr listing;
+    unsigned long generation = 0;
+    nc::utility::NativeFSManager::Info info;
+};
+
+enum class NativeVolumeMembership : uint8_t {
+    Present,
+    Absent,
+    Unknown,
+};
+
+[[nodiscard]] NativeVolumeMembership
+ExactNativeVolumeMembership(const nc::utility::NativeFSManager *_manager,
+                            const nc::utility::NativeFSManager::Info &_info) noexcept
+{
+    if( _manager == nullptr || !_info )
+        return NativeVolumeMembership::Unknown;
+    try {
+        const auto volumes = _manager->Volumes();
+        return std::ranges::find(volumes, _info) != volumes.end() ? NativeVolumeMembership::Present
+                                                                 : NativeVolumeMembership::Absent;
+    } catch( ... ) {
+        return NativeVolumeMembership::Unknown;
+    }
+}
 
 struct RefreshWorkRequest {
     VFSListingPtr source_listing;
@@ -125,6 +180,9 @@ struct RefreshWorkRequest {
     std::string path;
     unsigned long fetch_flags = 0;
     FileManagerErrorContext error_context;
+    std::optional<CommittedNativeVolumeBinding> native_volume_binding;
+    nc::utility::NativeFSManager *native_fs_manager = nullptr;
+    std::shared_ptr<const data::Model::PreparationSnapshot> preparation_snapshot;
 };
 
 struct RefreshRecoveryTarget {
@@ -134,9 +192,12 @@ struct RefreshRecoveryTarget {
 
 struct RefreshFetchOutcome {
     VFSListingPtr listing;
+    std::unique_ptr<data::Model> prepared_model;
+    std::optional<data::Model::PreparationOptions> preparation_options;
     std::optional<Error> error;
     std::exception_ptr exception;
     std::optional<RefreshRecoveryTarget> recovery_target;
+    bool native_volume_disconnected = false;
     bool cancelled = false;
 };
 
@@ -155,6 +216,29 @@ struct PendingRefreshWork {
 
 struct RefreshAdmissionState {
     std::optional<RefreshWorkRequest> work;
+};
+
+enum class PresentationPreparationKind : uint8_t {
+    Sort,
+    HardFilter,
+    GenericOptions,
+    QuickSearchHardFilter,
+    QuickSearchSoftFilter,
+    QuickSearchClearTextFilter,
+};
+
+struct PresentationPreparationSource {
+    std::shared_ptr<const data::Model::PreparationSnapshot> snapshot;
+    VFSListingPtr listing;
+    unsigned long data_generation = 0;
+    uint64_t selection_projection_generation = 0;
+    data::Model::PreparationOptions source_options;
+};
+
+struct PresentationPreparationOutcome {
+    std::unique_ptr<data::Model> prepared_model;
+    std::exception_ptr exception;
+    bool cancelled = false;
 };
 
 struct LifecycleMappedException {
@@ -246,6 +330,19 @@ struct WeakPanelControllerRef {
                                       _request.host);
 }
 
+[[nodiscard]] FileManagerError MapRefreshError(Error _error,
+                                               const RefreshWorkRequest &_request,
+                                               const bool _native_volume_disconnected)
+{
+    FileManagerError mapped = MapRefreshError(std::move(_error), _request);
+    if( _native_volume_disconnected ) {
+        mapped.category = FileManagerErrorCategory::VolumeUnavailableError;
+        mapped.user_message_key = "errors.volumeUnavailable";
+        mapped.user_message = "The drive is disconnected.";
+    }
+    return mapped;
+}
+
 [[nodiscard]] FileManagerError MapRefreshException(std::exception_ptr _exception,
                                                    const RefreshWorkRequest &_request)
 {
@@ -264,6 +361,19 @@ struct WeakPanelControllerRef {
     }
 
     return MapRefreshError(Error{g_PanelRefreshErrorDomain, EIO}, _request);
+}
+
+[[nodiscard]] FileManagerError MapRefreshException(std::exception_ptr _exception,
+                                                   const RefreshWorkRequest &_request,
+                                                   const bool _native_volume_disconnected)
+{
+    FileManagerError mapped = MapRefreshException(std::move(_exception), _request);
+    if( _native_volume_disconnected ) {
+        mapped.category = FileManagerErrorCategory::VolumeUnavailableError;
+        mapped.user_message_key = "errors.volumeUnavailable";
+        mapped.user_message = "The drive is disconnected.";
+    }
+    return mapped;
 }
 
 [[nodiscard]] std::optional<RefreshRecoveryTarget>
@@ -320,14 +430,46 @@ FetchRefreshRequest(const RefreshWorkRequest &_request,
                 VFSListing::ProduceUpdatedTemporaryPanelListing(*_request.source_listing, is_cancelled);
         }
         outcome.cancelled = is_cancelled() || (outcome.error && IsCancellationError(*outcome.error));
-        if( !outcome.cancelled && outcome.error && IsInvalidLocationError(*outcome.error) )
-            outcome.recovery_target = FindRefreshRecoveryTarget(_request, _cancel_requested);
+        if( !outcome.cancelled && !outcome.error && outcome.listing && _request.preparation_snapshot ) {
+            outcome.preparation_options = _request.preparation_snapshot->options;
+            outcome.prepared_model = data::Model::PrepareDetachedReload(*_request.preparation_snapshot,
+                                                                        outcome.listing,
+                                                                        *outcome.preparation_options,
+                                                                        is_cancelled);
+            outcome.cancelled = is_cancelled() || !outcome.prepared_model;
+        }
+        if( !outcome.cancelled && outcome.error ) {
+            outcome.native_volume_disconnected =
+                _request.native_volume_binding &&
+                ExactNativeVolumeMembership(_request.native_fs_manager,
+                                            _request.native_volume_binding->info) ==
+                    NativeVolumeMembership::Absent;
+            if( !outcome.native_volume_disconnected && IsInvalidLocationError(*outcome.error) )
+                outcome.recovery_target = FindRefreshRecoveryTarget(_request, _cancel_requested);
+        }
     } catch( const ErrorException &error_exception ) {
         outcome.cancelled = IsCancellationError(error_exception.error());
-        if( !outcome.cancelled )
+        if( !outcome.cancelled ) {
             outcome.error = error_exception.error();
+            outcome.native_volume_disconnected =
+                _request.native_volume_binding &&
+                ExactNativeVolumeMembership(_request.native_fs_manager,
+                                            _request.native_volume_binding->info) ==
+                    NativeVolumeMembership::Absent;
+            if( !outcome.native_volume_disconnected && IsInvalidLocationError(*outcome.error) )
+                outcome.recovery_target = FindRefreshRecoveryTarget(_request, _cancel_requested);
+        }
     } catch( ... ) {
-        outcome.exception = std::current_exception();
+        if( is_cancelled() ) {
+            outcome.cancelled = true;
+        }
+        else {
+            outcome.exception = std::current_exception();
+            outcome.native_volume_disconnected =
+                _request.native_volume_binding &&
+                ExactNativeVolumeMembership(_request.native_fs_manager,
+                                            _request.native_volume_binding->info) == NativeVolumeMembership::Absent;
+        }
     }
     return outcome;
 }
@@ -427,20 +569,25 @@ struct CalculatedSizesBatch {
                                contentGeneration:(unsigned long)_content_generation;
 - (void)finishNavigationRequest:(PaneRequestId)_request_id
                          request:(const std::shared_ptr<DirectoryChangeRequest> &)_request
-                         outcome:(const NavigationFetchOutcome &)_outcome
+                         outcome:(NavigationFetchOutcome &)_outcome
                contentGeneration:(unsigned long)_content_generation
                synchronousResult:(std::expected<void, Error> *)_synchronous_result;
 - (void)finishRefreshRequest:(PaneRequestId)_request_id
                       request:(const RefreshWorkRequest &)_request
-                      outcome:(const RefreshFetchOutcome &)_outcome
+                      outcome:(RefreshFetchOutcome &)_outcome
             contentGeneration:(unsigned long)_content_generation;
 - (void)startRefreshWorker:(const PendingRefreshWork &)_work;
 - (void)refreshQueueDidBecomeDry;
 - (void)refreshWorkerDidFinish:(PaneRequestId)_request_id
                  finishedToken:(const std::shared_ptr<std::atomic_bool> &)_finished_token;
+- (bool)scheduleLargePresentationPreparation:
+            (const std::function<void(data::Model::PreparationOptions &)> &)_mutator
+                                          kind:(PresentationPreparationKind)_kind;
+- (void)cancelPresentationPreparationNotifyingQuickSearch:(bool)_notify_quick_search;
 - (void)cancelBackgroundOperationsForLifecycleReason:(PaneCancellationReason)_reason;
 - (void)stopBackgroundQueues;
 - (unsigned long)claimContentIntentInvalidatingNavigationAdmission;
+- (void)updateCommittedNativeVolumeBinding;
 - (ControllerLoadingWorkFacts)loadingWorkFactsForLifecycleContext:
     (std::optional<PanelControllerLifecycleProbeContext>)_context;
 @end
@@ -460,6 +607,11 @@ struct CalculatedSizesBatch {
     nc::base::SerialQueue m_DirectorySizeCountingQ;
     std::shared_ptr<nc::base::SerialQueue> m_DirectoryLoadingQ;
     std::shared_ptr<nc::base::SerialQueue> m_DirectoryReLoadingQ;
+    std::shared_ptr<nc::base::SerialQueue> m_PresentationPreparationQ;
+    std::shared_ptr<std::atomic_bool> m_PresentationPreparationCancel;
+    uint64_t m_PresentationPreparationToken;
+    std::optional<PresentationPreparationSource> m_PresentationPreparationSource;
+    std::optional<data::Model::PreparationOptions> m_PendingPresentationOptions;
 
     NCPanelQuickSearch *m_QuickSearch;
     __weak id<NCPanelQuickSearchPresentation> m_QuickSearchPresentation;
@@ -502,6 +654,7 @@ struct CalculatedSizesBatch {
     int m_ViewLayoutIndex;
     std::shared_ptr<const PanelViewLayout> m_AssignedViewLayout;
     bool m_AssignedViewLayoutUsesConfiguredSlot;
+    bool m_HasPaneLocalPresentationLayoutOverride;
     PanelViewLayoutsStorage::ObservationTicket m_LayoutsObservation;
     ContextMenuProvider m_ContextMenuProvider;
     nc::utility::NativeFSManager *m_NativeFSManager;
@@ -516,8 +669,9 @@ struct CalculatedSizesBatch {
     std::shared_ptr<std::atomic_bool> m_NavigationAdmissionCallbackAllowed;
     bool m_AcceptsNavigation;
     unsigned long m_DataGeneration;
+    std::optional<CommittedNativeVolumeBinding> m_CommittedNativeVolumeBinding;
     /** Global content-intent epoch captured by every delayed model commit. */
-    std::atomic_ulong m_ContentRequestGeneration;
+    std::shared_ptr<std::atomic_ulong> m_ContentRequestGeneration;
 }
 
 @synthesize view = m_View;
@@ -580,14 +734,17 @@ struct CalculatedSizesBatch {
         m_VFSFetchingFlags = 0;
         m_NextActivityTicket = 1;
         m_DataGeneration = 0;
-        m_ContentRequestGeneration = 0;
+        m_ContentRequestGeneration = std::make_shared<std::atomic_ulong>(0);
         m_AcceptsNavigation = true;
         m_IsAnythingWorksInBackground = false;
         m_DirectoryLoadingQ = std::make_shared<nc::base::SerialQueue>();
         m_DirectoryReLoadingQ = std::make_shared<nc::base::SerialQueue>();
+        m_PresentationPreparationQ = std::make_shared<nc::base::SerialQueue>();
+        m_PresentationPreparationToken = 0;
         m_ViewLayoutIndex = m_Layouts->DefaultLayoutIndex();
         m_AssignedViewLayout = m_Layouts->DefaultLayout();
         m_AssignedViewLayoutUsesConfiguredSlot = m_ViewLayoutIndex >= 0;
+        m_HasPaneLocalPresentationLayoutOverride = false;
 
         const auto weak_panel = std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
         auto on_change = [weak_panel] {
@@ -599,6 +756,7 @@ struct CalculatedSizesBatch {
         m_DirectorySizeCountingQ.SetOnChange(on_change);
         m_DirectoryReLoadingQ->SetOnChange(on_change);
         m_DirectoryLoadingQ->SetOnChange(on_change);
+        m_PresentationPreparationQ->SetOnChange(on_change);
         m_DirectoryReLoadingQ->SetOnDry([weak_panel] {
             dispatch_to_main_queue([weak_panel] {
                 if( PanelController *const panel = weak_panel->panel )
@@ -656,6 +814,8 @@ struct CalculatedSizesBatch {
 {
     dispatch_assert_main_queue();
     m_AcceptsNavigation = false;
+    if( m_ContentRequestGeneration )
+        m_ContentRequestGeneration->fetch_add(1, std::memory_order_acq_rel);
     if( m_NavigationAdmissionCallbackAllowed )
         m_NavigationAdmissionCallbackAllowed->store(false, std::memory_order_release);
     if( m_NavigationWorker )
@@ -710,6 +870,23 @@ struct CalculatedSizesBatch {
     m_FilePanelState = state;
 }
 
+- (void)updateCommittedNativeVolumeBinding
+{
+    m_CommittedNativeVolumeBinding.reset();
+    if( !m_Data.IsLoaded() || !m_Data.Listing().IsUniform() || !m_Data.Host() ||
+        !m_Data.Host()->IsNativeFS() || m_NativeFSManager == nullptr )
+        return;
+
+    const auto info = m_NativeFSManager->VolumeFromPath(m_Data.DirectoryPathWithTrailingSlash());
+    if( !info )
+        return;
+    m_CommittedNativeVolumeBinding = CommittedNativeVolumeBinding{
+        .listing = m_Data.ListingPtr(),
+        .generation = m_DataGeneration,
+        .info = info,
+    };
+}
+
 - (MainWindowFilePanelState *)state
 {
     return m_FilePanelState;
@@ -756,9 +933,163 @@ struct CalculatedSizesBatch {
     return m_View.active;
 }
 
+- (void)cancelPresentationPreparationNotifyingQuickSearch:(const bool)_notify_quick_search
+{
+    dispatch_assert_main_queue();
+    if( m_PresentationPreparationCancel )
+        m_PresentationPreparationCancel->store(true, std::memory_order_release);
+    ++m_PresentationPreparationToken;
+    m_PresentationPreparationCancel.reset();
+    m_PresentationPreparationSource.reset();
+    m_PendingPresentationOptions.reset();
+    if( _notify_quick_search )
+        [m_QuickSearch detachedFilteringDidCancel];
+}
+
+- (bool)scheduleLargePresentationPreparation:
+            (const std::function<void(data::Model::PreparationOptions &)> &)_mutator
+                                          kind:(const PresentationPreparationKind)_kind
+{
+    dispatch_assert_main_queue();
+    if( !_mutator || !m_Data.IsLoaded() ||
+        m_Data.RawEntriesCount() < g_LargeModelPreparationThreshold )
+        return false;
+
+    const bool can_reuse_source =
+        m_PresentationPreparationSource && m_PendingPresentationOptions &&
+        m_PresentationPreparationSource->listing == m_Data.ListingPtr() &&
+        m_PresentationPreparationSource->data_generation == m_DataGeneration &&
+        m_PresentationPreparationSource->selection_projection_generation ==
+            m_Data.SelectionProjectionGeneration() &&
+        m_Data.MatchesPreparationOptions(m_PresentationPreparationSource->source_options);
+    if( !can_reuse_source ) {
+        if( m_PresentationPreparationCancel )
+            m_PresentationPreparationCancel->store(true, std::memory_order_release);
+        auto snapshot =
+            std::make_shared<data::Model::PreparationSnapshot>(m_Data.CapturePreparationSnapshot());
+        m_PresentationPreparationSource = PresentationPreparationSource{
+            .snapshot = snapshot,
+            .listing = m_Data.ListingPtr(),
+            .data_generation = m_DataGeneration,
+            .selection_projection_generation = m_Data.SelectionProjectionGeneration(),
+            .source_options = snapshot->options,
+        };
+        m_PendingPresentationOptions = snapshot->options;
+    }
+
+    auto desired_options = *m_PendingPresentationOptions;
+    _mutator(desired_options);
+    desired_options.hard_filter.text.text = [desired_options.hard_filter.text.text copy];
+    desired_options.soft_filter.text = [desired_options.soft_filter.text copy];
+    if( desired_options == *m_PendingPresentationOptions )
+        return true;
+
+    if( m_PresentationPreparationCancel )
+        m_PresentationPreparationCancel->store(true, std::memory_order_release);
+    auto cancel_requested = std::make_shared<std::atomic_bool>(false);
+    m_PresentationPreparationCancel = cancel_requested;
+    m_PendingPresentationOptions = desired_options;
+    const uint64_t token = ++m_PresentationPreparationToken;
+    const auto source = *m_PresentationPreparationSource;
+    const auto queue = m_PresentationPreparationQ;
+    const auto weak_panel =
+        std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
+
+    queue->Run([source, desired_options, token, _kind, cancel_requested, queue, weak_panel] {
+        auto outcome = std::make_shared<PresentationPreparationOutcome>();
+        const auto is_cancelled = [cancel_requested, queue] {
+            return cancel_requested->load(std::memory_order_acquire) || queue->IsStopped();
+        };
+        try {
+            outcome->prepared_model = data::Model::PrepareDetachedFromSnapshot(
+                *source.snapshot, desired_options, is_cancelled);
+            outcome->cancelled = is_cancelled() || !outcome->prepared_model;
+        } catch( ... ) {
+            if( is_cancelled() )
+                outcome->cancelled = true;
+            else
+                outcome->exception = std::current_exception();
+        }
+
+        dispatch_to_main_queue([source,
+                                desired_options,
+                                token,
+                                _kind,
+                                cancel_requested,
+                                outcome,
+                                weak_panel] {
+            PanelController *const panel = weak_panel->panel;
+            if( !panel ) {
+                dispatch_to_default([outcome] {});
+                return;
+            }
+            if( token != panel->m_PresentationPreparationToken ||
+                cancel_requested->load(std::memory_order_acquire) ) {
+                dispatch_to_default([outcome] {});
+                return;
+            }
+
+            const bool source_matches =
+                !outcome->cancelled && !outcome->exception && outcome->prepared_model &&
+                panel->m_Data.ListingPtr() == source.listing &&
+                panel->m_DataGeneration == source.data_generation &&
+                panel->m_Data.SelectionProjectionGeneration() ==
+                    source.selection_projection_generation &&
+                panel->m_Data.MatchesPreparationOptions(source.source_options);
+            if( !source_matches ) {
+                [panel cancelPresentationPreparationNotifyingQuickSearch:true];
+                if( outcome->exception )
+                    PresentNavigationException(outcome->exception);
+                dispatch_to_default([outcome] {});
+                return;
+            }
+
+            const auto cursor = CursorBackup{panel->m_View.curpos, panel->m_Data};
+            std::optional<data::Model> displaced_model;
+            displaced_model.emplace(std::move(panel->m_Data));
+            panel->m_Data = std::move(*outcome->prepared_model);
+            panel->m_PresentationPreparationCancel.reset();
+            panel->m_PresentationPreparationSource.reset();
+            panel->m_PendingPresentationOptions.reset();
+            panel->m_View.curpos = cursor.RestoredCursorPosition();
+
+            switch( _kind ) {
+                case PresentationPreparationKind::Sort:
+                    [panel->m_View dataSortingHasChanged];
+                    [panel->m_View dataUpdated];
+                    [panel markRestorableStateAsInvalid];
+                    break;
+                case PresentationPreparationKind::HardFilter:
+                    [panel->m_View dataUpdated];
+                    [panel markRestorableStateAsInvalid];
+                    break;
+                case PresentationPreparationKind::GenericOptions:
+                    [panel->m_View dataUpdated];
+                    [panel->m_View dataSortingHasChanged];
+                    break;
+                case PresentationPreparationKind::QuickSearchHardFilter:
+                case PresentationPreparationKind::QuickSearchSoftFilter:
+                case PresentationPreparationKind::QuickSearchClearTextFilter:
+                    [panel->m_QuickSearch detachedFilteringDidCommit];
+                    break;
+            }
+            if( displaced_model )
+                dispatch_to_default([displaced = std::move(*displaced_model)] {});
+            dispatch_to_default([outcome] {});
+        });
+    });
+    return true;
+}
+
 - (void)changeSortingModeTo:(data::SortMode)_mode
 {
-    if( _mode != m_Data.SortMode() ) {
+    const auto effective_mode =
+        m_PendingPresentationOptions ? m_PendingPresentationOptions->sort_mode : m_Data.SortMode();
+    if( _mode != effective_mode ) {
+        if( [self scheduleLargePresentationPreparation:
+                      [_mode](data::Model::PreparationOptions &_options) { _options.sort_mode = _mode; }
+                                                   kind:PresentationPreparationKind::Sort] )
+            return;
         const auto pers = CursorBackup{m_View.curpos, m_Data};
 
         m_Data.SetSortMode(_mode);
@@ -773,7 +1104,16 @@ struct CalculatedSizesBatch {
 
 - (void)changeHardFilteringTo:(data::HardFilter)_filter
 {
-    if( _filter != m_Data.HardFiltering() ) {
+    const auto effective_filter = m_PendingPresentationOptions
+        ? m_PendingPresentationOptions->hard_filter
+        : m_Data.HardFiltering();
+    if( _filter != effective_filter ) {
+        if( [self scheduleLargePresentationPreparation:
+                      [_filter](data::Model::PreparationOptions &_options) {
+                          _options.hard_filter = _filter;
+                      }
+                                                   kind:PresentationPreparationKind::HardFilter] )
+            return;
         const auto pers = CursorBackup{m_View.curpos, m_Data};
 
         m_Data.SetHardFiltering(_filter);
@@ -786,7 +1126,7 @@ struct CalculatedSizesBatch {
 
 - (void)finishRefreshRequest:(const PaneRequestId)_request_id
                       request:(const RefreshWorkRequest &)_request
-                      outcome:(const RefreshFetchOutcome &)_outcome
+                      outcome:(RefreshFetchOutcome &)_outcome
             contentGeneration:(const unsigned long)_content_generation
 {
     dispatch_assert_main_queue();
@@ -795,13 +1135,19 @@ struct CalculatedSizesBatch {
     if( !active || active->request_id != _request_id )
         return;
 
-    bool source_matches = _content_generation == m_ContentRequestGeneration.load(std::memory_order_acquire) &&
+    bool source_matches = _content_generation == m_ContentRequestGeneration->load(std::memory_order_acquire) &&
                           m_Data.IsLoaded() && m_DataGeneration == _request.source_generation &&
                           m_Data.ListingPtr() == _request.source_listing &&
                           m_Data.Listing().IsUniform() == _request.is_uniform;
     if( source_matches && _request.is_uniform ) {
         source_matches = m_Data.Host() == _request.host &&
                          m_Data.DirectoryPathWithTrailingSlash() == _request.path;
+    }
+    if( source_matches && _request.preparation_snapshot ) {
+        source_matches =
+            m_Data.SelectionProjectionGeneration() ==
+                _request.preparation_snapshot->selection_projection_generation &&
+            m_Data.MatchesPreparationOptions(_request.preparation_snapshot->options);
     }
     if( !source_matches ) {
         [[maybe_unused]] const auto result =
@@ -810,8 +1156,9 @@ struct CalculatedSizesBatch {
     }
 
     if( _outcome.exception ) {
-        [[maybe_unused]] const auto result =
-            m_PaneLifecycle->Fail(_request_id, MapRefreshException(_outcome.exception, _request));
+        [[maybe_unused]] const auto result = m_PaneLifecycle->Fail(
+            _request_id,
+            MapRefreshException(_outcome.exception, _request, _outcome.native_volume_disconnected));
         return;
     }
     if( _outcome.cancelled ) {
@@ -820,10 +1167,11 @@ struct CalculatedSizesBatch {
         return;
     }
     if( _outcome.error ) {
-        const auto result =
-            m_PaneLifecycle->Fail(_request_id, MapRefreshError(*_outcome.error, _request));
+        const auto result = m_PaneLifecycle->Fail(
+            _request_id,
+            MapRefreshError(*_outcome.error, _request, _outcome.native_volume_disconnected));
         if( result == PaneLifecycleProducer::FinishResult::Published && _outcome.recovery_target &&
-            _content_generation == m_ContentRequestGeneration.load(std::memory_order_acquire) &&
+            _content_generation == m_ContentRequestGeneration->load(std::memory_order_acquire) &&
             !m_PaneLifecycle->Active() ) {
             auto recovery = std::make_shared<DirectoryChangeRequest>();
             recovery->RequestedDirectory = _outcome.recovery_target->path;
@@ -853,29 +1201,50 @@ struct CalculatedSizesBatch {
         return;
     }
 
-    std::optional<data::Model> prepared;
-    try {
-        prepared.emplace(m_Data);
-        prepared->ReLoad(_outcome.listing);
-    } catch( ... ) {
-        [[maybe_unused]] const auto result =
-            m_PaneLifecycle->Fail(_request_id, MapRefreshException(std::current_exception(), _request));
-        return;
+    std::unique_ptr<data::Model> prepared;
+    if( _request.preparation_snapshot ) {
+        if( !_outcome.prepared_model || !_outcome.preparation_options ||
+            *_outcome.preparation_options != _request.preparation_snapshot->options ) {
+            const auto exception =
+                std::make_exception_ptr(std::logic_error{"Detached refresh returned no matching prepared model"});
+            [[maybe_unused]] const auto result =
+                m_PaneLifecycle->Fail(_request_id, MapRefreshException(exception, _request));
+            return;
+        }
+        prepared = std::move(_outcome.prepared_model);
+    }
+    else {
+        try {
+            prepared = std::make_unique<data::Model>(m_Data);
+            prepared->ReLoad(_outcome.listing);
+        } catch( ... ) {
+            [[maybe_unused]] const auto result =
+                m_PaneLifecycle->Fail(_request_id, MapRefreshException(std::current_exception(), _request));
+            return;
+        }
     }
 
     const auto cursor = CursorBackup{m_View.curpos, m_Data};
     m_DirectorySizeCountingQ.Stop();
+    std::optional<data::Model> displaced_model;
     const auto commit_result = m_PaneLifecycle->Commit(
         _request_id,
         PaneLifecycleCommitted{
             .controller_generation = _request.source_generation,
             .listing = _outcome.listing,
         },
-        [&] { m_Data = std::move(*prepared); });
+        [&] {
+            displaced_model.emplace(std::move(m_Data));
+            m_Data = std::move(*prepared);
+        });
+    if( displaced_model )
+        dispatch_to_default([displaced = std::move(*displaced_model)] {});
     if( commit_result != PaneLifecycleProducer::FinishResult::Published ||
         m_DataGeneration != _request.source_generation ||
         m_Data.ListingPtr() != _outcome.listing )
         return;
+
+    [self updateCommittedNativeVolumeBinding];
 
     [m_View dataUpdated];
     [m_QuickSearch dataUpdated];
@@ -916,7 +1285,8 @@ struct CalculatedSizesBatch {
     facts.has_external_work =
         (loading_queue_occupied && !lifecycle_owns_loading_queue) ||
         (reload_queue_length != 0 && !lifecycle_owns_reload_queue) ||
-        m_DirectoryReLoadingQ->IsStopped();
+        m_DirectoryReLoadingQ->IsStopped() || !m_PresentationPreparationQ->Empty() ||
+        m_PresentationPreparationQ->IsStopped();
     return facts;
 }
 
@@ -944,7 +1314,7 @@ struct CalculatedSizesBatch {
                            weak_panel,
                            reload_queue] {
             (void)reload_queue;
-            const RefreshFetchOutcome outcome = FetchRefreshRequest(request, cancel_requested);
+            auto outcome = std::make_shared<RefreshFetchOutcome>(FetchRefreshRequest(request, cancel_requested));
             worker_finished->store(true, std::memory_order_release);
             dispatch_to_main_queue([request_id,
                                     request,
@@ -955,12 +1325,15 @@ struct CalculatedSizesBatch {
                                     reload_queue] {
                 (void)reload_queue;
                 PanelController *const panel = weak_panel->panel;
-                if( !panel )
+                if( !panel ) {
+                    dispatch_to_default([outcome] {});
                     return;
+                }
                 [panel finishRefreshRequest:request_id
                                     request:request
-                                    outcome:outcome
+                                    outcome:*outcome
                           contentGeneration:content_generation];
+                dispatch_to_default([outcome] {});
             });
         });
     } catch( ... ) {
@@ -998,7 +1371,7 @@ struct CalculatedSizesBatch {
     const auto active = m_PaneLifecycle ? m_PaneLifecycle->Active() : std::nullopt;
     if( pending.cancel_requested->load(std::memory_order_acquire) || !active ||
         active->request_id != pending.request_id ||
-        pending.content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+        pending.content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) )
         return;
 
     try {
@@ -1033,12 +1406,22 @@ struct CalculatedSizesBatch {
                     work.is_uniform = m_Data.Listing().IsUniform();
                     work.fetch_flags = m_VFSFetchingFlags | (_force ? VFSFlags::F_ForceRefresh : 0);
                     work.native_host = m_NativeHost->SharedPtr();
+                    if( m_Data.RawEntriesCount() >= g_LargeModelPreparationThreshold ) {
+                        work.preparation_snapshot =
+                            std::make_shared<data::Model::PreparationSnapshot>(m_Data.CapturePreparationSnapshot());
+                    }
                     if( work.is_uniform ) {
                         work.host = m_Data.Host();
                         work.path = m_Data.DirectoryPathWithTrailingSlash();
                         work.error_context.affected_items.emplace_back(work.path);
                         if( const char *const provider = work.host->Tag(); provider != nullptr )
                             work.error_context.provider_id = provider;
+                        if( m_CommittedNativeVolumeBinding &&
+                            m_CommittedNativeVolumeBinding->listing == work.source_listing &&
+                            m_CommittedNativeVolumeBinding->generation == work.source_generation ) {
+                            work.native_volume_binding = m_CommittedNativeVolumeBinding;
+                            work.native_fs_manager = m_NativeFSManager;
+                        }
                     }
                     admission_state->work.emplace(std::move(work));
                 }
@@ -1073,7 +1456,7 @@ struct CalculatedSizesBatch {
                 if( m_NavigationWorker )
                     m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
                 const unsigned long content_generation =
-                    m_ContentRequestGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+                    m_ContentRequestGeneration->fetch_add(1, std::memory_order_acq_rel) + 1;
                 auto cancel_requested = std::make_shared<std::atomic_bool>(false);
                 PendingRefreshWork pending{
                     .request_id = _request_id,
@@ -1190,14 +1573,31 @@ struct CalculatedSizesBatch {
     }
 }
 
-- (void)calculateSizesOfItems:(const std::vector<VFSListingItem> &)_items
+- (bool)calculateSizesOfItems:(const std::vector<VFSListingItem> &)_items
 {
-    if( !_items.empty() ) {
-        m_DirectorySizeCountingQ.Run([=] { [self doCalculateSizesOfItems:_items]; });
+    dispatch_assert_main_queue();
+    if( _items.empty() || !m_DirectorySizeCountingQ.Empty() || m_DirectorySizeCountingQ.IsStopped() )
+        return false;
+
+    const VFSListingPtr listing = m_Data.ListingPtr();
+    if( !m_Data.IsLoaded() || !listing || listing == VFSListing::EmptyListing() )
+        return false;
+    if( std::ranges::any_of(_items, [&](const VFSListingItem &_item) {
+            return !_item || _item.Listing().get() != listing.get();
+        }) ) {
+        return false;
     }
+
+    const unsigned long data_generation = m_DataGeneration;
+    m_DirectorySizeCountingQ.Run([self, items = _items, listing, data_generation] {
+        [self doCalculateSizesOfItems:items listing:listing dataGeneration:data_generation];
+    });
+    return true;
 }
 
 - (void)doCalculateSizesOfItems:(const std::vector<VFSListingItem> &)_items
+                         listing:(const VFSListingPtr &)_listing
+                  dataGeneration:(const unsigned long)_data_generation
 {
     dispatch_assert_background_queue();
     assert(!_items.empty());
@@ -1240,27 +1640,15 @@ struct CalculatedSizesBatch {
 
         auto commit_batch = [=, calculated = std::move(calculated)] {
             assert(!calculated.items.empty());
+            if( m_DataGeneration != _data_generation || m_Data.ListingPtr() != _listing )
+                return;
 
             // may cause re-sorting if current sorting is by size so save the cursor
             const auto pers = CursorBackup{m_View.curpos, m_Data};
 
-            size_t num_set = 0;
-            if( &m_Data.Listing() == calculated.items.front().Listing().get() ) {
-                // the listing is the same, can use indices directly
-                std::vector<unsigned> raw_indices(calculated.items.size());
-                std::ranges::transform(calculated.items, raw_indices.begin(), [](auto &i) { return i.Index(); });
-                num_set = m_Data.SetCalculatedSizesForDirectories(raw_indices, calculated.sizes);
-            }
-            else {
-                // the listing has changed, need to use indirects: filename and directory
-                std::vector<std::string_view> filenames(calculated.items.size());
-                std::vector<std::string_view> directories(calculated.items.size());
-                std::ranges::transform(
-                    calculated.items, filenames.begin(), [](auto &i) { return std::string_view{i.Filename()}; });
-                std::ranges::transform(
-                    calculated.items, directories.begin(), [](auto &i) { return std::string_view{i.Directory()}; });
-                num_set = m_Data.SetCalculatedSizesForDirectories(filenames, directories, calculated.sizes);
-            }
+            std::vector<unsigned> raw_indices(calculated.items.size());
+            std::ranges::transform(calculated.items, raw_indices.begin(), [](const auto &i) { return i.Index(); });
+            const size_t num_set = m_Data.SetCalculatedSizesForDirectories(raw_indices, calculated.sizes);
             if( num_set != 0 ) {
                 [m_View dataUpdated];
                 [m_View volatileDataChanged];
@@ -1276,11 +1664,15 @@ struct CalculatedSizesBatch {
     m_DirectorySizeCountingQ.Stop();
     m_DirectoryLoadingQ->Stop();
     m_DirectoryReLoadingQ->Stop();
+    if( m_PresentationPreparationCancel )
+        m_PresentationPreparationCancel->store(true, std::memory_order_release);
+    m_PresentationPreparationQ->Stop();
 }
 
 - (unsigned long)claimContentIntentInvalidatingNavigationAdmission
 {
     dispatch_assert_main_queue();
+    [self cancelPresentationPreparationNotifyingQuickSearch:true];
     if( m_NavigationAdmissionCallbackAllowed ) {
         m_NavigationAdmissionCallbackAllowed->store(false, std::memory_order_release);
         m_NavigationAdmissionCallbackAllowed.reset();
@@ -1293,7 +1685,7 @@ struct CalculatedSizesBatch {
         m_PendingRefresh->cancel_requested->store(true, std::memory_order_release);
         m_PendingRefresh.reset();
     }
-    return m_ContentRequestGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+    return m_ContentRequestGeneration->fetch_add(1, std::memory_order_acq_rel) + 1;
 }
 
 - (void)cancelBackgroundOperationsForLifecycleReason:(const PaneCancellationReason)_reason
@@ -1331,7 +1723,8 @@ struct CalculatedSizesBatch {
 
     size_t ext_activities_no = call_locked(m_ActivitiesTicketsLock, [&] { return m_ActivitiesTickets.size(); });
     bool is_anything_working = !m_DirectorySizeCountingQ.Empty() || !m_DirectoryLoadingQ->Empty() ||
-                               !m_DirectoryReLoadingQ->Empty() || ext_activities_no > 0;
+                               !m_DirectoryReLoadingQ->Empty() || !m_PresentationPreparationQ->Empty() ||
+                               ext_activities_no > 0;
 
     if( is_anything_working == m_IsAnythingWorksInBackground )
         return; // nothing to update;
@@ -1444,6 +1837,9 @@ struct CalculatedSizesBatch {
 {
     dispatch_assert_main_queue();
 
+    if( _sort_pos < 0 )
+        return m_ContextMenuProvider({}, self);
+
     const auto clicked_item = m_Data.EntryAtSortPosition(_sort_pos);
     if( !clicked_item || clicked_item.IsDotDot() )
         return nil;
@@ -1470,58 +1866,55 @@ struct CalculatedSizesBatch {
     [m_View volatileDataChanged];
 }
 
-static void ShowAlertAboutInvalidFilename(const std::string &_filename)
+- (nc::panel::actions::InlineRenameStatus)requestQuickRenamingOfItem:(VFSListingItem)_item
+                                                                  to:(const std::string &)_filename
 {
-    Alert *const a = [[Alert alloc] init];
-    auto fn = [NSString stringWithUTF8StdString:_filename];
-    if( fn.length > 256 )
-        fn = [[fn substringToIndex:256] stringByAppendingString:@"..."];
+    using namespace nc::panel::actions;
+    dispatch_assert_main_queue();
 
-    const auto msg =
-        NSLocalizedString(@"The name “%@” can’t be used.", "Message text when user is entering an invalid filename");
-    a.messageText = [NSString stringWithFormat:msg, fn];
-    const auto info = NSLocalizedString(@"Try using a name with fewer characters or without punctuation marks.",
-                                        "Informative text when user is entering an invalid filename");
-    a.informativeText = info;
-    a.alertStyle = NSAlertStyleCritical;
-    [a runModal];
-}
+    const auto active_lifecycle = m_PaneLifecycle ? m_PaneLifecycle->Active() : std::nullopt;
+    InlineRenameLiveContext live{
+        .pane_available = m_View != nil,
+        .window_available = self.mainWindowController != nil,
+        .loading = self.isDoingBackgroundLoading || active_lifecycle.has_value(),
+        .listing_loaded = m_Data.IsLoaded() && m_Data.ListingPtr() != VFSListing::EmptyListing(),
+        .uniform = m_Data.IsLoaded() && m_Data.Listing().IsUniform(),
+        .listing = m_Data.IsLoaded() ? m_Data.ListingPtr() : VFSListingPtr{},
+        .generation = m_DataGeneration,
+        .host = m_Data.IsLoaded() && m_Data.Listing().IsUniform() ? m_Data.Host() : VFSHostPtr{},
+        .directory = m_Data.IsLoaded() && m_Data.Listing().IsUniform()
+                         ? m_Data.DirectoryPathWithTrailingSlash()
+                         : std::string{},
+    };
+    InlineRenamePlanningResult planned = PlanInlineRename(live, _item, _filename);
+    if( planned.status != InlineRenameStatus::Ready )
+        return planned.status;
 
-- (void)requestQuickRenamingOfItem:(VFSListingItem)_item to:(const std::string &)_filename
-{
-    if( _filename == "." || _filename == ".." || !_item || _item.IsDotDot() || !_item.Host()->IsWritable() ||
-        _filename == _item.Filename() )
-        return;
+    if( !planned.plan )
+        return InlineRenameStatus::ListingUnavailable;
+    const std::shared_ptr<nc::ops::Copying> operation = MakeInlineRenameOperation(*planned.plan);
+    if( !operation )
+        return InlineRenameStatus::ProviderUnsupported;
 
-    const auto &target_fn = _filename;
+    const std::string target_filename = planned.plan->DestinationName();
+    const std::string source_directory = planned.plan->Directory();
+    const VFSHostPtr source_host = planned.plan->Host();
+    __weak PanelController *weak_self = self;
+    operation->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion,
+                                 [weak_self, target_filename, source_directory, source_host] {
+      dispatch_to_main_queue([weak_self, target_filename, source_directory, source_host] {
+        PanelController *const panel = weak_self;
+        if( !panel || panel.currentDirectoryPath != source_directory || panel.vfs != source_host )
+            return;
+        DelayedFocusing request;
+        request.filename = target_filename;
+        [panel scheduleDelayedFocusing:request];
+        [panel refreshPanel];
+      });
+    });
 
-    // checking for invalid symbols
-    if( !_item.Host()->ValidateFilename(target_fn) ) {
-        ShowAlertAboutInvalidFilename(target_fn);
-        return;
-    }
-
-    nc::ops::CopyingOptions opts;
-    opts.docopy = false;
-
-    const auto op = std::make_shared<nc::ops::Copying>(
-        std::vector<VFSListingItem>{_item}, _item.Directory() + target_fn, _item.Host(), opts);
-
-    if( self.isUniform && m_View.item && m_View.item.Filename() == _item.Filename() ) {
-        std::string curr_path = self.currentDirectoryPath;
-        auto curr_vfs = self.vfs;
-        op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [=] {
-            if( self.currentDirectoryPath == curr_path && self.vfs == curr_vfs )
-                dispatch_to_main_queue([=] {
-                    DelayedFocusing req;
-                    req.filename = target_fn;
-                    [self scheduleDelayedFocusing:req];
-                    [self refreshPanel];
-                });
-        });
-    }
-
-    [self.mainWindowController enqueueOperation:op];
+    [self.mainWindowController enqueueOperation:operation];
+    return InlineRenameStatus::Ready;
 }
 
 - (void)panelViewDidBecomeFirstResponder
@@ -1535,6 +1928,24 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 {
     assert(dispatch_is_main_queue());
     assert(_workload);
+
+    if( m_Data.IsLoaded() && m_Data.RawEntriesCount() >= g_LargeModelPreparationThreshold ) {
+        const auto base_options = m_PendingPresentationOptions.value_or(m_Data.CapturePreparationOptions());
+        data::Model staged_options;
+        staged_options.SetSortMode(base_options.sort_mode);
+        staged_options.SetHardFiltering(base_options.hard_filter);
+        staged_options.SetSoftFiltering(base_options.soft_filter);
+        _workload(staged_options);
+        const auto desired_options = staged_options.CapturePreparationOptions();
+        if( [self scheduleLargePresentationPreparation:
+                      [desired_options](data::Model::PreparationOptions &_options) {
+                          _options.sort_mode = desired_options.sort_mode;
+                          _options.hard_filter = desired_options.hard_filter;
+                          _options.soft_filter = desired_options.soft_filter;
+                      }
+                                                   kind:PresentationPreparationKind::GenericOptions] )
+            return;
+    }
 
     const auto pers = CursorBackup{m_View.curpos, m_Data};
 
@@ -1569,36 +1980,83 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 
 - (void)setLayoutIndex:(int)layoutIndex
 {
-    if( m_ViewLayoutIndex != layoutIndex ) {
-        if( auto l = m_Layouts->GetLayout(layoutIndex) )
-            if( !l->is_disabled() ) {
-                m_ViewLayoutIndex = layoutIndex;
-                m_AssignedViewLayout = l;
-                m_AssignedViewLayoutUsesConfiguredSlot = true;
-                [m_View setPresentationLayout:*l];
-                [self markRestorableStateAsInvalid];
-                [NSNotificationCenter.defaultCenter
-                    postNotificationName:NCPanelViewContextDidChangeNotification
-                                  object:m_View];
-            }
+    const auto configured_layout = m_Layouts->GetLayout(layoutIndex);
+    if( !configured_layout || configured_layout->is_disabled() )
+        return;
+
+    const bool presentation_changed = !m_AssignedViewLayout || *m_AssignedViewLayout != *configured_layout;
+    const bool ownership_changed = m_ViewLayoutIndex != layoutIndex || m_HasPaneLocalPresentationLayoutOverride ||
+                                   !m_AssignedViewLayoutUsesConfiguredSlot;
+    if( !presentation_changed && !ownership_changed )
+        return;
+
+    m_ViewLayoutIndex = layoutIndex;
+    m_AssignedViewLayout = configured_layout;
+    m_AssignedViewLayoutUsesConfiguredSlot = true;
+    m_HasPaneLocalPresentationLayoutOverride = false;
+    if( presentation_changed )
+        [m_View setPresentationLayout:*configured_layout];
+    [self markRestorableStateAsInvalid];
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:m_View];
+}
+
+- (bool)applyPaneLocalPresentationLayout:(const PanelViewLayout &)_layout atConfiguredSlot:(int)_slot
+{
+    dispatch_assert_main_queue();
+    const auto configured_layout = m_Layouts->GetLayout(_slot);
+    if( !configured_layout || configured_layout->is_disabled() || !IsValidPanelViewLayout(*configured_layout) ||
+        configured_layout->type() != _layout.type() || !IsValidPanelViewLayout(_layout) ) {
+        return false;
     }
+
+    PanelViewLayout local_layout = _layout;
+    local_layout.name = configured_layout->name;
+    const bool presentation_changed = !m_AssignedViewLayout || *m_AssignedViewLayout != local_layout;
+    const bool ownership_changed = m_ViewLayoutIndex != _slot || !m_HasPaneLocalPresentationLayoutOverride ||
+                                   m_AssignedViewLayoutUsesConfiguredSlot;
+    if( !presentation_changed && !ownership_changed )
+        return true;
+
+    m_ViewLayoutIndex = _slot;
+    m_AssignedViewLayout = std::make_shared<const PanelViewLayout>(std::move(local_layout));
+    m_AssignedViewLayoutUsesConfiguredSlot = false;
+    m_HasPaneLocalPresentationLayoutOverride = true;
+    if( presentation_changed )
+        [m_View setPresentationLayout:*m_AssignedViewLayout];
+    [self markRestorableStateAsInvalid];
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:m_View];
+    return true;
 }
 
 - (void)panelLayoutsChanged
 {
     const auto configured_layout = m_Layouts->GetLayout(m_ViewLayoutIndex);
     const bool uses_configured_slot = configured_layout && !configured_layout->is_disabled();
+
+    if( m_HasPaneLocalPresentationLayoutOverride && uses_configured_slot && m_AssignedViewLayout &&
+        configured_layout->type() == m_AssignedViewLayout->type() ) {
+        if( configured_layout->name == m_AssignedViewLayout->name )
+            return;
+
+        PanelViewLayout renamed_layout = *m_AssignedViewLayout;
+        renamed_layout.name = configured_layout->name;
+        m_AssignedViewLayout = std::make_shared<const PanelViewLayout>(std::move(renamed_layout));
+        [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:m_View];
+        return;
+    }
+
     const auto next_layout = uses_configured_slot
                                  ? configured_layout
                                  : nc::panel::PanelViewLayoutsStorage::LastResortLayout();
     const bool presentation_changed = !m_AssignedViewLayout || *m_AssignedViewLayout != *next_layout;
-    const bool slot_validity_changed =
-        m_AssignedViewLayoutUsesConfiguredSlot != uses_configured_slot;
-    if( !presentation_changed && !slot_validity_changed )
+    const bool ownership_changed = m_HasPaneLocalPresentationLayoutOverride ||
+                                   m_AssignedViewLayoutUsesConfiguredSlot != uses_configured_slot;
+    if( !presentation_changed && !ownership_changed )
         return;
 
     m_AssignedViewLayout = next_layout;
     m_AssignedViewLayoutUsesConfiguredSlot = uses_configured_slot;
+    m_HasPaneLocalPresentationLayoutOverride = false;
     if( presentation_changed )
         [m_View setPresentationLayout:*m_AssignedViewLayout];
     [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:m_View];
@@ -1606,12 +2064,27 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 
 - (void)panelViewDidChangePresentationLayout
 {
+    if( !m_AssignedViewLayout )
+        return;
+
     PanelViewLayout layout;
     layout.name = m_AssignedViewLayout->name;
     layout.layout = [m_View presentationLayout];
 
-    if( layout != *m_AssignedViewLayout )
-        m_Layouts->ReplaceLayout(std::move(layout), m_ViewLayoutIndex);
+    if( layout == *m_AssignedViewLayout )
+        return;
+
+    if( m_HasPaneLocalPresentationLayoutOverride ) {
+        if( !IsValidPanelViewLayout(layout) )
+            return;
+        m_AssignedViewLayout = std::make_shared<const PanelViewLayout>(std::move(layout));
+        m_AssignedViewLayoutUsesConfiguredSlot = false;
+        [self markRestorableStateAsInvalid];
+        [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification object:m_View];
+        return;
+    }
+
+    m_Layouts->ReplaceLayout(std::move(layout), m_ViewLayoutIndex);
 }
 
 - (void)commitCancelableLoadingTask:(std::function<void(const CancelableLoadingTaskContext &)>)_task
@@ -1623,15 +2096,40 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
             .is_cancelled = [sq, self, content_generation] {
                 return sq->IsStopped() ||
                        content_generation !=
-                           self->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                           self->m_ContentRequestGeneration->load(std::memory_order_acquire);
             },
             .commit_on_main = [self, content_generation](std::function<void()> _commit) {
                 dispatch_to_main_queue([self, content_generation, commit = std::move(_commit)] {
                     if( content_generation !=
-                        self->m_ContentRequestGeneration.load(std::memory_order_acquire) )
+                        self->m_ContentRequestGeneration->load(std::memory_order_acquire) )
                         return;
                     commit();
                 });
+            },
+        };
+        task(context);
+    });
+}
+
+- (void)commitDetachedCancelableLoadingTask:(std::function<void(const CancelableLoadingTaskContext &)>)_task
+{
+    dispatch_assert_main_queue();
+    const auto content_generation = [self claimContentIntentInvalidatingNavigationAdmission];
+    const auto generation = m_ContentRequestGeneration;
+    const auto weak_panel = std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
+    dispatch_to_default([task = std::move(_task), generation, weak_panel, content_generation] {
+        const CancelableLoadingTaskContext context{
+            .is_cancelled = [generation, content_generation] {
+                return content_generation != generation->load(std::memory_order_acquire);
+            },
+            .commit_on_main = [generation, weak_panel, content_generation](std::function<void()> _commit) {
+                dispatch_to_main_queue(
+                    [generation, weak_panel, content_generation, commit = std::move(_commit)] {
+                        PanelController *const panel = weak_panel->panel;
+                        if( !panel || content_generation != generation->load(std::memory_order_acquire) )
+                            return;
+                        commit();
+                    });
             },
         };
         task(context);
@@ -1661,7 +2159,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     assert(_request != nullptr);
     assert(_request->VFS != nullptr);
     Log::Debug("[PanelController doGoToDirWithContext] was called with {}", *_request);
-    if( _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+    if( _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) )
         return std::unexpected(Error{Error::POSIX, ECANCELED});
 
     try {
@@ -1681,27 +2179,28 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                 DirectoryChangeResultSource::Fetch,
                 [=] {
                     return _content_generation ==
-                           m_ContentRequestGeneration.load(std::memory_order_acquire);
+                           m_ContentRequestGeneration->load(std::memory_order_acquire);
                 });
         }
 
         if( !listing )
             return std::unexpected(listing.error());
         if( m_DirectoryLoadingQ->IsStopped() ||
-            _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+            _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) )
             return std::unexpected(Error{Error::POSIX, ECANCELED});
 
         // TODO: need an ability to show errors at least
 
         [self stopBackgroundQueues]; // legacy recovery path; no lifecycle request owns this worker
         dispatch_or_run_in_main_queue([=] {
-            if( _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) )
+            if( _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) )
                 return;
             [m_View savePathState];
             m_Data.Load(*listing, data::Model::PanelType::Directory);
             for( auto &i : _request->RequestSelectedEntries )
                 m_Data.CustomFlagsSelectSorted(m_Data.SortedIndexForName(i), true);
             m_DataGeneration++;
+            [self updateCommittedNativeVolumeBinding];
             [m_View dataUpdated];
             [m_View panelChangedWithFocusedFilename:_request->RequestFocusedEntry
                                   loadPreviousState:_request->LoadPreviousViewState];
@@ -1723,7 +2222,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     try {
         const auto canceller = VFSCancelChecker([&] {
             return m_DirectoryLoadingQ->IsStopped() ||
-                   _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire);
+                   _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire);
         });
         const std::expected<VFSListingPtr, Error> listing =
             _request->VFS->FetchDirectoryListing(_request->RequestedDirectory, _fetch_flags, canceller);
@@ -1733,7 +2232,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
         else
             outcome.error = listing.error();
         outcome.cancelled = m_DirectoryLoadingQ->IsStopped() ||
-                            _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) ||
+                            _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) ||
                             (outcome.error && IsCancellationError(*outcome.error));
     } catch( ... ) {
         outcome.exception = std::current_exception();
@@ -1743,7 +2242,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 
 - (void)finishNavigationRequest:(const PaneRequestId)_request_id
                          request:(const std::shared_ptr<DirectoryChangeRequest> &)_request
-                         outcome:(const NavigationFetchOutcome &)_outcome
+                         outcome:(NavigationFetchOutcome &)_outcome
                contentGeneration:(const unsigned long)_content_generation
                synchronousResult:(std::expected<void, Error> *)_synchronous_result
 {
@@ -1758,12 +2257,24 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
         if( _synchronous_result )
             *_synchronous_result = std::unexpected(_error);
     };
+    const auto report_cancelled_callback = [&] {
+        if( !_request->LoadingResultCallback )
+            return;
+        try {
+            _request->LoadingResultCallback(std::unexpected(Error{Error::POSIX, ECANCELED}),
+                                            DirectoryChangeResultSource::Fetch,
+                                            [] { return false; });
+        } catch( ... ) {
+            PresentNavigationException(std::current_exception());
+        }
+    };
 
-    if( _content_generation != m_ContentRequestGeneration.load(std::memory_order_acquire) ) {
+    if( _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
         [[maybe_unused]] const auto result =
             m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
         clear_worker_slot();
+        report_cancelled_callback();
         return;
     }
 
@@ -1809,29 +2320,53 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     if( !active || active->request_id != _request_id ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
         clear_worker_slot();
+        report_cancelled_callback();
         return;
     }
 
-    std::optional<data::Model> prepared;
-    try {
-        prepared.emplace(m_Data);
-        prepared->Load(_outcome.listing, data::Model::PanelType::Directory);
-        for( const auto &item : _request->RequestSelectedEntries )
-            prepared->CustomFlagsSelectSorted(prepared->SortedIndexForName(item), true);
-    } catch( ... ) {
-        const auto exception = std::current_exception();
-        FileManagerError error = MapNavigationException(exception, _request);
-        set_synchronous_error(error.original_error);
-        const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
-        clear_worker_slot();
-        if( result == PaneLifecycleProducer::FinishResult::Published )
-            PresentNavigationException(exception);
-        return;
+    std::unique_ptr<data::Model> prepared;
+    if( _request->PerformAsynchronous ) {
+        if( !_outcome.prepared_model || !_outcome.preparation_options ) {
+            const auto exception =
+                std::make_exception_ptr(std::logic_error{"Asynchronous navigation returned no prepared model"});
+            FileManagerError error = MapNavigationException(exception, _request);
+            const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+            clear_worker_slot();
+            if( result == PaneLifecycleProducer::FinishResult::Published )
+                PresentNavigationException(exception);
+            return;
+        }
+        if( !m_Data.MatchesPreparationOptions(*_outcome.preparation_options) ) {
+            [[maybe_unused]] const auto result =
+                m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+            clear_worker_slot();
+            report_cancelled_callback();
+            return;
+        }
+        prepared = std::move(_outcome.prepared_model);
+    }
+    else {
+        try {
+            prepared = std::make_unique<data::Model>(m_Data);
+            prepared->Load(_outcome.listing, data::Model::PanelType::Directory);
+            for( const auto &item : _request->RequestSelectedEntries )
+                prepared->CustomFlagsSelectSorted(prepared->SortedIndexForName(item), true);
+        } catch( ... ) {
+            const auto exception = std::current_exception();
+            FileManagerError error = MapNavigationException(exception, _request);
+            set_synchronous_error(error.original_error);
+            const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+            clear_worker_slot();
+            if( result == PaneLifecycleProducer::FinishResult::Published )
+                PresentNavigationException(exception);
+            return;
+        }
     }
 
     const unsigned long next_generation = m_DataGeneration + 1;
     [m_View savePathState];
     m_DirectorySizeCountingQ.Stop();
+    std::optional<data::Model> displaced_model;
 
     PaneLifecycleProducer::FinishResult commit_result;
     try {
@@ -1839,8 +2374,10 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
             _request_id,
             PaneLifecycleCommitted{.controller_generation = next_generation, .listing = _outcome.listing},
             [&] {
-                m_Data = std::move(*prepared);
+                displaced_model.emplace(std::move(m_Data));
+                m_Data = std::move(*prepared); // statically nothrow: the only model work on main
                 m_DataGeneration = next_generation;
+                [self updateCommittedNativeVolumeBinding];
             });
     } catch( ... ) {
         const auto exception = std::current_exception();
@@ -1852,11 +2389,15 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
             PresentNavigationException(exception);
         return;
     }
+    // Vector/listing destruction from the displaced model can be proportional to the old folder.
+    if( displaced_model )
+        dispatch_to_default([displaced = std::move(*displaced_model)] {});
     clear_worker_slot();
 
     if( commit_result != PaneLifecycleProducer::FinishResult::Published ||
         m_DataGeneration != next_generation || m_Data.ListingPtr() != _outcome.listing ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
+        report_cancelled_callback();
         return;
     }
 
@@ -1866,6 +2407,25 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     [m_View panelChangedWithFocusedFilename:_request->RequestFocusedEntry
                           loadPreviousState:_request->LoadPreviousViewState];
     [self onPathChanged];
+    if( _request->LoadingResultCallback ) {
+        const auto weak_panel =
+            std::make_shared<WeakPanelControllerRef>(WeakPanelControllerRef{.panel = self});
+        const auto committed_listing = _outcome.listing;
+        try {
+            _request->LoadingResultCallback(
+                {},
+                DirectoryChangeResultSource::Fetch,
+                [weak_panel, _content_generation, committed_listing] {
+                    PanelController *const panel = weak_panel->panel;
+                    return panel &&
+                           _content_generation ==
+                               panel->m_ContentRequestGeneration->load(std::memory_order_acquire) &&
+                           panel->m_Data.ListingPtr() == committed_listing;
+                });
+        } catch( ... ) {
+            PresentNavigationException(std::current_exception());
+        }
+    }
 }
 
 - (std::expected<void, Error>)GoToDirWithContext:(std::shared_ptr<DirectoryChangeRequest>)_request
@@ -1958,7 +2518,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                     m_PendingRefresh.reset();
                 }
                 const unsigned long content_generation =
-                    m_ContentRequestGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+                    m_ContentRequestGeneration->fetch_add(1, std::memory_order_acq_rel) + 1;
                 if( m_NavigationWorker )
                     m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
                 if( !asynchronous ) {
@@ -1985,7 +2545,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                                 PanelController *const panel = weak_panel_controller;
                                 return panel && worker_callback_allowed->load(std::memory_order_acquire) &&
                                        content_generation ==
-                                           panel->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                                           panel->m_ContentRequestGeneration->load(std::memory_order_acquire);
                             };
                         try {
                             _request->LoadingResultCallback(std::unexpected(access_error),
@@ -2040,26 +2600,15 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                         PanelController *const panel = weakself;
                         return panel && callback_allowed->load(std::memory_order_acquire) &&
                                content_generation ==
-                                   panel->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                                   panel->m_ContentRequestGeneration->load(std::memory_order_acquire);
                     };
                     NavigationFetchOutcome outcome = [self fetchNavigationRequest:_request
                                                                         fetchFlags:fetch_flags
                                                                  contentGeneration:content_generation];
-                    const std::expected<void, Error> callback_result = outcome.error
-                        ? std::expected<void, Error>{std::unexpected(*outcome.error)}
-                        : std::expected<void, Error>{};
-
-                    if( !outcome.exception && !outcome.cancelled && !outcome.error &&
-                        _request->LoadingResultCallback ) {
-                        try {
-                            _request->LoadingResultCallback(callback_result,
-                                                            DirectoryChangeResultSource::Fetch,
-                                                            callback_is_current);
-                        } catch( ... ) {
-                            outcome.listing.reset();
-                            outcome.exception = std::current_exception();
-                        }
-                    }
+                    const std::expected<void, Error> callback_result = outcome.cancelled
+                        ? std::expected<void, Error>{std::unexpected(Error{Error::POSIX, ECANCELED})}
+                        : outcome.error ? std::expected<void, Error>{std::unexpected(*outcome.error)}
+                                        : std::expected<void, Error>{};
 
                     [self finishNavigationRequest:_request_id
                                            request:_request
@@ -2080,6 +2629,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                 }
 
                 const auto fetch_flags = m_VFSFetchingFlags;
+                const auto preparation_options = m_Data.CapturePreparationOptions();
                 auto callback_allowed = worker_callback_allowed;
                 auto worker_finished = std::make_shared<std::atomic_bool>(false);
                 const auto weak_panel =
@@ -2088,6 +2638,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                 loading_queue->Run([request_id = _request_id,
                                     request = _request,
                                     fetch_flags,
+                                    preparation_options,
                                     content_generation,
                                     callback_allowed,
                                     worker_finished,
@@ -2100,25 +2651,17 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                         PanelController *const panel = weak_panel->panel;
                         return panel && callback_allowed->load(std::memory_order_acquire) &&
                                content_generation ==
-                                   panel->m_ContentRequestGeneration.load(std::memory_order_acquire);
+                                   panel->m_ContentRequestGeneration->load(std::memory_order_acquire);
                     };
-                    NavigationFetchOutcome outcome =
-                        FetchNavigationRequestDetached(request, fetch_flags, callback_allowed);
-                    const std::expected<void, Error> callback_result = outcome.error
-                        ? std::expected<void, Error>{std::unexpected(*outcome.error)}
-                        : std::expected<void, Error>{};
+                    auto outcome = std::make_shared<NavigationFetchOutcome>(
+                        FetchNavigationRequestDetached(
+                            request, fetch_flags, callback_allowed, preparation_options));
+                    const std::expected<void, Error> callback_result = outcome->cancelled
+                        ? std::expected<void, Error>{std::unexpected(Error{Error::POSIX, ECANCELED})}
+                        : outcome->error ? std::expected<void, Error>{std::unexpected(*outcome->error)}
+                                         : std::expected<void, Error>{};
 
-                    if( !outcome.exception && !outcome.cancelled && !outcome.error &&
-                        request->LoadingResultCallback &&
-                        callback_is_current() ) {
-                        try {
-                            request->LoadingResultCallback(
-                                callback_result, DirectoryChangeResultSource::Fetch, callback_is_current);
-                        } catch( ... ) {
-                            outcome.listing.reset();
-                            outcome.exception = std::current_exception();
-                        }
-                    }
+                    const bool report_fetch_failure = outcome->cancelled || outcome->error;
 
                     dispatch_to_main_queue([request_id,
                                             request,
@@ -2126,16 +2669,20 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
                                             content_generation,
                                             weak_panel] {
                         PanelController *const panel = weak_panel->panel;
-                        if( !panel )
+                        if( !panel ) {
+                            dispatch_to_default([outcome] {});
                             return;
+                        }
                         [panel finishNavigationRequest:request_id
                                                 request:request
-                                                outcome:outcome
+                                                outcome:*outcome
                                       contentGeneration:content_generation
                                       synchronousResult:nullptr];
+                        // Destruction of a rejected 100k prepared model/listing stays off the UI queue.
+                        dispatch_to_default([outcome] {});
                     });
 
-                    if( (outcome.cancelled || outcome.error) && request->LoadingResultCallback &&
+                    if( report_fetch_failure && request->LoadingResultCallback &&
                         callback_is_current() ) {
                         try {
                             request->LoadingResultCallback(
@@ -2210,6 +2757,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     else
         m_Data.Load(_listing, data::Model::PanelType::Temporary);
     m_DataGeneration++;
+    [self updateCommittedNativeVolumeBinding];
     [m_View dataUpdated];
     [m_View panelChangedWithFocusedFilename:"" loadPreviousState:false];
     [self onPathChanged];
@@ -2225,7 +2773,7 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
         const auto is_stale = [=] {
             return m_DirectoryLoadingQ->IsStopped() ||
                    recovery_generation !=
-                       m_ContentRequestGeneration.load(std::memory_order_acquire);
+                       m_ContentRequestGeneration->load(std::memory_order_acquire);
         };
         // 1st - try to locate a valid dir in current host
         std::filesystem::path path = initial_path;
@@ -2376,6 +2924,60 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
     [m_View dataUpdated];
 }
 
+- (bool)quickSearch:(NCPanelQuickSearch *) [[maybe_unused]] _qs
+    requestsDetachedHardFiltering:(const data::HardFilter &)_filter
+{
+    return [self scheduleLargePresentationPreparation:
+                     [_filter](data::Model::PreparationOptions &_options) {
+                         _options.hard_filter = _filter;
+                     }
+                                                  kind:PresentationPreparationKind::QuickSearchHardFilter];
+}
+
+- (bool)quickSearch:(NCPanelQuickSearch *) [[maybe_unused]] _qs
+    requestsDetachedSoftFiltering:(const data::TextualFilter &)_filter
+{
+    return [self scheduleLargePresentationPreparation:
+                     [_filter](data::Model::PreparationOptions &_options) {
+                         _options.soft_filter = _filter;
+                     }
+                                                  kind:PresentationPreparationKind::QuickSearchSoftFilter];
+}
+
+- (bool)quickSearchRequestsDetachedTextFilteringClear:(NCPanelQuickSearch *)_qs
+{
+    if( m_Data.RawEntriesCount() < g_LargeModelPreparationThreshold )
+        return false;
+
+    const bool live_has_filter = m_Data.HardFiltering().text.text != nil ||
+                                 m_Data.SoftFiltering().text != nil;
+    const bool pending_has_filter =
+        m_PendingPresentationOptions &&
+        (m_PendingPresentationOptions->hard_filter.text.text != nil ||
+         m_PendingPresentationOptions->soft_filter.text != nil);
+    if( !live_has_filter && !pending_has_filter )
+        return false;
+
+    // Escape before the first detached filter commit restores the already-unfiltered live model
+    // immediately; the cancelled worker is allowed to drain cooperatively in the background.
+    if( !live_has_filter && m_PresentationPreparationSource ) {
+        [self cancelPresentationPreparationNotifyingQuickSearch:false];
+        __weak NCPanelQuickSearch *weak_quick_search = _qs;
+        dispatch_to_main_queue([weak_quick_search] {
+            if( NCPanelQuickSearch *const quick_search = weak_quick_search )
+                [quick_search detachedFilteringDidCommit];
+        });
+        return true;
+    }
+
+    return [self scheduleLargePresentationPreparation:
+                     [](data::Model::PreparationOptions &_options) {
+                         _options.hard_filter.text.text = nil;
+                         _options.soft_filter.text = nil;
+                     }
+                                                  kind:PresentationPreparationKind::QuickSearchClearTextFilter];
+}
+
 - (void)quickSearch:(NCPanelQuickSearch *) [[maybe_unused]] _qs
     wantsToSetSearchPrompt:(NSString *)_prompt
           withMatchesCount:(int)_count
@@ -2388,7 +2990,13 @@ static void ShowAlertAboutInvalidFilename(const std::string &_filename)
 
 - (bool)isDoingBackgroundLoading
 {
-    return !m_DirectoryLoadingQ->Empty() || !m_DirectoryReLoadingQ->Empty();
+    return !m_DirectoryLoadingQ->Empty() || !m_DirectoryReLoadingQ->Empty() ||
+           !m_PresentationPreparationQ->Empty();
+}
+
+- (bool)isDirectorySizeCalculationBusy
+{
+    return !m_DirectorySizeCountingQ.Empty() || m_DirectorySizeCountingQ.IsStopped();
 }
 
 - (std::unique_ptr<nc::panel::DragReceiver>)panelView:(PanelView *) [[maybe_unused]] _view

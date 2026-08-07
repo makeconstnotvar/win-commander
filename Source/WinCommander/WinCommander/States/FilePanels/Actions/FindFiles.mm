@@ -1,6 +1,7 @@
 // Copyright (C) 2017-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include <VFS/VFSListingInput.h>
 #include <WinCommander/States/FilePanels/FindFilesSheetController.h>
+#include <WinCommander/States/Explorer/NCExplorerSearchPresenting.h>
 #include "../PanelController.h"
 #include "FindFiles.h"
 #include "../PanelView.h"
@@ -18,6 +19,14 @@ static const auto g_ConfigModalInternalViewer = "viewer.modalMode";
 
 namespace nc::panel::actions {
 
+static id<NCExplorerSearchPresenting> ExplorerSearchPresenter(PanelController *_target)
+{
+    id const state = _target.state;
+    return [state conformsToProtocol:@protocol(NCExplorerSearchPresenting)]
+               ? static_cast<id<NCExplorerSearchPresenting>>(state)
+               : nil;
+}
+
 FindFiles::FindFiles(std::function<NCViewerView *(NSRect)> _make_viewer,
                      std::function<NCViewerViewController *()> _make_controller)
     : m_MakeViewer{std::move(_make_viewer)}, m_MakeController{std::move(_make_controller)}
@@ -26,6 +35,8 @@ FindFiles::FindFiles(std::function<NCViewerView *(NSRect)> _make_viewer,
 
 bool FindFiles::Predicate(PanelController *_target) const
 {
+    if( id<NCExplorerSearchPresenting> const presenter = ExplorerSearchPresenter(_target) )
+        return [presenter canPresentSearchForPanel:_target];
     return _target.isUniform || _target.view.item;
 }
 
@@ -68,12 +79,21 @@ void FindFiles::Perform(PanelController *_target, id _sender) const
     if( !Predicate(_target) )
         return;
 
-    FindFilesSheetController *const sheet = [FindFilesSheetController new];
+    NSString *initial_query = nil;
     if( [_sender isKindOfClass:NSTextField.class] ) {
-        NSString *const mask = static_cast<NSTextField *>(_sender).stringValue;
-        if( mask.length )
-            sheet.initialFilenameMask = mask;
+        NSString *const candidate = static_cast<NSTextField *>(_sender).stringValue;
+        if( candidate.length )
+            initial_query = candidate;
     }
+    if( id<NCExplorerSearchPresenting> const presenter = ExplorerSearchPresenter(_target) ) {
+        [presenter presentSearchForPanel:_target
+                           initialQuery:initial_query
+                         preferredScope:NCExplorerSearchPreferredScopeCurrentFolder];
+        return;
+    }
+
+    FindFilesSheetController *const sheet = [FindFilesSheetController new];
+    sheet.initialFilenameMask = initial_query;
     sheet.vfsInstanceManager = &_target.vfsInstanceManager;
     sheet.host = _target.isUniform ? _target.vfs : _target.view.item.Host();
     sheet.path = _target.isUniform ? _target.currentDirectoryPath : _target.view.item.Directory();

@@ -34,6 +34,10 @@ class VFSInstanceManager;
 class ServicesHandler;
 } // namespace core
 
+namespace explorer {
+class ExplorerViewSettingsPersistence;
+} // namespace explorer
+
 namespace ops {
 class AggregateProgressTracker;
 class CopyOperationRunReceiptCustodian;
@@ -171,6 +175,9 @@ class NativeHost;
 @property(nonatomic, readonly) nc::viewer::hl::SettingsStorage &syntaxHighlightingSettingsStorage;
 
 @property(nonatomic, readonly) nc::panel::PanelDataPersistency &panelDataPersistency;
+
+/** Process-owned exact per-location Explorer presentation settings. */
+@property(nonatomic, readonly) nc::explorer::ExplorerViewSettingsPersistence &explorerViewSettingsPersistence;
 
 @property(nonatomic, readonly) nc::utility::ActionsShortcutsManager &actionsShortcutsManager;
 

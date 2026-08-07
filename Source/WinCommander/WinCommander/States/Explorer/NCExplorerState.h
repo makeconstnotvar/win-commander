@@ -3,8 +3,12 @@
 
 #include <Cocoa/Cocoa.h>
 #include "../MainWindowStateProtocol.h"
+#include "NCExplorerInspectorPresenting.h"
+#include "NCExplorerSearchPresenting.h"
+#include "ExplorerSessionPersistency.h"
 #include "NCPanelControllerHostingState.h"
 #include <Panel/PanelViewKeystrokeSink.h>
+#include <Panel/UI/PanelTabBarView.h>
 
 namespace nc::ops {
 class Pool;
@@ -19,11 +23,27 @@ class Pool;
  * to it - it never replaces the dual-pane state, which remains the app's permanent base window
  * state (see NCMainWindowController.setFilePanelsState:).
  */
-@interface NCExplorerState : NSView <NCMainWindowState, NCPanelControllerHostingState, NCPanelViewKeystrokeSink>
+@interface NCExplorerState : NSView <NCMainWindowState,
+                                     NCPanelControllerHostingState,
+                                     NCPanelViewKeystrokeSink,
+                                     NCExplorerInspectorPresenting,
+                                     NCExplorerSearchPresenting,
+                                     NCPanelTabBarViewDelegate,
+                                     NSMenuItemValidation>
 
 - (instancetype)initWithFrame:(NSRect)frameRect operationsPool:(nc::ops::Pool &)_pool;
 
 @property(nonatomic, readonly) PanelController *panelController;
+
+/**
+ * Replaces the initial Home intent with a decoded ordered Explorer session. Every restored tab
+ * receives a newly allocated process-local PaneId; persisted locations never carry pane identity,
+ * history or view settings. May be accepted only once, before runtime tab mutations begin.
+ */
+- (BOOL)restoreTabsFromSession:(const nc::explorer::ExplorerTabsSession &)_session;
+
+/** Captures ordered exact tab locations and the active index for window-session persistence. */
+- (nc::explorer::ExplorerTabsSession)captureTabsSession;
 
 // Called by NCMainWindow before Commander-mode configurable menu shortcuts are resolved.
 - (BOOL)handleModeSpecificKeyEquivalent:(NSEvent *)_event;

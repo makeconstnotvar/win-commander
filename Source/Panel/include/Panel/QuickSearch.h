@@ -3,6 +3,7 @@
 
 #include <Config/Config.h>
 #include <Panel/PanelViewKeystrokeSink.h>
+#include <Panel/PanelDataFilter.h>
 
 namespace nc::panel {
 namespace data {
@@ -39,6 +40,16 @@ constexpr auto g_ConfigIgnoreCharacters = "filePanel.quickSearch.ignoreCharacter
 - (void)quickSearchHasUpdatedData:(NCPanelQuickSearch *)_qs;
 - (void)quickSearch:(NCPanelQuickSearch *)_qs wantsToSetSearchPrompt:(NSString *)_prompt withMatchesCount:(int)_count;
 
+@optional
+
+// Returns true when the delegate accepted a detached large-list preparation. Small-list delegates
+// can omit these methods and keep the established synchronous Model behavior.
+- (bool)quickSearch:(NCPanelQuickSearch *)_qs
+    requestsDetachedHardFiltering:(const nc::panel::data::HardFilter &)_filter;
+- (bool)quickSearch:(NCPanelQuickSearch *)_qs
+    requestsDetachedSoftFiltering:(const nc::panel::data::TextualFilter &)_filter;
+- (bool)quickSearchRequestsDetachedTextFilteringClear:(NCPanelQuickSearch *)_qs;
+
 @end
 
 @interface NCPanelQuickSearch : NSObject <NCPanelViewKeystrokeSink>
@@ -53,5 +64,9 @@ constexpr auto g_ConfigIgnoreCharacters = "filePanel.quickSearch.ignoreCharacter
 // Notifies the QuickSearch that the associated Model has reloaded its data.
 // Potentially causes to update the search prompt UI
 - (void)dataUpdated;
+
+// Completion hooks for an accepted detached filter request. Stale requests never call commit.
+- (void)detachedFilteringDidCommit;
+- (void)detachedFilteringDidCancel;
 
 @end

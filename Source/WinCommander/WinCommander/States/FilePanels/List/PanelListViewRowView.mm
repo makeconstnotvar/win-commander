@@ -6,6 +6,7 @@
 #include "PanelListViewNameView.h"
 #include "PanelListViewSizeView.h"
 #include "PanelListViewRowView.h"
+#include "../PanelItemAccessibility.h"
 #include <Utility/ObjCpp.h>
 
 using namespace nc::panel;
@@ -14,6 +15,8 @@ using namespace nc::panel;
 
 @property(nonatomic) bool dropTarget;
 @property(nonatomic) bool highlighted;
+
+- (void)updateAccessibilityPresentation;
 
 @end
 
@@ -52,7 +55,11 @@ using namespace nc::panel;
         m_RowColor = NSColor.whiteColor;
         m_TextColor = NSColor.blackColor;
         m_TextSecondaryColor = NSColor.blackColor;
+        self.accessibilityElement = true;
+        self.accessibilityRole = NSAccessibilityRowRole;
+        self.accessibilityIdentifier = @"wincommander.explorer.list.item";
         self.selected = false;
+        [self updateAccessibilityPresentation];
         [self updateColors];
         [self registerForDraggedTypes:PanelView.acceptedDragAndDropTypes];
     }
@@ -79,6 +86,7 @@ using namespace nc::panel;
     if( m_PanelActive != panelActive ) {
         m_PanelActive = panelActive;
         [self updateColors];
+        [self updateAccessibilityPresentation];
     }
 }
 
@@ -87,7 +95,12 @@ using namespace nc::panel;
     if( m_Item != item ) {
         m_Item = item;
         m_Hovered = false;
+        if( !m_Item ) {
+            m_VD = data::ItemVolatileData{};
+            [super setSelected:false];
+        }
         [self updateColors];
+        [self updateAccessibilityPresentation];
     }
 }
 
@@ -103,6 +116,7 @@ using namespace nc::panel;
         [self updateColors];
         [self.sizeView setSizeWithItem:m_Item andVD:m_VD];
         self.highlighted = vd.is_highlighted();
+        [self updateAccessibilityPresentation];
     }
 }
 
@@ -117,7 +131,25 @@ using namespace nc::panel;
         [super setSelected:selected];
         [self updateLayer];
         [self updateColors];
+        [self updateAccessibilityPresentation];
     }
+}
+
+- (BOOL)isAccessibilitySelected
+{
+    return m_Item && (self.selected || m_VD.is_selected());
+}
+
+- (BOOL)isAccessibilityFocused
+{
+    return m_Item && self.selected && m_PanelActive;
+}
+
+- (void)updateAccessibilityPresentation
+{
+    const bool focused = self.selected && m_PanelActive;
+    const bool selected = self.selected || m_VD.is_selected();
+    UpdatePanelItemAccessibility(self, m_Item, selected, focused);
 }
 
 [[clang::no_destroy]] struct {

@@ -1,5 +1,6 @@
 // Copyright (C) 2017-2025 Michael Kazakov. Subject to GNU General Public License version 3.
 #include <VFS/Native.h>
+#include <VFS/ProviderCapabilities.h>
 #include <Utility/PathManip.h>
 #include "../PanelController.h"
 #include "../PanelAux.h"
@@ -39,16 +40,16 @@ struct PasteboardSourceItems {
     size_t listed_paths = 0;
 };
 
-static PasteboardSourceItems FetchVFSListingsItemsFromPasteboard(vfs::NativeHost &_native_host)
+static PasteboardSourceItems FetchVFSListingsItemsFromPasteboard(NSPasteboard *_pasteboard,
+                                                                vfs::NativeHost &_native_host)
 {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
     // check what's inside pasteboard
-    NSPasteboard *const pasteboard = NSPasteboard.generalPasteboard;
-    if( [pasteboard availableTypeFromArray:@[NSFilenamesPboardType]] ) {
+    if( [_pasteboard availableTypeFromArray:@[NSFilenamesPboardType]] ) {
         // input should be an array of filepaths as NSStrings
-        auto filepaths = objc_cast<NSArray>([pasteboard propertyListForType:NSFilenamesPboardType]);
+        auto filepaths = objc_cast<NSArray>([_pasteboard propertyListForType:NSFilenamesPboardType]);
 
         // currently fetching listings synchronously, which is BAAAD
         // (but we're on native vfs, at least for now)
@@ -93,50 +94,80 @@ static bool OriginalSourceItemsWereMoved(const std::vector<NativeSourceIdentity>
     });
 }
 
-static void PasteOrMove(PanelController *_target,
-                        bool _paste,
-                        vfs::NativeHost &_native_host,
-                        std::optional<PasteboardCutToken> _cut_token = std::nullopt,
-                        std::optional<PasteboardFileListToken> _file_list_token = std::nullopt)
+static PasteSubmissionResult PasteOrMove(PanelController *_target,
+                                         bool _paste,
+                                         vfs::NativeHost &_native_host,
+                                         NSPasteboard *_pasteboard,
+                                         std::optional<PasteboardCutToken> _cut_token = std::nullopt,
+                                         std::optional<PasteboardFileListToken> _file_list_token = std::nullopt)
 {
     const auto release_move_claim = [&] {
         if( _cut_token )
-            PasteboardSupport::ReleaseCut(NSPasteboard.generalPasteboard, *_cut_token);
+            PasteboardSupport::ReleaseCut(_pasteboard, *_cut_token);
         if( _file_list_token )
-            PasteboardSupport::ReleaseFileListMove(NSPasteboard.generalPasteboard, *_file_list_token);
+            PasteboardSupport::ReleaseFileListMove(_pasteboard, *_file_list_token);
     };
 
-    // check if we're on uniform panel with a writeable VFS
-    if( !_target.isUniform || !_target.vfs->IsWritable() ) {
+    if( !_pasteboard )
+        return PasteSubmissionResult::ClipboardUnavailable;
+    if( !_target ) {
         release_move_claim();
-        return;
+        return PasteSubmissionResult::PaneUnavailable;
     }
 
-    auto pasteboard_items = FetchVFSListingsItemsFromPasteboard(_native_host);
-
-    if( pasteboard_items.items.empty() ) {
+    auto *const window_controller = _target.mainWindowController;
+    VFSHostPtr destination_vfs;
+    std::string destination_path;
+    try {
+        if( !window_controller || _target.isDoingBackgroundLoading || !_target.isUniform || !_target.vfs ) {
+            release_move_claim();
+            return !window_controller ? PasteSubmissionResult::WindowUnavailable
+                                      : PasteSubmissionResult::DestinationUnavailable;
+        }
+        destination_vfs = _target.vfs;
+        destination_path = _target.currentDirectoryPath;
+        if( !vfs::ProviderCapabilitiesResolver::Resolve(*destination_vfs, destination_path).can_write ) {
+            release_move_claim();
+            return PasteSubmissionResult::DestinationReadOnly;
+        }
+    } catch( ... ) {
         release_move_claim();
-        return; // errors on fetching listings?
+        return PasteSubmissionResult::DestinationUnavailable;
     }
 
-    if( !_paste && pasteboard_items.items.size() != pasteboard_items.listed_paths ) {
+    auto pasteboard_items = FetchVFSListingsItemsFromPasteboard(_pasteboard, _native_host);
+
+    if( pasteboard_items.items.empty() || pasteboard_items.items.size() != pasteboard_items.listed_paths ) {
         release_move_claim();
-        return;
+        return PasteSubmissionResult::SourceUnavailable;
+    }
+
+    try {
+        if( _target.mainWindowController != window_controller || _target.isDoingBackgroundLoading ||
+            !_target.isUniform || !_target.vfs || _target.vfs != destination_vfs ||
+            _target.currentDirectoryPath != destination_path ||
+            !vfs::ProviderCapabilitiesResolver::Resolve(*destination_vfs, destination_path).can_write ) {
+            release_move_claim();
+            return PasteSubmissionResult::DestinationUnavailable;
+        }
+    } catch( ... ) {
+        release_move_claim();
+        return PasteSubmissionResult::DestinationUnavailable;
     }
 
     // Revalidate after reading the paths. An external clipboard replacement must never turn
     // a newly supplied file list into a destructive move.
     if( !_paste && _cut_token ) {
-        const auto current_token = PasteboardSupport::CurrentCutToken(NSPasteboard.generalPasteboard);
+        const auto current_token = PasteboardSupport::CurrentCutToken(_pasteboard);
         if( !current_token || *current_token != *_cut_token ) {
             release_move_claim();
-            return;
+            return PasteSubmissionResult::ClipboardChanged;
         }
     }
     if( !_paste && _file_list_token &&
-        !PasteboardSupport::IsFileListMoveClaimCurrent(NSPasteboard.generalPasteboard, *_file_list_token) ) {
+        !PasteboardSupport::IsFileListMoveClaimCurrent(_pasteboard, *_file_list_token) ) {
         release_move_claim();
-        return;
+        return PasteSubmissionResult::ClipboardChanged;
     }
 
     std::optional<std::vector<NativeSourceIdentity>> source_identities;
@@ -144,7 +175,7 @@ static void PasteOrMove(PanelController *_target,
         source_identities = CaptureSourceIdentities(pasteboard_items.items);
         if( !source_identities ) {
             release_move_claim();
-            return;
+            return PasteSubmissionResult::SourceUnavailable;
         }
     }
 
@@ -152,7 +183,7 @@ static void PasteOrMove(PanelController *_target,
     opts.docopy = _paste;
     __weak PanelController *wpc = _target;
     const auto op = std::make_shared<nc::ops::Copying>(
-        std::move(pasteboard_items.items), _target.currentDirectoryPath, _target.vfs, opts);
+        std::move(pasteboard_items.items), destination_path, destination_vfs, opts);
     op->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, [=] {
         dispatch_to_main_queue([=] {
             if( PanelController *const pc = wpc )
@@ -161,36 +192,40 @@ static void PasteOrMove(PanelController *_target,
     });
     if( !_paste ) {
         op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion,
-                              [cut_token = _cut_token,
+                              [pasteboard = _pasteboard,
+                               cut_token = _cut_token,
                                file_list_token = _file_list_token,
                                identities = std::move(*source_identities)] {
           const bool fully_moved = OriginalSourceItemsWereMoved(identities);
-          dispatch_to_main_queue([cut_token, file_list_token, fully_moved] {
+          dispatch_to_main_queue([pasteboard, cut_token, file_list_token, fully_moved] {
               if( cut_token ) {
                   if( fully_moved )
-                      PasteboardSupport::ConsumeCut(NSPasteboard.generalPasteboard, *cut_token);
+                      PasteboardSupport::ConsumeCut(pasteboard, *cut_token);
                   else
-                      PasteboardSupport::ReleaseCut(NSPasteboard.generalPasteboard, *cut_token);
+                      PasteboardSupport::ReleaseCut(pasteboard, *cut_token);
               }
               if( file_list_token ) {
                   if( fully_moved )
-                      PasteboardSupport::ConsumeFileListMove(NSPasteboard.generalPasteboard, *file_list_token);
+                      PasteboardSupport::ConsumeFileListMove(pasteboard, *file_list_token);
                   else
-                      PasteboardSupport::ReleaseFileListMove(NSPasteboard.generalPasteboard, *file_list_token);
+                      PasteboardSupport::ReleaseFileListMove(pasteboard, *file_list_token);
               }
           });
         });
         op->ObserveUnticketed(nc::ops::Operation::NotifyAboutStop,
-                              [cut_token = _cut_token, file_list_token = _file_list_token] {
-          dispatch_to_main_queue([cut_token, file_list_token] {
+                              [pasteboard = _pasteboard,
+                               cut_token = _cut_token,
+                               file_list_token = _file_list_token] {
+          dispatch_to_main_queue([pasteboard, cut_token, file_list_token] {
               if( cut_token )
-                  PasteboardSupport::ReleaseCut(NSPasteboard.generalPasteboard, *cut_token);
+                  PasteboardSupport::ReleaseCut(pasteboard, *cut_token);
               if( file_list_token )
-                  PasteboardSupport::ReleaseFileListMove(NSPasteboard.generalPasteboard, *file_list_token);
+                  PasteboardSupport::ReleaseFileListMove(pasteboard, *file_list_token);
           });
         });
     }
-    [_target.mainWindowController enqueueOperation:op];
+    [window_controller enqueueOperation:op];
+    return PasteSubmissionResult::Submitted;
 }
 
 PasteFromPasteboard::PasteFromPasteboard(nc::vfs::NativeHost &_native_host) : m_NativeHost(_native_host)
@@ -202,25 +237,33 @@ bool PasteFromPasteboard::Predicate(PanelController *_target) const
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     NSPasteboard *const pasteboard = NSPasteboard.generalPasteboard;
-    return _target.isUniform && _target.vfs->IsWritable() && PasteboardSupport::CanReadFileList(pasteboard) &&
-           !PasteboardSupport::IsCutInFlight(pasteboard) && !PasteboardSupport::IsFileListMoveInFlight(pasteboard);
+    if( !_target || !_target.mainWindowController || _target.isDoingBackgroundLoading || !_target.isUniform ||
+        !_target.vfs ) {
+        return false;
+    }
+    return vfs::ProviderCapabilitiesResolver::Resolve(*_target.vfs, _target.currentDirectoryPath).can_write &&
+           PasteboardSupport::CanReadFileList(pasteboard) && !PasteboardSupport::IsCutInFlight(pasteboard) &&
+           !PasteboardSupport::IsFileListMoveInFlight(pasteboard);
 #pragma clang diagnostic pop
 }
 
 void PasteFromPasteboard::Perform(PanelController *_target, [[maybe_unused]] id _sender) const
 {
-    NSPasteboard *const pasteboard = NSPasteboard.generalPasteboard;
-    if( !PasteboardSupport::CanReadFileList(pasteboard) ) {
+    if( Execute(_target) != PasteSubmissionResult::Submitted )
         NSBeep();
-        return;
-    }
+}
+
+PasteSubmissionResult PasteFromPasteboard::Execute(PanelController *_target, NSPasteboard *_pasteboard) const
+{
+    NSPasteboard *const pasteboard = _pasteboard != nil ? _pasteboard : NSPasteboard.generalPasteboard;
+    if( !PasteboardSupport::CanReadFileList(pasteboard) )
+        return PasteSubmissionResult::ClipboardUnavailable;
     const auto cut_token = PasteboardSupport::CurrentCutToken(pasteboard);
     if( PasteboardSupport::IsFileListMoveInFlight(pasteboard) ||
         (cut_token && !PasteboardSupport::TryClaimCut(pasteboard, *cut_token)) ) {
-        NSBeep();
-        return;
+        return PasteSubmissionResult::ClipboardBusy;
     }
-    PasteOrMove(_target, !cut_token, m_NativeHost, cut_token);
+    return PasteOrMove(_target, !cut_token, m_NativeHost, pasteboard, cut_token);
 }
 
 MoveFromPasteboard::MoveFromPasteboard(nc::vfs::NativeHost &_native_host) : m_NativeHost(_native_host)
@@ -263,7 +306,8 @@ void MoveFromPasteboard::Perform(PanelController *_target, [[maybe_unused]] id _
             return;
         }
     }
-    PasteOrMove(_target, false, m_NativeHost, cut_token, file_list_token);
+    [[maybe_unused]] const PasteSubmissionResult submitted =
+        PasteOrMove(_target, false, m_NativeHost, pasteboard, cut_token, file_list_token);
 }
 
 }; // namespace nc::panel::actions

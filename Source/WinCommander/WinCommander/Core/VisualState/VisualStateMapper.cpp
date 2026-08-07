@@ -39,11 +39,12 @@ PaneVisualKind KindForError(const FileManagerErrorCategory _category) noexcept
         case FileManagerErrorCategory::PathNotFoundError:
             return PaneVisualKind::PathNotFound;
         case FileManagerErrorCategory::VolumeUnavailableError:
+            return PaneVisualKind::VolumeDisconnected;
         case FileManagerErrorCategory::NetworkError:
         case FileManagerErrorCategory::TimeoutError:
         case FileManagerErrorCategory::AuthenticationError:
         case FileManagerErrorCategory::RateLimitError:
-            return PaneVisualKind::ProviderUnavailable;
+            return PaneVisualKind::RemoteUnavailable;
         case FileManagerErrorCategory::ProviderUnsupportedError:
             return PaneVisualKind::Unsupported;
         case FileManagerErrorCategory::ConflictError:
@@ -92,7 +93,8 @@ bool IsPaneError(const PaneVisualKind _kind) noexcept
     switch( _kind ) {
         case PaneVisualKind::PermissionBlocked:
         case PaneVisualKind::PathNotFound:
-        case PaneVisualKind::ProviderUnavailable:
+        case PaneVisualKind::VolumeDisconnected:
+        case PaneVisualKind::RemoteUnavailable:
         case PaneVisualKind::Unsupported:
         case PaneVisualKind::Error:
             return true;
@@ -142,6 +144,8 @@ PrimaryVisualState ResolvePrimary(const PaneSnapshot &_snapshot, const FileManag
         case PaneLoadPhase::Loading:
             return PrimaryVisualState{.kind = PaneVisualKind::Loading, .priority = VisualPriority::Activity};
         case PaneLoadPhase::Refreshing:
+            if( _snapshot.state.listing == nullptr )
+                return PrimaryVisualState{.kind = PaneVisualKind::Loading, .priority = VisualPriority::Activity};
             return PrimaryVisualState{.kind = PaneVisualKind::Refreshing, .priority = VisualPriority::Activity};
         case PaneLoadPhase::Loaded:
             if( _snapshot.state.item_count == 0 )
@@ -173,8 +177,8 @@ BreadcrumbVisualState MapBreadcrumb(const PaneSnapshot &_snapshot, const PaneVis
 
     // A failed navigation retains the last committed location and must remain recoverable through
     // the address editor. Only an initial/unavailable pane and an in-flight location change lock it.
-    result.editable = has_location && _snapshot.state.load_phase != PaneLoadPhase::Empty &&
-                      _snapshot.state.load_phase != PaneLoadPhase::Loading;
+    result.editable = has_location && _primary_kind != PaneVisualKind::Unavailable &&
+                      _primary_kind != PaneVisualKind::Loading;
     result.shows_activity = _primary_kind == PaneVisualKind::Loading || _primary_kind == PaneVisualKind::Refreshing;
     result.shows_error = IsPaneError(_primary_kind);
     return result;
@@ -225,7 +229,8 @@ PaneStatusVisualState MapStatus(const PaneSnapshot &_snapshot, const PrimaryVisu
             break;
         case PaneVisualKind::PermissionBlocked:
         case PaneVisualKind::PathNotFound:
-        case PaneVisualKind::ProviderUnavailable:
+        case PaneVisualKind::VolumeDisconnected:
+        case PaneVisualKind::RemoteUnavailable:
         case PaneVisualKind::Unsupported:
         case PaneVisualKind::Error:
             break;

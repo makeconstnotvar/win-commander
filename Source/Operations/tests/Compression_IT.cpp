@@ -42,6 +42,74 @@ static std::vector<VFSListingItem>
 FetchItems(const std::string &_directory_path, const std::vector<std::string> &_filenames, VFSHost &_host);
 static bool touch(const std::filesystem::path &_path);
 
+struct ExclusiveCreateRaceState {
+    bool open_called = false;
+    unsigned long open_flags = 0;
+    int unlink_calls = 0;
+    std::string created_path;
+};
+
+class ExclusiveCreateRaceFile final : public VFSFile
+{
+public:
+    ExclusiveCreateRaceFile(std::string_view _path,
+                            const VFSHostPtr &_host,
+                            std::shared_ptr<ExclusiveCreateRaceState> _state)
+        : VFSFile(_path, _host), m_State(std::move(_state))
+    {
+    }
+
+    std::expected<void, Error>
+    Open(const unsigned long _flags, const VFSCancelChecker & /*_cancel_checker*/) override
+    {
+        m_State->open_called = true;
+        m_State->open_flags = _flags;
+        return std::unexpected(Error{Error::POSIX, EEXIST});
+    }
+
+private:
+    std::shared_ptr<ExclusiveCreateRaceState> m_State;
+};
+
+class ExclusiveCreateRaceHost final : public vfs::Host
+{
+public:
+    explicit ExclusiveCreateRaceHost(std::shared_ptr<ExclusiveCreateRaceState> _state)
+        : Host("/", nullptr, "exclusive_create_race"), m_State(std::move(_state))
+    {
+    }
+
+    std::expected<VFSStat, Error>
+    Stat(std::string_view /*_path*/,
+         unsigned long /*_flags*/,
+         const VFSCancelChecker & /*_cancel_checker*/) override
+    {
+        return std::unexpected(Error{Error::POSIX, EIO});
+    }
+
+    HostErrorKind ClassifyError(const Error &_error) const noexcept override
+    {
+        return _error == Error{Error::POSIX, EIO} ? HostErrorKind::Missing : Host::ClassifyError(_error);
+    }
+
+    std::expected<std::shared_ptr<VFSFile>, Error>
+    CreateFile(std::string_view _path, const VFSCancelChecker & /*_cancel_checker*/) override
+    {
+        m_State->created_path = _path;
+        return std::make_shared<ExclusiveCreateRaceFile>(_path, SharedPtr(), m_State);
+    }
+
+    std::expected<void, Error>
+    Unlink(std::string_view /*_path*/, const VFSCancelChecker & /*_cancel_checker*/) override
+    {
+        ++m_State->unlink_calls;
+        return {};
+    }
+
+private:
+    std::shared_ptr<ExclusiveCreateRaceState> m_State;
+};
+
 TEST_CASE(PREFIX "Empty archive building")
 {
     const TempTestDir tmp_dir;
@@ -56,6 +124,43 @@ TEST_CASE(PREFIX "Empty archive building")
     std::shared_ptr<vfs::ArchiveHost> arc_host;
     REQUIRE_NOTHROW(arc_host = std::make_shared<vfs::ArchiveHost>(operation.ArchivePath(), native_host));
     CHECK(arc_host->StatTotalFiles() == 0);
+}
+
+TEST_CASE(PREFIX "Existing destination archive is preserved")
+{
+    const TempTestDir tmp_dir;
+    const auto native_host = TestEnv().vfs_native;
+    const std::filesystem::path source = tmp_dir.directory / "item";
+    const std::filesystem::path existing_archive = tmp_dir.directory / "item.zip";
+    std::ofstream(source) << "payload";
+    std::ofstream(existing_archive) << "sentinel";
+
+    Compression operation{FetchItems(tmp_dir.directory, {"item"}, *native_host), tmp_dir.directory, native_host};
+    operation.Start();
+    operation.Wait();
+
+    REQUIRE(operation.State() == OperationState::Completed);
+    CHECK(operation.ArchivePath() == (tmp_dir.directory / "item 2.zip").native());
+    REQUIRE(native_host->Exists(operation.ArchivePath()));
+
+    std::ifstream preserved(existing_archive);
+    const std::string contents{std::istreambuf_iterator<char>{preserved}, std::istreambuf_iterator<char>{}};
+    CHECK(contents == "sentinel");
+}
+
+TEST_CASE(PREFIX "Destination appearing after the name probe is preserved")
+{
+    const auto state = std::make_shared<ExclusiveCreateRaceState>();
+    const auto host = std::make_shared<ExclusiveCreateRaceHost>(state);
+    Compression operation{std::vector<VFSListingItem>{}, "/destination", host};
+    operation.Start();
+    operation.Wait();
+
+    CHECK(operation.State() == OperationState::Stopped);
+    CHECK(state->created_path == "/destination/Archive.zip");
+    CHECK(state->open_called);
+    CHECK((state->open_flags & VFSFlags::OF_NoExist) != 0);
+    CHECK(state->unlink_calls == 0);
 }
 
 TEST_CASE(PREFIX "Compressing Mac kernel")

@@ -41,6 +41,10 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     nc::config::Config *m_Config;
     std::array<nc::config::Token, 5> m_ConfigObservers;
     NSCharacterSet *m_IgnoreCharacters;
+    bool m_HasPendingDetachedFiltering;
+    bool m_PendingDetachedFilteringIsSoft;
+    uint64_t m_DetachedFilteringEpoch;
+    NSString *m_PendingSearchCriteria;
 }
 
 - (instancetype)initWithData:(nc::panel::data::Model &)_data
@@ -53,6 +57,9 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     m_Delegate = _delegate;
     m_Data = &_data;
     m_Config = &_config;
+    m_HasPendingDetachedFiltering = false;
+    m_PendingDetachedFilteringIsSoft = false;
+    m_DetachedFilteringEpoch = 0;
 
     // wire up config changing notifications
     auto wire = [&](std::string_view _path) {
@@ -103,6 +110,8 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
 
 - (NSString *)searchCriteria
 {
+    if( m_HasPendingDetachedFiltering )
+        return m_PendingSearchCriteria;
     if( m_IsSoftFiltering )
         return m_Data->SoftFiltering().text;
     else
@@ -111,6 +120,18 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
 
 - (void)discardFiltering
 {
+    if( [m_Delegate respondsToSelector:@selector(quickSearchRequestsDetachedTextFilteringClear:)] &&
+        [m_Delegate quickSearchRequestsDetachedTextFilteringClear:self] ) {
+        m_HasPendingDetachedFiltering = true;
+        m_PendingDetachedFilteringIsSoft = m_IsSoftFiltering;
+        ++m_DetachedFilteringEpoch;
+        m_PendingSearchCriteria = nil;
+        [self setPanelHeaderPrompt:nil withMatchesCount:0];
+        return;
+    }
+
+    m_HasPendingDetachedFiltering = false;
+    m_PendingSearchCriteria = nil;
     const auto pers = CursorBackup{[m_Delegate quickSearchNeedsCursorPosition:self], *m_Data};
     const auto any_changed = m_Data->ClearTextFiltering();
     [self setPanelHeaderPrompt:nil withMatchesCount:0];
@@ -143,8 +164,7 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     if( IsQuickSearchStringCharacter(character) )
         return view::BiddingPriority::Default;
 
-    bool empty_now =
-        m_IsSoftFiltering ? m_Data->SoftFiltering().text.length == 0 : m_Data->HardFiltering().text.text.length == 0;
+    const bool empty_now = self.searchCriteria.length == 0;
 
     if( !empty_now ) {
         if( IsBackspace(character) )
@@ -177,7 +197,7 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
 - (void)eatKeydownForHardFiltering:(NSEvent *)_event
 {
     const auto key = _event.charactersIgnoringModifiers.decomposedStringWithCanonicalMapping;
-    const auto current = m_Data->HardFiltering().text.text;
+    const auto current = self.searchCriteria;
     const auto replace = ModifyStringByKeyDownString(current, key);
 
     if( replace == nil || replace.length == 0 ) {
@@ -209,7 +229,7 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     }
 
     const auto is_in_progress = m_SoftFilteringLastAction + g_SoftFilteringTimeout >= nc::base::machtime();
-    const auto current = is_in_progress ? m_Data->SoftFiltering().text : static_cast<NSString *>(nil);
+    const auto current = is_in_progress ? self.searchCriteria : static_cast<NSString *>(nil);
     const auto replace = ModifyStringByKeyDownString(current, key);
 
     if( replace == nil || replace.length == 0 ) {
@@ -223,7 +243,7 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
 - (void)setHardFiltering:(NSString *)_text
 {
     auto filtering = m_Data->HardFiltering();
-    if( filtering.text.text == _text || [filtering.text.text isEqualToString:_text] )
+    if( self.searchCriteria == _text || [self.searchCriteria isEqualToString:_text] )
         return;
 
     filtering.text.text = _text;
@@ -235,6 +255,19 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     filtering.text.type = m_WhereToSearch;
     filtering.text.clear_on_new_listing = true;
     filtering.text.hightlight_results = m_ShowTyping;
+    if( [m_Delegate respondsToSelector:@selector(quickSearch:requestsDetachedHardFiltering:)] &&
+        [m_Delegate quickSearch:self requestsDetachedHardFiltering:filtering] ) {
+        m_HasPendingDetachedFiltering = true;
+        m_PendingDetachedFilteringIsSoft = false;
+        ++m_DetachedFilteringEpoch;
+        m_PendingSearchCriteria = [_text copy];
+        if( m_ShowTyping )
+            [self setPanelHeaderPrompt:m_PendingSearchCriteria withMatchesCount:0];
+        return;
+    }
+
+    m_HasPendingDetachedFiltering = false;
+    m_PendingSearchCriteria = nil;
     m_Data->SetHardFiltering(filtering);
 
     [m_Delegate quickSearch:self wantsToSetCursorPosition:pers.RestoredCursorPosition()];
@@ -263,9 +296,22 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     filtering.type = m_WhereToSearch;
     filtering.ignore_dot_dot = false;
     filtering.hightlight_results = m_ShowTyping;
-    m_Data->SetSoftFiltering(filtering);
-
     m_SoftFilteringLastAction = current_time;
+    if( [m_Delegate respondsToSelector:@selector(quickSearch:requestsDetachedSoftFiltering:)] &&
+        [m_Delegate quickSearch:self requestsDetachedSoftFiltering:filtering] ) {
+        m_HasPendingDetachedFiltering = true;
+        m_PendingDetachedFilteringIsSoft = true;
+        ++m_DetachedFilteringEpoch;
+        m_PendingSearchCriteria = [_text copy];
+        if( m_ShowTyping )
+            [self setPanelHeaderPrompt:m_PendingSearchCriteria withMatchesCount:0];
+        [self scheduleSoftFilteringCleanup];
+        return;
+    }
+
+    m_HasPendingDetachedFiltering = false;
+    m_PendingSearchCriteria = nil;
+    m_Data->SetSoftFiltering(filtering);
 
     const auto filtered_amount = static_cast<int>(m_Data->EntriesBySoftFiltering().size());
 
@@ -356,10 +402,54 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     [self updateTypingUI];
 }
 
+- (void)detachedFilteringDidCommit
+{
+    if( !m_HasPendingDetachedFiltering )
+        return;
+
+    const bool was_soft = m_PendingDetachedFilteringIsSoft;
+    m_HasPendingDetachedFiltering = false;
+    m_PendingSearchCriteria = nil;
+
+    if( was_soft ) {
+        const auto filtered_amount = static_cast<int>(m_Data->EntriesBySoftFiltering().size());
+        if( filtered_amount != 0 ) {
+            if( m_SoftFilteringOffset >= filtered_amount )
+                m_SoftFilteringOffset = filtered_amount - 1;
+            const auto new_cur_pos = m_Data->EntriesBySoftFiltering()[m_SoftFilteringOffset];
+            [m_Delegate quickSearch:self wantsToSetCursorPosition:new_cur_pos];
+        }
+        if( m_ShowTyping )
+            [m_Delegate quickSearchHasChangedVolatileData:self];
+    }
+    else {
+        [m_Delegate quickSearchHasUpdatedData:self];
+        if( [m_Delegate quickSearchNeedsCursorPosition:self] == 0 &&
+            m_Data->SortedDirectoryEntries().size() >= 2 &&
+            m_Data->EntryAtRawPosition(m_Data->SortedDirectoryEntries()[0]).IsDotDot() )
+            [m_Delegate quickSearch:self wantsToSetCursorPosition:1];
+    }
+    [self updateTypingUI];
+}
+
+- (void)detachedFilteringDidCancel
+{
+    if( !m_HasPendingDetachedFiltering )
+        return;
+    m_HasPendingDetachedFiltering = false;
+    m_PendingSearchCriteria = nil;
+    [self updateTypingUI];
+}
+
 - (void)updateTypingUI
 {
     if( !m_ShowTyping )
         return;
+
+    if( m_HasPendingDetachedFiltering ) {
+        [self setPanelHeaderPrompt:m_PendingSearchCriteria withMatchesCount:0];
+        return;
+    }
 
     if( m_IsSoftFiltering ) {
         const auto filtering = m_Data->SoftFiltering();

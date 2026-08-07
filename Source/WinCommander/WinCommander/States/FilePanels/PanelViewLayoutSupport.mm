@@ -1,10 +1,11 @@
-// Copyright (C) 2016-2025 Michael Kazakov. Subject to GNU General Public License version 3.
+// Copyright (C) 2016-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "PanelViewLayoutSupport.h"
 #include <WinCommander/Bootstrap/Config.h>
 #include <Config/RapidJSON.h>
 #include <Base/dispatch_cpp.h>
 #include <Utility/ObjCpp.h>
 #include <Utility/StringExtras.h>
+#include <array>
 
 namespace nc::panel {
 
@@ -34,6 +35,104 @@ const PanelListViewColumnsLayout *PanelViewLayout::list() const noexcept
 }
 
 bool PanelViewLayout::operator==(const PanelViewLayout &_rhs) const noexcept = default;
+
+namespace {
+
+constexpr int g_MinItemWidth = 16;
+constexpr int g_MaxItemWidth = 8192;
+constexpr int g_MaxBriefColumns = 64;
+constexpr int g_MinIconScale = 0;
+constexpr int g_MaxIconScale = 3;
+constexpr int g_MinTextLines = 1;
+constexpr int g_MaxTextLines = 4;
+
+bool IsKnownColumn(const PanelListViewColumns _kind) noexcept
+{
+    switch( _kind ) {
+        case PanelListViewColumns::Filename:
+        case PanelListViewColumns::Extension:
+        case PanelListViewColumns::Size:
+        case PanelListViewColumns::DateCreated:
+        case PanelListViewColumns::DateAdded:
+        case PanelListViewColumns::DateModified:
+        case PanelListViewColumns::DateAccessed:
+        case PanelListViewColumns::Tags:
+            return true;
+        case PanelListViewColumns::Empty:
+        default:
+            return false;
+    }
+}
+
+bool IsValidOptionalWidth(const int _width) noexcept
+{
+    return _width == -1 || (_width >= g_MinItemWidth && _width <= g_MaxItemWidth);
+}
+
+bool IsValidBrief(const PanelBriefViewColumnsLayout &_layout) noexcept
+{
+    using Mode = PanelBriefViewColumnsLayout::Mode;
+    if( _layout.icon_scale < g_MinIconScale || _layout.icon_scale > g_MaxIconScale )
+        return false;
+    switch( _layout.mode ) {
+        case Mode::FixedWidth:
+            return _layout.fixed_mode_width >= g_MinItemWidth && _layout.fixed_mode_width <= g_MaxItemWidth;
+        case Mode::FixedAmount:
+            return _layout.fixed_amount_value >= 1 && _layout.fixed_amount_value <= g_MaxBriefColumns;
+        case Mode::DynamicWidth:
+            return _layout.dynamic_width_min >= g_MinItemWidth && _layout.dynamic_width_max <= g_MaxItemWidth &&
+                   _layout.dynamic_width_min <= _layout.dynamic_width_max;
+        default:
+            return false;
+    }
+}
+
+bool IsValidList(const PanelListViewColumnsLayout &_layout) noexcept
+{
+    if( _layout.icon_scale < g_MinIconScale || _layout.icon_scale > g_MaxIconScale || _layout.columns.empty() ||
+        _layout.columns.size() > 8 )
+        return false;
+
+    std::array<bool, 9> seen{};
+    for( const auto &column : _layout.columns ) {
+        if( !IsKnownColumn(column.kind) )
+            return false;
+        const auto index = static_cast<size_t>(column.kind);
+        if( index >= seen.size() || seen[index] )
+            return false;
+        seen[index] = true;
+
+        if( !IsValidOptionalWidth(column.width) || !IsValidOptionalWidth(column.min_width) ||
+            !IsValidOptionalWidth(column.max_width) )
+            return false;
+        if( column.min_width >= 0 && column.max_width >= 0 && column.min_width > column.max_width )
+            return false;
+        if( column.width >= 0 && column.min_width >= 0 && column.width < column.min_width )
+            return false;
+        if( column.width >= 0 && column.max_width >= 0 && column.width > column.max_width )
+            return false;
+    }
+    return seen[static_cast<size_t>(PanelListViewColumns::Filename)];
+}
+
+bool IsValidGallery(const PanelGalleryViewLayout &_layout) noexcept
+{
+    return _layout.icon_scale >= g_MinIconScale && _layout.icon_scale <= g_MaxIconScale &&
+           _layout.text_lines >= g_MinTextLines && _layout.text_lines <= g_MaxTextLines;
+}
+
+} // namespace
+
+bool IsValidPanelViewLayout(const PanelViewLayout &_layout) noexcept
+{
+    if( const auto brief = _layout.brief() )
+        return IsValidBrief(*brief);
+    if( const auto list = _layout.list() )
+        return IsValidList(*list);
+    if( const auto gallery = _layout.gallery() )
+        return IsValidGallery(*gallery);
+    return false;
+}
 
 static const auto g_TitleKey = "title";
 static const auto g_BriefKey = "brief";

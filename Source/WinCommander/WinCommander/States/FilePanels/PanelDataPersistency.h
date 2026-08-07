@@ -17,16 +17,22 @@ class VFSInstanceManager;
 namespace nc::panel {
 
 struct PersistentLocation {
-    [[nodiscard]] [[nodiscard]] [[nodiscard]] [[nodiscard]] bool is_native() const noexcept;
-    [[nodiscard]] [[nodiscard]] [[nodiscard]] [[nodiscard]] bool is_network() const noexcept;
+    [[nodiscard]] bool is_native() const noexcept;
+    [[nodiscard]] bool is_network() const noexcept;
     std::vector<std::any> hosts; // .front() is a deepest host, .back() is topmost
                                  // empty hosts means using native vfs
     std::string path;
 };
 
+struct PanelDataPersistencyVFSRestoreOptions {
+    bool allow_password_ui = true;
+};
+
 class PanelDataPersistency
 {
 public:
+    using VFSRestoreOptions = PanelDataPersistencyVFSRestoreOptions;
+
     PanelDataPersistency(NetworkConnectionsManager &_conn_manager);
 
     std::string MakeFootprintString(const PersistentLocation &_loc);
@@ -56,7 +62,8 @@ public:
 
     // uses current state to retrieve existing vfs if possible
     std::expected<VFSHostPtr, Error> CreateVFSFromLocation(const PersistentLocation &_state,
-                                                           core::VFSInstanceManager &_inst_mgr);
+                                                           core::VFSInstanceManager &_inst_mgr,
+                                                           VFSRestoreOptions _options = {});
 
     std::string GetPathFromState(const json &_state);
 

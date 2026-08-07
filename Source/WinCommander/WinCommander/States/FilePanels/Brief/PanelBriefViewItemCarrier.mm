@@ -102,6 +102,11 @@ static NSParagraphStyle *ParagraphStyle(PanelViewFilenameTrimming _mode)
     return true;
 }
 
+- (BOOL)isAccessibilityFocused
+{
+    return m_Controller.selected && m_Controller.panelActive;
+}
+
 - (BOOL)wantsDefaultClipping
 {
     return false;

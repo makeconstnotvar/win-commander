@@ -17,6 +17,29 @@
 		D4C04D0231A2C0DE00000001 /* CommandRegistry_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */; };
 		F1C0A00131A2C0DE00000001 /* FileCopyCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */; };
 		F1C0A00231A2C0DE00000001 /* FileCopyCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */; };
+		A8E1000131F3000000000001 /* ArchiveExtractionManifest.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A8E1000131F3000000000012 /* ArchiveExtractionManifest.cpp */; };
+		A8E1000131F3000000000002 /* ArchiveExtractionManifest_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A8E1000131F3000000000013 /* ArchiveExtractionManifest_UT.cpp */; };
+		D83F000131F5000000000001 /* NCExplorerInspectorModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D83F000131F5000000000012 /* NCExplorerInspectorModel.cpp */; };
+		D83F000131F5000000000002 /* ExplorerInspectorModel_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D83F000131F5000000000013 /* ExplorerInspectorModel_UT.cpp */; };
+		D84A000131F8000000000001 /* NCExplorerInspectorView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D84A000131F8000000000012 /* NCExplorerInspectorView.mm */; };
+		D84A000131F8000000000002 /* ExplorerInspectorView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D84A000131F8000000000013 /* ExplorerInspectorView_UT.mm */; };
+		A7B700013201000000000001 /* NCExplorerPaneStateView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7B700013201000000000012 /* NCExplorerPaneStateView.mm */; };
+		A7B700013201000000000002 /* ExplorerPaneStateView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7B700013201000000000013 /* ExplorerPaneStateView_UT.mm */; };
+		A7C700013203000000000001 /* InlineRename.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7C700013203000000000012 /* InlineRename.mm */; };
+		A7C700013203000000000002 /* InlineRenameAction_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7C700013203000000000013 /* InlineRenameAction_UT.mm */; };
+		A7D700013204000000000001 /* DragDropPolicy.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7D700013204000000000012 /* DragDropPolicy.mm */; };
+		A7D700013204000000000002 /* DragDropPolicy_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = A7D700013204000000000013 /* DragDropPolicy_UT.mm */; };
+		F19F000131F6000000000001 /* FileGetInfoCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F19F000131F6000000000012 /* FileGetInfoCommand.cpp */; };
+		F19F000131F6000000000002 /* FileMetadataSnapshot.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F19F000131F6000000000015 /* FileMetadataSnapshot.cpp */; };
+		F19F000131F6000000000003 /* FileGetInfoCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F19F000131F6000000000013 /* FileGetInfoCommand_UT.cpp */; };
+		E5A3000131F7000000000001 /* FilePreviewCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E5A3000131F7000000000012 /* FilePreviewCommand.cpp */; };
+		E5A3000131F7000000000002 /* FilePreviewCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E5A3000131F7000000000013 /* FilePreviewCommand_UT.cpp */; };
+		E5A4000131F8000000000001 /* TogglePreviewPaneCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E5A4000131F8000000000012 /* TogglePreviewPaneCommand.cpp */; };
+		E5A4000131F8000000000002 /* TogglePreviewPaneCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E5A4000131F8000000000013 /* TogglePreviewPaneCommand_UT.cpp */; };
+		B9E2000131F4000000000001 /* ExtractArchive.mm in Sources */ = {isa = PBXBuildFile; fileRef = B9E2000131F4000000000012 /* ExtractArchive.mm */; };
+		C1A7000131F5000000000001 /* ExtractArchiveAction_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = C1A7000131F5000000000002 /* ExtractArchiveAction_UT.mm */; };
+		F17E000131F1000000000001 /* FileMutationCommands.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F17E000131F1000000000012 /* FileMutationCommands.cpp */; };
+		F17E000131F1000000000002 /* FileMutationCommands_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F17E000131F1000000000013 /* FileMutationCommands_UT.cpp */; };
 		C0A5200131E2000000000001 /* ReviewedCopyAsPolicy_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */; };
 		D7C1000131E3000000000001 /* CopyOperationRecoveryCoordinator.mm in Sources */ = {isa = PBXBuildFile; fileRef = D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */; };
 		D7C1000231E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */; };
@@ -36,8 +59,36 @@
 		BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */; };
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
+		E7AB000131FA000000000001 /* ExplorerTabsModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7AB000131FA000000000012 /* ExplorerTabsModel.cpp */; };
+		E7AB000131FA000000000002 /* ExplorerTabsModel_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7AB000131FA000000000013 /* ExplorerTabsModel_UT.cpp */; };
+		E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */; };
+		A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5E5000131FB000000000012 /* ExplorerViewSettingsPersistence.cpp */; };
+		A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */; };
+		B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B6F5000131FC000000000011 /* ExplorerViewSettingsBinding.cpp */; };
+		B6F5000131FC000000000002 /* ExplorerViewSettingsBinding_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B6F5000131FC000000000012 /* ExplorerViewSettingsBinding_UT.cpp */; };
+		C6E6000131FD000000000001 /* ExplorerSessionPersistency.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C6E6000131FD000000000011 /* ExplorerSessionPersistency.cpp */; };
+		C6E6000131FD000000000002 /* ExplorerSessionPersistency_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C6E6000131FD000000000012 /* ExplorerSessionPersistency_UT.cpp */; };
 		9A10A00131B0000000000001 /* VisualStateMapper.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9A10A00131B0000000000013 /* VisualStateMapper.cpp */; };
 		9A10A00131B0000000000002 /* VisualStateMapper_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 9A10A00131B0000000000014 /* VisualStateMapper_UT.cpp */; };
+		D8E800013205000000000001 /* ExplorerOperationProgressModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D8E800013205000000000012 /* ExplorerOperationProgressModel.cpp */; };
+		D8E800013205000000000002 /* ExplorerOperationProgressModel_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D8E800013205000000000013 /* ExplorerOperationProgressModel_UT.cpp */; };
+		D8E801013205000000000001 /* ExplorerOperationProgressController.mm in Sources */ = {isa = PBXBuildFile; fileRef = D8E801013205000000000012 /* ExplorerOperationProgressController.mm */; };
+		D8E801013205000000000002 /* NCExplorerOperationProgressView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D8E801013205000000000014 /* NCExplorerOperationProgressView.mm */; };
+		D8E801013205000000000003 /* ExplorerOperationProgressView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D8E801013205000000000015 /* ExplorerOperationProgressView_UT.mm */; };
+		E9A900013206000000000001 /* SearchPlanning.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000013 /* SearchPlanning.cpp */; };
+		E9A900013206000000000002 /* SearchStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000015 /* SearchStore.cpp */; };
+		E9A900013206000000000003 /* SearchResultListingBuilder.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000018 /* SearchResultListingBuilder.cpp */; };
+		E9A900013206000000000004 /* NCExplorerSearchModeView.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A90001320600000000001A /* NCExplorerSearchModeView.mm */; };
+		E9A900013206000000000005 /* SearchStore_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000021 /* SearchStore_UT.cpp */; };
+		E9A900013206000000000006 /* SearchResultListingBuilder_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000022 /* SearchResultListingBuilder_UT.cpp */; };
+		E9A900013206000000000007 /* ExplorerSearchActions_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000023 /* ExplorerSearchActions_UT.mm */; };
+		E9A900013206000000000008 /* ExplorerSearchModeView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000024 /* ExplorerSearchModeView_UT.mm */; };
+		E9A900013206000000000009 /* ExplorerDirectSearchBackend.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000032 /* ExplorerDirectSearchBackend.mm */; };
+		E9A90001320600000000000A /* ExplorerSearchController.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000034 /* ExplorerSearchController.mm */; };
+		E9A90001320600000000000B /* ExplorerSpotlightSearchBackend.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000036 /* ExplorerSpotlightSearchBackend.mm */; };
+		E9A90001320600000000000C /* ExplorerSearchController_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000037 /* ExplorerSearchController_UT.mm */; };
+		E9A90001320600000000000D /* ExplorerSpotlightSearchBackend_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000038 /* ExplorerSpotlightSearchBackend_UT.mm */; };
+		E9A90001320600000000000E /* ExplorerDirectSearchBackend_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E9A900013206000000000039 /* ExplorerDirectSearchBackend_UT.mm */; };
 		B71A000131B1000000000001 /* CommandPresentationAdapter.mm in Sources */ = {isa = PBXBuildFile; fileRef = B71A000131B1000000000012 /* CommandPresentationAdapter.mm */; };
 		B71A000131B1000000000002 /* NCEditMenuPresentationDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = B71A000131B1000000000014 /* NCEditMenuPresentationDelegate.mm */; };
 		B71A000131B1000000000003 /* CommandPresentationAdapter_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = B71A000131B1000000000015 /* CommandPresentationAdapter_UT.mm */; };
@@ -949,6 +1000,42 @@
 		F1C0A01131A2C0DE00000001 /* FileCopyCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileCopyCommand.h; path = WinCommander/Core/Commands/FileCopyCommand.h; sourceTree = SOURCE_ROOT; };
 		F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCopyCommand.cpp; path = WinCommander/Core/Commands/FileCopyCommand.cpp; sourceTree = SOURCE_ROOT; };
 		F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileCopyCommand_UT.cpp; path = WinCommander/Tests/FileCopyCommand_UT.cpp; sourceTree = "<group>"; };
+		F17E000131F1000000000011 /* FileMutationCommands.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileMutationCommands.h; path = WinCommander/Core/Commands/FileMutationCommands.h; sourceTree = SOURCE_ROOT; };
+		F17E000131F1000000000012 /* FileMutationCommands.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileMutationCommands.cpp; path = WinCommander/Core/Commands/FileMutationCommands.cpp; sourceTree = SOURCE_ROOT; };
+		F17E000131F1000000000013 /* FileMutationCommands_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileMutationCommands_UT.cpp; path = WinCommander/Tests/FileMutationCommands_UT.cpp; sourceTree = "<group>"; };
+		A8E1000131F3000000000011 /* ArchiveExtractionManifest.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ArchiveExtractionManifest.h; path = WinCommander/Core/Operations/ArchiveExtractionManifest.h; sourceTree = SOURCE_ROOT; };
+		A8E1000131F3000000000012 /* ArchiveExtractionManifest.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ArchiveExtractionManifest.cpp; path = WinCommander/Core/Operations/ArchiveExtractionManifest.cpp; sourceTree = SOURCE_ROOT; };
+		A8E1000131F3000000000013 /* ArchiveExtractionManifest_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ArchiveExtractionManifest_UT.cpp; path = WinCommander/Tests/ArchiveExtractionManifest_UT.cpp; sourceTree = "<group>"; };
+		D83F000131F5000000000011 /* NCExplorerInspectorModel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerInspectorModel.h; path = WinCommander/States/Explorer/NCExplorerInspectorModel.h; sourceTree = SOURCE_ROOT; };
+		D83F000131F5000000000012 /* NCExplorerInspectorModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NCExplorerInspectorModel.cpp; path = WinCommander/States/Explorer/NCExplorerInspectorModel.cpp; sourceTree = SOURCE_ROOT; };
+		D83F000131F5000000000013 /* ExplorerInspectorModel_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerInspectorModel_UT.cpp; path = WinCommander/Tests/ExplorerInspectorModel_UT.cpp; sourceTree = "<group>"; };
+		D84A000131F8000000000011 /* NCExplorerInspectorView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerInspectorView.h; path = WinCommander/States/Explorer/NCExplorerInspectorView.h; sourceTree = SOURCE_ROOT; };
+		D84A000131F8000000000012 /* NCExplorerInspectorView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerInspectorView.mm; path = WinCommander/States/Explorer/NCExplorerInspectorView.mm; sourceTree = SOURCE_ROOT; };
+		D84A000131F8000000000013 /* ExplorerInspectorView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerInspectorView_UT.mm; path = WinCommander/Tests/ExplorerInspectorView_UT.mm; sourceTree = "<group>"; };
+		A7B700013201000000000011 /* NCExplorerPaneStateView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerPaneStateView.h; path = WinCommander/States/Explorer/NCExplorerPaneStateView.h; sourceTree = SOURCE_ROOT; };
+		A7B700013201000000000012 /* NCExplorerPaneStateView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerPaneStateView.mm; path = WinCommander/States/Explorer/NCExplorerPaneStateView.mm; sourceTree = SOURCE_ROOT; };
+		A7B700013201000000000013 /* ExplorerPaneStateView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerPaneStateView_UT.mm; path = WinCommander/Tests/ExplorerPaneStateView_UT.mm; sourceTree = "<group>"; };
+		F19F000131F6000000000011 /* FileGetInfoCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileGetInfoCommand.h; path = WinCommander/Core/Commands/FileGetInfoCommand.h; sourceTree = SOURCE_ROOT; };
+		F19F000131F6000000000012 /* FileGetInfoCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileGetInfoCommand.cpp; path = WinCommander/Core/Commands/FileGetInfoCommand.cpp; sourceTree = SOURCE_ROOT; };
+		F19F000131F6000000000013 /* FileGetInfoCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileGetInfoCommand_UT.cpp; path = WinCommander/Tests/FileGetInfoCommand_UT.cpp; sourceTree = "<group>"; };
+		F19F000131F6000000000014 /* FileMetadataSnapshot.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FileMetadataSnapshot.h; path = WinCommander/Core/Metadata/FileMetadataSnapshot.h; sourceTree = SOURCE_ROOT; };
+		F19F000131F6000000000015 /* FileMetadataSnapshot.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FileMetadataSnapshot.cpp; path = WinCommander/Core/Metadata/FileMetadataSnapshot.cpp; sourceTree = SOURCE_ROOT; };
+		E5A3000131F7000000000011 /* FilePreviewCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FilePreviewCommand.h; path = WinCommander/Core/Commands/FilePreviewCommand.h; sourceTree = SOURCE_ROOT; };
+		E5A3000131F7000000000012 /* FilePreviewCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FilePreviewCommand.cpp; path = WinCommander/Core/Commands/FilePreviewCommand.cpp; sourceTree = SOURCE_ROOT; };
+		E5A3000131F7000000000013 /* FilePreviewCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FilePreviewCommand_UT.cpp; path = WinCommander/Tests/FilePreviewCommand_UT.cpp; sourceTree = "<group>"; };
+		E5A4000131F8000000000011 /* TogglePreviewPaneCommand.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = TogglePreviewPaneCommand.h; path = WinCommander/Core/Commands/TogglePreviewPaneCommand.h; sourceTree = SOURCE_ROOT; };
+		E5A4000131F8000000000012 /* TogglePreviewPaneCommand.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = TogglePreviewPaneCommand.cpp; path = WinCommander/Core/Commands/TogglePreviewPaneCommand.cpp; sourceTree = SOURCE_ROOT; };
+		E5A4000131F8000000000013 /* TogglePreviewPaneCommand_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = TogglePreviewPaneCommand_UT.cpp; path = WinCommander/Tests/TogglePreviewPaneCommand_UT.cpp; sourceTree = "<group>"; };
+		E5A5000131F9000000000011 /* NCExplorerInspectorPresenting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerInspectorPresenting.h; path = WinCommander/States/Explorer/NCExplorerInspectorPresenting.h; sourceTree = SOURCE_ROOT; };
+		B9E2000131F4000000000011 /* ExtractArchive.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ExtractArchive.h; path = WinCommander/States/FilePanels/Actions/ExtractArchive.h; sourceTree = SOURCE_ROOT; };
+		B9E2000131F4000000000012 /* ExtractArchive.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = ExtractArchive.mm; path = WinCommander/States/FilePanels/Actions/ExtractArchive.mm; sourceTree = SOURCE_ROOT; };
+		C1A7000131F5000000000002 /* ExtractArchiveAction_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExtractArchiveAction_UT.mm; path = WinCommander/Tests/ExtractArchiveAction_UT.mm; sourceTree = "<group>"; };
+		A7C700013203000000000011 /* InlineRename.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = InlineRename.h; path = WinCommander/States/FilePanels/Actions/InlineRename.h; sourceTree = SOURCE_ROOT; };
+		A7C700013203000000000012 /* InlineRename.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = InlineRename.mm; path = WinCommander/States/FilePanels/Actions/InlineRename.mm; sourceTree = SOURCE_ROOT; };
+		A7C700013203000000000013 /* InlineRenameAction_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = InlineRenameAction_UT.mm; path = WinCommander/Tests/InlineRenameAction_UT.mm; sourceTree = "<group>"; };
+		A7D700013204000000000011 /* DragDropPolicy.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = DragDropPolicy.h; path = WinCommander/States/FilePanels/DragDropPolicy.h; sourceTree = SOURCE_ROOT; };
+		A7D700013204000000000012 /* DragDropPolicy.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = DragDropPolicy.mm; path = WinCommander/States/FilePanels/DragDropPolicy.mm; sourceTree = SOURCE_ROOT; };
+		A7D700013204000000000013 /* DragDropPolicy_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = DragDropPolicy_UT.mm; path = WinCommander/Tests/DragDropPolicy_UT.mm; sourceTree = "<group>"; };
 		C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ReviewedCopyAsPolicy_UT.mm; path = WinCommander/Tests/ReviewedCopyAsPolicy_UT.mm; sourceTree = "<group>"; };
 		D7C1001131E3000000000001 /* CopyOperationRecoveryCoordinator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyOperationRecoveryCoordinator.h; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h; sourceTree = SOURCE_ROOT; };
 		D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CopyOperationRecoveryCoordinator.mm; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.mm; sourceTree = SOURCE_ROOT; };
@@ -980,10 +1067,54 @@
 		BAEC000241D3000000000014 /* PaneNavigationAvailability.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationAvailability.h; path = WinCommander/Core/Pane/PaneNavigationAvailability.h; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability_UT.cpp; path = WinCommander/Tests/PaneNavigationAvailability_UT.cpp; sourceTree = "<group>"; };
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
+		E7AB000131FA000000000011 /* ExplorerTabsModel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerTabsModel.h; path = WinCommander/Core/Pane/ExplorerTabsModel.h; sourceTree = SOURCE_ROOT; };
+		E7AB000131FA000000000012 /* ExplorerTabsModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerTabsModel.cpp; path = WinCommander/Core/Pane/ExplorerTabsModel.cpp; sourceTree = SOURCE_ROOT; };
+		E7AB000131FA000000000013 /* ExplorerTabsModel_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerTabsModel_UT.cpp; path = WinCommander/Tests/ExplorerTabsModel_UT.cpp; sourceTree = "<group>"; };
+		E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerTabsState_UT.mm; path = WinCommander/Tests/ExplorerTabsState_UT.mm; sourceTree = "<group>"; };
+		A5E5000131FB000000000011 /* ExplorerViewSettingsPersistence.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerViewSettingsPersistence.h; path = WinCommander/States/Explorer/ExplorerViewSettingsPersistence.h; sourceTree = SOURCE_ROOT; };
+		A5E5000131FB000000000012 /* ExplorerViewSettingsPersistence.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerViewSettingsPersistence.cpp; path = WinCommander/States/Explorer/ExplorerViewSettingsPersistence.cpp; sourceTree = SOURCE_ROOT; };
+		A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerViewSettingsPersistence_UT.cpp; path = WinCommander/Tests/ExplorerViewSettingsPersistence_UT.cpp; sourceTree = "<group>"; };
+		B6F5000131FC000000000010 /* ExplorerViewSettingsBinding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerViewSettingsBinding.h; path = WinCommander/States/Explorer/ExplorerViewSettingsBinding.h; sourceTree = SOURCE_ROOT; };
+		B6F5000131FC000000000011 /* ExplorerViewSettingsBinding.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerViewSettingsBinding.cpp; path = WinCommander/States/Explorer/ExplorerViewSettingsBinding.cpp; sourceTree = SOURCE_ROOT; };
+		B6F5000131FC000000000012 /* ExplorerViewSettingsBinding_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerViewSettingsBinding_UT.cpp; path = WinCommander/Tests/ExplorerViewSettingsBinding_UT.cpp; sourceTree = "<group>"; };
+		C6E6000131FD000000000010 /* ExplorerSessionPersistency.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerSessionPersistency.h; path = WinCommander/States/Explorer/ExplorerSessionPersistency.h; sourceTree = SOURCE_ROOT; };
+		C6E6000131FD000000000011 /* ExplorerSessionPersistency.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerSessionPersistency.cpp; path = WinCommander/States/Explorer/ExplorerSessionPersistency.cpp; sourceTree = SOURCE_ROOT; };
+		C6E6000131FD000000000012 /* ExplorerSessionPersistency_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerSessionPersistency_UT.cpp; path = WinCommander/Tests/ExplorerSessionPersistency_UT.cpp; sourceTree = "<group>"; };
 		9A10A00131B0000000000011 /* VisualState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VisualState.h; path = WinCommander/Core/VisualState/VisualState.h; sourceTree = SOURCE_ROOT; };
 		9A10A00131B0000000000012 /* VisualStateMapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = VisualStateMapper.h; path = WinCommander/Core/VisualState/VisualStateMapper.h; sourceTree = SOURCE_ROOT; };
 		9A10A00131B0000000000013 /* VisualStateMapper.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = VisualStateMapper.cpp; path = WinCommander/Core/VisualState/VisualStateMapper.cpp; sourceTree = SOURCE_ROOT; };
 		9A10A00131B0000000000014 /* VisualStateMapper_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = VisualStateMapper_UT.cpp; path = WinCommander/Tests/VisualStateMapper_UT.cpp; sourceTree = "<group>"; };
+		D8E800013205000000000011 /* ExplorerOperationProgressModel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerOperationProgressModel.h; path = WinCommander/Core/VisualState/ExplorerOperationProgressModel.h; sourceTree = SOURCE_ROOT; };
+		D8E800013205000000000012 /* ExplorerOperationProgressModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerOperationProgressModel.cpp; path = WinCommander/Core/VisualState/ExplorerOperationProgressModel.cpp; sourceTree = SOURCE_ROOT; };
+		D8E800013205000000000013 /* ExplorerOperationProgressModel_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerOperationProgressModel_UT.cpp; path = WinCommander/Tests/ExplorerOperationProgressModel_UT.cpp; sourceTree = "<group>"; };
+		D8E801013205000000000011 /* ExplorerOperationProgressController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerOperationProgressController.h; path = WinCommander/States/Explorer/ExplorerOperationProgressController.h; sourceTree = SOURCE_ROOT; };
+		D8E801013205000000000012 /* ExplorerOperationProgressController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerOperationProgressController.mm; path = WinCommander/States/Explorer/ExplorerOperationProgressController.mm; sourceTree = SOURCE_ROOT; };
+		D8E801013205000000000013 /* NCExplorerOperationProgressView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerOperationProgressView.h; path = WinCommander/States/Explorer/NCExplorerOperationProgressView.h; sourceTree = SOURCE_ROOT; };
+		D8E801013205000000000014 /* NCExplorerOperationProgressView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerOperationProgressView.mm; path = WinCommander/States/Explorer/NCExplorerOperationProgressView.mm; sourceTree = SOURCE_ROOT; };
+		D8E801013205000000000015 /* ExplorerOperationProgressView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerOperationProgressView_UT.mm; path = WinCommander/Tests/ExplorerOperationProgressView_UT.mm; sourceTree = "<group>"; };
+		E9A900013206000000000011 /* SearchState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SearchState.h; path = WinCommander/Core/Search/SearchState.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000012 /* SearchPlanning.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SearchPlanning.h; path = WinCommander/Core/Search/SearchPlanning.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000013 /* SearchPlanning.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SearchPlanning.cpp; path = WinCommander/Core/Search/SearchPlanning.cpp; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000014 /* SearchStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SearchStore.h; path = WinCommander/Core/Search/SearchStore.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000015 /* SearchStore.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SearchStore.cpp; path = WinCommander/Core/Search/SearchStore.cpp; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000016 /* NCExplorerSearchPresenting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerSearchPresenting.h; path = WinCommander/States/Explorer/NCExplorerSearchPresenting.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000017 /* SearchResultListingBuilder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SearchResultListingBuilder.h; path = WinCommander/States/Explorer/SearchResultListingBuilder.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000018 /* SearchResultListingBuilder.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SearchResultListingBuilder.cpp; path = WinCommander/States/Explorer/SearchResultListingBuilder.cpp; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000019 /* NCExplorerSearchModeView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerSearchModeView.h; path = WinCommander/States/Explorer/NCExplorerSearchModeView.h; sourceTree = SOURCE_ROOT; };
+		E9A90001320600000000001A /* NCExplorerSearchModeView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerSearchModeView.mm; path = WinCommander/States/Explorer/NCExplorerSearchModeView.mm; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000021 /* SearchStore_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SearchStore_UT.cpp; path = WinCommander/Tests/SearchStore_UT.cpp; sourceTree = "<group>"; };
+		E9A900013206000000000022 /* SearchResultListingBuilder_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SearchResultListingBuilder_UT.cpp; path = WinCommander/Tests/SearchResultListingBuilder_UT.cpp; sourceTree = "<group>"; };
+		E9A900013206000000000023 /* ExplorerSearchActions_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerSearchActions_UT.mm; path = WinCommander/Tests/ExplorerSearchActions_UT.mm; sourceTree = "<group>"; };
+		E9A900013206000000000024 /* ExplorerSearchModeView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerSearchModeView_UT.mm; path = WinCommander/Tests/ExplorerSearchModeView_UT.mm; sourceTree = "<group>"; };
+		E9A900013206000000000031 /* ExplorerDirectSearchBackend.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerDirectSearchBackend.h; path = WinCommander/States/Explorer/ExplorerDirectSearchBackend.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000032 /* ExplorerDirectSearchBackend.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerDirectSearchBackend.mm; path = WinCommander/States/Explorer/ExplorerDirectSearchBackend.mm; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000033 /* ExplorerSearchController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerSearchController.h; path = WinCommander/States/Explorer/ExplorerSearchController.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000034 /* ExplorerSearchController.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerSearchController.mm; path = WinCommander/States/Explorer/ExplorerSearchController.mm; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000035 /* ExplorerSpotlightSearchBackend.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerSpotlightSearchBackend.h; path = WinCommander/States/Explorer/ExplorerSpotlightSearchBackend.h; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000036 /* ExplorerSpotlightSearchBackend.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerSpotlightSearchBackend.mm; path = WinCommander/States/Explorer/ExplorerSpotlightSearchBackend.mm; sourceTree = SOURCE_ROOT; };
+		E9A900013206000000000037 /* ExplorerSearchController_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerSearchController_UT.mm; path = WinCommander/Tests/ExplorerSearchController_UT.mm; sourceTree = "<group>"; };
+		E9A900013206000000000038 /* ExplorerSpotlightSearchBackend_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerSpotlightSearchBackend_UT.mm; path = WinCommander/Tests/ExplorerSpotlightSearchBackend_UT.mm; sourceTree = "<group>"; };
+		E9A900013206000000000039 /* ExplorerDirectSearchBackend_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerDirectSearchBackend_UT.mm; path = WinCommander/Tests/ExplorerDirectSearchBackend_UT.mm; sourceTree = "<group>"; };
 		B71A000131B1000000000011 /* CommandPresentationAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandPresentationAdapter.h; path = WinCommander/States/CommandPresentationAdapter.h; sourceTree = SOURCE_ROOT; };
 		B71A000131B1000000000012 /* CommandPresentationAdapter.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CommandPresentationAdapter.mm; path = WinCommander/States/CommandPresentationAdapter.mm; sourceTree = SOURCE_ROOT; };
 		B71A000131B1000000000013 /* NCEditMenuPresentationDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCEditMenuPresentationDelegate.h; path = WinCommander/Bootstrap/NCEditMenuPresentationDelegate.h; sourceTree = SOURCE_ROOT; };
@@ -1620,6 +1751,14 @@
 				D4C04D1531A2C0DE00000001 /* CommandRegistry.cpp */,
 				F1C0A01131A2C0DE00000001 /* FileCopyCommand.h */,
 				F1C0A01231A2C0DE00000001 /* FileCopyCommand.cpp */,
+				F19F000131F6000000000011 /* FileGetInfoCommand.h */,
+				F19F000131F6000000000012 /* FileGetInfoCommand.cpp */,
+				E5A3000131F7000000000011 /* FilePreviewCommand.h */,
+				E5A3000131F7000000000012 /* FilePreviewCommand.cpp */,
+				E5A4000131F8000000000011 /* TogglePreviewPaneCommand.h */,
+				E5A4000131F8000000000012 /* TogglePreviewPaneCommand.cpp */,
+				F17E000131F1000000000011 /* FileMutationCommands.h */,
+				F17E000131F1000000000012 /* FileMutationCommands.cpp */,
 				C17C000131B8000000000011 /* FileCutCommand.h */,
 				C17C000131B8000000000012 /* FileCutCommand.cpp */,
 				A7E9000131B9000000000011 /* FileRenameCommand.h */,
@@ -1652,9 +1791,23 @@
 			name = Errors;
 			sourceTree = "<group>";
 		};
+		E9A900013206000000000020 /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				E9A900013206000000000011 /* SearchState.h */,
+				E9A900013206000000000012 /* SearchPlanning.h */,
+				E9A900013206000000000013 /* SearchPlanning.cpp */,
+				E9A900013206000000000014 /* SearchStore.h */,
+				E9A900013206000000000015 /* SearchStore.cpp */,
+			);
+			name = Search;
+			sourceTree = "<group>";
+		};
 		9A10A00131B0000000000020 /* VisualState */ = {
 			isa = PBXGroup;
 			children = (
+				D8E800013205000000000011 /* ExplorerOperationProgressModel.h */,
+				D8E800013205000000000012 /* ExplorerOperationProgressModel.cpp */,
 				9A10A00131B0000000000011 /* VisualState.h */,
 				9A10A00131B0000000000012 /* VisualStateMapper.h */,
 				9A10A00131B0000000000013 /* VisualStateMapper.cpp */,
@@ -1769,6 +1922,8 @@
 				CFDAC2651DFBF20F0039A104 /* ContextMenu.mm */,
 				CFFA95231F47CA760035E606 /* DragReceiver.h */,
 				CFFA95241F47CA760035E606 /* DragReceiver.mm */,
+				A7D700013204000000000011 /* DragDropPolicy.h */,
+				A7D700013204000000000012 /* DragDropPolicy.mm */,
 				CFFA952D1F4930BA0035E606 /* DragSender.h */,
 				CFFA952E1F4930BA0035E606 /* DragSender.mm */,
 				CFDAC2FE1DFD1D7C0039A104 /* ExternalEditorInfo.h */,
@@ -1905,6 +2060,21 @@
 		7807AA70A1FA912BC203C9F3 /* Explorer */ = {
 			isa = PBXGroup;
 			children = (
+				E9A900013206000000000016 /* NCExplorerSearchPresenting.h */,
+				E9A900013206000000000017 /* SearchResultListingBuilder.h */,
+				E9A900013206000000000018 /* SearchResultListingBuilder.cpp */,
+				E9A900013206000000000019 /* NCExplorerSearchModeView.h */,
+				E9A90001320600000000001A /* NCExplorerSearchModeView.mm */,
+				E9A900013206000000000031 /* ExplorerDirectSearchBackend.h */,
+				E9A900013206000000000032 /* ExplorerDirectSearchBackend.mm */,
+				E9A900013206000000000033 /* ExplorerSearchController.h */,
+				E9A900013206000000000034 /* ExplorerSearchController.mm */,
+				E9A900013206000000000035 /* ExplorerSpotlightSearchBackend.h */,
+				E9A900013206000000000036 /* ExplorerSpotlightSearchBackend.mm */,
+				D8E801013205000000000011 /* ExplorerOperationProgressController.h */,
+				D8E801013205000000000012 /* ExplorerOperationProgressController.mm */,
+				D8E801013205000000000013 /* NCExplorerOperationProgressView.h */,
+				D8E801013205000000000014 /* NCExplorerOperationProgressView.mm */,
 				AD8A7BD10209170D0BBF6F10 /* NCPanelControllerHostingState.h */,
 				E82EE413095991A772595753 /* NCExplorerState.h */,
 				72A17403241CCD58B1CAF648 /* NCExplorerState.mm */,
@@ -1917,6 +2087,19 @@
 				9FFC0D40F94DC445DAC7B5D4 /* NCExplorerCommandBarView.h */,
 				A3DB0EBE07157AC08219105D /* NCExplorerCommandBarView.mm */,
 				1F9E000131BB000000000011 /* NCExplorerPanePresentationModel.h */,
+				E5A5000131F9000000000011 /* NCExplorerInspectorPresenting.h */,
+				D83F000131F5000000000011 /* NCExplorerInspectorModel.h */,
+				D83F000131F5000000000012 /* NCExplorerInspectorModel.cpp */,
+				A5E5000131FB000000000011 /* ExplorerViewSettingsPersistence.h */,
+				A5E5000131FB000000000012 /* ExplorerViewSettingsPersistence.cpp */,
+				B6F5000131FC000000000010 /* ExplorerViewSettingsBinding.h */,
+				B6F5000131FC000000000011 /* ExplorerViewSettingsBinding.cpp */,
+				C6E6000131FD000000000010 /* ExplorerSessionPersistency.h */,
+				C6E6000131FD000000000011 /* ExplorerSessionPersistency.cpp */,
+				D84A000131F8000000000011 /* NCExplorerInspectorView.h */,
+				D84A000131F8000000000012 /* NCExplorerInspectorView.mm */,
+				A7B700013201000000000011 /* NCExplorerPaneStateView.h */,
+				A7B700013201000000000012 /* NCExplorerPaneStateView.mm */,
 				46D557F68546EF2C975C20CF /* NCExplorerStatusBarView.h */,
 				52E86FCE0ECC8CA2631FAD7B /* NCExplorerStatusBarView.mm */,
 				BB294F0B2C69547454CF82C9 /* NCExplorerInspectorPlaceholderView.h */,
@@ -1977,8 +2160,32 @@
 			isa = PBXGroup;
 			children = (
 				CF371DA92D18472E0034EB3F /* ActionsShortcutsManager_UT.cpp */,
+				E9A900013206000000000021 /* SearchStore_UT.cpp */,
+				E9A900013206000000000022 /* SearchResultListingBuilder_UT.cpp */,
+				E9A900013206000000000023 /* ExplorerSearchActions_UT.mm */,
+				E9A900013206000000000024 /* ExplorerSearchModeView_UT.mm */,
+				E9A900013206000000000037 /* ExplorerSearchController_UT.mm */,
+				E9A900013206000000000038 /* ExplorerSpotlightSearchBackend_UT.mm */,
+				E9A900013206000000000039 /* ExplorerDirectSearchBackend_UT.mm */,
+				A8E1000131F3000000000013 /* ArchiveExtractionManifest_UT.cpp */,
+				D8E800013205000000000013 /* ExplorerOperationProgressModel_UT.cpp */,
+				D8E801013205000000000015 /* ExplorerOperationProgressView_UT.mm */,
+				D83F000131F5000000000013 /* ExplorerInspectorModel_UT.cpp */,
+				D84A000131F8000000000013 /* ExplorerInspectorView_UT.mm */,
+				A7B700013201000000000013 /* ExplorerPaneStateView_UT.mm */,
+				E7AB000131FA000000000013 /* ExplorerTabsModel_UT.cpp */,
+				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
+				A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */,
+				B6F5000131FC000000000012 /* ExplorerViewSettingsBinding_UT.cpp */,
+				C6E6000131FD000000000012 /* ExplorerSessionPersistency_UT.cpp */,
+				C1A7000131F5000000000002 /* ExtractArchiveAction_UT.mm */,
+				A7C700013203000000000013 /* InlineRenameAction_UT.mm */,
 				D4C04D1631A2C0DE00000001 /* CommandRegistry_UT.cpp */,
 				F1C0A01331A2C0DE00000001 /* FileCopyCommand_UT.cpp */,
+				F19F000131F6000000000013 /* FileGetInfoCommand_UT.cpp */,
+				E5A3000131F7000000000013 /* FilePreviewCommand_UT.cpp */,
+				E5A4000131F8000000000013 /* TogglePreviewPaneCommand_UT.cpp */,
+				F17E000131F1000000000013 /* FileMutationCommands_UT.cpp */,
 				C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */,
 				D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */,
 				C17C000131B8000000000013 /* FileCutCommand_UT.cpp */,
@@ -1992,6 +2199,7 @@
 				620C765247E94D5693592AB6 /* LegacyShortcutBindingAdapter_UT.cpp */,
 				B6AC000131C0000000000013 /* VFSOperationPlanningAccessChecker_UT.mm */,
 				CF764CE62587661300D7ED17 /* DragSender_UT.mm */,
+				A7D700013204000000000013 /* DragDropPolicy_UT.mm */,
 				CF764D422587837200D7ED17 /* PanelBriefViewDynamicWidthLayoutEngine_UT.mm */,
 				CF764D4E258785CC00D7ED17 /* PanelBriefViewFixedNumberLayoutEngine_UT.mm */,
 				CF764D562587875E00D7ED17 /* PanelBriefViewFixedWidthLayoutEngine_UT.mm */,
@@ -2018,6 +2226,8 @@
 			isa = PBXGroup;
 			children = (
 				B623B724F2A47A53C6E699A4 /* PaneSnapshot.h */,
+				E7AB000131FA000000000011 /* ExplorerTabsModel.h */,
+				E7AB000131FA000000000012 /* ExplorerTabsModel.cpp */,
 				BAEC000241D3000000000014 /* PaneNavigationAvailability.h */,
 				BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */,
 				FC253E74056C8068A69BC009 /* PaneStoreAdapter.h */,
@@ -2039,6 +2249,8 @@
 				CFD8CD5D1E7E390500E4DC53 /* AddToFavorites.mm */,
 				CF0260C81E9DF45D0025B50F /* BatchRename.h */,
 				CF0260C91E9DF45D0025B50F /* BatchRename.mm */,
+				A7C700013203000000000011 /* InlineRename.h */,
+				A7C700013203000000000012 /* InlineRename.mm */,
 				CF0260C51E9DEC380025B50F /* CalculateSizes.h */,
 				CF0260C61E9DEC380025B50F /* CalculateSizes.mm */,
 				CF6ECDA71E9F4776008FA79E /* ChangeAttributes.h */,
@@ -2047,6 +2259,8 @@
 				CFEADD2E259CF60D009ECA14 /* ChangePanelsPosition.mm */,
 				CF9F4A901EC9442C00E0AF82 /* Compress.h */,
 				CF9F4A911EC9442C00E0AF82 /* Compress.mm */,
+				B9E2000131F4000000000011 /* ExtractArchive.h */,
+				B9E2000131F4000000000012 /* ExtractArchive.mm */,
 				CF197C471FB92E80009F6C59 /* CopyFile.h */,
 				CF197C481FB92E80009F6C59 /* CopyFile.mm */,
 				CF5FE7D31E120A4900CD83B4 /* CopyFilePaths.h */,
@@ -2315,8 +2529,10 @@
 			children = (
 				D4C04D2031A2C0DE00000001 /* Commands */,
 				E220E02031A2C0DE00000001 /* Errors */,
+				F19F000131F6000000000020 /* Metadata */,
 				D7C1002031E3000000000001 /* Operations */,
 				FDE3E28A7F15994A517A24AA /* Pane */,
+				E9A900013206000000000020 /* Search */,
 				9A10A00131B0000000000020 /* VisualState */,
 				B6AC000131C0000000000011 /* VFSOperationPlanningAccessChecker.h */,
 				B6AC000131C0000000000012 /* VFSOperationPlanningAccessChecker.mm */,
@@ -2351,9 +2567,20 @@
 			name = Core;
 			sourceTree = "<group>";
 		};
+		F19F000131F6000000000020 /* Metadata */ = {
+			isa = PBXGroup;
+			children = (
+				F19F000131F6000000000014 /* FileMetadataSnapshot.h */,
+				F19F000131F6000000000015 /* FileMetadataSnapshot.cpp */,
+			);
+			name = Metadata;
+			sourceTree = "<group>";
+		};
 		D7C1002031E3000000000001 /* Operations */ = {
 			isa = PBXGroup;
 			children = (
+				A8E1000131F3000000000011 /* ArchiveExtractionManifest.h */,
+				A8E1000131F3000000000012 /* ArchiveExtractionManifest.cpp */,
 				D7C1001131E3000000000001 /* CopyOperationRecoveryCoordinator.h */,
 				D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */,
 				D7C1001331E3000000000001 /* CopyOperationRecoveryCoordinatorTesting.h */,
@@ -3354,10 +3581,29 @@
 			buildActionMask = 2147483647;
 			files = (
 				34BBA7112548DACC966E141E /* PaneStoreAdapter.cpp in Sources */,
+				E9A900013206000000000001 /* SearchPlanning.cpp in Sources */,
+				E9A900013206000000000002 /* SearchStore.cpp in Sources */,
+				E9A900013206000000000003 /* SearchResultListingBuilder.cpp in Sources */,
+				E9A900013206000000000004 /* NCExplorerSearchModeView.mm in Sources */,
+				E9A900013206000000000009 /* ExplorerDirectSearchBackend.mm in Sources */,
+				E9A90001320600000000000A /* ExplorerSearchController.mm in Sources */,
+				E9A90001320600000000000B /* ExplorerSpotlightSearchBackend.mm in Sources */,
+				D8E800013205000000000001 /* ExplorerOperationProgressModel.cpp in Sources */,
+				D8E801013205000000000001 /* ExplorerOperationProgressController.mm in Sources */,
+				D8E801013205000000000002 /* NCExplorerOperationProgressView.mm in Sources */,
+				A8E1000131F3000000000001 /* ArchiveExtractionManifest.cpp in Sources */,
+				D83F000131F5000000000001 /* NCExplorerInspectorModel.cpp in Sources */,
+				D84A000131F8000000000001 /* NCExplorerInspectorView.mm in Sources */,
+				A7B700013201000000000001 /* NCExplorerPaneStateView.mm in Sources */,
+				F19F000131F6000000000002 /* FileMetadataSnapshot.cpp in Sources */,
 				5FE621A117C74BC79AF5E886 /* PanelControllerPaneStoreAdapter.mm in Sources */,
 				E220E00131A2C0DE00000001 /* FileManagerErrorAdapter.cpp in Sources */,
 				D4C04D0131A2C0DE00000001 /* CommandRegistry.cpp in Sources */,
 				F1C0A00131A2C0DE00000001 /* FileCopyCommand.cpp in Sources */,
+				F19F000131F6000000000001 /* FileGetInfoCommand.cpp in Sources */,
+				E5A3000131F7000000000001 /* FilePreviewCommand.cpp in Sources */,
+				E5A4000131F8000000000001 /* TogglePreviewPaneCommand.cpp in Sources */,
+				F17E000131F1000000000001 /* FileMutationCommands.cpp in Sources */,
 				C17C000131B8000000000001 /* FileCutCommand.cpp in Sources */,
 				A7E9000131B9000000000001 /* FileRenameCommand.cpp in Sources */,
 				F10E000131D5000000000001 /* FileOpenCommand.cpp in Sources */,
@@ -3366,6 +3612,10 @@
 				BAEC000241D3000000000001 /* PaneNavigationCommand.cpp in Sources */,
 				C0CA000131D7000000000001 /* OperationCancelCommand.cpp in Sources */,
 				C0CB000131D8000000000001 /* OperationCenterOpenCommand.cpp in Sources */,
+				E7AB000131FA000000000001 /* ExplorerTabsModel.cpp in Sources */,
+				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
+				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
+				C6E6000131FD000000000001 /* ExplorerSessionPersistency.cpp in Sources */,
 				BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */,
 				9A10A00131B0000000000001 /* VisualStateMapper.cpp in Sources */,
 				B71A000131B1000000000001 /* CommandPresentationAdapter.mm in Sources */,
@@ -3451,6 +3701,7 @@
 				CF0A48322BDDA15300833160 /* CopyToPasteboard.mm in Sources */,
 				CF0A48412BDDA1D600833160 /* NavigateHistory.mm in Sources */,
 				CF764D002587671A00D7ED17 /* FilesDraggingSource.mm in Sources */,
+				A7D700013204000000000001 /* DragDropPolicy.mm in Sources */,
 				CF0A481D2BDDA02C00833160 /* PanelController.mm in Sources */,
 				CF35C5B52FBA3CF400370B89 /* PanelTabBarThemeProviderImpl.mm in Sources */,
 				CF0A48442BDDA27500833160 /* OpenWithExternalEditor.mm in Sources */,
@@ -3473,6 +3724,7 @@
 				CF0A47212BDD882D00833160 /* UserNotificationsCenter.mm in Sources */,
 				CF0A48182BDDA01200833160 /* MainWindowFilePanelState.mm in Sources */,
 				CF0A482F2BDDA0E300833160 /* Compress.mm in Sources */,
+				B9E2000131F4000000000001 /* ExtractArchive.mm in Sources */,
 				CF0A47552BDD8EEB00833160 /* NetworkConnectionIconProvider.mm in Sources */,
 				CF0A481F2BDDA03600833160 /* PanelControllerActions.mm in Sources */,
 				CF764D2E258782D900D7ED17 /* PanelBriefViewFixedNumberLayoutEngine.mm in Sources */,
@@ -3549,6 +3801,7 @@
 				CF0A48752BDDA4FE00833160 /* ExternalToolParameterValueSheetController.mm in Sources */,
 				CF0A48682BDDA3F000833160 /* PanelListViewSizeView.mm in Sources */,
 				CF0A482B2BDDA0B100833160 /* BatchRename.mm in Sources */,
+				A7C700013203000000000001 /* InlineRename.mm in Sources */,
 				CF764D21258782D100D7ED17 /* PanelBriefViewDynamicWidthLayoutEngine.mm in Sources */,
 				CF0A474F2BDD8D4E00833160 /* PanelHistory.mm in Sources */,
 				CF0A48032BDD9F5500833160 /* Preferences.mm in Sources */,
@@ -3592,10 +3845,34 @@
 			buildActionMask = 2147483647;
 			files = (
 				FA0078408EA805D2E69DDF82 /* PaneStoreAdapter_UT.mm in Sources */,
+				E9A900013206000000000005 /* SearchStore_UT.cpp in Sources */,
+				E9A900013206000000000006 /* SearchResultListingBuilder_UT.cpp in Sources */,
+				E9A900013206000000000007 /* ExplorerSearchActions_UT.mm in Sources */,
+				E9A900013206000000000008 /* ExplorerSearchModeView_UT.mm in Sources */,
+				E9A90001320600000000000C /* ExplorerSearchController_UT.mm in Sources */,
+				E9A90001320600000000000D /* ExplorerSpotlightSearchBackend_UT.mm in Sources */,
+				E9A90001320600000000000E /* ExplorerDirectSearchBackend_UT.mm in Sources */,
+				D8E800013205000000000002 /* ExplorerOperationProgressModel_UT.cpp in Sources */,
+				D8E801013205000000000003 /* ExplorerOperationProgressView_UT.mm in Sources */,
+				A8E1000131F3000000000002 /* ArchiveExtractionManifest_UT.cpp in Sources */,
+				D83F000131F5000000000002 /* ExplorerInspectorModel_UT.cpp in Sources */,
+				D84A000131F8000000000002 /* ExplorerInspectorView_UT.mm in Sources */,
+				A7B700013201000000000002 /* ExplorerPaneStateView_UT.mm in Sources */,
+				E7AB000131FA000000000002 /* ExplorerTabsModel_UT.cpp in Sources */,
+				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
+				A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */,
+				B6F5000131FC000000000002 /* ExplorerViewSettingsBinding_UT.cpp in Sources */,
+				C6E6000131FD000000000002 /* ExplorerSessionPersistency_UT.cpp in Sources */,
+				C1A7000131F5000000000001 /* ExtractArchiveAction_UT.mm in Sources */,
+				A7C700013203000000000002 /* InlineRenameAction_UT.mm in Sources */,
 				676A7E68C500419B825245FF /* PanelControllerPaneStoreAdapter_UT.mm in Sources */,
 				E220E00231A2C0DE00000001 /* FileManagerErrorAdapter_UT.cpp in Sources */,
 				D4C04D0231A2C0DE00000001 /* CommandRegistry_UT.cpp in Sources */,
 				F1C0A00231A2C0DE00000001 /* FileCopyCommand_UT.cpp in Sources */,
+				F19F000131F6000000000003 /* FileGetInfoCommand_UT.cpp in Sources */,
+				E5A3000131F7000000000002 /* FilePreviewCommand_UT.cpp in Sources */,
+				E5A4000131F8000000000002 /* TogglePreviewPaneCommand_UT.cpp in Sources */,
+				F17E000131F1000000000002 /* FileMutationCommands_UT.cpp in Sources */,
 				C0A5200131E2000000000001 /* ReviewedCopyAsPolicy_UT.mm in Sources */,
 				D7C1000231E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm in Sources */,
 				C17C000131B8000000000002 /* FileCutCommand_UT.cpp in Sources */,
@@ -3625,6 +3902,7 @@
 				CFD2D27B28A03DC5003C18F9 /* ThemesManager_UT.mm in Sources */,
 				CF764D432587837200D7ED17 /* PanelBriefViewDynamicWidthLayoutEngine_UT.mm in Sources */,
 				CF764CE72587661300D7ED17 /* DragSender_UT.mm in Sources */,
+				A7D700013204000000000002 /* DragDropPolicy_UT.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

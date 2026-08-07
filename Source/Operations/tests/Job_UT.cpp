@@ -196,6 +196,78 @@ private:
     ObservableJob job{*this};
 };
 
+class JobUTCurrentItemOperation final : public Operation
+{
+public:
+    ~JobUTCurrentItemOperation() override
+    {
+        (void)Stop();
+        Release();
+        Wait();
+    }
+
+    bool WaitForPublication(int _count, std::chrono::milliseconds _timeout)
+    {
+        std::unique_lock lock{mutex};
+        return publication_cv.wait_for(lock, _timeout, [this, _count] { return publications >= _count; });
+    }
+
+    void Release()
+    {
+        {
+            const auto guard = std::lock_guard{mutex};
+            released = true;
+        }
+        release_cv.notify_all();
+    }
+
+private:
+    class CurrentItemJob final : public Job
+    {
+    public:
+        explicit CurrentItemJob(JobUTCurrentItemOperation &_owner) : owner{_owner} {}
+
+    private:
+        void Perform() override
+        {
+            Publish("/source/top");
+            WaitForRelease();
+            if( IsStopped() )
+                return;
+            Publish("/source/top/nested.txt");
+            WaitForRelease();
+        }
+
+        void Publish(std::string _path)
+        {
+            PublishCurrentItemPath(std::move(_path));
+            {
+                const auto guard = std::lock_guard{owner.mutex};
+                ++owner.publications;
+                owner.released = false;
+            }
+            owner.publication_cv.notify_all();
+        }
+
+        void WaitForRelease()
+        {
+            std::unique_lock lock{owner.mutex};
+            owner.release_cv.wait(lock, [this] { return owner.released; });
+        }
+
+        JobUTCurrentItemOperation &owner;
+    };
+
+    Job *GetJob() noexcept override { return &job; }
+
+    std::mutex mutex;
+    std::condition_variable publication_cv;
+    std::condition_variable release_cv;
+    int publications{0};
+    bool released{false};
+    CurrentItemJob job{*this};
+};
+
 } // namespace
 
 TEST_CASE(PREFIX "worker launch failure publishes stopped callbacks before finish and rethrows",
@@ -483,6 +555,66 @@ TEST_CASE(PREFIX "Operation emits distinct pause and resume notifications", "[jo
     operation->Stop();
     REQUIRE(operation->Wait(5s));
     CHECK(operation->State() == OperationState::Stopped);
+}
+
+TEST_CASE(PREFIX "Operation publishes copied current-item snapshots and clears them before terminal notification",
+          "[job][operation-progress]")
+{
+    auto operation = std::make_shared<JobUTCurrentItemOperation>();
+    CHECK_FALSE(operation->CurrentItemPath());
+
+    std::atomic_bool terminal_callback_saw_item{true};
+    operation->ObserveUnticketed(Operation::NotifyAboutFinish,
+                                 [&] { terminal_callback_saw_item = operation->CurrentItemPath().has_value(); });
+
+    operation->Start();
+    REQUIRE(operation->WaitForPublication(1, 5s));
+    const auto first_snapshot = operation->CurrentItemPath();
+    REQUIRE(first_snapshot);
+    CHECK(*first_snapshot == "/source/top");
+
+    std::atomic_bool poller_done{false};
+    std::atomic_bool invalid_snapshot{false};
+    std::thread poller{[&] {
+        while( !poller_done ) {
+            const auto snapshot = operation->CurrentItemPath();
+            if( snapshot && *snapshot != "/source/top" && *snapshot != "/source/top/nested.txt" )
+                invalid_snapshot = true;
+        }
+    }};
+
+    operation->Release();
+    REQUIRE(operation->WaitForPublication(2, 5s));
+    const auto second_snapshot = operation->CurrentItemPath();
+    REQUIRE(second_snapshot);
+    CHECK(*second_snapshot == "/source/top/nested.txt");
+    CHECK(*first_snapshot == "/source/top"); // the earlier owning snapshot is unaffected by publication
+
+    operation->Release();
+    REQUIRE(operation->Wait(5s));
+    poller_done = true;
+    poller.join();
+
+    CHECK_FALSE(invalid_snapshot);
+    CHECK(operation->State() == OperationState::Completed);
+    CHECK_FALSE(operation->CurrentItemPath());
+    CHECK_FALSE(terminal_callback_saw_item);
+}
+
+TEST_CASE(PREFIX "stopped current-item publisher clears its snapshot at worker termination",
+          "[job][operation-progress]")
+{
+    auto operation = std::make_shared<JobUTCurrentItemOperation>();
+    operation->Start();
+    REQUIRE(operation->WaitForPublication(1, 5s));
+    REQUIRE(operation->CurrentItemPath() == std::optional<std::string>{"/source/top"});
+
+    REQUIRE(operation->Stop());
+    operation->Release();
+    REQUIRE(operation->Wait(5s));
+
+    CHECK(operation->State() == OperationState::Stopped);
+    CHECK_FALSE(operation->CurrentItemPath());
 }
 
 TEST_CASE(PREFIX "Operation stop closes both sides of the dialog registration race", "[job]")

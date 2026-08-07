@@ -50,15 +50,18 @@ AsyncPersistentLocationRestorer::AsyncPersistentLocationRestorer(PanelController
 
 void AsyncPersistentLocationRestorer::Restore(const nc::panel::PersistentLocation &_location,
                                               SuccessHandler _success_handler,
-                                              FailureHandler _failure_handler)
+                                              FailureHandler _failure_handler,
+                                              const PanelDataPersistency::VFSRestoreOptions _options)
 {
     auto task = [&manager = m_InstanceManager,
                  &netmgr = m_NetConnManager,
                  location = _location,
                  success = std::move(_success_handler),
-                 failure = std::move(_failure_handler)](const CancelableLoadingTaskContext &_context) {
+                 failure = std::move(_failure_handler),
+                 options = _options](const CancelableLoadingTaskContext &_context) {
         PanelDataPersistency persistency(netmgr);
-        const std::expected<VFSHostPtr, Error> exp_host = persistency.CreateVFSFromLocation(location, manager);
+        const std::expected<VFSHostPtr, Error> exp_host =
+            persistency.CreateVFSFromLocation(location, manager, options);
 
         if( !exp_host ) {
             if( failure != nullptr )
@@ -73,7 +76,10 @@ void AsyncPersistentLocationRestorer::Restore(const nc::panel::PersistentLocatio
         }
     };
 
-    [m_Panel commitCancelableLoadingTask:std::move(task)];
+    if( _options.allow_password_ui )
+        [m_Panel commitCancelableLoadingTask:std::move(task)];
+    else
+        [m_Panel commitDetachedCancelableLoadingTask:std::move(task)];
 }
 
 DeselectorViaOpNotification::DeselectorViaOpNotification(PanelController *_pc)

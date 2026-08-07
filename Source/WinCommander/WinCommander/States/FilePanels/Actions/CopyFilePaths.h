@@ -6,6 +6,21 @@
 
 namespace nc::panel::actions {
 
+enum class CopyPathSubmissionResult {
+    Submitted,
+    PaneUnavailable,
+    Loading,
+    SelectionUnavailable,
+    ParentEntryUnsupported,
+    StaleContext,
+    ClipboardUnavailable
+};
+
+[[nodiscard]] CopyPathSubmissionResult
+EvaluateCopyPathSubmission(std::span<const VFSListingItem> _items, PanelController *_source);
+[[nodiscard]] CopyPathSubmissionResult
+SubmitCopyPaths(std::span<const VFSListingItem> _items, PanelController *_source);
+
 struct CopyFileName final : PanelAction {
     [[nodiscard]] bool Predicate(PanelController *_source) const override;
     void Perform(PanelController *_source, id _sender) const override;

@@ -5,6 +5,18 @@
 
 namespace nc::panel::actions {
 
+enum class PaneSelectionActionResult {
+    Available,
+    PaneUnavailable,
+    Loading,
+    ListingUnavailable,
+    Empty
+};
+
+[[nodiscard]] PaneSelectionActionResult EvaluatePaneSelectionAction(PanelController *_target);
+[[nodiscard]] PaneSelectionActionResult ApplySelectAll(PanelController *_target);
+[[nodiscard]] PaneSelectionActionResult ApplyInvertSelection(PanelController *_target);
+
 struct SelectAll final : PanelAction {
     void Perform(PanelController *_target, id _sender) const override;
 };

@@ -56,13 +56,13 @@
       }
     },
     "2O5-JQ-7Zs.title" : {
-      "comment" : "Class = \"NSMenuItem\"; title = \"Overwrite Older\"; ObjectID = \"2O5-JQ-7Zs\";",
+      "comment" : "Class = \"NSMenuItem\"; title = \"Replace Older\"; ObjectID = \"2O5-JQ-7Zs\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Overwrite Older"
+            "value" : "Replace Older"
           }
         },
         "ru" : {
@@ -92,13 +92,13 @@
       }
     },
     "8Xz-24-O4V.title" : {
-      "comment" : "Class = \"NSButtonCell\"; title = \"Overwrite\"; ObjectID = \"8Xz-24-O4V\";",
+      "comment" : "Class = \"NSButtonCell\"; title = \"Replace\"; ObjectID = \"8Xz-24-O4V\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Overwrite"
+            "value" : "Replace"
           }
         },
         "ru" : {
