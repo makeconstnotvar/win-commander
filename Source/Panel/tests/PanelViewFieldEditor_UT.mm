@@ -101,6 +101,15 @@ TEST_CASE(PREFIX "escape cancels without submitting")
     }
 }
 
+TEST_CASE(PREFIX "editor text view exposes an accessibility identifier and label")
+{
+    @autoreleasepool {
+        NCPanelViewFieldEditor *const editor = [[NCPanelViewFieldEditor alloc] initWithItem:TestItem()];
+        CHECK([editor.editor.accessibilityIdentifier isEqualToString:@"wincommander.panel.renameField"]);
+        CHECK(editor.editor.accessibilityLabel.length > 0);
+    }
+}
+
 } // namespace
 
 #undef PREFIX

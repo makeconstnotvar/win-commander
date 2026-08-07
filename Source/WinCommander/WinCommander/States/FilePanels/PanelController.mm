@@ -2271,10 +2271,14 @@ struct CalculatedSizesBatch {
 
     if( _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
-        [[maybe_unused]] const auto result =
-            m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+        const auto result = m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
         clear_worker_slot();
-        report_cancelled_callback();
+        // A prior explicit cancellation (e.g. CancelBackgroundOperations) already finished this exact
+        // request and published its own PaneLifecycleCancelled event; Cancel() here is then a stale
+        // duplicate (StaleRequest/NoActiveRequest), and the legacy per-request callback must stay
+        // silent to avoid reporting the same cancellation twice through two different channels.
+        if( result == PaneLifecycleProducer::FinishResult::Published )
+            report_cancelled_callback();
         return;
     }
 
@@ -2337,10 +2341,12 @@ struct CalculatedSizesBatch {
             return;
         }
         if( !m_Data.MatchesPreparationOptions(*_outcome.preparation_options) ) {
-            [[maybe_unused]] const auto result =
-                m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+            const auto result = m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
             clear_worker_slot();
-            report_cancelled_callback();
+            // See the matching comment on the content-generation mismatch branch above: only report
+            // the legacy callback when this call is the one that actually published the cancellation.
+            if( result == PaneLifecycleProducer::FinishResult::Published )
+                report_cancelled_callback();
             return;
         }
         prepared = std::move(_outcome.prepared_model);

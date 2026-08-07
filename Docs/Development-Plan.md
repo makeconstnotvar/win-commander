@@ -43,7 +43,12 @@ Local development identity evidence 2026-08-04: the installed certificate `66CA9
 
 ### 2.1 Что осталось до продукта
 
-Следующий продуктовый разрыв Explorer — Q1-10: режим по умолчанию, large-folder responsiveness и accessibility closure.
+Все срезы Очереди 1 (Q1-1…Q1-10) закрыты. Что осталось до полноценного закрытия Очереди 1 по разделу 4.3 — два явных пункта, ни один не является продуктовым разрывом:
+
+1. Первый hosted CI run ещё не выполнен.
+2. Обнаружен и вынесен отдельно предсуществующий дефект тестовой инфраструктуры: полный нефильтрованный прогон `WinCommanderUT` без `--filter` падает по `assert(g_Config)` в `AppDelegate.mm`, потому что ни один тест не бутстрапит глобальный `Config` singleton — воспроизводится и на чистом коде до среза Q1-10, не связан с продуктовой функциональностью. Целевые/отфильтрованные прогоны для каждого затронутого файла проходят чисто.
+
+Очередь 2 может начинаться параллельно с закрытием этих двух пунктов.
 
 ## 3. Решение о переприоритизации
 
@@ -91,7 +96,7 @@ Local development identity evidence 2026-08-04: the installed certificate `66CA9
 | **Q1-7** | Полный набор состояний строки и папки | **M** | **complete** — Q1-7a–Q1-7d production implementation and closure gates pass; evidence in [`explorer_folder_visual_states_slice.md`](Features/explorer_folder_visual_states_slice.md). The adjacent conflict presentation is closed by Q1-8. | Inline rename (F2) с валидацией, modifier-reactive drag & drop с Copy/Move/Link badge и count, loading skeleton, empty, permission denied, drive disconnected | `VisualStateMapper`, `NCExplorerPaneStateView`; exact committed Native mount identity; exact inline-rename plan; pure `DragDropPolicy`; persistent Validate→Receive receiver; exact source/target seals and legacy `Copying`/`Linkage` routing |
 | **Q1-8** | Прогресс и конфликты копирования в Explorer | **M** | **complete** — exact per-window Pool progress strip, copied current-item publication and explicit accessible conflict actions; evidence in [`explorer_operation_progress_conflicts_slice.md`](Features/explorer_operation_progress_conflicts_slice.md) | Видимый прогресс операции, MB/s, ETA, текущий файл; диалог конфликта Replace/Skip/Keep both/Apply to all | `ExplorerOperationProgressModel`, `ExplorerOperationProgressController`, `NCExplorerOperationProgressView`, `Job::CurrentItemPath`, `FileAlreadyExistDialog` |
 | **Q1-9** | Search Mode | **L** | **complete** — per-tab Store/controller, direct folder/disk and local Spotlight backends, explicit P0 filters/limitations/progress/cancel, bounded ordinary result listings and exact Reveal Original; evidence in [`explorer_search_mode_slice.md`](Features/explorer_search_mode_slice.md) | Поиск с явным scope (папка / диск / Spotlight), прогресс, отмена, понятные ограничения backend, результаты как обычный listing с навигацией к элементу | `SearchStore`, `ExplorerSearchController`, direct/Spotlight adapters, `VFS::SearchForFiles` diagnostics |
-| **Q1-10** | Explorer как режим по умолчанию + перф и accessibility | **M** | pending | Explorer открывается по умолчанию; папки 10k/100k остаются интерактивными; VoiceOver-проход по основным поверхностям | `MainWindowController` state machine; baseline из `Performance/` |
+| **Q1-10** | Explorer как режим по умолчанию + перф и accessibility | **M** | **complete** — default-startup policy verified (4/4 focused cases), large-folder cancellation double-notification bug fixed and covered (`PanelController*` 94/94 across four seeds), rename-field и List column header accessibility gaps закрыты, подтверждённый мёртвый код удалён; evidence in [`explorer_default_mode_and_accessibility_slice.md`](Features/explorer_default_mode_and_accessibility_slice.md) | Explorer открывается по умолчанию; папки 10k/100k остаются интерактивными без дублирующих уведомлений при отмене; rename field и column headers доступны VoiceOver | `MainWindowController` state machine; `Performance/` baseline + [`explorer_large_folder_interactivity_2026-08-07.md`](Performance/explorer_large_folder_interactivity_2026-08-07.md) |
 
 ### 4.1 Порядок исполнения
 
@@ -112,11 +117,11 @@ Q1-1 идёт первым и даёт максимальный прирост �
 
 ### 4.3 Exit criteria Очереди 1
 
-- Explorer закрывает повседневный цикл: навигация, просмотр, создание, копирование, перемещение, переименование, удаление, архивирование, поиск, свойства.
-- Вкладки, preview, view modes и сессия работают и восстанавливаются.
-- Длинные операции видимы и отменяемы, конфликты разрешаются явно.
-- Папки 10 000 и 100 000 элементов остаются интерактивными.
-- Аггрегатные unit-тесты проходят локально; первый hosted CI run выполнен.
+- Explorer закрывает повседневный цикл: навигация, просмотр, создание, копирование, перемещение, переименование, удаление, архивирование, поиск, свойства. **Выполнено** (Q1-1…Q1-9).
+- Вкладки, preview, view modes и сессия работают и восстанавливаются. **Выполнено** (Q1-3…Q1-6).
+- Длинные операции видимы и отменяемы, конфликты разрешаются явно. **Выполнено** (Q1-8).
+- Папки 10 000 и 100 000 элементов остаются интерактивными. **Выполнено** (Q1-10): shared navigation pipeline держит heartbeat отзывчивым и не дублирует уведомления об отмене; Explorer использует тот же `PanelController`/`PanelView` без изменений.
+- Аггрегатные unit-тесты проходят локально; первый hosted CI run выполнен. **Частично**: отфильтрованные прогоны для каждого затронутого файла проходят чисто на нескольких seed; полный нефильтрованный `WinCommanderUT` падает по предсуществующему, не связанному с продуктом дефекту тестового бутстрапа (см. раздел 2.1); первый hosted CI run не выполнен.
 
 ## 5. Очередь 2 — power-user и полнота
 
@@ -186,9 +191,9 @@ Scripts/run_all_integration_tests.sh
 
 | Старый milestone | Судьба |
 |---|---|
-| M0 Baseline | Закрыт локально; остаётся первый hosted CI run → Q1-10 |
+| M0 Baseline | Закрыт локально; остаётся первый hosted CI run |
 | M1 Source of Truth и Commands | `PaneStore` закрыт для чтения; Queue 1 Registry roster и presentation composition закрыты в Q1-1/Q1-2/Q1-3 |
-| M2 Local Explorer | Q1-7 complete; default/performance/accessibility closure → Q1-10 |
+| M2 Local Explorer | Закрыт в Q1-10: default mode, large-folder interactivity и accessibility gap closure подтверждены |
 | M3 Operation lifecycle | Bounded Explorer progress/conflict surface закрыта в Q1-8; full live Operation Center и расширение движка → Queue 2; cross-volume и hardware → раздел 5.1 |
 | M4 Search | → Q1-9 |
 | M5 Power-user | → Q2-1 … Q2-3, Q2-9 |

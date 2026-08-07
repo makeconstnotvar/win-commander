@@ -5,6 +5,16 @@
 
 @implementation PanelListViewTableHeaderView
 
+- (instancetype)init
+{
+    self = [super init];
+    if( self ) {
+        self.accessibilityIdentifier = @"wincommander.panel.list.header";
+        self.accessibilityLabel = NSLocalizedString(@"Column Headers", "Accessibility label for the list view's column header row");
+    }
+    return self;
+}
+
 - (NSMenu *)menu
 {
     if( auto v = nc::objc_cast<NCPanelListView>(self.tableView.enclosingScrollView.superview) )
