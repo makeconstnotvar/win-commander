@@ -1,4 +1,4 @@
-# Q2-7 CL-1/GL-1/NW-1…NW-2: Cloud sync state, badge rule, Gallery eligibility, network volume state and the mount table
+# Q2-7 CL-1/GL-1/NW-1…NW-3: Cloud sync state, badge rule, Gallery eligibility, network volume state, the mount table and the probe
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-7.
@@ -108,6 +108,44 @@ A local volume is also reported as answering by construction, whatever probe res
 - Focused `WinCommanderUT 'nc::core::MountTable*'`: **8/8 cases, 58 assertions** — the `/Volumes/data` versus `/Volumes/database` collision in both directions; innermost-wins including a mount point belonging to its own volume; the root-volume fallback and a path that cannot be placed; normalization; a local volume answering by construction despite a contrary probe; a network volume classifying as responsive, unresponsive and stale from the probe it is given, with the unresponsive one asserted unsafe to touch; the unplaceable path reported rather than invented; and one case against the **real** mount table, finding the root volume and placing `/` on it.
 - Full `WinCommanderUT --rng-seed 424242`: **789/789 cases, 11,698 assertions**.
 
+### Coverage gap at NW-2
+
+**The probe itself does not exist** — closed by NW-3 below.
+
+---
+
+# NW-3: asking a volume whether it is still there
+
+NW-2 supplies everything the mount table knows. Whether the server still *answers* is the one fact that cannot be had without touching it — and touching it is the thing this whole model exists to keep off the drawing thread.
+
+## The wait has a deadline, because the call cannot
+
+There is no timeout on `statfs`. Under a dead network mount the kernel holds it for tens of seconds, and nothing can interrupt it. The only way to have a deadline at all is to stop *waiting* for it: the call runs on a thread of its own and is abandoned when the budget is spent.
+
+The abandoned thread owns everything it touches — a heap-allocated block shared with it — so its eventual return writes somewhere valid and unread, whatever else has been destroyed by then.
+
+**A late answer is not an answer.** Once the budget is spent the volume is reported unresponsive, and a reply arriving afterwards does not retract that. Something that takes half a minute to respond is precisely what must not go on the drawing thread, whatever it eventually says.
+
+## Silence and refusal are different answers
+
+A server that replies "no such export" has answered — the mount is `Stale`, which fails fast and can be refused up front. A server that says nothing is `Unresponsive`, which blocks. The probe distinguishes them because NW-1 treats them differently, and collapsing them would send the optimistic fast-failing path into a mount that hangs.
+
+## The answer is remembered, and it expires
+
+Probing to draw a row would be the synchronous touch being avoided, so `Known` never blocks and never probes — that is the call the drawing thread may make. But a remembered answer expires: a `Responsive` from a minute ago would hide a mount that has died since, and hiding it is how the synchronous touch happens anyway. An aged-out answer is withheld rather than repeated, which turns into "needs a refresh" instead of a stale reassurance.
+
+**The prober runs outside the lock.** It is the part that can take tens of seconds, and holding the lock across it would block every drawing-thread read for exactly that long — reintroducing the stall this class exists to prevent, one indirection further away. A test holds a probe inside the prober and asserts reads still answer while it is stuck.
+
+A slower probe that started earlier does not overwrite a fresher answer: it is older news whatever order the two land in.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::NetworkVolumeProbe*'`: **7/7 cases, 42 assertions** — an answer served from memory without asking again, and asking what is known never probing; an aged-out answer withheld and then refreshed; mount points kept apart and one forgotten; an out-of-order refresh not overwriting fresher news; **reads answering while a probe is stuck inside the prober**; the real prober against a path that answers, against a budget nothing can meet, and against a path that is not a mount point — checking that refusal and silence come out different; and the result feeding through to `Unresponsive`, asserted unsafe to touch.
+- The same suite plus `RemoteConnectionRegistry` under **TSan**: **15/15 cases, 93 assertions** — this slice detaches a thread and shares state with it.
+- Full `WinCommanderUT --rng-seed 424242`: **796/796 cases, 11,740 assertions**.
+- The TSan build again needed the frame-size warning relaxed for two unrelated tests; see the note in `git_status_foundation.md`.
+
 ### Coverage gap
 
-**The probe itself does not exist.** Whether a server still answers is a parameter here, because finding out means touching it — which has to happen off the drawing thread, with its own budget, and be remembered. That, the cloud-facts adapter, and the Gallery view are what remain of Q2-7.
+**No scheduler and no caller.** Something has to notice which volumes a listing touches, refresh the stale ones off the drawing thread, and redraw when an answer changes. The cloud-facts adapter and the Gallery view also remain.

@@ -72,6 +72,8 @@
 		D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000045 /* GitStatus_UT.cpp */; };
 		D9FC000132A0000000000052 /* NetworkVolumeState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000055 /* NetworkVolumeState.cpp */; };
 		D9FC000132A00000000000F0 /* MountTable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000F2 /* MountTable.cpp */; };
+		D9FC000132A0000000000101 /* NetworkVolumeProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000103 /* NetworkVolumeProbe.cpp */; };
+		D9FC000132A0000000000102 /* NetworkVolumeProbe_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000104 /* NetworkVolumeProbe_UT.cpp */; };
 		D9FC000132A00000000000F1 /* MountTable_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000F3 /* MountTable_UT.cpp */; };
 		D9FC000132A0000000000053 /* NetworkVolumeState_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */; };
 		D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004A /* GalleryEligibility.cpp */; };
@@ -1129,6 +1131,9 @@
 		D9FC000132A0000000000044 /* GitStatus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitStatus.cpp; path = WinCommander/Core/Git/GitStatus.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000045 /* GitStatus_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitStatus_UT.cpp; path = WinCommander/Tests/GitStatus_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000054 /* NetworkVolumeState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NetworkVolumeState.h; path = WinCommander/Core/Cloud/NetworkVolumeState.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000103 /* NetworkVolumeProbe.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NetworkVolumeProbe.cpp; path = WinCommander/Core/Cloud/NetworkVolumeProbe.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000105 /* NetworkVolumeProbe.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NetworkVolumeProbe.h; path = WinCommander/Core/Cloud/NetworkVolumeProbe.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000104 /* NetworkVolumeProbe_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NetworkVolumeProbe_UT.cpp; path = WinCommander/Tests/NetworkVolumeProbe_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A00000000000F2 /* MountTable.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = MountTable.cpp; path = WinCommander/Core/Cloud/MountTable.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000000F4 /* MountTable.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = MountTable.h; path = WinCommander/Core/Cloud/MountTable.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000000F3 /* MountTable_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = MountTable_UT.cpp; path = WinCommander/Tests/MountTable_UT.cpp; sourceTree = "<group>"; };
@@ -2302,6 +2307,7 @@
 				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
 				D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */,
 				D9FC000132A00000000000F3 /* MountTable_UT.cpp */,
+				D9FC000132A0000000000104 /* NetworkVolumeProbe_UT.cpp */,
 				D9FC000132A0000000000045 /* GitStatus_UT.cpp */,
 				D9FC000132A00000000000D3 /* GitRepositoryDiscovery_UT.cpp */,
 				D9FC000132A00000000000E3 /* GitStatusReader_UT.cpp */,
@@ -2423,6 +2429,8 @@
 				D9FC000132A0000000000055 /* NetworkVolumeState.cpp */,
 				D9FC000132A00000000000F4 /* MountTable.h */,
 				D9FC000132A00000000000F2 /* MountTable.cpp */,
+				D9FC000132A0000000000105 /* NetworkVolumeProbe.h */,
+				D9FC000132A0000000000103 /* NetworkVolumeProbe.cpp */,
 			);
 			name = Cloud;
 			sourceTree = "<group>";
@@ -3852,6 +3860,7 @@
 				D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */,
 				D9FC000132A0000000000052 /* NetworkVolumeState.cpp in Sources */,
 				D9FC000132A00000000000F0 /* MountTable.cpp in Sources */,
+				D9FC000132A0000000000101 /* NetworkVolumeProbe.cpp in Sources */,
 				D9FC000132A0000000000041 /* GitStatus.cpp in Sources */,
 				D9FC000132A00000000000D0 /* GitRepositoryDiscovery.cpp in Sources */,
 				D9FC000132A00000000000E0 /* GitStatusReader.cpp in Sources */,
@@ -4119,6 +4128,7 @@
 				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,
 				D9FC000132A0000000000053 /* NetworkVolumeState_UT.cpp in Sources */,
 				D9FC000132A00000000000F1 /* MountTable_UT.cpp in Sources */,
+				D9FC000132A0000000000102 /* NetworkVolumeProbe_UT.cpp in Sources */,
 				D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */,
 				D9FC000132A00000000000D1 /* GitRepositoryDiscovery_UT.cpp in Sources */,
 				D9FC000132A00000000000E1 /* GitStatusReader_UT.cpp in Sources */,
