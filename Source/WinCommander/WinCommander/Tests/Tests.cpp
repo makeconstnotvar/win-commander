@@ -29,7 +29,10 @@ static int RMRF(const std::string &_path)
                         [[maybe_unused]] const struct stat *sb,
                         int typeflag,
                         [[maybe_unused]] struct FTW *ftwbuf) {
-        if( typeflag == FTW_F )
+        // FTW_SL matters: with FTW_PHYS, nftw reports a symlink as FTW_SL rather than FTW_F.
+        // Without this branch a test that creates one leaves it behind, the directory then cannot
+        // be removed, and the NEXT test fails in its constructor - far from the actual cause.
+        if( typeflag == FTW_F || typeflag == FTW_SL || typeflag == FTW_SLN )
             unlink(fpath);
         else if( typeflag == FTW_D || typeflag == FTW_DNR || typeflag == FTW_DP )
             rmdir(fpath);

@@ -44,7 +44,8 @@ WriteAtomically(const std::filesystem::path &_path, std::span<const std::byte> _
     std::pmr::string temp_path(target_fs.parent_path().native(), &alloc);
     temp_path += "/.";
     temp_path += target_fs.filename().native();
-    temp_path += ".nctmp.XXXXXX";
+    temp_path += g_AtomicWriteTemporaryMarker;
+    temp_path.append(g_AtomicWriteTemporarySuffixLength, 'X');
     const auto fd = mkstemp(temp_path.data());
     if( fd < 0 )
         return std::unexpected(Error{Error::POSIX, errno});

@@ -1,4 +1,4 @@
-# Q2-10 RH-1…RH-5: Atomic-write durability, localization, accessibility, crash leftovers
+# Q2-10 RH-1…RH-6: Atomic-write durability, localization, accessibility, crash cleanup
 
 > Status: defect found and fixed; see §Verification.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-10 ("atomic persistence", "локализация").
@@ -157,6 +157,38 @@ The general shape of this fix is worth naming: when a read-side heuristic cannot
 - Full `ConfigUT --rng-seed 424242`: **38/38 cases** — the consumer.
 - Full `WinCommanderUT --rng-seed 424242`: **738/738 cases, 11,405/11,405 assertions**.
 
+That gap — nothing actually sweeping — is closed by RH-6 below.
+
+---
+
+# RH-6: the sweep, and two latent traps it uncovered
+
+## The sweep
+
+`SweepOrphanedTemporaries` removes leftovers of an interrupted write from the target's own directory and **reports what it removed and what it could not**, rather than tidying up silently.
+
+Three constraints, each for a specific reason:
+
+- **It never recurses.** A leftover is created beside its target, so descending could only reach files this function has no claim over.
+- **It uses `symlink_status`, not `status`.** A symlink wearing the temporary's name was not written by us, and resolving it would let a planted link redirect the deletion to a file somewhere else entirely. A directory bearing the name is refused for the same reason.
+- **It never throws.** This runs at startup as best-effort cleanup; failing to tidy up must not prevent the application from starting. What could not be removed is reported instead.
+
+The marker constant now lives beside `WriteAtomically` and is consumed by the matcher, so the writer and the recogniser cannot drift apart — a second copy would have silently stopped matching the day one of them changed.
+
+## Two latent traps found on the way
+
+**The symlink test broke the *next* test, not itself.** `TempTestDir`'s cleanup handled `FTW_F` and directories but not `FTW_SL` — and with `FTW_PHYS`, `nftw` reports a symlink as `FTW_SL`, never `FTW_F`. So the link survived, its directory could not be removed, and the following test failed inside its own constructor with `mkdir failed` — a failure pointing nowhere near the cause.
+
+Tellingly, the *production* code in `TemporaryFileStorageImpl.cpp` already handles `FTW_SL | FTW_SLN` correctly. Only the test harnesses were wrong, in three places: `WinCommander/Tests/Tests.cpp`, `Panel/tests/Tests.mm`, and `Utility/tests/TemporaryFileStorageImpl_UT.mm`. All three fixed, since any future test that creates a symlink would have hit the same misdirected failure.
+
+## Verification
+
+- `WinCommanderUT`, `BaseUT`, `PanelUT`, `UtilityUT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::SweepOrphanedTemporaries*'`: **5/5 cases, 34/34 assertions** — leftovers removed and reported; every non-claim left alone, including the two lookalikes that defeated RH-5's first draft and a neighbour's leftover; a symlink refused with its target intact; no recursion and a directory bearing the name refused; empty, missing and nonexistent-directory paths answered safely.
+- Focused `'nc::core::IsOrphanedAtomicWriteTemporary*'`: **5/5 cases, 21/21 assertions**.
+- Full `WinCommanderUT --rng-seed 424242`: **743/743 cases, 11,439/11,439 assertions**.
+- Full `BaseUT`: **80/80, 70,576 assertions**. Full `PanelUT`: **57/57, 1,385**. Full `UtilityUT`: **121/121, 1,776** — the three harnesses whose cleanup changed.
+
 ### Coverage gap
 
-**Nothing sweeps yet.** This decides safely *which* files are leftovers; a startup pass that actually removes them is the next step, and it should log what it deletes rather than doing so silently.
+**Nothing calls the sweep yet.** Wiring it into startup for the config paths is the remaining step; it is deliberately separate, because deciding *when* to sweep and *what to log* is a lifecycle decision rather than a filesystem one.

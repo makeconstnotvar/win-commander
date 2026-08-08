@@ -1,7 +1,10 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #pragma once
 
+#include <filesystem>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace nc::core {
 
@@ -26,5 +29,30 @@ namespace nc::core {
  * the other way is destroying someone's data.
  */
 [[nodiscard]] bool IsOrphanedAtomicWriteTemporary(std::string_view _target_name, std::string_view _candidate) noexcept;
+
+/** What a sweep found and did. Reported rather than performed silently. */
+struct OrphanedTemporarySweepResult {
+    /** Files removed, by full path. */
+    std::vector<std::string> removed;
+    /** Matched, but could not be removed - reported so a caller can say so rather than assume. */
+    std::vector<std::string> failed;
+
+    friend bool operator==(const OrphanedTemporarySweepResult &, const OrphanedTemporarySweepResult &) = default;
+};
+
+/**
+ * Removes leftovers of interrupted atomic writes of `_target` from its own directory.
+ *
+ * Scans only the target's immediate directory and never recurses: a leftover is created beside its
+ * target, so descending could only reach files this function has no claim over.
+ *
+ * Every candidate must satisfy `IsOrphanedAtomicWriteTemporary` and be a regular file - a directory
+ * or symlink bearing the name is not something this wrote, and following a symlink would let a
+ * planted link redirect the deletion somewhere else entirely.
+ *
+ * Never throws: a sweep is best-effort cleanup running at startup, and failing to tidy up must not
+ * prevent the application from starting. What could not be removed is reported instead.
+ */
+[[nodiscard]] OrphanedTemporarySweepResult SweepOrphanedTemporaries(const std::filesystem::path &_target) noexcept;
 
 } // namespace nc::core

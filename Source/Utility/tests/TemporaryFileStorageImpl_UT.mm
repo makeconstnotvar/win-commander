@@ -268,7 +268,10 @@ int RMRF(const std::string &_path)
                         [[maybe_unused]] const struct stat *sb,
                         int typeflag,
                         [[maybe_unused]] struct FTW *ftwbuf) {
-        if( typeflag == FTW_F )
+        // With FTW_PHYS a symlink is reported as FTW_SL, not FTW_F. Missing it leaves the link
+        // behind, the directory then cannot be removed, and the NEXT test fails in its
+        // constructor - far from the cause. TemporaryFileStorageImpl.cpp already gets this right.
+        if( typeflag == FTW_F || typeflag == FTW_SL || typeflag == FTW_SLN )
             unlink(fpath);
         else if( typeflag == FTW_D || typeflag == FTW_DNR || typeflag == FTW_DP )
             rmdir(fpath);
