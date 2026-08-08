@@ -162,3 +162,39 @@ TEST_CASE(PREFIX "Error handling")
 }
 
 #undef PREFIX
+
+TEST_CASE("WriteAtomically Leaves no temporary behind after publishing")
+{
+    // A surviving mkstemp artefact would accumulate one file per save in the user's own directory.
+    const TempTestDir d;
+    const std::filesystem::path target = d.directory / "durable.bin";
+
+    REQUIRE(WriteAtomically(target, FromString("first generation")));
+    REQUIRE(WriteAtomically(target, FromString("second generation, rather longer than the first")));
+    REQUIRE(ReadFile(target) == FromString("second generation, rather longer than the first"));
+
+    size_t entries = 0;
+    for( const auto &entry : std::filesystem::directory_iterator{d.directory} ) {
+        ++entries;
+        CHECK(entry.path().filename() == "durable.bin");
+    }
+    CHECK(entries == 1);
+}
+
+TEST_CASE("WriteAtomically A rejected write leaves the previous contents intact")
+{
+    // The point of writing through a temporary: a failure must never be observable as a truncated
+    // target, because a reader cannot distinguish that from a legitimately short file.
+    const TempTestDir d;
+    const std::filesystem::path target = d.directory / "kept.bin";
+    const std::vector<std::byte> original = FromString("original contents");
+    REQUIRE(WriteAtomically(target, original));
+
+    // A relative path is rejected before anything is opened.
+    CHECK_FALSE(WriteAtomically("relative/path.bin", FromString("x")));
+    CHECK(ReadFile(target) == original);
+
+    // So is an empty one.
+    CHECK_FALSE(WriteAtomically("", FromString("x")));
+    CHECK(ReadFile(target) == original);
+}
