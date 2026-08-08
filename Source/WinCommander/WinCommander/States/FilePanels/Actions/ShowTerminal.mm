@@ -4,6 +4,7 @@
 #include "../PanelController.h"
 #include "../../MainWindowController.h"
 #include <Utility/ObjCpp.h>
+#include <WinCommander/Core/Tools/LocalWorkingDirectory.h>
 
 namespace nc::panel::actions {
 
@@ -19,9 +20,19 @@ void ShowTerminal::Perform(MainWindowFilePanelState *_target, [[maybe_unused]] i
 {
     std::string path;
 
-    if( auto pc = _target.activePanelController )
-        if( pc.isUniform && pc.vfs->IsNativeFS() )
-            path = pc.currentDirectoryPath;
+    // The one rule, rather than a second copy of it here. Besides keeping the two from drifting, it
+    // strips the trailing separator, which the shell echoes back doubled.
+    if( auto pc = _target.activePanelController; pc != nil && pc.vfs != nil ) {
+        const std::string current = pc.currentDirectoryPath;
+        const nc::core::LocalWorkingDirectory resolved =
+            nc::core::ResolveLocalWorkingDirectory({.is_native_filesystem = pc.vfs->IsNativeFS(),
+                                                    .is_uniform = pc.isUniform != 0,
+                                                    .path = current});
+        // An unusable location leaves the path empty, which starts the shell at the user's home -
+        // the same thing it did before, and better than a directory they were not looking at.
+        if( resolved.Usable() )
+            path = resolved.path;
+    }
 
     if( const auto mwc = objc_cast<NCMainWindowController>(_target.window.delegate) )
         [mwc requestTerminal:path];

@@ -64,6 +64,7 @@
 		D9FC000132A000000000005E /* OrphanedTemporary_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */; };
 		D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004F /* LocalWorkingDirectory.cpp */; };
 		D9FC000132A0000000000111 /* LocalToolLaunch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000113 /* LocalToolLaunch.cpp */; };
+		D9FC000132A0000000000131 /* LocalToolLauncher.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000133 /* LocalToolLauncher.mm */; };
 		D9FC000132A0000000000112 /* LocalToolLaunch_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000114 /* LocalToolLaunch_UT.cpp */; };
 		D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */; };
 		D9FC000132A0000000000041 /* GitStatus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000044 /* GitStatus.cpp */; };
@@ -1123,6 +1124,8 @@
 		D9FC000132A0000000000060 /* OrphanedTemporary.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OrphanedTemporary.cpp; path = WinCommander/Core/Tools/OrphanedTemporary.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OrphanedTemporary_UT.cpp; path = WinCommander/Tests/OrphanedTemporary_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A000000000004E /* LocalWorkingDirectory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LocalWorkingDirectory.h; path = WinCommander/Core/Tools/LocalWorkingDirectory.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000133 /* LocalToolLauncher.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = LocalToolLauncher.mm; path = WinCommander/Core/Tools/LocalToolLauncher.mm; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000135 /* LocalToolLauncher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LocalToolLauncher.h; path = WinCommander/Core/Tools/LocalToolLauncher.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000113 /* LocalToolLaunch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalToolLaunch.cpp; path = WinCommander/Core/Tools/LocalToolLaunch.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000115 /* LocalToolLaunch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LocalToolLaunch.h; path = WinCommander/Core/Tools/LocalToolLaunch.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000114 /* LocalToolLaunch_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalToolLaunch_UT.cpp; path = WinCommander/Tests/LocalToolLaunch_UT.cpp; sourceTree = "<group>"; };
@@ -2408,6 +2411,8 @@
 				D9FC000132A000000000004F /* LocalWorkingDirectory.cpp */,
 				D9FC000132A0000000000115 /* LocalToolLaunch.h */,
 				D9FC000132A0000000000113 /* LocalToolLaunch.cpp */,
+				D9FC000132A0000000000135 /* LocalToolLauncher.h */,
+				D9FC000132A0000000000133 /* LocalToolLauncher.mm */,
 				D9FC000132A000000000005F /* OrphanedTemporary.h */,
 				D9FC000132A0000000000060 /* OrphanedTemporary.cpp */,
 			);
@@ -3883,6 +3888,7 @@
 				D9FC000132A00000000000E0 /* GitStatusReader.cpp in Sources */,
 				D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */,
 				D9FC000132A0000000000111 /* LocalToolLaunch.cpp in Sources */,
+				D9FC000132A0000000000131 /* LocalToolLauncher.mm in Sources */,
 				D9FC000132A000000000005D /* OrphanedTemporary.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,

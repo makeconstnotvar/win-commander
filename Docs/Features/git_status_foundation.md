@@ -179,6 +179,39 @@ Nothing chosen yet is a settings problem; a blank value is a broken one. Both re
 - Full `WinCommanderUT --rng-seed 424242`: **804/804 cases, 11,765 assertions**.
 - No sanitizer run: a pure value transformation, with no allocation ownership, concurrency, or process launching of its own.
 
+### Coverage gap at TL-2
+
+**Nothing performs the launch** — closed by TL-3 below.
+
+---
+
+# TL-3: performing the launch, and one rule instead of two
+
+## The launch is not waited for
+
+An application can take many seconds to start. Blocking for it would freeze the window that asked — the same stall this codebase refuses to accept from an unresponsive network mount, arriving from a different direction. The first draft of this code did exactly that, with a semaphore, and it was wrong for precisely that reason. The completion arrives when Launch Services answers.
+
+What *is* synchronous is resolving the application, because it needs no launch to discover. "You have not got that editor" is reported as itself and immediately, rather than as a generic failure some seconds later — the two send the user to different places.
+
+An application named by path is checked for existence before being handed over, so a stale path is reported as a missing application rather than as a launch failure.
+
+## The directory is what gets opened when nothing is selected
+
+Which is what makes "open here" land in the folder the user is looking at rather than merely starting the application.
+
+## The built-in terminal now asks the same question as everything else
+
+`ShowTerminal` had its own copy of the rule — uniform listing, native filesystem — written inline. It was correct, but it was a second copy, and it did not strip the trailing separator that `currentDirectoryPath` carries, so the shell was handed `/Users/me/project/` and echoed the doubled separator back.
+
+It now goes through `ResolveLocalWorkingDirectory`. An unusable location still leaves the path empty, which starts the shell at the user's home — the same thing it did before, and still better than a directory they were not looking at.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- `WinCommanderUT 'nc::core::ResolveLocalWorkingDirectory*'` and `'nc::core::PrepareLocalToolLaunch*'`: both still pass unchanged — the consolidation moved a caller onto an already-tested rule rather than changing the rule.
+- Full `WinCommanderUT --rng-seed 424242`: **812/812 cases, 11,796 assertions**.
+- The launcher itself has no unit test: every path through it is a Launch Services call, and a test that passed would have had to start an application on the developer's machine. The decisions that can be tested without one — what to launch, with which documents, and when to refuse — are TL-2's, and they are.
+
 ### Coverage gap
 
-**Nothing performs the launch.** Handing the request to `NSWorkspace`, choosing defaults for the two roles, and surfacing each refusal where the user can act on it are the next steps — as is the menu wiring that would let a user invoke either.
+**No menu action invokes the external launch**, and nothing yet stores which application fills each role. Both are settings-and-menu work rather than decisions.
