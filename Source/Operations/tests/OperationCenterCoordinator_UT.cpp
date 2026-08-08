@@ -325,3 +325,72 @@ TEST_CASE("OperationCenterCoordinator: refresh rejects a staged admission withou
     CHECK(refreshed.error().code == OperationCenterCoordinatorErrorCode::ColdHistoryBusy);
     CHECK((*coordinator)->Model().Snapshot() == before);
 }
+
+TEST_CASE("OperationCenterCoordinator: pause and resume revalidate before reaching any executor",
+          "[operation-center-coordinator]")
+{
+    OperationCenterCoordinatorUTDirectory directory;
+    auto journal = OperationJournal::Open(directory.path);
+    REQUIRE(journal);
+    auto coordinator = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(coordinator);
+
+    auto staging = (*coordinator)->StageAdmission(*journal, OperationCenterCoordinatorUTPlan("pausable"));
+    REQUIRE(staging);
+    auto committed = (*coordinator)->CommitAdmission(*journal, std::move(*staging));
+    REQUIRE(committed);
+    const auto id = committed->operation_id;
+    const auto queued = (*coordinator)->Model().Find(id);
+    REQUIRE(queued);
+    REQUIRE(queued->state == OperationRecordState::Queued);
+
+    SECTION("an unknown operation is refused without inventing a record")
+    {
+        // A second coordinator allocates its own sequence; its op-2 is unknown to the first, which
+        // only holds op-1.
+        OperationCenterCoordinatorUTDirectory other_directory;
+        auto other_journal = OperationJournal::Open(other_directory.path);
+        REQUIRE(other_journal);
+        auto other = OperationCenterCoordinator::Create(*other_journal);
+        REQUIRE(other);
+        OperationId foreign = id;
+        for( int index = 0; index < 2; ++index ) {
+            auto other_staging = (*other)->StageAdmission(
+                *other_journal, OperationCenterCoordinatorUTPlan("foreign-" + std::to_string(index)));
+            REQUIRE(other_staging);
+            auto other_committed = (*other)->CommitAdmission(*other_journal, std::move(*other_staging));
+            REQUIRE(other_committed);
+            foreign = other_committed->operation_id;
+        }
+        REQUIRE_FALSE(foreign == id);
+
+        const auto result = (*coordinator)->SetPaused(foreign, 1, OperationCenterPauseIntent::Pause);
+        CHECK(result.code == OperationCenterPauseResultCode::OperationNotFound);
+        CHECK_FALSE(result.current_record);
+    }
+    SECTION("a stale revision is refused and reports what the record actually is now")
+    {
+        const auto result = (*coordinator)->SetPaused(id, queued->revision + 1, OperationCenterPauseIntent::Pause);
+        CHECK(result.code == OperationCenterPauseResultCode::StaleRevision);
+        REQUIRE(result.current_record);
+        CHECK(result.current_record->revision == queued->revision);
+        CHECK(result.current_record->state == OperationRecordState::Queued);
+    }
+    SECTION("the record's own control projection decides which direction is offered")
+    {
+        // A Queued operation has not started, so neither direction applies. The port refuses both
+        // here rather than passing them to an executor to sort out - and, importantly, refuses
+        // before it ever looks for a live residency.
+        const auto paused = (*coordinator)->SetPaused(id, queued->revision, OperationCenterPauseIntent::Pause);
+        CHECK(paused.code == OperationCenterPauseResultCode::ControlUnavailable);
+        const auto resumed = (*coordinator)->SetPaused(id, queued->revision, OperationCenterPauseIntent::Resume);
+        CHECK(resumed.code == OperationCenterPauseResultCode::ControlUnavailable);
+
+        // A refused request leaves the record exactly as it was, so the panel cannot start claiming
+        // a state the executor never entered.
+        const auto current = (*coordinator)->Model().Find(id);
+        REQUIRE(current);
+        CHECK(current->state == OperationRecordState::Queued);
+        CHECK(current->revision == queued->revision);
+    }
+}

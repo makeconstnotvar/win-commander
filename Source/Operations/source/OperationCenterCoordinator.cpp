@@ -383,6 +383,93 @@ void OperationCenterCoordinator::ApplyDurableTerminal(const OperationId _operati
     }
 }
 
+OperationCenterPauseResult OperationCenterCoordinator::SetPaused(const OperationId _operation_id,
+                                                                 const uint64_t _expected_revision,
+                                                                 const OperationCenterPauseIntent _intent) noexcept
+{
+    const bool pausing = _intent == OperationCenterPauseIntent::Pause;
+
+    const auto validate = [&](const OperationRecord &_record) {
+        if( _record.revision != _expected_revision )
+            return OperationCenterPauseResult{
+                .code = OperationCenterPauseResultCode::StaleRevision,
+                .current_record = _record,
+            };
+        // The record's own projection is the authority for which direction is offered, so a resume
+        // on a running operation and a pause on a paused one are both refused here rather than
+        // being passed to the executor to sort out.
+        const bool available = pausing ? _record.controls.can_pause : _record.controls.can_resume;
+        if( !available )
+            return OperationCenterPauseResult{
+                .code = OperationCenterPauseResultCode::ControlUnavailable,
+                .current_record = _record,
+            };
+        return OperationCenterPauseResult{
+            .code = OperationCenterPauseResultCode::Accepted,
+            .current_record = _record,
+        };
+    };
+
+    try {
+        const auto initial = m_Model.Find(_operation_id);
+        if( !initial )
+            return {.code = OperationCenterPauseResultCode::OperationNotFound};
+        if( const auto validation = validate(*initial);
+            validation.code != OperationCenterPauseResultCode::Accepted )
+            return validation;
+
+        const auto residency = FindLiveResidency(_operation_id);
+        if( !residency || !residency->operation )
+            return {.code = OperationCenterPauseResultCode::ResidencyUnavailable, .current_record = initial};
+
+        // Revalidate under the same gate Cancel uses, so a cancellation landing concurrently cannot
+        // be overtaken by a pause that was authorised against the pre-cancel record.
+        const auto cancel_guard = std::lock_guard{residency->cancel_gate};
+        const auto current = m_Model.Find(_operation_id);
+        if( !current )
+            return {.code = OperationCenterPauseResultCode::OperationNotFound};
+        if( const auto validation = validate(*current);
+            validation.code != OperationCenterPauseResultCode::Accepted )
+            return validation;
+
+        const auto pool_operations =
+            residency->pool ? residency->pool->Operations() : std::vector<std::shared_ptr<Operation>>{};
+        const bool is_resident = std::ranges::any_of(pool_operations, [&](const auto &_operation) {
+            return _operation == residency->operation;
+        });
+        if( !is_resident )
+            return {.code = OperationCenterPauseResultCode::ResidencyUnavailable, .current_record = current};
+
+        if( pausing )
+            residency->operation->Pause();
+        else
+            residency->operation->Resume();
+
+        ReducePaused(_operation_id, pausing);
+        return {.code = OperationCenterPauseResultCode::Accepted, .current_record = m_Model.Find(_operation_id)};
+    } catch( ... ) {
+        return {.code = OperationCenterPauseResultCode::ResidencyUnavailable};
+    }
+}
+
+void OperationCenterCoordinator::ReducePaused(const OperationId _operation_id, const bool _paused) noexcept
+{
+    const auto reduction_guard = std::lock_guard{m_ReductionLock};
+    const auto current = m_Model.Find(_operation_id);
+    if( !current )
+        return;
+    const bool available = _paused ? current->controls.can_pause : current->controls.can_resume;
+    if( !available )
+        return;
+    try {
+        (void)m_Model.Transition(_operation_id,
+                                 current->revision,
+                                 _paused ? OperationRecordState::Paused : OperationRecordState::Running,
+                                 std::chrono::system_clock::now());
+    } catch( ... ) {
+    }
+}
+
 void OperationCenterCoordinator::ReduceCancelling(const OperationId _operation_id) noexcept
 {
     const auto reduction_guard = std::lock_guard{m_ReductionLock};

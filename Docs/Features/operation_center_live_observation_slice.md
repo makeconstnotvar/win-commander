@@ -1,4 +1,4 @@
-# Q2-4 OC-1/OC-2: Live observation and the live Operation Center panel
+# Q2-4 OC-1/OC-2/OC-3: Live observation, the live panel, and the pause/resume port
 
 > Status: implemented and tested — see §Verification.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-4.
@@ -13,7 +13,9 @@ This increment adds the missing half: observation. It is the prerequisite for th
 
 **OC-2** then consumes it: the Operation Center panel stays current while it is open instead of requiring a reopen.
 
-Not here: pause/resume/retry control ports, log capture, and history persistence beyond the hydration the coordinator already performs.
+**OC-3** adds the pause/resume control port on the coordinator.
+
+Not here: retry, log capture, and history persistence beyond the hydration the coordinator already performs.
 
 ## The contract
 
@@ -54,21 +56,34 @@ Presenting was split into `renderOperationCenterSnapshot:` (rebuild contents fro
 
 The refresh re-checks panel visibility after its main-queue hop, because the panel may have closed in between.
 
+## OC-3: the pause/resume port
+
+The model already had everything for this — `Running ↔ Paused` transitions and a `ControlsFor` table that offers `can_pause` only while Running and `can_resume` only while Paused. What was missing was the port that revalidates a request and reaches the executor.
+
+`OperationCenterCoordinator::SetPaused(id, expected_revision, intent)` mirrors `Cancel` deliberately, because the failure it has to prevent is the same one: a control authorised against a record the user was *looking at* being applied to whatever the operation is doing *now*. So it revalidates the exact revision, then the record's own control projection, then live Pool residency — and re-checks all of it under the same `cancel_gate` the cancel path uses, so a cancellation landing concurrently cannot be overtaken by a pause authorised against the pre-cancel record.
+
+**The record's own projection is the authority for direction.** A resume on a running operation and a pause on a paused one are refused here rather than handed to the executor to sort out, which is what keeps a redundant request from producing a state the panel would then have to explain.
+
+Unlike `Cancel` there is no in-flight gate: pausing is reversible, so a duplicate request is simply refused by the projection rather than needing to be serialised against itself.
+
+A request that cannot reach the executor leaves the model untouched. That is the point of the `ResidencyUnavailable` path: a panel must never start claiming an operation is paused when the executor never saw the request.
+
 ## Verification
 
 Built and run in this session (Xcode 26.6 toolchain):
 
 - `xcodebuild -scheme OperationsUT -configuration Debug build` — **BUILD SUCCEEDED**.
 - Focused Debug `OperationsUT '[operation-center-model]' --rng-seed 424242`: **8/8 cases, 101/101 assertions** — 4 pre-existing plus 4 new: every accepted change notifies and every rejected one does not, and reads never notify; an observer calling `Snapshot()` from its callback completes and already sees the change that triggered it; releasing one ticket retires only that observer; a ticket outliving the model is safe to release afterwards.
-- Full Debug `OperationsUT --rng-seed 424242`: **220/220 cases, 5,763/5,763 assertions** (re-run after OC-2's coordinator forwarder).
+- Full Debug `OperationsUT --rng-seed 424242`: **221/221 cases, 5,808/5,808 assertions** (re-run after OC-2's forwarder and OC-3's port; the extra case is OC-3's).
 - Full Debug `WinCommanderUT --rng-seed 424242`: **666/666 cases, 11,038/11,038 assertions**.
 - `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED**.
-- **Release ASAN** `OperationsUT --rng-seed 424242`: **220/220 cases, 5,763/5,763 assertions**, `libclang_rt.asan_osx_dynamic.dylib` verified linked via `otool -L`, **0** AddressSanitizer diagnostics and 0 `SUMMARY:` lines. (The three `Error:` lines in that output are the suite's own intentional throwing fixtures, not sanitizer findings.)
-- **Release UBSAN** `OperationsUT --rng-seed 424242`: **220/220 cases, 5,763/5,763 assertions**, `libclang_rt.ubsan_osx_dynamic.dylib` verified linked, **0** `runtime error` diagnostics with `print_stacktrace=1`.
+- **Release ASAN** `OperationsUT --rng-seed 424242`: **221/221 cases, 5,808/5,808 assertions**, `libclang_rt.asan_osx_dynamic.dylib` verified linked via `otool -L`, **0** AddressSanitizer diagnostics and 0 `SUMMARY:` lines. (The three `Error:` lines in that output are the suite's own intentional throwing fixtures, not sanitizer findings.)
+- **Release UBSAN** `OperationsUT --rng-seed 424242`: **221/221 cases, 5,808/5,808 assertions**, `libclang_rt.ubsan_osx_dynamic.dylib` verified linked, **0** `runtime error` diagnostics with `print_stacktrace=1`.
 - `AGENTS.md` scopes sanitizer runs to changes *in* `Operations`, concurrency, ownership or lifetime code. This slice is all three, so unlike the Q2-1…Q2-3 presentation slices it does not qualify for the focused-filter tier — hence both runtimes above.
 
 ### Coverage gaps
 
 - **The live panel has no automated coverage.** `WinCommanderUT` does not bootstrap the application's operation-center composition, so the subscribe/coalesce/re-render path is exercised only by construction and by the model-level tests underneath it. The pieces that *can* be tested without that bootstrap — when the model notifies, and that an observer may re-read from its callback — are covered above.
+- **OC-3's executor-reaching path is untested.** The three fail-closed gates that do not need a live Pool — unknown operation, stale revision, and the control projection refusing a direction — are covered. Reaching `ResidencyUnavailable` or an accepted pause needs a record in `Running`, and `ReduceStarted` is coordinator-private, so driving one there from a test would mean widening that surface. The accepted path shares its revalidation and residency code with `Cancel`, which the engine exercises through its own composition.
 - **No multi-threaded stress case.** The tests exercise the reentrancy and lifetime contracts single-threaded; `ScopedObservableBase` is documented and already relied upon as thread-safe, and this slice adds no new synchronization of its own beyond moving the fire point outside an existing lock. A concurrent producer/observer stress test would still be worth adding when the live panel starts consuming this from the main thread while the Pool transitions records from its own.
 - `Hydrate` and `RefreshColdHistory` notify, but neither has an observation test: both are coordinator-private, and widening the test-only surface purely to observe them is a worse trade than leaving them to the coordinator's own coverage. Their notifications follow the same `DeferredNotification` pattern as the paths that are covered.

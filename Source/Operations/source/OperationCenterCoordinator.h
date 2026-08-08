@@ -64,6 +64,29 @@ enum class OperationCenterCancelResultCode : uint8_t {
     StopRejected
 };
 
+/** Which way a pause/resume request moves a running operation. */
+enum class OperationCenterPauseIntent : uint8_t {
+    Pause,
+    Resume
+};
+
+enum class OperationCenterPauseResultCode : uint8_t {
+    Accepted,
+    OperationNotFound,
+    StaleRevision,
+    /** The record's own control projection does not offer this direction right now. */
+    ControlUnavailable,
+    ResidencyUnavailable
+};
+
+/** Value-only result for a revalidated pause/resume request; it exposes no executor reference. */
+struct OperationCenterPauseResult final {
+    OperationCenterPauseResultCode code;
+    std::optional<OperationRecord> current_record;
+
+    bool operator==(const OperationCenterPauseResult &) const = default;
+};
+
 /** Value-only result for a revalidated cancel request; it exposes no executor reference. */
 struct OperationCenterCancelResult final {
     OperationCenterCancelResultCode code;
@@ -219,6 +242,19 @@ public:
                                                       uint64_t _expected_revision) noexcept;
 
     /**
+     * Pauses or resumes one live operation, revalidating the exact model revision and the record's
+     * own control projection first. Same shape as Cancel and for the same reasons: the caller never
+     * receives an executor reference, and a stale revision is refused rather than applied to
+     * whatever the operation happens to be doing now.
+     *
+     * Unlike Cancel this is reversible, so there is no in-flight gate: a redundant pause on an
+     * already-paused operation is refused by the control projection rather than needing one.
+     */
+    [[nodiscard]] OperationCenterPauseResult SetPaused(OperationId _operation_id,
+                                                       uint64_t _expected_revision,
+                                                       OperationCenterPauseIntent _intent) noexcept;
+
+    /**
      * Imports only absent terminal/Interrupted history from an exact reopened journal storage.
      * The coordinator must be cold: active model records, staged admissions and live residencies
      * fail closed without changing the model or retaining the journal.
@@ -232,6 +268,7 @@ private:
     void ReduceStarted(OperationId _operation_id) noexcept;
     void ReduceDurableTerminal(OperationId _operation_id, OperationJournalState _state) noexcept;
     void ReduceDurableTerminalFromJournal(OperationId _operation_id, const OperationJournal &_journal) noexcept;
+    void ReducePaused(OperationId _operation_id, bool _paused) noexcept;
     void ReduceCancelling(OperationId _operation_id) noexcept;
     void ApplyDurableTerminal(OperationId _operation_id, OperationJournalState _state) noexcept;
     void ReleaseLiveResidencyDraft() noexcept;
