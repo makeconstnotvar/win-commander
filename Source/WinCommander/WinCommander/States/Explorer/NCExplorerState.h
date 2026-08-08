@@ -36,14 +36,20 @@ class Pool;
 @property(nonatomic, readonly) PanelController *panelController;
 
 /**
- * Replaces the initial Home intent with a decoded ordered Explorer session. Every restored tab
- * receives a newly allocated process-local PaneId; persisted locations never carry pane identity,
- * history or view settings. May be accepted only once, before runtime tab mutations begin.
+ * Replaces the initial Home intent with a decoded Explorer pane layout: the left side's ordered
+ * tabs and, when the session recorded dual-pane mode, the right side's own tabs plus the focused
+ * side and divider ratio. Every restored tab receives a newly allocated process-local PaneId;
+ * persisted locations never carry pane identity, history or view settings. May be accepted only
+ * once, before runtime tab mutations begin. A right side that cannot be rebuilt leaves the already
+ * restored left side as a single-pane window rather than failing the whole session.
  */
-- (BOOL)restoreTabsFromSession:(const nc::explorer::ExplorerTabsSession &)_session;
+- (BOOL)restorePanesFromSession:(const nc::explorer::ExplorerPanesSession &)_session;
 
-/** Captures ordered exact tab locations and the active index for window-session persistence. */
-- (nc::explorer::ExplorerTabsSession)captureTabsSession;
+/**
+ * Captures each live side's ordered exact tab locations and active index, plus the dual-pane
+ * layout, focused side and divider ratio, for window-session persistence.
+ */
+- (nc::explorer::ExplorerPanesSession)capturePanesSession;
 
 // Called by NCMainWindow before Commander-mode configurable menu shortcuts are resolved.
 - (BOOL)handleModeSpecificKeyEquivalent:(NSEvent *)_event;

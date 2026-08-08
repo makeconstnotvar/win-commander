@@ -9,6 +9,7 @@
 #include <VFS/XAttr.h>
 
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <limits>
 #include <string_view>
@@ -26,6 +27,11 @@ constexpr auto g_CommanderKey = "commander";
 constexpr auto g_ExplorerKey = "explorer";
 constexpr auto g_TabsKey = "tabs";
 constexpr auto g_ActiveKey = "active";
+constexpr auto g_RightKey = "right";
+constexpr auto g_FocusedKey = "focused";
+constexpr auto g_DividerKey = "divider";
+constexpr auto g_LeftSideName = "left";
+constexpr auto g_RightSideName = "right";
 constexpr auto g_LocationKey = "location";
 constexpr auto g_LegacyPanelsKey = "panels_v1";
 constexpr auto g_LegacyUIKey = "uiState";
@@ -183,7 +189,7 @@ bool IsLegacyCommanderRoot(const Value &_root, panel::PanelDataPersistency &_per
     return Member(_root, g_SchemaKey) == nullptr && IsValidCommanderState(_root, _persistency);
 }
 
-std::optional<ExplorerTabsSession> DecodeExplorer(const Value &_value, panel::PanelDataPersistency &_persistency)
+std::optional<ExplorerTabsSession> DecodeTabs(const Value &_value, panel::PanelDataPersistency &_persistency)
 {
     if( !_value.IsObject() )
         return std::nullopt;
@@ -214,19 +220,61 @@ std::optional<ExplorerTabsSession> DecodeExplorer(const Value &_value, panel::Pa
     return result;
 }
 
-Value EncodeExplorer(const ExplorerTabsSession &_explorer, panel::PanelDataPersistency &_persistency)
+/**
+ * The left pane's tabs live directly on the Explorer object, so a v1 payload decodes unchanged as a
+ * single-pane session. A present but undecodable right pane rejects the envelope - it carries its
+ * own ordered tab locations, which is user data no default can stand in for. The focused side and
+ * divider ratio are presentation hints with exact safe defaults, so an unusable value degrades to
+ * left focus and the even split rather than discarding the whole window.
+ */
+std::optional<ExplorerPanesSession> DecodeExplorer(const Value &_value, panel::PanelDataPersistency &_persistency)
 {
-    if( _explorer.tabs.size() > ExplorerSessionPersistency::MaximumTabs )
+    auto left = DecodeTabs(_value, _persistency);
+    if( !left )
+        return std::nullopt;
+
+    ExplorerPanesSession result;
+    result.left = std::move(*left);
+
+    const Value *const right = Member(_value, g_RightKey);
+    if( right != nullptr && !right->IsNull() ) {
+        auto decoded_right = DecodeTabs(*right, _persistency);
+        if( !decoded_right )
+            return std::nullopt;
+        result.right = std::move(decoded_right);
+    }
+    if( !result.right )
+        return result;
+
+    const Value *const focused = Member(_value, g_FocusedKey);
+    if( focused != nullptr && focused->IsString() ) {
+        const std::string_view name{focused->GetString(), focused->GetStringLength()};
+        result.right_focused = name == g_RightSideName;
+    }
+
+    const Value *const divider = Member(_value, g_DividerKey);
+    if( divider != nullptr && divider->IsNumber() ) {
+        const double ratio = divider->GetDouble();
+        if( std::isfinite(ratio) && ratio >= ExplorerSessionPersistency::MinimumDividerRatio &&
+            ratio <= ExplorerSessionPersistency::MaximumDividerRatio )
+            result.divider_ratio = ratio;
+    }
+    return result;
+}
+
+Value EncodeTabs(const ExplorerTabsSession &_tabs, panel::PanelDataPersistency &_persistency)
+{
+    if( _tabs.tabs.size() > ExplorerSessionPersistency::MaximumTabs )
         return Value{kNullType};
 
     Value tabs{kArrayType};
-    if( _explorer.tabs.empty() ) {
+    if( _tabs.tabs.empty() ) {
         Value tab{kObjectType};
         tab.AddMember(String(g_LocationKey), Value{kNullType}, config::g_CrtAllocator);
         tabs.PushBack(std::move(tab), config::g_CrtAllocator);
     }
     else {
-        for( const ExplorerSessionTab &source : _explorer.tabs ) {
+        for( const ExplorerSessionTab &source : _tabs.tabs ) {
             Value tab{kObjectType};
             tab.AddMember(
                 String(g_LocationKey), EncodeCanonicalLocation(source.location, _persistency), config::g_CrtAllocator);
@@ -234,10 +282,39 @@ Value EncodeExplorer(const ExplorerTabsSession &_explorer, panel::PanelDataPersi
         }
     }
 
-    const size_t active_index = _explorer.active_index < tabs.Size() ? _explorer.active_index : 0;
+    const size_t active_index = _tabs.active_index < tabs.Size() ? _tabs.active_index : 0;
     Value result{kObjectType};
     result.AddMember(String(g_TabsKey), std::move(tabs), config::g_CrtAllocator);
     result.AddMember(String(g_ActiveKey), Value{static_cast<uint64_t>(active_index)}, config::g_CrtAllocator);
+    return result;
+}
+
+Value EncodeExplorer(const ExplorerPanesSession &_explorer, panel::PanelDataPersistency &_persistency)
+{
+    Value result = EncodeTabs(_explorer.left, _persistency);
+    if( result.IsNull() )
+        return Value{kNullType};
+
+    Value right{kNullType};
+    if( _explorer.right ) {
+        right = EncodeTabs(*_explorer.right, _persistency);
+        if( right.IsNull() )
+            return Value{kNullType};
+    }
+
+    const bool dual_pane = _explorer.right.has_value();
+    Value divider{kNullType};
+    if( dual_pane && _explorer.divider_ratio && std::isfinite(*_explorer.divider_ratio) &&
+        *_explorer.divider_ratio >= ExplorerSessionPersistency::MinimumDividerRatio &&
+        *_explorer.divider_ratio <= ExplorerSessionPersistency::MaximumDividerRatio ) {
+        divider = Value{*_explorer.divider_ratio};
+    }
+
+    result.AddMember(String(g_RightKey), std::move(right), config::g_CrtAllocator);
+    result.AddMember(String(g_FocusedKey),
+                     String(dual_pane && _explorer.right_focused ? g_RightSideName : g_LeftSideName),
+                     config::g_CrtAllocator);
+    result.AddMember(String(g_DividerKey), std::move(divider), config::g_CrtAllocator);
     return result;
 }
 
@@ -308,9 +385,9 @@ std::optional<ExplorerWindowSession> ExplorerSessionPersistency::Decode(const Va
     const Value *const mode = Member(_root, g_ModeKey);
     const Value *const commander = Member(_root, g_CommanderKey);
     const Value *const explorer = Member(_root, g_ExplorerKey);
-    if( schema == nullptr || !schema->IsInt() || schema->GetInt() != SchemaVersion || mode == nullptr ||
-        !mode->IsString() || commander == nullptr || !IsValidCommanderState(*commander, m_LocationPersistency) ||
-        explorer == nullptr ) {
+    if( schema == nullptr || !schema->IsInt() || schema->GetInt() < MinimumReadableSchemaVersion ||
+        schema->GetInt() > SchemaVersion || mode == nullptr || !mode->IsString() || commander == nullptr ||
+        !IsValidCommanderState(*commander, m_LocationPersistency) || explorer == nullptr ) {
         return std::nullopt;
     }
 

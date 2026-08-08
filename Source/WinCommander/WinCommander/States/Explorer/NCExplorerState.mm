@@ -54,6 +54,11 @@ static const CGFloat g_InspectorPreferredWidth = 320.0;
 static const CGFloat g_InspectorMinimumWidth = 280.0;
 static const CGFloat g_InspectorMaximumWidth = 520.0;
 static const CGFloat g_PanelMinimumWidth = 360.0;
+static const CGFloat g_DefaultPaneDividerRatio = 0.5;
+static const CGFloat g_MinimumPaneDividerRatio =
+    static_cast<CGFloat>(nc::explorer::ExplorerSessionPersistency::MinimumDividerRatio);
+static const CGFloat g_MaximumPaneDividerRatio =
+    static_cast<CGFloat>(nc::explorer::ExplorerSessionPersistency::MaximumDividerRatio);
 static constexpr auto g_QuickLookHazardousExtensionsList = "filePanel.presentation.quickLookHazardousExtensionsList";
 
 @interface NCAppDelegate (NCExplorerInspectorDependencies)
@@ -256,6 +261,7 @@ void ConfigureExplorerRootAccessibility(NSView *_view)
 - (BOOL)attachExplorerTabPanel:(PanelController *)_panel createPaneStore:(BOOL)_create_pane_store;
 - (void)attachExplorerTabViewForPanel:(PanelController *)_panel;
 - (void)rollbackSessionRestorePanels;
+@property(nonatomic, readonly) double paneDividerRatioForTesting;
 - (PanelController *)allocateExplorerPanelForSessionRestore;
 - (PanelController *)allocateExplorerPanelForDualPane;
 - (BOOL)dualPaneCreatesPaneStore;
@@ -501,6 +507,11 @@ class NCExplorerPaneContent;
 - (PanelController *)allocateExplorerPanelForDualPane;
 - (void)changeFocusedSide;
 - (BOOL)focusSide:(NCExplorerPaneSide)_side;
+- (BOOL)restoreTabs:(const nc::explorer::ExplorerTabsSession &)_session intoContent:(NCExplorerPaneContent &)_content;
+- (nc::explorer::ExplorerTabsSession)captureTabsForContent:(NCExplorerPaneContent &)_content;
+- (void)rollbackSessionRestoreForContent:(NCExplorerPaneContent &)_content;
+- (void)applyPaneDividerRatio;
+- (std::optional<CGFloat>)measuredPaneDividerRatio;
 @end
 
 /**
@@ -902,6 +913,9 @@ private:
     NCExplorerInspectorView *m_Inspector;
     NCPanelQLPanelAdaptor *m_QLPanelAdaptor;
     CGFloat m_LastInspectorWidth;
+    /** Left side's share of the dual-pane split's usable width. Retained across dual-pane toggles
+     *  and window sessions; the live split view only exists while dual-pane is on. */
+    CGFloat m_PaneDividerRatio;
     std::array<NCExplorerPaneContent, g_ExplorerPaneSideCount> m_Sides;
     NCExplorerPaneSide m_FocusedSide;
     bool m_DualPaneEnabled;
@@ -961,6 +975,7 @@ private:
             return nil;
         m_QLPanelAdaptor = [app QLPanelAdaptor];
         m_LastInspectorWidth = g_InspectorPreferredWidth;
+        m_PaneDividerRatio = g_DefaultPaneDividerRatio;
 
         m_ToolbarDelegate = [[NCExplorerToolbarDelegate alloc] initWithPanelController:initial_panel];
         [self buildLayout];
@@ -1086,6 +1101,43 @@ private:
 
 #pragma mark - Dual Pane layout toggle
 
+/**
+ * Places the dual-pane divider at the retained ratio of the split's usable width. AppKit reports the
+ * achieved position back through -splitViewDidResizeSubviews:, so the ratio the delegate then keeps
+ * is the one actually satisfied by the per-side minimum-width constraints, not the requested one.
+ */
+- (void)applyPaneDividerRatio
+{
+    if( !m_PaneSplitView || m_PaneSplitView.subviews.count != 2 )
+        return;
+    const CGFloat usable = m_PaneSplitView.bounds.size.width - m_PaneSplitView.dividerThickness;
+    if( usable <= 0.0 )
+        return;
+    const CGFloat ratio = std::clamp(m_PaneDividerRatio, g_MinimumPaneDividerRatio, g_MaximumPaneDividerRatio);
+    [m_PaneSplitView setPosition:std::clamp(usable * ratio, 0.0, usable) ofDividerAtIndex:0];
+}
+
+/**
+ * The left side's measured share of the dual-pane split, or nullopt when that measurement cannot
+ * express user intent. Below twice the per-side minimum width no divider position satisfies the
+ * layout constraints at all, so whatever AppKit settles on there is an artifact of the window being
+ * too narrow - recording it would let one cramped layout pass silently destroy the retained ratio
+ * the user actually chose. This mirrors how -splitViewDidResizeSubviews: only accepts an inspector
+ * width that is already inside its own usable band.
+ */
+- (std::optional<CGFloat>)measuredPaneDividerRatio
+{
+    if( !m_PaneSplitView || m_PaneSplitView.subviews.count != 2 )
+        return std::nullopt;
+    const CGFloat usable = m_PaneSplitView.bounds.size.width - m_PaneSplitView.dividerThickness;
+    if( usable < 2.0 * g_PanelMinimumWidth )
+        return std::nullopt;
+    const CGFloat left_width = m_PaneSplitView.subviews.firstObject.frame.size.width;
+    if( left_width <= 0.0 || left_width > usable )
+        return std::nullopt;
+    return left_width / usable;
+}
+
 - (BOOL)dualPaneEnabled
 {
     return m_DualPaneEnabled;
@@ -1144,6 +1196,7 @@ private:
         [m_PaneSplitView addSubview:left_view];
         [m_PaneSplitView addSubview:right_view];
         [m_PaneSplitView adjustSubviews];
+        [self applyPaneDividerRatio];
 
         right.BindActiveObservation(panel, NCExplorerPaneSide::Right, self);
         [self loadNativeHomeForSessionPanel:panel];
@@ -1228,6 +1281,11 @@ private:
 
 - (void)splitViewDidResizeSubviews:(NSNotification *)_notification
 {
+    if( m_PaneSplitView != nil && _notification.object == m_PaneSplitView ) {
+        if( const std::optional<CGFloat> ratio = [self measuredPaneDividerRatio] )
+            m_PaneDividerRatio = std::clamp(*ratio, g_MinimumPaneDividerRatio, g_MaximumPaneDividerRatio);
+        return;
+    }
     if( _notification.object != m_ContentSplitView || m_Inspector.hidden )
         return;
     const CGFloat width = m_Inspector.frame.size.width;
@@ -1523,15 +1581,49 @@ private:
 
 - (void)rollbackSessionRestorePanels
 {
-    // Session restore is always seeded into the Left content before the dual-pane layout can ever
-    // be toggled on, so rollback only ever needs to touch that one side.
-    [self focusedContent].RollbackSessionRestore(self);
+    // The left side is always the first restore target and is the focused one while it is being
+    // restored: dual-pane can only be turned on afterwards, by restorePanesFromSession: itself.
+    [self rollbackSessionRestoreForContent:[self focusedContent]];
+}
+
+- (void)rollbackSessionRestoreForContent:(NCExplorerPaneContent &)_content
+{
+    _content.RollbackSessionRestore(self);
     [self invalidateExplorerRestorableState];
 }
 
-- (BOOL)restoreTabsFromSession:(const nc::explorer::ExplorerTabsSession &)_session
+- (BOOL)restorePanesFromSession:(const nc::explorer::ExplorerPanesSession &)_session
 {
-    NCExplorerPaneContent &content = [self focusedContent];
+    // Dual-pane is never on before a session is applied, so the left side is both the focused one
+    // and the only one that exists at this point; its restore keeps the exact pre-DP-3 behaviour.
+    if( m_DualPaneEnabled )
+        return false;
+    if( ![self restoreTabs:_session.left intoContent:[self contentForSide:NCExplorerPaneSide::Left]] )
+        return false;
+    if( !_session.right )
+        return true;
+
+    // From here the left side is already restored and is the window's primary content. A right side
+    // that cannot be rebuilt therefore degrades this window to single-pane instead of discarding a
+    // session that has already succeeded for the side the user is looking at.
+    if( _session.divider_ratio ) {
+        m_PaneDividerRatio =
+            std::clamp(static_cast<CGFloat>(*_session.divider_ratio), g_MinimumPaneDividerRatio, g_MaximumPaneDividerRatio);
+    }
+    if( ![self setDualPaneEnabled:YES] )
+        return true;
+    if( ![self restoreTabs:*_session.right intoContent:[self contentForSide:NCExplorerPaneSide::Right]] ) {
+        [self setDualPaneEnabled:NO];
+        return true;
+    }
+    if( _session.right_focused )
+        [self focusSide:NCExplorerPaneSide::Right];
+    return true;
+}
+
+- (BOOL)restoreTabs:(const nc::explorer::ExplorerTabsSession &)_session intoContent:(NCExplorerPaneContent &)_content
+{
+    NCExplorerPaneContent &content = _content;
     if( content.SessionRestoreApplied() || content.RuntimeTabsMutated() || !content.HasTabsModel() ||
         content.TabsModel()->Size() != 1 || content.MutableEntries().size() != 1 || _session.tabs.empty() ||
         _session.tabs.size() > nc::explorer::ExplorerSessionPersistency::MaximumTabs ||
@@ -1551,13 +1643,21 @@ private:
     }
 
     const BOOL create_pane_store = content.MutableEntries().front().pane_store != nullptr;
+    const bool content_is_focused = &content == &[self focusedContent];
     content.SetSynchronizingTabs(true);
     for( size_t index = 1; index < panels.size(); ++index ) {
-        // Goes through the overridable 2-arg entry point (which targets [self focusedContent], the
-        // same `content` as here) rather than the toContent: variant, so that test doubles overriding
-        // attachExplorerTabPanel:createPaneStore: (e.g. to simulate a failed attach) still apply.
-        if( ![self attachExplorerTabPanel:panels[index] createPaneStore:create_pane_store] ) {
-            [self rollbackSessionRestorePanels];
+        // The focused side goes through the overridable 2-arg entry point (which resolves to
+        // [self focusedContent], the same `content` as here) rather than the toContent: variant, so
+        // that test doubles overriding attachExplorerTabPanel:createPaneStore: (e.g. to simulate a
+        // failed attach) still apply. Only the dual-pane right side, restored while the left side
+        // still holds focus, has to name its content explicitly.
+        const BOOL attached = content_is_focused
+                                  ? [self attachExplorerTabPanel:panels[index] createPaneStore:create_pane_store]
+                                  : [self attachExplorerTabPanel:panels[index]
+                                                 createPaneStore:create_pane_store
+                                                       toContent:content];
+        if( !attached ) {
+            [self rollbackSessionRestoreForContent:content];
             content.SetSynchronizingTabs(false);
             return false;
         }
@@ -1568,21 +1668,21 @@ private:
         std::ranges::any_of(panels, [tabbed_holder](PanelController *_panel) {
             return [tabbed_holder tabViewItemForController:_panel] == nil;
         }) ) {
-        [self rollbackSessionRestorePanels];
+        [self rollbackSessionRestoreForContent:content];
         content.SetSynchronizingTabs(false);
         return false;
     }
 
     PanelController *const active_panel = panels[_session.active_index];
     if( !content.TabsModel()->Activate(active_panel.paneId) ) {
-        [self rollbackSessionRestorePanels];
+        [self rollbackSessionRestoreForContent:content];
         content.SetSynchronizingTabs(false);
         return false;
     }
     if( tabbed_holder ) {
         NSTabViewItem *const active_item = [tabbed_holder tabViewItemForController:active_panel];
         if( !active_item ) {
-            [self rollbackSessionRestorePanels];
+            [self rollbackSessionRestoreForContent:content];
             content.SetSynchronizingTabs(false);
             return false;
         }
@@ -1599,10 +1699,22 @@ private:
     return true;
 }
 
-- (nc::explorer::ExplorerTabsSession)captureTabsSession
+- (nc::explorer::ExplorerPanesSession)capturePanesSession
+{
+    nc::explorer::ExplorerPanesSession session;
+    session.left = [self captureTabsForContent:[self contentForSide:NCExplorerPaneSide::Left]];
+    if( !m_DualPaneEnabled )
+        return session;
+    session.right = [self captureTabsForContent:[self contentForSide:NCExplorerPaneSide::Right]];
+    session.right_focused = m_FocusedSide == NCExplorerPaneSide::Right;
+    session.divider_ratio = static_cast<double>(m_PaneDividerRatio);
+    return session;
+}
+
+- (nc::explorer::ExplorerTabsSession)captureTabsForContent:(NCExplorerPaneContent &)_content
 {
     nc::explorer::ExplorerTabsSession session;
-    NCExplorerPaneContent &content = [self focusedContent];
+    NCExplorerPaneContent &content = _content;
     if( !content.HasTabsModel() || content.MutableEntries().size() != content.TabsModel()->Size() )
         return session;
 
@@ -2617,6 +2729,7 @@ private:
     m_QLPanelAdaptor = _ql_panel_adaptor;
     content.BuildTestingContainer(_panel_view, [[NCExplorerQuickSearchOverlayView alloc] initWithFrame:NSZeroRect]);
     m_LastInspectorWidth = g_InspectorPreferredWidth;
+    m_PaneDividerRatio = g_DefaultPaneDividerRatio;
     [self buildContentSplitWithPaneAreaView:content.Container() inspectorView:_inspector];
     [self addSubview:m_ContentSplitView];
     [NSLayoutConstraint activateConstraints:@[
@@ -2742,6 +2855,11 @@ private:
 - (NSView *)rightPanelContainerForTesting
 {
     return m_Sides[static_cast<size_t>(NCExplorerPaneSide::Right)].Container();
+}
+
+- (double)paneDividerRatioForTesting
+{
+    return static_cast<double>(m_PaneDividerRatio);
 }
 
 @end

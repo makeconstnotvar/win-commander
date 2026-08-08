@@ -15,6 +15,7 @@ namespace {
 
 using nc::config::Document;
 using nc::config::Value;
+using nc::explorer::ExplorerPanesSession;
 using nc::explorer::ExplorerSessionPersistency;
 using nc::explorer::ExplorerSessionTab;
 using nc::explorer::ExplorerTabsSession;
@@ -100,10 +101,12 @@ std::string JSONString(const Value &_value)
     return {buffer.GetString(), buffer.GetSize()};
 }
 
-Document ExplorerEnvelope(const std::string_view _explorer)
+Document ExplorerEnvelope(const std::string_view _explorer,
+                          const int _schema = ExplorerSessionPersistency::SchemaVersion)
 {
     const Value commander = CommanderState();
-    const std::string json = std::string{"{\"schema\":1,\"mode\":\"explorer\",\"commander\":"} + JSONString(commander) +
+    const std::string json = std::string{"{\"schema\":"} + std::to_string(_schema) +
+                             ",\"mode\":\"explorer\",\"commander\":" + JSONString(commander) +
                              ",\"explorer\":" + std::string{_explorer} + "}";
     return Parse(json);
 }
@@ -151,7 +154,8 @@ TEST_CASE(PREFIX "round-trips ordered Explorer locations and active index withou
         .active_index = 1,
     };
     ExplorerWindowSession source{
-        .mode = ExplorerWindowSessionMode::Explorer, .commander_state = CommanderState(), .explorer = std::move(tabs)};
+        .mode = ExplorerWindowSessionMode::Explorer, .commander_state = CommanderState(),
+        .explorer = ExplorerPanesSession{.left = std::move(tabs)}};
 
     const Value encoded = fixture.codec.Encode(source);
     REQUIRE(encoded.IsObject());
@@ -168,10 +172,161 @@ TEST_CASE(PREFIX "round-trips ordered Explorer locations and active index withou
     REQUIRE(decoded);
     CHECK(decoded->mode == ExplorerWindowSessionMode::Explorer);
     REQUIRE(decoded->explorer);
-    REQUIRE(decoded->explorer->tabs.size() == 2);
-    CHECK(decoded->explorer->active_index == 1);
-    CheckLocation(fixture.persistency, decoded->explorer->tabs[0].location, native);
-    CheckLocation(fixture.persistency, decoded->explorer->tabs[1].location, remote);
+    REQUIRE(decoded->explorer->left.tabs.size() == 2);
+    CHECK(decoded->explorer->left.active_index == 1);
+    CheckLocation(fixture.persistency, decoded->explorer->left.tabs[0].location, native);
+    CheckLocation(fixture.persistency, decoded->explorer->left.tabs[1].location, remote);
+}
+
+TEST_CASE(PREFIX "round-trips the dual-pane layout as an independent right side")
+{
+    Fixture fixture;
+    const PersistentLocation left_location = NativeLocation("/Users/example/Left");
+    const PersistentLocation right_location = NativeLocation("/Users/example/Right");
+    ExplorerPanesSession panes{
+        .left = {.tabs = {ExplorerSessionTab{.location = left_location}}, .active_index = 0},
+        .right = ExplorerTabsSession{.tabs = {ExplorerSessionTab{}, ExplorerSessionTab{.location = right_location}},
+                                     .active_index = 1},
+        .right_focused = true,
+        .divider_ratio = 0.4,
+    };
+    ExplorerWindowSession source{
+        .mode = ExplorerWindowSessionMode::Explorer, .commander_state = CommanderState(), .explorer = std::move(panes)};
+
+    const Value encoded = fixture.codec.Encode(source);
+    REQUIRE(encoded.IsObject());
+    CHECK(encoded["schema"].GetInt() == ExplorerSessionPersistency::SchemaVersion);
+    REQUIRE(encoded["explorer"]["right"].IsObject());
+    CHECK(encoded["explorer"]["right"]["tabs"].Size() == 2);
+    CHECK(std::string_view{encoded["explorer"]["focused"].GetString()} == "right");
+    CHECK(encoded["explorer"]["divider"].GetDouble() == 0.4);
+
+    const auto decoded = fixture.codec.Decode(encoded);
+    REQUIRE(decoded);
+    REQUIRE(decoded->explorer);
+    REQUIRE(decoded->explorer->left.tabs.size() == 1);
+    CheckLocation(fixture.persistency, decoded->explorer->left.tabs[0].location, left_location);
+    REQUIRE(decoded->explorer->right);
+    REQUIRE(decoded->explorer->right->tabs.size() == 2);
+    CHECK(decoded->explorer->right->active_index == 1);
+    CHECK_FALSE(decoded->explorer->right->tabs[0].location);
+    CheckLocation(fixture.persistency, decoded->explorer->right->tabs[1].location, right_location);
+    CHECK(decoded->explorer->right_focused);
+    REQUIRE(decoded->explorer->divider_ratio);
+    CHECK(*decoded->explorer->divider_ratio == 0.4);
+}
+
+TEST_CASE(PREFIX "keeps a single-pane session free of dual-pane state in both directions")
+{
+    Fixture fixture;
+
+    SECTION("encoding a left-only model records no right side")
+    {
+        ExplorerWindowSession source{
+            .mode = ExplorerWindowSessionMode::Explorer,
+            .commander_state = CommanderState(),
+            // right_focused and divider_ratio are meaningless without a right side and must not
+            // survive into the payload, or a restart would try to focus a side that does not exist.
+            .explorer = ExplorerPanesSession{.left = {.tabs = {ExplorerSessionTab{}}, .active_index = 0},
+                                             .right = std::nullopt,
+                                             .right_focused = true,
+                                             .divider_ratio = 0.3}};
+        const Value encoded = fixture.codec.Encode(source);
+        REQUIRE(encoded.IsObject());
+        CHECK(encoded["explorer"]["right"].IsNull());
+        CHECK(std::string_view{encoded["explorer"]["focused"].GetString()} == "left");
+        CHECK(encoded["explorer"]["divider"].IsNull());
+
+        const auto decoded = fixture.codec.Decode(encoded);
+        REQUIRE(decoded);
+        REQUIRE(decoded->explorer);
+        CHECK_FALSE(decoded->explorer->right);
+        CHECK_FALSE(decoded->explorer->right_focused);
+        CHECK_FALSE(decoded->explorer->divider_ratio);
+    }
+    SECTION("a stored v1 payload still decodes as one left pane")
+    {
+        const Document document = ExplorerEnvelope(R"({"tabs":[{"location":{"path":"/A/"}}],"active":0})", 1);
+        const auto decoded = fixture.codec.Decode(document);
+        REQUIRE(decoded);
+        REQUIRE(decoded->explorer);
+        REQUIRE(decoded->explorer->left.tabs.size() == 1);
+        CheckLocation(fixture.persistency, decoded->explorer->left.tabs[0].location, NativeLocation("/A/"));
+        CHECK_FALSE(decoded->explorer->right);
+        CHECK_FALSE(decoded->explorer->divider_ratio);
+    }
+    SECTION("dual-pane hints without a right side are ignored")
+    {
+        const Document document =
+            ExplorerEnvelope(R"({"tabs":[{"location":null}],"active":0,"right":null,"focused":"right","divider":0.4})");
+        const auto decoded = fixture.codec.Decode(document);
+        REQUIRE(decoded);
+        REQUIRE(decoded->explorer);
+        CHECK_FALSE(decoded->explorer->right);
+        CHECK_FALSE(decoded->explorer->right_focused);
+        CHECK_FALSE(decoded->explorer->divider_ratio);
+    }
+}
+
+TEST_CASE(PREFIX "rejects an undecodable right pane but degrades its presentation hints")
+{
+    Fixture fixture;
+
+    SECTION("a malformed right pane rejects the envelope atomically")
+    {
+        // The right pane carries its own ordered tab locations, so there is no safe default to
+        // substitute - unlike the focused side and divider ratio exercised below.
+        for( const std::string_view right : {R"("left")", R"([])", R"({"active":0})", R"({"tabs":{}})"} ) {
+            const Document document =
+                ExplorerEnvelope(std::string{R"({"tabs":[{"location":null}],"active":0,"right":)"} +
+                                 std::string{right} + "}");
+            CHECK_FALSE(fixture.codec.Decode(document));
+        }
+    }
+    SECTION("an oversized right pane is rejected with the same bound as the left one")
+    {
+        Document document = ExplorerEnvelope(R"({"tabs":[{"location":null}],"active":0,"right":{"tabs":[]}})");
+        auto &right_tabs = document["explorer"]["right"]["tabs"];
+        for( size_t index = 0; index <= ExplorerSessionPersistency::MaximumTabs; ++index ) {
+            Value tab{rapidjson::kObjectType};
+            tab.AddMember(
+                nc::config::MakeStandaloneString("location"), Value{rapidjson::kNullType}, nc::config::g_CrtAllocator);
+            right_tabs.PushBack(std::move(tab), nc::config::g_CrtAllocator);
+        }
+        CHECK_FALSE(fixture.codec.Decode(document));
+    }
+    SECTION("an unusable focused side or divider ratio falls back to its default")
+    {
+        for( const std::string_view hints : {R"("focused":"middle","divider":0.9999)",
+                                             R"("focused":7,"divider":"half")",
+                                             R"("focused":null,"divider":-1.0)",
+                                             R"("focused":"left","divider":0.0)"} ) {
+            const Document document =
+                ExplorerEnvelope(std::string{R"({"tabs":[{"location":null}],"active":0,)"} + std::string{hints} +
+                                 R"(,"right":{"tabs":[{"location":null}],"active":0}})");
+            const auto decoded = fixture.codec.Decode(document);
+            REQUIRE(decoded);
+            REQUIRE(decoded->explorer);
+            REQUIRE(decoded->explorer->right);
+            CHECK_FALSE(decoded->explorer->right_focused);
+            CHECK_FALSE(decoded->explorer->divider_ratio);
+        }
+    }
+    SECTION("an out-of-band divider ratio is dropped on the way out as well")
+    {
+        ExplorerWindowSession source{
+            .mode = ExplorerWindowSessionMode::Explorer,
+            .commander_state = CommanderState(),
+            .explorer = ExplorerPanesSession{.left = {.tabs = {ExplorerSessionTab{}}, .active_index = 0},
+                                             .right = ExplorerTabsSession{.tabs = {ExplorerSessionTab{}},
+                                                                          .active_index = 0},
+                                             .right_focused = false,
+                                             .divider_ratio = 0.99}};
+        const Value encoded = fixture.codec.Encode(source);
+        REQUIRE(encoded.IsObject());
+        CHECK(encoded["explorer"]["right"].IsObject());
+        CHECK(encoded["explorer"]["divider"].IsNull());
+    }
 }
 
 TEST_CASE(PREFIX "migrates the legacy panels root into Commander mode")
@@ -193,7 +348,7 @@ TEST_CASE(PREFIX "migrates the legacy panels root into Commander mode")
 
         const Value upgraded = fixture.codec.Encode(*decoded);
         REQUIRE(upgraded.IsObject());
-        CHECK(upgraded["schema"].GetInt() == 1);
+        CHECK(upgraded["schema"].GetInt() == ExplorerSessionPersistency::SchemaVersion);
         CHECK(std::string_view{upgraded["mode"].GetString()} == "commander");
         CHECK(upgraded["commander"] == legacy);
     }
@@ -222,7 +377,7 @@ TEST_CASE(PREFIX "rejects unknown schema mode and root atomically")
     SECTION("unknown schema")
     {
         Document document = ExplorerEnvelope(R"({"tabs":[],"active":0})");
-        document["schema"].SetInt(2);
+        document["schema"].SetInt(ExplorerSessionPersistency::SchemaVersion + 1);
         CHECK_FALSE(fixture.codec.Decode(document));
     }
     SECTION("unknown mode")
@@ -281,7 +436,7 @@ TEST_CASE(PREFIX "normalizes an empty Explorer session and invalid active index 
     {
         ExplorerWindowSession source{.mode = ExplorerWindowSessionMode::Explorer,
                                      .commander_state = CommanderState(),
-                                     .explorer = ExplorerTabsSession{.tabs = {}, .active_index = 99}};
+                                     .explorer = ExplorerPanesSession{.left = ExplorerTabsSession{.tabs = {}, .active_index = 99}}};
         const Value encoded = fixture.codec.Encode(source);
         REQUIRE(encoded.IsObject());
         REQUIRE(encoded["explorer"]["tabs"].Size() == 1);
@@ -295,15 +450,15 @@ TEST_CASE(PREFIX "normalizes an empty Explorer session and invalid active index 
         const auto decoded = fixture.codec.Decode(document);
         REQUIRE(decoded);
         REQUIRE(decoded->explorer);
-        CHECK(decoded->explorer->tabs.size() == 2);
-        CHECK(decoded->explorer->active_index == 0);
+        CHECK(decoded->explorer->left.tabs.size() == 2);
+        CHECK(decoded->explorer->left.active_index == 0);
 
         Document wrong_type = Parse(JSONString(document));
         wrong_type["explorer"]["active"].SetString("one");
         const auto decoded_wrong_type = fixture.codec.Decode(wrong_type);
         REQUIRE(decoded_wrong_type);
         REQUIRE(decoded_wrong_type->explorer);
-        CHECK(decoded_wrong_type->explorer->active_index == 0);
+        CHECK(decoded_wrong_type->explorer->left.active_index == 0);
     }
 }
 
@@ -324,12 +479,12 @@ TEST_CASE(PREFIX "isolates malformed noncanonical locations to Home without chan
     const auto decoded = fixture.codec.Decode(document);
     REQUIRE(decoded);
     REQUIRE(decoded->explorer);
-    REQUIRE(decoded->explorer->tabs.size() == 8);
-    CHECK(decoded->explorer->active_index == 5);
-    CheckLocation(fixture.persistency, decoded->explorer->tabs[0].location, NativeLocation("/A/"));
+    REQUIRE(decoded->explorer->left.tabs.size() == 8);
+    CHECK(decoded->explorer->left.active_index == 5);
+    CheckLocation(fixture.persistency, decoded->explorer->left.tabs[0].location, NativeLocation("/A/"));
     for( size_t index = 1; index < 7; ++index )
-        CHECK_FALSE(decoded->explorer->tabs[index].location);
-    CheckLocation(fixture.persistency, decoded->explorer->tabs[7].location, NativeLocation("/B/"));
+        CHECK_FALSE(decoded->explorer->left.tabs[index].location);
+    CheckLocation(fixture.persistency, decoded->explorer->left.tabs[7].location, NativeLocation("/B/"));
 }
 
 TEST_CASE(PREFIX "rejects a tab count above the bounded capacity")
@@ -338,7 +493,8 @@ TEST_CASE(PREFIX "rejects a tab count above the bounded capacity")
     ExplorerTabsSession tabs;
     tabs.tabs.resize(ExplorerSessionPersistency::MaximumTabs + 1);
     ExplorerWindowSession source{
-        .mode = ExplorerWindowSessionMode::Explorer, .commander_state = CommanderState(), .explorer = std::move(tabs)};
+        .mode = ExplorerWindowSessionMode::Explorer, .commander_state = CommanderState(),
+        .explorer = ExplorerPanesSession{.left = std::move(tabs)}};
     CHECK(fixture.codec.Encode(source).IsNull());
 
     Document document = ExplorerEnvelope(R"({"tabs":[],"active":0})");
@@ -359,7 +515,7 @@ TEST_CASE(PREFIX "rejects invalid caller envelopes before encoding")
     ExplorerWindowSession commander_with_tabs{
         .mode = ExplorerWindowSessionMode::Commander,
         .commander_state = CommanderState(),
-        .explorer = ExplorerTabsSession{},
+        .explorer = ExplorerPanesSession{},
     };
     CHECK(fixture.codec.Encode(commander_with_tabs).IsNull());
 
@@ -385,7 +541,8 @@ TEST_CASE(PREFIX "preserves only well-formed future StateConfig schemas")
     CHECK(ExplorerSessionPersistency::CanReplaceStoredSession(CommanderState()));
     CHECK(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":0})")));
     CHECK(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":1})")));
-    CHECK_FALSE(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":2})")));
+    CHECK(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":2})")));
+    CHECK_FALSE(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":3})")));
     CHECK_FALSE(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":4294967296})")));
     CHECK(ExplorerSessionPersistency::CanReplaceStoredSession(Parse(R"({"schema":"bad"})")));
 }

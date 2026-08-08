@@ -203,7 +203,7 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
         m_Explorer != nil && std::ranges::find(m_WindowState, m_Explorer) != m_WindowState.end();
     if( explorer_mode ) {
         session.mode = nc::explorer::ExplorerWindowSessionMode::Explorer;
-        session.explorer = [m_Explorer captureTabsSession];
+        session.explorer = [m_Explorer capturePanesSession];
     }
     else {
         session.mode = nc::explorer::ExplorerWindowSessionMode::Commander;
@@ -239,7 +239,7 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
     NCExplorerState *const explorer = [self makeExplorerState];
     if( !explorer )
         return true;
-    if( ![explorer restoreTabsFromSession:*session->explorer] ) {
+    if( ![explorer restorePanesFromSession:*session->explorer] ) {
         // The envelope explicitly selected Explorer, but its tab payload could not be restored.
         // Fall back to a fresh Explorer state while retaining the decoded Commander base solely
         // as the permanent compatibility layer.

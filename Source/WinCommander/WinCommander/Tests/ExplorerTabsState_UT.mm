@@ -46,6 +46,7 @@
 @property(nonatomic, readonly) BOOL dualPaneEnabledForTesting;
 @property(nonatomic, readonly) PanelController *rightPanelControllerForTesting;
 @property(nonatomic, readonly) NSView *rightPanelContainerForTesting;
+@property(nonatomic, readonly) double paneDividerRatioForTesting;
 @end
 
 @interface NCExplorerSearchModeView (ExplorerTabsStateTesting)
@@ -517,20 +518,21 @@ TEST_CASE(PREFIX "restores ordered fresh tab identities and the requested active
         [[ExplorerTabsTestPanelController alloc] initWithPaneID:nc::core::PaneId{503} view:third_view];
     [fixture.state setSessionRestorePanelsForTesting:@[ fixture.second, third ]];
 
-    nc::explorer::ExplorerTabsSession session;
-    session.tabs.resize(3);
-    session.active_index = 1;
-    REQUIRE([fixture.state restoreTabsFromSession:session]);
+    nc::explorer::ExplorerPanesSession session;
+    session.left.tabs.resize(3);
+    session.left.active_index = 1;
+    REQUIRE([fixture.state restorePanesFromSession:session]);
 
     CHECK(fixture.state.panelController == fixture.second);
     CHECK([[fixture.state restoredSessionPanelsForTesting]
         isEqualToArray:@[ fixture.first, fixture.second, third ]]);
     CHECK([fixture.state tabPaneIDsForTesting] ==
           std::vector<nc::core::PaneId>{{501}, {502}, {503}});
-    const nc::explorer::ExplorerTabsSession captured = [fixture.state captureTabsSession];
-    CHECK(captured.tabs.size() == 3);
-    CHECK(captured.active_index == 1);
-    CHECK(std::ranges::none_of(captured.tabs, [](const auto &_tab) { return _tab.location.has_value(); }));
+    const nc::explorer::ExplorerPanesSession captured = [fixture.state capturePanesSession];
+    CHECK(captured.left.tabs.size() == 3);
+    CHECK(captured.left.active_index == 1);
+    CHECK(std::ranges::none_of(captured.left.tabs, [](const auto &_tab) { return _tab.location.has_value(); }));
+    CHECK_FALSE(captured.right);
     CHECK(fixture.first.state == fixture.state);
     CHECK(fixture.second.state == fixture.state);
     CHECK(third.state == fixture.state);
@@ -540,7 +542,7 @@ TEST_CASE(PREFIX "restores ordered fresh tab identities and the requested active
     CHECK(fixture.first_view.hidden);
     CHECK_FALSE(fixture.second_view.hidden);
     CHECK(third_view.hidden);
-    CHECK_FALSE([fixture.state restoreTabsFromSession:session]);
+    CHECK_FALSE([fixture.state restorePanesFromSession:session]);
 }
 
 TEST_CASE(PREFIX "rejects duplicate restored pane identity before changing tab topology")
@@ -551,10 +553,10 @@ TEST_CASE(PREFIX "rejects duplicate restored pane identity before changing tab t
         [[ExplorerTabsTestPanelController alloc] initWithPaneID:fixture.first.paneId view:duplicate_view];
     [fixture.state setSessionRestorePanelsForTesting:@[ duplicate ]];
 
-    nc::explorer::ExplorerTabsSession session;
-    session.tabs.resize(2);
-    session.active_index = 1;
-    CHECK_FALSE([fixture.state restoreTabsFromSession:session]);
+    nc::explorer::ExplorerPanesSession session;
+    session.left.tabs.resize(2);
+    session.left.active_index = 1;
+    CHECK_FALSE([fixture.state restorePanesFromSession:session]);
     CHECK(fixture.state.panelController == fixture.first);
     CHECK([fixture.state tabPaneIDsForTesting] == std::vector<nc::core::PaneId>{{501}});
     CHECK([fixture.state restoredSessionPanelsForTesting].count == 0);
@@ -569,10 +571,10 @@ TEST_CASE(PREFIX "rolls back a partially attached restored topology")
     fixture.state.sessionAttachmentFailurePanel = third;
     [fixture.state setSessionRestorePanelsForTesting:@[ fixture.second, third ]];
 
-    nc::explorer::ExplorerTabsSession session;
-    session.tabs.resize(3);
-    session.active_index = 2;
-    CHECK_FALSE([fixture.state restoreTabsFromSession:session]);
+    nc::explorer::ExplorerPanesSession session;
+    session.left.tabs.resize(3);
+    session.left.active_index = 2;
+    CHECK_FALSE([fixture.state restorePanesFromSession:session]);
 
     CHECK(fixture.state.panelController == fixture.first);
     CHECK([fixture.state tabPaneIDsForTesting] == std::vector<nc::core::PaneId>{{501}});
@@ -582,9 +584,9 @@ TEST_CASE(PREFIX "rolls back a partially attached restored topology")
     CHECK(third.state == nil);
     CHECK(third_view.keystrokeSink == nil);
     CHECK([fixture.state restoredSessionPanelsForTesting].count == 0);
-    const nc::explorer::ExplorerTabsSession captured_after_failure = [fixture.state captureTabsSession];
-    CHECK(captured_after_failure.tabs.size() == 1);
-    CHECK(captured_after_failure.active_index == 0);
+    const nc::explorer::ExplorerPanesSession captured_after_failure = [fixture.state capturePanesSession];
+    CHECK(captured_after_failure.left.tabs.size() == 1);
+    CHECK(captured_after_failure.left.active_index == 0);
 
     ExplorerTabsTestPanelView *const replacement_second_view =
         [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
@@ -599,7 +601,7 @@ TEST_CASE(PREFIX "rolls back a partially attached restored topology")
     fixture.state.sessionAttachmentFailurePanel = nil;
     [fixture.state setSessionRestorePanelsForTesting:@[ replacement_second, replacement_third ]];
 
-    REQUIRE([fixture.state restoreTabsFromSession:session]);
+    REQUIRE([fixture.state restorePanesFromSession:session]);
     CHECK([fixture.state tabPaneIDsForTesting] ==
           std::vector<nc::core::PaneId>{{501}, {504}, {505}});
     CHECK(fixture.state.panelController == replacement_third);
@@ -717,6 +719,149 @@ TEST_CASE(PREFIX "dual pane toggle creates an independent right side and tears i
     CHECK(fixture.second.state == nil);
     CHECK(fixture.state.panelController == fixture.first);
     CHECK_FALSE(fixture.state.bothPanelsAreVisible);
+}
+
+TEST_CASE(PREFIX "restores a dual-pane session into two independent sides with its focus and divider")
+{
+    Fixture fixture;
+    ExplorerTabsTestPanelView *const left_extra_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
+    ExplorerTabsTestPanelView *const right_extra_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
+    ExplorerTabsTestPanelController *const left_extra =
+        [[ExplorerTabsTestPanelController alloc] initWithPaneID:nc::core::PaneId{503} view:left_extra_view];
+    ExplorerTabsTestPanelController *const right_extra =
+        [[ExplorerTabsTestPanelController alloc] initWithPaneID:nc::core::PaneId{504} view:right_extra_view];
+    // The left side's extra tab is allocated first, then the right side's initial panel comes from
+    // the dual-pane seam, then the right side's own extra tab.
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state setSessionRestorePanelsForTesting:@[ left_extra, right_extra ]];
+
+    nc::explorer::ExplorerPanesSession session;
+    session.left.tabs.resize(2);
+    session.left.active_index = 1;
+    session.right = nc::explorer::ExplorerTabsSession{};
+    session.right->tabs.resize(2);
+    session.right->active_index = 0;
+    session.right_focused = true;
+    session.divider_ratio = 0.35;
+
+    REQUIRE([fixture.state restorePanesFromSession:session]);
+
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    CHECK([fixture.state tabPaneIDsForTesting] == std::vector<nc::core::PaneId>{{502}, {504}});
+    CHECK(fixture.state.rightPanelControllerForTesting == fixture.second);
+    CHECK(fixture.state.panelController == fixture.second);
+    CHECK([fixture.state isLeftController:left_extra]);
+    CHECK([fixture.state isRightController:fixture.second]);
+    CHECK(fixture.state.paneDividerRatioForTesting == 0.35);
+    CHECK([[fixture.state restoredSessionPanelsForTesting]
+        isEqualToArray:@[ fixture.first, left_extra, fixture.second, right_extra ]]);
+
+    const nc::explorer::ExplorerPanesSession captured = [fixture.state capturePanesSession];
+    CHECK(captured.left.tabs.size() == 2);
+    CHECK(captured.left.active_index == 1);
+    REQUIRE(captured.right);
+    CHECK(captured.right->tabs.size() == 2);
+    CHECK(captured.right->active_index == 0);
+    CHECK(captured.right_focused);
+    REQUIRE(captured.divider_ratio);
+    CHECK(*captured.divider_ratio == 0.35);
+
+    // The one-shot guard covers the whole layout, not just the side it started with.
+    CHECK_FALSE([fixture.state restorePanesFromSession:session]);
+}
+
+TEST_CASE(PREFIX "a single-pane session leaves dual pane off and captures no right side")
+{
+    Fixture fixture;
+    fixture.state.dualPanePanelForTesting = fixture.second;
+
+    nc::explorer::ExplorerPanesSession session;
+    session.left.tabs.resize(1);
+    // Dual-pane hints without a right side must not turn the layout on by themselves.
+    session.right_focused = true;
+    session.divider_ratio = 0.2;
+
+    REQUIRE([fixture.state restorePanesFromSession:session]);
+
+    CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+    CHECK(fixture.state.rightPanelControllerForTesting == nil);
+    CHECK(fixture.state.panelController == fixture.first);
+    CHECK(fixture.state.paneDividerRatioForTesting == 0.5);
+
+    const nc::explorer::ExplorerPanesSession captured = [fixture.state capturePanesSession];
+    CHECK(captured.left.tabs.size() == 1);
+    CHECK_FALSE(captured.right);
+    CHECK_FALSE(captured.right_focused);
+    CHECK_FALSE(captured.divider_ratio);
+}
+
+TEST_CASE(PREFIX "a right side that cannot be rebuilt degrades the restored window to single pane")
+{
+    Fixture fixture;
+
+    SECTION("no panel available for the right side")
+    {
+        fixture.state.dualPanePanelForTesting = nil;
+        nc::explorer::ExplorerPanesSession session;
+        session.left.tabs.resize(1);
+        session.right = nc::explorer::ExplorerTabsSession{};
+        session.right->tabs.resize(1);
+
+        REQUIRE([fixture.state restorePanesFromSession:session]);
+
+        CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+        CHECK(fixture.state.panelController == fixture.first);
+        CHECK([fixture.state tabPaneIDsForTesting] == std::vector<nc::core::PaneId>{{501}});
+    }
+    SECTION("the right side's own extra tab fails to attach")
+    {
+        ExplorerTabsTestPanelView *const right_extra_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
+        ExplorerTabsTestPanelController *const right_extra =
+            [[ExplorerTabsTestPanelController alloc] initWithPaneID:nc::core::PaneId{504} view:right_extra_view];
+        fixture.state.dualPanePanelForTesting = fixture.second;
+        // The right side names its content explicitly rather than going through the focused-side
+        // entry point, so a duplicate identity is what fails its attach here.
+        [fixture.state setSessionRestorePanelsForTesting:@[ fixture.second ]];
+
+        nc::explorer::ExplorerPanesSession session;
+        session.left.tabs.resize(1);
+        session.right = nc::explorer::ExplorerTabsSession{};
+        session.right->tabs.resize(2);
+
+        REQUIRE([fixture.state restorePanesFromSession:session]);
+
+        CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+        CHECK(fixture.state.rightPanelControllerForTesting == nil);
+        CHECK(fixture.state.panelController == fixture.first);
+        CHECK([fixture.state tabPaneIDsForTesting] == std::vector<nc::core::PaneId>{{501}});
+        CHECK(fixture.second.state == nil);
+        CHECK(right_extra.state == nil);
+
+        const nc::explorer::ExplorerPanesSession captured = [fixture.state capturePanesSession];
+        CHECK(captured.left.tabs.size() == 1);
+        CHECK_FALSE(captured.right);
+    }
+}
+
+TEST_CASE(PREFIX "swapping sides moves each side's tabs into the other side's captured session")
+{
+    Fixture fixture;
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    const nc::explorer::ExplorerPanesSession before = [fixture.state capturePanesSession];
+    REQUIRE(before.right);
+    CHECK_FALSE(before.right_focused);
+
+    [fixture.state OnSwapPanels:nil];
+
+    CHECK([fixture.state isLeftController:fixture.second]);
+    CHECK([fixture.state isRightController:fixture.first]);
+    const nc::explorer::ExplorerPanesSession after = [fixture.state capturePanesSession];
+    REQUIRE(after.right);
+    // Swap exchanges the sides' contents, so the focused pane travels with its panel to the left.
+    CHECK(fixture.state.panelController == fixture.second);
+    CHECK_FALSE(after.right_focused);
 }
 
 TEST_CASE(PREFIX "closing the last tab of a side while dual pane is active is a disabled no-op")
