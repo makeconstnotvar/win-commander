@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-8: Remote connection state, retry, host trust, pinning, presentation, enforcement and classification
+# Q2-5 RC-1…RC-9: Remote connection state, retry, host trust, pinning, presentation, enforcement, classification and scheduling
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -201,6 +201,48 @@ Anything this cannot name becomes `ProtocolError`, which is not in the retryable
 - Full `WinCommanderUT --rng-seed 424242`: **751/751 cases, 11,479 assertions**.
 - No sanitizer run: a pure switch over an error code, with no allocation, ownership or concurrency.
 
+### Coverage gap at RC-8
+
+**Nothing calls it yet** — the connect paths still return a raw `Error`. RC-9 below builds the half that decides *when*; the wiring that feeds real errors in remains open.
+
+---
+
+# RC-9: when the retry actually happens
+
+RC-1 folds one outcome into one connection and says how long to wait. RC-9 owns the collection and the clock-facing half: turning that duration into a deadline that survives until it comes due.
+
+## The deadline is absolute, and computed once
+
+A delay recomputed on every tick would restart the wait each time anybody asked, and nothing would ever come due — the connection would sit "about to retry in 500ms" forever. The registry stores `now + retry_after` at the moment the failure is folded, and every later question reads it rather than deriving it.
+
+## Retries are claimed, not observed
+
+`ClaimDueRetries` hands out the due connections **and disarms them in the same locked step**. Two ticks that both merely *saw* the same due connection would each start an attempt, and the second would race the first — against a server that is, by definition, already having trouble.
+
+That is also why the type is internally synchronized rather than documented as single-threaded. Connection attempts run on background queues while the manager reads the same rows to draw them, and a claim is only meaningful if it is atomic. A test drives eight threads at sixty-four due connections and asserts the total handed out is exactly sixty-four — not fewer, not more.
+
+## What disarms a pending retry
+
+- **A success.** Leaving it armed would start an attempt against a link that is already up.
+- **An explicit disconnect.** The user asked this one to stop; reconnecting on a timer they never set would undo it.
+- **A non-retryable failure**, which never arms one in the first place. A refused host key put on a timer would defeat verification entirely — the same rule RC-1 states, now with something that actually schedules.
+- **A spent budget**, which settles into `Offline` — try again later — rather than `Blocked`, which is what a user has to resolve themselves.
+
+Connections are keyed by whatever identity the caller already uses. Inventing a second scheme here would be a way for one connection to be filed under two names and retried twice.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::RemoteConnectionRegistry*'`: **8/8 cases, 51 assertions** — a deadline that does not move however often it is asked; a due connection handed out exactly once; nothing armed for a refused host key or a rejected credential; the budget spent across a full backoff sequence and settling on `Offline`; success and disconnect both disarming; the earliest deadline reported and consumed in order; connections kept apart, one forgotten without disturbing the other, and an unknown key answered rather than created.
+- The same focused suite again under **TSan** (see below), covering the eight-thread claim.
+- Full `WinCommanderUT --rng-seed 424242`: **759/759 cases, 11,530 assertions**.
+
+### A pre-existing blocker found on the way
+
+`WinCommanderUT` **cannot be built under TSan as it stands**: `PanelPresentationGeometry_UT.mm:1696` has a test whose stack frame is 33,536 bytes against a 32,768 limit, and TSan's instrumentation is what pushes it over. It is a `-Werror` error, so the whole scheme fails to build — nothing to do with this slice, but it means the suite's concurrency tests were unreachable by the sanitizer that exists to check them.
+
+The TSan run above was obtained by relaxing that one warning for the build only (`-Wno-frame-larger-than`), which is a workaround rather than a fix: it silences the check for every file. Fixing the oversized test is spun off separately; the limit is doing its job and should not be raised.
+
 ### Coverage gap
 
-**Nothing calls it yet.** The connect paths still return a raw `Error`; feeding it into a `RemoteConnectionState` — and then acting on the retry decision — is the reconnect-scheduler increment, which this unblocks.
+**Still nothing drives it.** The registry decides *when*, RC-8 decides *what a failure was*, and RC-1 decides *whether*. What is missing is the loop that calls them: a timer armed from `NextDeadline`, a connect attempt per claimed key, and the outcome fed back. That, plus the manager UI and system SMB/NFS mounts, is what remains of Q2-5.
