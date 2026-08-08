@@ -1,4 +1,4 @@
-# Q2-7 CL-1: Cloud sync state and when a badge earns its place
+# Q2-7 CL-1/GL-1: Cloud sync state, badge rule, and Gallery eligibility
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-7.
@@ -6,7 +6,9 @@
 
 ## Scope
 
-The classification and the badge rule. Not here: the Gallery mode, provider adapters that produce these facts, or network-volume states.
+CL-1 is the classification and the badge rule. **GL-1** then uses it for the one Gallery decision that has consequences.
+
+Not here: the Gallery view itself, provider adapters that produce these facts, or network-volume states.
 
 ## The rule the plan actually asks for
 
@@ -28,15 +30,29 @@ Ordering is by what the user most needs told:
 4. **Transfers outrank placeholder status.** A downloading placeholder is on its way; a stalled one is not. Reporting both as `CloudOnly` would hide exactly the difference someone about to open the file cares about.
 5. Download outranks upload when an adapter reports both, because the missing bytes are the more consequential half.
 
+## GL-1: what a Gallery row may show
+
+`ClassifyGalleryItem` answers one question per item — thumbnail, placeholder, plain icon, or folder — and exists for a single judgement:
+
+**A cloud-only media file is not thumbnailable.** Asking for its thumbnail makes the file manager fetch the bytes: potentially gigabytes, potentially on a metered link, *because the user switched view mode*. Switching a view is not consent to a transfer. So such items get a placeholder row and downloading stays an explicit action.
+
+That is why GL-1 lives beside CL-1 rather than in a view layer — it needs `CloudSyncState`, and putting the rule where the state is keeps a future Gallery implementation from having to rediscover it.
+
+Two smaller calls:
+
+- **A folder is never a thumbnail of itself**, whatever it is named. A directory called `holiday.jpg` is still a directory, and the extension check runs after the directory check for exactly that reason.
+- **An unrecognized extension degrades to an icon.** The media list is deliberately conservative: a wrong guess renders an empty frame, which reads as a *broken file*, while an icon simply looks correct. Being wrong in the safe direction costs a thumbnail; being wrong in the other direction makes intact files look damaged.
+
 ## Verification
 
 - `xcodebuild -scheme WinCommanderUT -configuration Debug build` — **BUILD SUCCEEDED**.
 - `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::GalleryEligibility*' --rng-seed 424242`: **6/6 cases, 24/24 assertions** — case-insensitive extension matching; unknown, empty and over-long extensions degrading to an icon; a directory named like an image still a folder; a cloud-only media file held to a placeholder while all six other cloud states thumbnail; a cloud-only non-media file still an icon.
 - Focused `WinCommanderUT 'nc::core::CloudSyncState*' --rng-seed 424242`: **7/7 cases, 17/17 assertions** — every other fact ignored outside a container; conflict outranking a maximally-set fact struct; exclusion beating a stale transfer flag; an arriving placeholder distinguished from a stalled one; upload, and download winning over it; a quiet present item; and the badge rule for all seven states.
-- Full unfiltered `WinCommanderUT --rng-seed 424242`: **703/703 cases, 11,249/11,249 assertions**.
+- Full unfiltered `WinCommanderUT --rng-seed 424242`: **716/716 cases, 11,317/11,317 assertions**.
 - No sanitizer run: a pure `noexcept` classifier over a value struct.
 
 ### Coverage gaps
 
 - **Nothing produces `CloudItemFacts` yet.** The macOS side (`NSURLUbiquitousItemDownloadingStatusKey` and friends for iCloud, and per-provider equivalents) is the next increment; this slice deliberately fixes the vocabulary and the ordering first, so each adapter has one place to map onto rather than inventing its own.
-- Gallery mode and network-volume states are untouched.
+- The Gallery view itself and network-volume states are untouched; GL-1 fixes the eligibility rule, not the rendering.

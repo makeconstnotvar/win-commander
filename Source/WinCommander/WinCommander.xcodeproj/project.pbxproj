@@ -62,6 +62,8 @@
 		D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */; };
 		D9FC000132A0000000000041 /* GitStatus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000044 /* GitStatus.cpp */; };
 		D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000045 /* GitStatus_UT.cpp */; };
+		D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004A /* GalleryEligibility.cpp */; };
+		D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */; };
 		D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000003E /* CloudSyncState.cpp */; };
 		D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000003F /* CloudSyncState_UT.cpp */; };
 		D9FC000132A0000000000036 /* RemoteConnectionPresentation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000039 /* RemoteConnectionPresentation.cpp */; };
@@ -1094,6 +1096,9 @@
 		D9FC000132A0000000000043 /* GitStatus.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GitStatus.h; path = WinCommander/Core/Git/GitStatus.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000044 /* GitStatus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitStatus.cpp; path = WinCommander/Core/Git/GitStatus.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000045 /* GitStatus_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitStatus_UT.cpp; path = WinCommander/Tests/GitStatus_UT.cpp; sourceTree = "<group>"; };
+		D9FC000132A0000000000049 /* GalleryEligibility.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GalleryEligibility.h; path = WinCommander/Core/Cloud/GalleryEligibility.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000004A /* GalleryEligibility.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GalleryEligibility.cpp; path = WinCommander/Core/Cloud/GalleryEligibility.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GalleryEligibility_UT.cpp; path = WinCommander/Tests/GalleryEligibility_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A000000000003D /* CloudSyncState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CloudSyncState.h; path = WinCommander/Core/Cloud/CloudSyncState.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000003E /* CloudSyncState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CloudSyncState.cpp; path = WinCommander/Core/Cloud/CloudSyncState.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000003F /* CloudSyncState_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CloudSyncState_UT.cpp; path = WinCommander/Tests/CloudSyncState_UT.cpp; sourceTree = "<group>"; };
@@ -2240,6 +2245,7 @@
 				D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */,
 				D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */,
 				D9FC000132A000000000003F /* CloudSyncState_UT.cpp */,
+				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
 				D9FC000132A0000000000045 /* GitStatus_UT.cpp */,
 				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
@@ -2321,6 +2327,8 @@
 			children = (
 				D9FC000132A000000000003D /* CloudSyncState.h */,
 				D9FC000132A000000000003E /* CloudSyncState.cpp */,
+				D9FC000132A0000000000049 /* GalleryEligibility.h */,
+				D9FC000132A000000000004A /* GalleryEligibility.cpp */,
 			);
 			name = Cloud;
 			sourceTree = "<group>";
@@ -3741,6 +3749,7 @@
 				D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */,
 				D9FC000132A0000000000036 /* RemoteConnectionPresentation.cpp in Sources */,
 				D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */,
+				D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */,
 				D9FC000132A0000000000041 /* GitStatus.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
@@ -3997,6 +4006,7 @@
 				D9FC000132A0000000000032 /* KeychainHostPinStore_UT.cpp in Sources */,
 				D9FC000132A0000000000037 /* RemoteConnectionPresentation_UT.cpp in Sources */,
 				D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */,
+				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,
 				D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */,
 				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
