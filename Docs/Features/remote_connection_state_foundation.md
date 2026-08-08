@@ -1,4 +1,4 @@
-# Q2-5 RC-1/RC-2: Remote connection state, retry policy and host trust
+# Q2-5 RC-1…RC-3: Remote connection state, retry policy, host trust and pinning
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -10,7 +10,7 @@ The connection-state and retry rules Q2-5 needs before any of its surfaces can b
 
 This is where the decisions with consequences live, and none of it needs a socket.
 
-**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place.
+**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place. **RC-3** attaches it to a pin store and enforces who may write a pin.
 
 Not here: the manager UI, actual reconnect scheduling, and system SMB/NFS mounts. Credential *storage* already exists (`KeychainServices` via `ConfigBackedNetworkConnectionsManager`); what §46 was missing was host verification, which is RC-2.
 
@@ -54,19 +54,36 @@ Three refusals worth naming:
 - **An unparseable *stored* pin is `Mismatch`, not "no pin".** Degrading a corrupted or tampered store to first-use would silently downgrade an established host into one the user is invited to accept — which is exactly the attack pinning exists to stop.
 - **`Mismatch` is never offered as a routine accept.** `MayPromptToTrust` admits only `UnknownFirstUse`. An established pin that suddenly disagrees puts a question to the user they cannot honestly answer from a dialog; replacing such a pin has to be a separate, explicit action.
 
+## RC-3: pinning, and who may write a pin
+
+`RemoteHostPinStore` is an interface rather than a direct Keychain call, so the decisions above it are testable without a keychain and so a **store that fails to persist** is a case the policy must answer rather than something that only appears on a device.
+
+Pinning is split into two operations, and the split is the security property:
+
+- **`TrustOnFirstUse`** is the routine path a connection flow may call after the user accepts an unknown host. It refuses — without touching the store at all — unless the live verdict is exactly `UnknownFirstUse`. So the button that accepts a new host can never also overwrite an established pin, which would silently dismiss an interception warning.
+- **`ReplacePin`** is the deliberate path for a host whose key legitimately changed. It accepts a `Mismatch`, because that is the case it exists for; the explicit user decision lives in whatever calls it, which the policy cannot check for it.
+
+Two further refusals:
+
+- Neither path records an unverifiable fingerprint. For `ReplacePin` that matters especially: pinning garbage would leave the host permanently unverifiable rather than merely re-pinned.
+- A store that cannot persist reports failure rather than pretending. A pin that did not become durable must not be reported as trusted, or the next launch would present the host as unknown again with no explanation.
+
+`TrustOnFirstUse` re-reads the store rather than trusting a verdict the caller obtained earlier, so a pin written between a caller's `Verify` and its accept still wins.
+
 ## Verification
 
 Built and run in this session (Xcode 26.6 toolchain):
 
 - `xcodebuild -scheme WinCommanderUT -configuration Debug build` — **BUILD SUCCEEDED**.
 - `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED** (the slice adds files to the Xcode project).
+- Focused `WinCommanderUT 'nc::core::RemoteHostTrustPolicy*' --rng-seed 424242`: **6/6 cases, 34/34 assertions** — first-use pinning stored normalized and matching later spellings, scoped per provider and host; the routine accept path refusing a mismatch, a repeat, and an unverifiable fingerprint without touching the store; `ReplacePin` accepting a mismatch but not garbage; forgetting; a failing store reported rather than assumed; and a decision taken against the live store rather than a stale verdict.
 - Focused `WinCommanderUT 'nc::core::RemoteHostTrust*' --rng-seed 424242`: **7/7 cases, 44/44 assertions** — six spellings of one fingerprint accepted; malformed and odd-length values rejected rather than coerced; unusable-presented handled with and without a pin; first use never an automatic yes; mismatch neither self-resolving nor promptable; an unparseable stored pin treated as mismatch; only a pinned match connecting unprompted.
 - Focused `WinCommanderUT 'nc::core::RemoteConnection*' --rng-seed 424242`: **8/8 cases, 69/69 assertions** — the non-retryable set refused even on a fresh budget; the exponential sequence, ceiling clamp, sub-1 multiplier, and zero-attempt policy; a retryable failure exhausting into `Offline` versus a non-retryable one blocking at once; bounded newest-first history; success resetting the budget and restoring the full backoff sequence; read-only reporting and stale-latency clearing; explicit disconnect; a no-op outcome.
-- Full unfiltered `WinCommanderUT --rng-seed 424242`: **681/681 cases, 11,151/11,151 assertions**.
+- Full unfiltered `WinCommanderUT --rng-seed 424242`: **687/687 cases, 11,185/11,185 assertions**.
 - No ASAN/UBSAN/TSan run: a pure value model with no allocation ownership, concurrency or `Operations`/`VFS`/`RoutedIO` involvement. The increment that performs real reconnection scheduling is where that budget changes.
 
 ### Coverage gaps
 
 - **Latency is stored but nothing classifies it.** §46 asks for a status; a "degraded" threshold is a presentation decision the manager surface should own, and inventing one here without a surface to show it would be guessing.
-- **Nothing stores or retrieves a pin yet.** RC-2 classifies; wiring it to a pin store (the existing `KeychainServices` is the natural home, since a pin's integrity matters more than its secrecy) and to the providers that present fingerprints is the next increment.
+- **No concrete Keychain-backed store yet.** RC-3 defines the interface and the policy over it; a `KeychainServices`-backed implementation (the natural home, since a pin's integrity matters more than its secrecy) and the wiring to providers that actually present fingerprints are the next increment.
 - No scheduler, no UI, and no system SMB/NFS mount handling — all later Q2-5 increments.
