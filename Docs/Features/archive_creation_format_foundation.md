@@ -1,4 +1,4 @@
-# Q2-6 AR-1: Creatable archive formats
+# Q2-6 AR-1…AR-2: Creatable archive formats, and creating them
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-6.
@@ -37,3 +37,36 @@ tar-based formats carry full POSIX ownership and permissions through a round tri
 - **Nothing consumes this yet.** The Compress action still decides its own format; pointing it here, and building the Create picker from `SupportedArchiveCreationFormats()`, is the next increment.
 - The creatable set is not cross-checked against the extraction whitelist, because that whitelist lives inside an action rather than in a shared contract. Making every creatable format provably extractable is worth doing when that whitelist moves somewhere both can see.
 - 7z is deliberately absent: the engine's current compression path does not produce it, and listing a format the engine cannot write is exactly the failure this slice exists to prevent.
+
+---
+
+# AR-2: the engine can now create what the model describes
+
+AR-1 named four creatable formats. The compression engine could produce exactly one of them — `archive_write_set_format_zip`, hardcoded, with `.zip` appended to every filename it generated. The model described a choice nothing could act on.
+
+## The model moved down
+
+`ArchiveCreationFormat` was in the application layer, where a picker would use it. But the code that actually creates archives lives in `Operations`, which the application already depends on and which cannot depend back. Two copies of the table would have been the alternative, and the day they disagreed the picker would offer a format the engine could not produce — the exact failure the type was introduced to prevent. It is now `nc::ops::ArchiveCreationFormat`, with one owner.
+
+## Container and compressor are separate choices
+
+Which is what the tar family is about: the same tar container is what gets gzipped or bzipped, and it is also a valid archive on its own. `pax_restricted` is the container for all three — it stays plain ustar until an entry needs more than ustar can express, and only then writes extended headers, which is what lets a tarball carry the ownership and permission metadata the format is chosen for without becoming unreadable to plain `tar`.
+
+Zip keeps `bytes_in_last_block = 1`; the tar family does not. Zip has no block structure to preserve, while tar does, and other tools warn about a truncated final block.
+
+## A passphrase is refused, not dropped
+
+Only zip can carry one. Producing a tarball anyway and quietly discarding the protection is the worst outcome available: the archive looks finished, and nothing tells the user that its contents are readable by anyone who gets the file. The job stops before writing anything, so there is not even a half-made archive to mistake for a protected one, and it reports the refusal as its own state — the request could not be honoured as asked, which is a different thing from a failure partway through the work.
+
+## Verification
+
+- `OperationsUT`, `OperationsIT`, `WinCommanderUT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- New `OperationsIT 'Operations::Compression Creates each format*'`: **4 formats, 36 assertions** — each archive is named with its own extension and then **read back**, which is the only proof that matters: a wrong container would still have produced a file with the right name. The nesting is checked explicitly rather than inferred from an entry count, because a lost directory structure is precisely the silent failure AR-1 describes.
+- New `'Refuses a passphrase for a format that cannot carry one'`: **3 formats, 9 assertions** — stopped, reported as a rejected request, and no archive path produced.
+- New `'Carries POSIX permissions through the formats that claim to'`: **12 assertions** — a `0700` script survives tar and tar.gz with its group and other bits still clear, which is what makes AR-1's `preserves_posix_metadata` an answerable claim rather than a comment.
+- Full `OperationsIT 'Operations::Compression*'`: **17/17 cases, 284 assertions**, and again under **ASAN+UBSAN** and under **TSan** — the slice changes an operation that writes files, which is where that budget applies.
+- Focused `OperationsUT 'nc::ops::ArchiveCreationFormat*'`: **6/6 cases, 34 assertions** (moved from `WinCommanderUT` unchanged). Full `OperationsUT`: **228/228, 5,965 assertions**. Full `WinCommanderUT`: **745/745, 11,441 assertions** — six fewer cases than before, exactly the ones that moved.
+
+### Coverage gap
+
+**The user still cannot choose.** The compress dialog offers a destination directory and a password, and the action layer names `Zip` explicitly at each call site so the choice is visible where a picker belongs. Adding that picker — and deciding what the destination field should do when someone types a name ending in `.tar.gz` — is the next increment.

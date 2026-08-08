@@ -1,3 +1,4 @@
+#include "ArchiveCreationFormat_UT.cpp"
 #include "CopyingFindNonExistingItemPath_UT.cpp"
 #include "Deletion_UT.cpp"
 #include "Job_UT.cpp"

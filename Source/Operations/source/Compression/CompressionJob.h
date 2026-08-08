@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../Job.h"
+#include "ArchiveCreationFormat.h"
 #include <VFS/VFS.h>
 #include <Base/chained_strings.h>
 
@@ -46,10 +47,14 @@ public:
     CompressionJob(std::vector<VFSListingItem> _src_files,
                    std::string _dst_root,
                    VFSHostPtr _dst_vfs,
-                   std::string _password);
+                   std::string _password,
+                   ArchiveCreationFormat _format);
     ~CompressionJob() override;
 
     const std::string &TargetArchivePath() const;
+
+    /** True when the job refused to start because the request could not be honoured as asked. */
+    [[nodiscard]] bool RejectedRequest() const noexcept;
 
 private:
     struct Source;
@@ -75,6 +80,8 @@ private:
     StepResult ProcessRegularItem(int _index, const std::string &_relative_path, const std::string &_full_path);
     StepResult ProcessSymlinkItem(int _index, const std::string &_relative_path, const std::string &_full_path);
 
+    /** Applies the container and compressor for the requested format. False means unavailable. */
+    bool ConfigureArchiveFormat();
     std::string FindSuitableFilename(const std::string &_proposed_arcname);
     bool IsEncrypted() const noexcept;
 
@@ -93,6 +100,8 @@ private:
     VFSHostPtr m_DstVFS;
     std::string m_TargetArchivePath;
     std::string m_Password;
+    ArchiveCreationFormat m_Format = ArchiveCreationFormat::Zip;
+    bool m_RejectedRequest = false;
 
     struct ::archive *m_Archive = nullptr;
     std::shared_ptr<VFSFile> m_TargetFile;

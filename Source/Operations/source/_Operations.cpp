@@ -19,6 +19,7 @@
 #include "Statistics.cpp"
 #include "AttrsChanging/AttrsChangingJob.cpp"
 #include "BatchRenaming/BatchRenamingJob.cpp"
+#include "Compression/ArchiveCreationFormat.cpp"
 #include "Compression/CompressionJob.cpp"
 #include "Copying/ChecksumExpectation.cpp"
 #include "Copying/CopyingJob.cpp"

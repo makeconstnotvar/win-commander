@@ -6,7 +6,7 @@
 #include <span>
 #include <string_view>
 
-namespace nc::core {
+namespace nc::ops {
 
 /**
  * Formats this application can *create*.
@@ -52,4 +52,4 @@ struct ArchiveCreationFormatInfo {
  */
 [[nodiscard]] std::optional<ArchiveCreationFormat> ArchiveCreationFormatForFilename(std::string_view _filename);
 
-} // namespace nc::core
+} // namespace nc::ops

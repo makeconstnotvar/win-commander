@@ -56,9 +56,10 @@ struct CompressionJob::Source {
 CompressionJob::CompressionJob(std::vector<VFSListingItem> _src_files,
                                std::string _dst_root,
                                VFSHostPtr _dst_vfs,
-                               std::string _password)
+                               std::string _password,
+                               const ArchiveCreationFormat _format)
     : m_InitialListingItems{std::move(_src_files)}, m_DstRoot{std::move(_dst_root)}, m_DstVFS{std::move(_dst_vfs)},
-      m_Password{std::move(_password)}
+      m_Password{std::move(_password)}, m_Format{_format}
 {
     if( m_DstRoot.empty() || m_DstRoot.back() != '/' )
         m_DstRoot += '/';
@@ -66,9 +67,23 @@ CompressionJob::CompressionJob(std::vector<VFSListingItem> _src_files,
 
 CompressionJob::~CompressionJob() = default;
 
+bool CompressionJob::RejectedRequest() const noexcept
+{
+    return m_RejectedRequest;
+}
+
 void CompressionJob::Perform()
 {
     using namespace std::literals;
+
+    // Only zip can carry a passphrase. Producing a tarball and quietly dropping the protection the
+    // user asked for is the worst available outcome: the archive looks finished, and nothing says
+    // its contents are readable by anyone who gets the file.
+    if( !m_Password.empty() && m_Format != ArchiveCreationFormat::Zip ) {
+        m_RejectedRequest = true;
+        Stop();
+        return;
+    }
     const std::string proposed_arcname =
         m_InitialListingItems.size() == 1 ? m_InitialListingItems.front().Filename() : "Archive"s; // Localize!
 
@@ -106,8 +121,11 @@ bool CompressionJob::BuildArchive()
     const std::expected<void, Error> open_rc = m_TargetFile->Open(flags);
     if( open_rc ) {
         m_Archive = archive_write_new();
-        archive_write_set_format_zip(m_Archive);
-        archive_write_add_filter_none(m_Archive);
+        if( !ConfigureArchiveFormat() ) {
+            m_RejectedRequest = true;
+            Stop();
+            return false;
+        }
         if( !m_Password.empty() ) {
             if( archive_write_set_options(m_Archive, "zip:encryption=aes256") != ARCHIVE_OK ) {
                 Stop();
@@ -124,7 +142,11 @@ bool CompressionJob::BuildArchive()
         }
 
         archive_write_open(m_Archive, this, nullptr, WriteCallback, nullptr);
-        archive_write_set_bytes_in_last_block(m_Archive, 1);
+        if( m_Format == ArchiveCreationFormat::Zip ) {
+            // Zip has no block structure to preserve. The tar family does, and other tools warn
+            // about a truncated final block, so those keep libarchive's default padding.
+            archive_write_set_bytes_in_last_block(m_Archive, 1);
+        }
 
         ProcessItems();
 
@@ -387,11 +409,39 @@ CompressionJob::ProcessRegularItem(int _index, const std::string &_relative_path
     return StepResult::Done;
 }
 
+bool CompressionJob::ConfigureArchiveFormat()
+{
+    // A container and a compressor are separate choices in libarchive, and the tar family is the
+    // reason: the same tar container is what gets gzipped or bzipped, and it is also a valid
+    // archive on its own.
+    switch( m_Format ) {
+        case ArchiveCreationFormat::Zip:
+            if( archive_write_set_format_zip(m_Archive) != ARCHIVE_OK )
+                return false;
+            return archive_write_add_filter_none(m_Archive) == ARCHIVE_OK;
+        case ArchiveCreationFormat::Tar:
+        case ArchiveCreationFormat::TarGzip:
+        case ArchiveCreationFormat::TarBzip2:
+            // pax_restricted is ustar until an entry needs more than ustar can express, and only
+            // then extended headers. That is what lets a tarball carry the ownership and permission
+            // metadata the format is chosen for without becoming unreadable to plain tar.
+            if( archive_write_set_format_pax_restricted(m_Archive) != ARCHIVE_OK )
+                return false;
+            if( m_Format == ArchiveCreationFormat::TarGzip )
+                return archive_write_add_filter_gzip(m_Archive) == ARCHIVE_OK;
+            if( m_Format == ArchiveCreationFormat::TarBzip2 )
+                return archive_write_add_filter_bzip2(m_Archive) == ARCHIVE_OK;
+            return archive_write_add_filter_none(m_Archive) == ARCHIVE_OK;
+    }
+    return false;
+}
+
 std::string CompressionJob::FindSuitableFilename(const std::string &_proposed_arcname)
 {
     for( int i = 1; i < 100; ++i ) {
-        const std::string fn = i == 1 ? fmt::format("{}{}.zip", m_DstRoot, _proposed_arcname)
-                                     : fmt::format("{}{} {}.zip", m_DstRoot, _proposed_arcname, i);
+        const std::string_view extension = DescribeArchiveCreationFormat(m_Format).extension;
+        const std::string fn = i == 1 ? fmt::format("{}{}.{}", m_DstRoot, _proposed_arcname, extension)
+                                     : fmt::format("{}{} {}.{}", m_DstRoot, _proposed_arcname, i, extension);
         const std::expected<VFSStat, Error> stat = m_DstVFS->Stat(fn, VFSFlags::F_NoFollow);
         if( stat )
             continue;

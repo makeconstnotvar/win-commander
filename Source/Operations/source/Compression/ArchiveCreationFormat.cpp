@@ -4,7 +4,7 @@
 #include <array>
 #include <string>
 
-namespace nc::core {
+namespace nc::ops {
 
 namespace {
 
@@ -66,4 +66,4 @@ std::optional<ArchiveCreationFormat> ArchiveCreationFormatForFilename(const std:
     return std::nullopt;
 }
 
-} // namespace nc::core
+} // namespace nc::ops

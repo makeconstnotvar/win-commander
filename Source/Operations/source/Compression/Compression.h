@@ -2,6 +2,7 @@
 #pragma once
 
 #include "../Operation.h"
+#include "ArchiveCreationFormat.h"
 #include <VFS/VFS.h>
 
 /*
@@ -20,10 +21,17 @@ public:
     Compression(std::vector<VFSListingItem> _src_files,
                 std::string _dst_root,
                 VFSHostPtr _dst_vfs,
-                std::string _passphrase = "");
+                std::string _passphrase = "",
+                ArchiveCreationFormat _format = ArchiveCreationFormat::Zip);
     ~Compression() override;
 
     std::string ArchivePath() const;
+
+    /**
+     * True when the operation stopped because the request itself could not be honoured - today, a
+     * passphrase asked of a format that cannot carry one. Distinct from a failure during the work.
+     */
+    [[nodiscard]] bool RejectedRequest() const noexcept;
 
 private:
     using Callbacks = CompressionJobCallbacks;

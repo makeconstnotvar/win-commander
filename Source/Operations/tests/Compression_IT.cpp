@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "../source/Compression/Compression.h"
+#include "../source/Compression/ArchiveCreationFormat.h"
 #include "../source/Statistics.h"
 
 #include <VFS/VFS.h>
@@ -161,6 +162,106 @@ TEST_CASE(PREFIX "Destination appearing after the name probe is preserved")
     CHECK(state->open_called);
     CHECK((state->open_flags & VFSFlags::OF_NoExist) != 0);
     CHECK(state->unlink_calls == 0);
+}
+
+TEST_CASE(PREFIX "Creates each format it claims to support, and names it accordingly")
+{
+    // The format is not decoration - a file named .tar.gz that is really a zip opens, yields one
+    // unnamed blob, and the directory structure the user thought they archived is silently absent.
+    // These cases prove the container actually is what the extension says.
+    const auto [format, extension] = GENERATE(table<ArchiveCreationFormat, const char *>({
+        {ArchiveCreationFormat::Zip, "zip"},
+        {ArchiveCreationFormat::Tar, "tar"},
+        {ArchiveCreationFormat::TarGzip, "tar.gz"},
+        {ArchiveCreationFormat::TarBzip2, "tar.bz2"},
+    }));
+
+    const TempTestDir tmp_dir;
+    const auto native_host = TestEnv().vfs_native;
+    const std::filesystem::path directory = tmp_dir.directory / "payload";
+    REQUIRE(std::filesystem::create_directory(directory));
+    std::ofstream(directory / "inner.txt") << "contents";
+
+    Compression operation{FetchItems(tmp_dir.directory, {"payload"}, *native_host),
+                          tmp_dir.directory,
+                          native_host,
+                          "",
+                          format};
+    operation.Start();
+    operation.Wait();
+
+    REQUIRE(operation.State() == OperationState::Completed);
+    CHECK(operation.ArchivePath() == (tmp_dir.directory / ("payload."s + extension)).native());
+
+    // Reading it back is the only proof that matters: a wrong container would still have produced a
+    // file with the right name.
+    std::shared_ptr<vfs::ArchiveHost> arc_host;
+    REQUIRE_NOTHROW(arc_host = std::make_shared<vfs::ArchiveHost>(operation.ArchivePath(), native_host));
+    CHECK(arc_host->StatTotalFiles() == 2); // the directory and the file inside it
+
+    // The nesting is the part that goes missing when the container is not what the name says, so it
+    // is checked rather than assumed from the entry count.
+    const std::expected<VFSStat, Error> directory_stat = arc_host->Stat("/payload", 0);
+    REQUIRE(directory_stat);
+    CHECK(S_ISDIR(directory_stat->mode));
+    const std::expected<VFSStat, Error> file = arc_host->Stat("/payload/inner.txt", 0);
+    REQUIRE(file);
+    CHECK(file->size == 8);
+}
+
+TEST_CASE(PREFIX "Refuses a passphrase for a format that cannot carry one")
+{
+    // Producing the tarball anyway and quietly dropping the protection is the worst outcome
+    // available: the archive looks finished, and nothing says its contents are readable by anyone
+    // who gets hold of the file.
+    const auto format = GENERATE(ArchiveCreationFormat::Tar, ArchiveCreationFormat::TarGzip,
+                                 ArchiveCreationFormat::TarBzip2);
+
+    const TempTestDir tmp_dir;
+    const auto native_host = TestEnv().vfs_native;
+    std::ofstream(tmp_dir.directory / "item") << "payload";
+
+    Compression operation{FetchItems(tmp_dir.directory, {"item"}, *native_host),
+                          tmp_dir.directory,
+                          native_host,
+                          "secret",
+                          format};
+    operation.Start();
+    operation.Wait();
+
+    CHECK(operation.State() == OperationState::Stopped);
+    CHECK(operation.RejectedRequest());
+    // Nothing was written, so there is no half-made archive to mistake for a protected one.
+    CHECK(operation.ArchivePath().empty());
+}
+
+TEST_CASE(PREFIX "Carries POSIX permissions through the formats that claim to")
+{
+    // The whole reason for offering tar beside zip: the model says the tar family preserves
+    // ownership and permission metadata, and this is what makes that claim answerable.
+    const auto format = GENERATE(ArchiveCreationFormat::Tar, ArchiveCreationFormat::TarGzip);
+
+    const TempTestDir tmp_dir;
+    const auto native_host = TestEnv().vfs_native;
+    const std::filesystem::path executable = tmp_dir.directory / "script.sh";
+    std::ofstream(executable) << "#!/bin/sh\n";
+    REQUIRE(chmod(executable.c_str(), S_IRWXU) == 0);
+
+    Compression operation{FetchItems(tmp_dir.directory, {"script.sh"}, *native_host),
+                          tmp_dir.directory,
+                          native_host,
+                          "",
+                          format};
+    operation.Start();
+    operation.Wait();
+
+    REQUIRE(operation.State() == OperationState::Completed);
+    std::shared_ptr<vfs::ArchiveHost> arc_host;
+    REQUIRE_NOTHROW(arc_host = std::make_shared<vfs::ArchiveHost>(operation.ArchivePath(), native_host));
+    const std::expected<VFSStat, Error> stat = arc_host->Stat("/script.sh", 0);
+    REQUIRE(stat);
+    CHECK((stat->mode & S_IRWXU) == S_IRWXU);
+    CHECK((stat->mode & (S_IRWXG | S_IRWXO)) == 0);
 }
 
 TEST_CASE(PREFIX "Compressing Mac kernel")

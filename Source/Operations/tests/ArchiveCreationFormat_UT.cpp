@@ -1,21 +1,21 @@
 // Copyright (C) 2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "Tests.h"
 
-#include <WinCommander/Core/Archive/ArchiveCreationFormat.h>
+#include <Operations/ArchiveCreationFormat.h>
 
 #include <set>
 #include <string>
 
 namespace {
 
-using nc::core::ArchiveCreationFormat;
-using nc::core::ArchiveCreationFormatForFilename;
-using nc::core::DescribeArchiveCreationFormat;
-using nc::core::SupportedArchiveCreationFormats;
+using nc::ops::ArchiveCreationFormat;
+using nc::ops::ArchiveCreationFormatForFilename;
+using nc::ops::DescribeArchiveCreationFormat;
+using nc::ops::SupportedArchiveCreationFormats;
 
 } // namespace
 
-#define PREFIX "nc::core::ArchiveCreationFormat "
+#define PREFIX "nc::ops::ArchiveCreationFormat "
 
 TEST_CASE(PREFIX "resolves a compound extension to the whole thing, not its tail")
 {
@@ -84,3 +84,5 @@ TEST_CASE(PREFIX "records the metadata trade-off a picker has to explain")
     CHECK(DescribeArchiveCreationFormat(ArchiveCreationFormat::TarGzip).compresses);
     CHECK(DescribeArchiveCreationFormat(ArchiveCreationFormat::Zip).compresses);
 }
+
+#undef PREFIX

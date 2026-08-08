@@ -8,6 +8,7 @@
 #include <VFS/VFS.h>
 #include <Utility/PathManip.h>
 #include <Operations/Compression.h>
+#include <Operations/ArchiveCreationFormat.h>
 #include <Operations/CompressDialog.h>
 #include <VFS/ProviderCapabilities.h>
 #include <Base/dispatch_cpp.h>
@@ -141,7 +142,10 @@ ArchiveCreateSubmissionResult PresentArchiveCreate(const std::span<const VFSList
           return;
       }
 
-      auto op = std::make_shared<nc::ops::Compression>(entries, dialog.destination, destination_vfs, dialog.password);
+      // Named rather than left to the default, so the format is visibly a decision this layer makes
+      // - which is where a picker belongs once there is one.
+      auto op = std::make_shared<nc::ops::Compression>(
+          entries, dialog.destination, destination_vfs, dialog.password, nc::ops::ArchiveCreationFormat::Zip);
       const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
       __weak PanelController *weak_focus_target = target;
       op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_focus_target, weak_op] {
@@ -209,8 +213,8 @@ void CompressToOpposite::Perform(PanelController *_target, id /*_sender*/) const
       if( returnCode != NSModalResponseOK )
           return;
 
-      auto op =
-          std::make_shared<nc::ops::Compression>(entries, dialog.destination, opposite_panel.vfs, dialog.password);
+      auto op = std::make_shared<nc::ops::Compression>(
+          entries, dialog.destination, opposite_panel.vfs, dialog.password, nc::ops::ArchiveCreationFormat::Zip);
       const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
       __weak PanelController *weak_target = opposite_panel;
       op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_target, weak_op] {
@@ -295,7 +299,8 @@ void context::CompressToOpposite::Perform(PanelController *_target, id /*_sender
 
     auto entries = m_Items;
     auto op = std::make_shared<nc::ops::Compression>(
-        std::move(entries), opposite_panel.currentDirectoryPath, opposite_panel.vfs);
+        std::move(entries), opposite_panel.currentDirectoryPath, opposite_panel.vfs, "",
+        nc::ops::ArchiveCreationFormat::Zip);
     const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
     __weak PanelController *weak_target = opposite_panel;
     op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_target, weak_op] {
