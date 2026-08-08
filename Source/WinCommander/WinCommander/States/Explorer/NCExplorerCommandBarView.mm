@@ -49,6 +49,48 @@
 @end
 
 /** A snapshot-panel Cancel button owns the exact immutable Registry target that created it. */
+/**
+ * Carries the exact value target a pause/resume request will be revalidated against: the operation
+ * identity and the revision of the record the user is actually looking at. The coordinator refuses
+ * the request if that revision has moved on, which is what stops a click landing on a different
+ * state than the one the button was drawn for.
+ */
+@interface NCExplorerOperationPauseSnapshotControl : NSButton
+- (instancetype)initWithOperationId:(nc::ops::OperationId)_operation_id
+                            revision:(uint64_t)_revision
+                              intent:(nc::ops::OperationCenterPauseIntent)_intent;
+@property(nonatomic, readonly) uint64_t revision;
+@property(nonatomic, readonly) nc::ops::OperationCenterPauseIntent intent;
+- (const nc::ops::OperationId &)operationId;
+@end
+
+@implementation NCExplorerOperationPauseSnapshotControl {
+    std::optional<nc::ops::OperationId> m_OperationId;
+    uint64_t _revision;
+    nc::ops::OperationCenterPauseIntent _intent;
+}
+@synthesize revision = _revision;
+@synthesize intent = _intent;
+
+- (instancetype)initWithOperationId:(nc::ops::OperationId)_operation_id
+                            revision:(uint64_t)_revision_value
+                              intent:(nc::ops::OperationCenterPauseIntent)_intent_value
+{
+    self = [super initWithFrame:NSZeroRect];
+    if( self ) {
+        m_OperationId = _operation_id;
+        _revision = _revision_value;
+        _intent = _intent_value;
+    }
+    return self;
+}
+
+- (const nc::ops::OperationId &)operationId
+{
+    return *m_OperationId;
+}
+@end
+
 @interface NCExplorerOperationCancelSnapshotControl : NSButton
 - (instancetype)initWithContext:(nc::core::CommandContext)_context;
 - (const nc::core::CommandContext &)context;
@@ -1352,6 +1394,27 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     bool has_cancel_control = false;
     for( std::size_t index = 0; index < m_OperationCenterSnapshotRecords.size(); ++index ) {
         const nc::ops::OperationRecord &record = m_OperationCenterSnapshotRecords[index];
+
+        // Pause and Resume are mutually exclusive by construction: ControlsFor offers can_pause
+        // only while Running and can_resume only while Paused, so a record never grows both.
+        if( record.controls.can_pause || record.controls.can_resume ) {
+            const bool pausing = record.controls.can_pause;
+            NCExplorerOperationPauseSnapshotControl *const toggle = [[NCExplorerOperationPauseSnapshotControl alloc]
+                initWithOperationId:record.operation_id
+                            revision:record.revision
+                              intent:pausing ? nc::ops::OperationCenterPauseIntent::Pause
+                                             : nc::ops::OperationCenterPauseIntent::Resume];
+            toggle.title = [NSString
+                stringWithFormat:pausing ? NSLocalizedString(@"explorer.operations.pause", "Explorer operation menu")
+                                          : NSLocalizedString(@"explorer.operations.resume", "Explorer operation menu"),
+                                 StringFromUTF8(record.operation_id.ToString())];
+            toggle.bezelStyle = NSBezelStyleRounded;
+            toggle.target = self;
+            toggle.action = @selector(performOperationCenterSnapshotPause:);
+            [m_OperationCenterSnapshotControls addArrangedSubview:toggle];
+            has_cancel_control = true;
+        }
+
         if( !record.controls.can_cancel )
             continue;
 
@@ -1378,6 +1441,29 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
         has_cancel_control = true;
     }
     m_OperationCenterSnapshotControls.hidden = !has_cancel_control;
+}
+
+- (void)performOperationCenterSnapshotPause:(id)_sender
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    NCExplorerOperationPauseSnapshotControl *const button =
+        nc::objc_cast<NCExplorerOperationPauseSnapshotControl>(_sender);
+    const auto coordinator = m_OperationCenter.lock();
+    if( !button || !coordinator ) {
+        NSBeep();
+        return;
+    }
+
+    // Every check that matters lives in the coordinator port, which revalidates the revision this
+    // button was drawn with against the live record. A refusal is surfaced rather than swallowed,
+    // because a silently ignored click looks identical to one that worked.
+    const auto result = coordinator->SetPaused(button.operationId, button.revision, button.intent);
+    if( result.code != nc::ops::OperationCenterPauseResultCode::Accepted )
+        NSBeep();
+
+    // Redraw either way: on success the state moved, and on refusal the panel was showing a record
+    // that had already changed underneath it.
+    [self renderOperationCenterSnapshot:coordinator->Model().Snapshot()];
 }
 
 - (void)performOperationCenterSnapshotCancel:(id)_sender

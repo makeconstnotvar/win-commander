@@ -1,4 +1,4 @@
-# Q2-4 OC-1/OC-2/OC-3: Live observation, the live panel, and the pause/resume port
+# Q2-4 OC-1…OC-4: Live observation, the live panel, and pause/resume
 
 > Status: implemented and tested — see §Verification.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-4.
@@ -13,7 +13,7 @@ This increment adds the missing half: observation. It is the prerequisite for th
 
 **OC-2** then consumes it: the Operation Center panel stays current while it is open instead of requiring a reopen.
 
-**OC-3** adds the pause/resume control port on the coordinator.
+**OC-3** adds the pause/resume control port on the coordinator, and **OC-4** puts it on the panel.
 
 Not here: retry, log capture, and history persistence beyond the hydration the coordinator already performs.
 
@@ -68,6 +68,16 @@ Unlike `Cancel` there is no in-flight gate: pausing is reversible, so a duplicat
 
 A request that cannot reach the executor leaves the model untouched. That is the point of the `ResidencyUnavailable` path: a panel must never start claiming an operation is paused when the executor never saw the request.
 
+## OC-4: pause/resume on the panel
+
+Each record that offers a direction gets one button. Pause and Resume are mutually exclusive by construction — `ControlsFor` offers `can_pause` only while Running and `can_resume` only while Paused — so a record never grows both and the panel never has to decide which to show.
+
+The button carries the **revision of the record it was drawn for**. The coordinator refuses the request if that revision has moved on, which is what stops a click landing on a state other than the one the button was drawn against — the panel is live now, so a record genuinely can change between the draw and the click.
+
+A refusal beeps rather than being swallowed: a silently ignored click looks identical to one that worked. Either outcome re-renders, because on success the state moved and on refusal the panel was already showing a record that had changed underneath it.
+
+One bug fixed while wiring this: the control loop began with `if( !record.controls.can_cancel ) continue;`, which would have skipped any record that offers only pause or resume. Cancel is available in every state that offers pause or resume today, so it was latent rather than visible — but it made the loop's structure depend on that coincidence.
+
 ## Verification
 
 Built and run in this session (Xcode 26.6 toolchain):
@@ -76,7 +86,7 @@ Built and run in this session (Xcode 26.6 toolchain):
 - Focused Debug `OperationsUT '[operation-center-model]' --rng-seed 424242`: **8/8 cases, 101/101 assertions** — 4 pre-existing plus 4 new: every accepted change notifies and every rejected one does not, and reads never notify; an observer calling `Snapshot()` from its callback completes and already sees the change that triggered it; releasing one ticket retires only that observer; a ticket outliving the model is safe to release afterwards.
 - Full Debug `OperationsUT --rng-seed 424242`: **221/221 cases, 5,808/5,808 assertions** (re-run after OC-2's forwarder and OC-3's port; the extra case is OC-3's).
 - Full Debug `WinCommanderUT --rng-seed 424242`: **666/666 cases, 11,038/11,038 assertions**.
-- `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED**.
+- `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED** (re-run after OC-4, which also adds two localized strings to `Localizable.xcstrings` in both en and ru).
 - **Release ASAN** `OperationsUT --rng-seed 424242`: **221/221 cases, 5,808/5,808 assertions**, `libclang_rt.asan_osx_dynamic.dylib` verified linked via `otool -L`, **0** AddressSanitizer diagnostics and 0 `SUMMARY:` lines. (The three `Error:` lines in that output are the suite's own intentional throwing fixtures, not sanitizer findings.)
 - **Release UBSAN** `OperationsUT --rng-seed 424242`: **221/221 cases, 5,808/5,808 assertions**, `libclang_rt.ubsan_osx_dynamic.dylib` verified linked, **0** `runtime error` diagnostics with `print_stacktrace=1`.
 - `AGENTS.md` scopes sanitizer runs to changes *in* `Operations`, concurrency, ownership or lifetime code. This slice is all three, so unlike the Q2-1…Q2-3 presentation slices it does not qualify for the focused-filter tier — hence both runtimes above.
