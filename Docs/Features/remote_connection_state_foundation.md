@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-3: Remote connection state, retry policy, host trust and pinning
+# Q2-5 RC-1…RC-4: Remote connection state, retry policy, host trust and pinning
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -10,7 +10,7 @@ The connection-state and retry rules Q2-5 needs before any of its surfaces can b
 
 This is where the decisions with consequences live, and none of it needs a socket.
 
-**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place. **RC-3** attaches it to a pin store and enforces who may write a pin.
+**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place. **RC-3** attaches it to a pin store and enforces who may write a pin; **RC-4** implements that store on the macOS keychain.
 
 Not here: the manager UI, actual reconnect scheduling, and system SMB/NFS mounts. Credential *storage* already exists (`KeychainServices` via `ConfigBackedNetworkConnectionsManager`); what §46 was missing was host verification, which is RC-2.
 
@@ -70,20 +70,37 @@ Two further refusals:
 
 `TrustOnFirstUse` re-reads the store rather than trusting a verdict the caller obtained earlier, so a pin written between a caller's `Verify` and its accept still wins.
 
+## RC-4: pins on the keychain
+
+A pin is **not a secret** — it is a public fingerprint — so keeping it in the keychain is not about confidentiality. It is about integrity: the keychain is harder to tamper with than a config file, and a silently edited pin is precisely how an interception warning would be made to disappear.
+
+The service name embeds the provider and the host is the account, rather than concatenating the two into one string. Concatenation is the classic way `("a", "b.c")` and `("a.b", "c")` end up filed in the same place, and a collision here would mean one host silently inheriting another's pin. A fixed `wincommander.hostpin.` prefix also keeps these entries apart from the connection passwords the same keychain already holds, so a pin can never be read as a credential or the reverse.
+
+Two guards run before any keychain call, which is also what makes them testable in a binary that must not touch the user's real keychain:
+
+- An incomplete key — empty provider or host — is refused outright.
+- An empty fingerprint is refused rather than stored. Storing one would create an entry that `RemoteHostTrust` must then read as a `Mismatch` forever, locking the user out of a host with no way to tell why.
+
+`LoadPin` deliberately returns whatever was stored, including an empty string, rather than mapping it to "no pin" — RC-2 treats an unusable stored pin as a mismatch on purpose, and reporting `nullopt` here would downgrade it to first-use, undoing that.
+
+The store holds no cache: a cached pin could answer a verification from memory after the stored one changed underneath it.
+
 ## Verification
 
 Built and run in this session (Xcode 26.6 toolchain):
 
 - `xcodebuild -scheme WinCommanderUT -configuration Debug build` — **BUILD SUCCEEDED**.
 - `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED** (the slice adds files to the Xcode project).
+- Focused `WinCommanderUT 'nc::core::KeychainHostPinStore*' --rng-seed 424242`: **3/3 cases, 16/16 assertions** — no two providers sharing a service name and the `("a","b.c")` / `("a.b","c")` concatenation collision specifically excluded; pins namespaced away from credentials; every incomplete key and the empty fingerprint refused before any keychain call.
 - Focused `WinCommanderUT 'nc::core::RemoteHostTrustPolicy*' --rng-seed 424242`: **6/6 cases, 34/34 assertions** — first-use pinning stored normalized and matching later spellings, scoped per provider and host; the routine accept path refusing a mismatch, a repeat, and an unverifiable fingerprint without touching the store; `ReplacePin` accepting a mismatch but not garbage; forgetting; a failing store reported rather than assumed; and a decision taken against the live store rather than a stale verdict.
 - Focused `WinCommanderUT 'nc::core::RemoteHostTrust*' --rng-seed 424242`: **7/7 cases, 44/44 assertions** — six spellings of one fingerprint accepted; malformed and odd-length values rejected rather than coerced; unusable-presented handled with and without a pin; first use never an automatic yes; mismatch neither self-resolving nor promptable; an unparseable stored pin treated as mismatch; only a pinned match connecting unprompted.
 - Focused `WinCommanderUT 'nc::core::RemoteConnection*' --rng-seed 424242`: **8/8 cases, 69/69 assertions** — the non-retryable set refused even on a fresh budget; the exponential sequence, ceiling clamp, sub-1 multiplier, and zero-attempt policy; a retryable failure exhausting into `Offline` versus a non-retryable one blocking at once; bounded newest-first history; success resetting the budget and restoring the full backoff sequence; read-only reporting and stale-latency clearing; explicit disconnect; a no-op outcome.
-- Full unfiltered `WinCommanderUT --rng-seed 424242`: **687/687 cases, 11,185/11,185 assertions**.
+- Full unfiltered `WinCommanderUT --rng-seed 424242`: **690/690 cases, 11,201/11,201 assertions**.
 - No ASAN/UBSAN/TSan run: a pure value model with no allocation ownership, concurrency or `Operations`/`VFS`/`RoutedIO` involvement. The increment that performs real reconnection scheduling is where that budget changes.
 
 ### Coverage gaps
 
 - **Latency is stored but nothing classifies it.** §46 asks for a status; a "degraded" threshold is a presentation decision the manager surface should own, and inventing one here without a surface to show it would be guessing.
-- **No concrete Keychain-backed store yet.** RC-3 defines the interface and the policy over it; a `KeychainServices`-backed implementation (the natural home, since a pin's integrity matters more than its secrecy) and the wiring to providers that actually present fingerprints are the next increment.
+- **The keychain round-trip itself is untested.** The tests cover key derivation and the pre-call guards; actually storing and reading a pin would touch the developer's real keychain, which a unit-test binary must not do. That belongs in an integration fixture with its own keychain.
+- **Nothing wires this to providers yet.** No VFS provider presents a fingerprint to `RemoteHostTrustPolicy` today, so host verification is built but not yet consulted on connect — the next increment.
 - No scheduler, no UI, and no system SMB/NFS mount handling — all later Q2-5 increments.

@@ -60,6 +60,8 @@
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
 		D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */; };
+		D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000034 /* KeychainHostPinStore.cpp */; };
+		D9FC000132A0000000000032 /* KeychainHostPinStore_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */; };
 		D9FC000132A000000000000F /* RemoteHostPinStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000002C /* RemoteHostPinStore.cpp */; };
 		D9FC000132A0000000000010 /* RemoteHostPinStore_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000002D /* RemoteHostPinStore_UT.cpp */; };
 		D9FC000132A000000000000D /* RemoteHostTrust.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000029 /* RemoteHostTrust.cpp */; };
@@ -1083,6 +1085,9 @@
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandPaletteView.h; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandPaletteView.mm; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.mm; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000033 /* KeychainHostPinStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = KeychainHostPinStore.h; path = WinCommander/Core/Remote/KeychainHostPinStore.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000034 /* KeychainHostPinStore.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = KeychainHostPinStore.cpp; path = WinCommander/Core/Remote/KeychainHostPinStore.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = KeychainHostPinStore_UT.cpp; path = WinCommander/Tests/KeychainHostPinStore_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A000000000002B /* RemoteHostPinStore.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteHostPinStore.h; path = WinCommander/Core/Remote/RemoteHostPinStore.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000002C /* RemoteHostPinStore.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteHostPinStore.cpp; path = WinCommander/Core/Remote/RemoteHostPinStore.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000002D /* RemoteHostPinStore_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteHostPinStore_UT.cpp; path = WinCommander/Tests/RemoteHostPinStore_UT.cpp; sourceTree = "<group>"; };
@@ -2217,6 +2222,7 @@
 				D9FC000132A0000000000026 /* RemoteConnectionState_UT.cpp */,
 				D9FC000132A000000000002A /* RemoteHostTrust_UT.cpp */,
 				D9FC000132A000000000002D /* RemoteHostPinStore_UT.cpp */,
+				D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */,
 				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
 				A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */,
@@ -2275,6 +2281,8 @@
 				D9FC000132A0000000000029 /* RemoteHostTrust.cpp */,
 				D9FC000132A000000000002B /* RemoteHostPinStore.h */,
 				D9FC000132A000000000002C /* RemoteHostPinStore.cpp */,
+				D9FC000132A0000000000033 /* KeychainHostPinStore.h */,
+				D9FC000132A0000000000034 /* KeychainHostPinStore.cpp */,
 			);
 			name = Remote;
 			sourceTree = "<group>";
@@ -3690,6 +3698,7 @@
 				D9FC000132A000000000000B /* RemoteConnectionState.cpp in Sources */,
 				D9FC000132A000000000000D /* RemoteHostTrust.cpp in Sources */,
 				D9FC000132A000000000000F /* RemoteHostPinStore.cpp in Sources */,
+				D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
 				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
@@ -3942,6 +3951,7 @@
 				D9FC000132A000000000000C /* RemoteConnectionState_UT.cpp in Sources */,
 				D9FC000132A000000000000E /* RemoteHostTrust_UT.cpp in Sources */,
 				D9FC000132A0000000000010 /* RemoteHostPinStore_UT.cpp in Sources */,
+				D9FC000132A0000000000032 /* KeychainHostPinStore_UT.cpp in Sources */,
 				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
 				A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */,
