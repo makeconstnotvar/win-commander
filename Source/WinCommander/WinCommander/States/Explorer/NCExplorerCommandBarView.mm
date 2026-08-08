@@ -239,6 +239,10 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     std::weak_ptr<nc::ops::OperationCenterCoordinator> m_OperationCenter;
     nc::core::CommandRegistry *m_CommandRegistry;
     NSPanel *m_OperationCenterSnapshotPanel;
+    /** Live model subscription; held only while the panel is on screen. */
+    nc::ops::OperationCenterModel::ObservationTicket m_OperationCenterObservation;
+    /** Set while a refresh is already queued, so a burst of transitions costs one redraw. */
+    bool m_OperationCenterRefreshQueued;
     NSTextView *m_OperationCenterSnapshotText;
     NSStackView *m_OperationCenterSnapshotControls;
     std::vector<nc::ops::OperationRecord> m_OperationCenterSnapshotRecords;
@@ -314,6 +318,7 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
 - (void)dealloc
 {
     [m_PasteboardMonitor invalidate];
+    m_OperationCenterObservation = {};
     [m_OperationCenterSnapshotPanel orderOut:nil];
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
@@ -1257,6 +1262,64 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     m_OperationCenterSnapshotControls = controls;
 }
 
+/**
+ * Keeps the open Operation Center panel current instead of making the user reopen it.
+ *
+ * The model notifies from whichever thread accepted the change - Pool threads publish terminal
+ * outcomes - so the callback does nothing but hop to the main queue. A burst of transitions is
+ * coalesced into one redraw by a queued flag: a copy operation can move through many states in a
+ * few milliseconds, and rebuilding the record list once per transition would make the panel flicker
+ * while telling the user nothing extra.
+ *
+ * The subscription is held only while the panel is visible, and re-reads the whole snapshot rather
+ * than applying a delta, so the panel can never assemble a view from two model generations.
+ */
+- (void)beginObservingOperationCenter
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    const auto coordinator = m_OperationCenter.lock();
+    if( !coordinator ) {
+        m_OperationCenterObservation = {};
+        return;
+    }
+
+    __weak NCExplorerCommandBarView *weak_self = self;
+    m_OperationCenterObservation = coordinator->ObserveChanges([weak_self] {
+        dispatch_to_main_queue([weak_self] {
+            NCExplorerCommandBarView *const strong_self = weak_self;
+            if( strong_self )
+                [strong_self scheduleOperationCenterRefresh];
+        });
+    });
+}
+
+- (void)scheduleOperationCenterRefresh
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    if( m_OperationCenterRefreshQueued || !m_OperationCenterSnapshotPanel.isVisible )
+        return;
+    m_OperationCenterRefreshQueued = true;
+    __weak NCExplorerCommandBarView *weak_self = self;
+    dispatch_to_main_queue([weak_self] {
+        NCExplorerCommandBarView *const strong_self = weak_self;
+        if( strong_self )
+            [strong_self performOperationCenterRefresh];
+    });
+}
+
+- (void)performOperationCenterRefresh
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    m_OperationCenterRefreshQueued = false;
+    // The panel may have closed between the notification and this hop.
+    if( !m_OperationCenterSnapshotPanel.isVisible )
+        return;
+    const auto coordinator = m_OperationCenter.lock();
+    if( !coordinator )
+        return;
+    [self renderOperationCenterSnapshot:coordinator->Model().Snapshot()];
+}
+
 - (BOOL)presentOperationCenterSnapshot:(std::vector<nc::ops::OperationRecord>)_snapshot
 {
     dispatch_assert_queue(dispatch_get_main_queue());
@@ -1264,6 +1327,20 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
         return NO;
 
     [self ensureOperationCenterSnapshotPanel];
+    [self renderOperationCenterSnapshot:std::move(_snapshot)];
+    [self beginObservingOperationCenter];
+    [m_OperationCenterSnapshotPanel center];
+    [m_OperationCenterSnapshotPanel makeKeyAndOrderFront:self];
+    return YES;
+}
+
+/** Rebuilds the panel's contents from one whole snapshot. Never shows or hides the panel. */
+- (void)renderOperationCenterSnapshot:(std::vector<nc::ops::OperationRecord>)_snapshot
+{
+    dispatch_assert_queue(dispatch_get_main_queue());
+    if( !m_CommandRegistry || !m_OperationCenterSnapshotPanel )
+        return;
+
     m_OperationCenterSnapshotRecords = std::move(_snapshot);
     m_OperationCenterSnapshotText.string = OperationSnapshotText(m_OperationCenterSnapshotRecords);
 
@@ -1301,10 +1378,6 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
         has_cancel_control = true;
     }
     m_OperationCenterSnapshotControls.hidden = !has_cancel_control;
-
-    [m_OperationCenterSnapshotPanel center];
-    [m_OperationCenterSnapshotPanel makeKeyAndOrderFront:self];
-    return YES;
 }
 
 - (void)performOperationCenterSnapshotCancel:(id)_sender

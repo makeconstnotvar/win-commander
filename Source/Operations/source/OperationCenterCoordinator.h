@@ -167,6 +167,20 @@ public:
     [[nodiscard]] const OperationCenterModel &Model() const noexcept { return m_Model; }
 
     /**
+     * Observes every accepted model change, so a consumer can stay live instead of re-reading on
+     * open. Forwarded here rather than taken from Model() because observation registers with the
+     * model and Model() is deliberately a const read handle.
+     *
+     * The callback may arrive on any thread - Pool threads publish terminal outcomes - so a UI
+     * consumer must hop to its own queue before touching views. It carries no payload; answer it
+     * with Model().Snapshot().
+     */
+    [[nodiscard]] OperationCenterModel::ObservationTicket ObserveChanges(std::function<void()> _callback)
+    {
+        return m_Model.ObserveChanges(std::move(_callback));
+    }
+
+    /**
      * Value-only storage identity captured during cold-history hydration. It binds an app-owned deferred
      * history-projection continuation without exposing or retaining the journal authority.
      */
