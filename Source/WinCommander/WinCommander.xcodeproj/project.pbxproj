@@ -63,6 +63,8 @@
 		D9FC000132A000000000005D /* OrphanedTemporary.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000060 /* OrphanedTemporary.cpp */; };
 		D9FC000132A000000000005E /* OrphanedTemporary_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */; };
 		D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004F /* LocalWorkingDirectory.cpp */; };
+		D9FC000132A0000000000111 /* LocalToolLaunch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000113 /* LocalToolLaunch.cpp */; };
+		D9FC000132A0000000000112 /* LocalToolLaunch_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000114 /* LocalToolLaunch_UT.cpp */; };
 		D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */; };
 		D9FC000132A0000000000041 /* GitStatus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000044 /* GitStatus.cpp */; };
 		D9FC000132A00000000000D0 /* GitRepositoryDiscovery.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000D2 /* GitRepositoryDiscovery.cpp */; };
@@ -1119,6 +1121,9 @@
 		D9FC000132A0000000000060 /* OrphanedTemporary.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OrphanedTemporary.cpp; path = WinCommander/Core/Tools/OrphanedTemporary.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OrphanedTemporary_UT.cpp; path = WinCommander/Tests/OrphanedTemporary_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A000000000004E /* LocalWorkingDirectory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LocalWorkingDirectory.h; path = WinCommander/Core/Tools/LocalWorkingDirectory.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000113 /* LocalToolLaunch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalToolLaunch.cpp; path = WinCommander/Core/Tools/LocalToolLaunch.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000115 /* LocalToolLaunch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = LocalToolLaunch.h; path = WinCommander/Core/Tools/LocalToolLaunch.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000114 /* LocalToolLaunch_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalToolLaunch_UT.cpp; path = WinCommander/Tests/LocalToolLaunch_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A000000000004F /* LocalWorkingDirectory.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalWorkingDirectory.cpp; path = WinCommander/Core/Tools/LocalWorkingDirectory.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalWorkingDirectory_UT.cpp; path = WinCommander/Tests/LocalWorkingDirectory_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000043 /* GitStatus.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GitStatus.h; path = WinCommander/Core/Git/GitStatus.h; sourceTree = SOURCE_ROOT; };
@@ -2312,6 +2317,7 @@
 				D9FC000132A00000000000D3 /* GitRepositoryDiscovery_UT.cpp */,
 				D9FC000132A00000000000E3 /* GitStatusReader_UT.cpp */,
 				D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */,
+				D9FC000132A0000000000114 /* LocalToolLaunch_UT.cpp */,
 				D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */,
 				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
@@ -2392,6 +2398,8 @@
 			children = (
 				D9FC000132A000000000004E /* LocalWorkingDirectory.h */,
 				D9FC000132A000000000004F /* LocalWorkingDirectory.cpp */,
+				D9FC000132A0000000000115 /* LocalToolLaunch.h */,
+				D9FC000132A0000000000113 /* LocalToolLaunch.cpp */,
 				D9FC000132A000000000005F /* OrphanedTemporary.h */,
 				D9FC000132A0000000000060 /* OrphanedTemporary.cpp */,
 			);
@@ -3865,6 +3873,7 @@
 				D9FC000132A00000000000D0 /* GitRepositoryDiscovery.cpp in Sources */,
 				D9FC000132A00000000000E0 /* GitStatusReader.cpp in Sources */,
 				D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */,
+				D9FC000132A0000000000111 /* LocalToolLaunch.cpp in Sources */,
 				D9FC000132A000000000005D /* OrphanedTemporary.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
@@ -4133,6 +4142,7 @@
 				D9FC000132A00000000000D1 /* GitRepositoryDiscovery_UT.cpp in Sources */,
 				D9FC000132A00000000000E1 /* GitStatusReader_UT.cpp in Sources */,
 				D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */,
+				D9FC000132A0000000000112 /* LocalToolLaunch_UT.cpp in Sources */,
 				D9FC000132A000000000005E /* OrphanedTemporary_UT.cpp in Sources */,
 				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,

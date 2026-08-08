@@ -145,3 +145,40 @@ The ASAN run above was obtained by relaxing that one warning for the build only,
 ### Coverage gap
 
 **No caller yet.** A panel does not refresh badges, nothing watches for changes to re-read a status, and porcelain v2 is unparsed. Rendering the badges is the next increment; so is deciding when a refresh is worth running at all.
+
+---
+
+# TL-2: what gets launched, and what does not
+
+TL-1 decided which directory a local tool may be pointed at, and why it must fail closed. TL-2 turns that into a launch.
+
+## The location is checked first, before the application is even looked at
+
+That ordering is the decision, not an implementation detail. A missing editor is a visible, obvious failure the user can fix in a settings pane. A path inside an archive or on a remote host resolves *silently* against the real filesystem and opens the wrong place. When both are wrong at once, the refusal that would otherwise be silent is the one that has to be reached.
+
+## An application identifier and arguments, never a command line
+
+A directory or filename may contain spaces, quotes, semicolons and newlines. Composing a command line would let all of them be re-read as syntax — the same reason the git integration spawns with an argument vector. A test passes a filename containing a semicolon, an `rm -rf`, a quote and a newline, and checks it arrives intact.
+
+## A terminal is opened *at* a directory; an editor is opened *on* files
+
+The selection is dropped for a terminal. Otherwise "open terminal here" would mean something different depending on what happened to be selected — and "here" is the one thing the command promises.
+
+## A selection that no longer belongs to this directory is dropped
+
+A selection can outlive the listing it came from, and handing an editor a path from somewhere else is how a stale selection edits the wrong file. Containment is by path component: `/Users/me/project-other` is not inside `/Users/me/project`, however alike the two look as strings — the same rule the mount table needs, and the same class of bug as `/Volumes/data` versus `/Volumes/database`.
+
+## Unconfigured and unusable are different refusals
+
+Nothing chosen yet is a settings problem; a blank value is a broken one. Both refuse, but a surface reporting them the same way would send the user to the wrong place to fix it.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::PrepareLocalToolLaunch*'`: **8/8 cases, 25 assertions** — a terminal at the directory with the selection dropped; an editor given its files; the location refused ahead of the application, asserted with and without one configured; a non-uniform listing refused; unconfigured told apart from blank; a selection outside the directory dropped including the `project` / `project-other` lookalike; a filename full of shell syntax arriving intact; and the root, where the trailing separator must not make every path read as outside it.
+- Full `WinCommanderUT --rng-seed 424242`: **804/804 cases, 11,765 assertions**.
+- No sanitizer run: a pure value transformation, with no allocation ownership, concurrency, or process launching of its own.
+
+### Coverage gap
+
+**Nothing performs the launch.** Handing the request to `NSWorkspace`, choosing defaults for the two roles, and surfacing each refusal where the user can act on it are the next steps — as is the menu wiring that would let a user invoke either.
