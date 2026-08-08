@@ -1,4 +1,4 @@
-# Q2-6 AR-1…AR-3: Creatable archive formats, creating them, and choosing one
+# Q2-6 AR-1…AR-4: Creatable archive formats, creating them, choosing one, and checking they can be opened
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-6.
@@ -104,3 +104,32 @@ Nothing short of loading the real nib would have found it: the logic was right, 
 
 - **The destination field still means a directory.** Typing `backup.tar.gz` there creates a directory path, not a format choice; `ArchiveCreationFormatForFilename` remains unused by any surface. Deciding whether that field should accept a filename is its own increment, and it interacts with the picker.
 - Nothing yet checks the creatable set against the extraction whitelist, and archive operations do not go through Operation Center plans — both still open in Q2-6.
+
+---
+
+# AR-4: the asymmetry only runs one way
+
+AR-1 modelled the creatable formats apart from the extractable ones because the two sets genuinely differ — rar extracts and cannot be created, since its compressor is not ours to ship. What nothing checked was the *direction* of that difference.
+
+Creating a format the application then cannot recognise would be the most confusing outcome available: the archive is written, sits in the listing, and refuses to open in the very application that made it.
+
+## The match is on the final extension, as a listing sees it
+
+`backup.tar.gz` is recognised through `gz`, because the whitelist is consulted with the extension after the last dot. Checking the whole compound against the list would pass for the wrong reason — `tar.gz` is not in it and never needs to be.
+
+## Two further properties worth pinning
+
+- **The creatable set stays strictly smaller.** If the two ever coincided, the separate type would be carrying no information, and the next format added would have nothing to stop it appearing in a Create menu it cannot serve. `rar` is asserted present in one and absent from the other, since it is the example the whole distinction exists for.
+- **No two creatable formats share an extension.** Resolution from a filename answers with exactly one format, so a duplicate would make one of the two permanently unreachable by name.
+
+Both sets are read from what actually ships — the whitelist from `Config.json` in the source tree, parsed the way the application parses it, comments and all.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::ops::ArchiveFormatReachability*'`: **3/3 cases, 15 assertions** — every creatable format admitted by the shipped extraction whitelist; the creatable set strictly smaller with `rar` on the right side of the line; and each creatable extension distinct.
+- Full `WinCommanderUT --rng-seed 424242`: **824/824 cases, 11,831 assertions**.
+
+### Coverage gap
+
+Archive operations still do not go through Operation Center plans, and the compress dialog's destination field still means a directory — both remain open in Q2-6.
