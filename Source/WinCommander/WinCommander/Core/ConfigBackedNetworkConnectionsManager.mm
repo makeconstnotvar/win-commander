@@ -12,6 +12,8 @@
 #include <VFS/NetWebDAV.h>
 #include <Config/RapidJSON.h>
 #include <WinCommander/GeneralUI/AskForPasswordWindowController.h>
+#include <WinCommander/Core/Remote/RemoteConnectionAttempt.h>
+#include <chrono>
 #include <Base/spinlock.h>
 #include <Base/dispatch_cpp.h>
 
@@ -475,13 +477,22 @@ VFSHostPtr ConfigBackedNetworkConnectionsManager::SpawnHostFromConnection(const 
         shoud_save_passwd = true;
     }
 
-    VFSHostPtr host;
-    if( auto ftp = _connection.Cast<FTP>() )
-        host = std::make_shared<vfs::FTPHost>(ftp->host, ftp->user, passwd, ftp->path, ftp->port, ftp->active);
-    else if( auto sftp = _connection.Cast<SFTP>() )
-        host = std::make_shared<vfs::SFTPHost>(sftp->host, sftp->user, passwd, sftp->keypath, sftp->port);
-    else if( auto w = _connection.Cast<WebDAV>() )
-        host = std::make_shared<vfs::WebDAVHost>(w->host, w->user, passwd, w->path, w->https, w->port);
+    // Recorded on the way through, so the retry policy and a manager row finally see real outcomes.
+    // What is returned and what is raised are both reproduced exactly, so no caller behaves
+    // differently than it did before.
+    const auto spawn = [&]() -> VFSHostPtr {
+        if( auto ftp = _connection.Cast<FTP>() )
+            return std::make_shared<vfs::FTPHost>(ftp->host, ftp->user, passwd, ftp->path, ftp->port, ftp->active);
+        if( auto sftp = _connection.Cast<SFTP>() )
+            return std::make_shared<vfs::SFTPHost>(sftp->host, sftp->user, passwd, sftp->keypath, sftp->port);
+        if( auto w = _connection.Cast<WebDAV>() )
+            return std::make_shared<vfs::WebDAVHost>(w->host, w->user, passwd, w->path, w->https, w->port);
+        return nullptr;
+    };
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch());
+    const VFSHostPtr host =
+        nc::core::RecordConnectionAttempt(m_ConnectionStates, _connection.Uuid().ToString(), now, spawn);
 
     if( host ) {
         ReportUsage(_connection);

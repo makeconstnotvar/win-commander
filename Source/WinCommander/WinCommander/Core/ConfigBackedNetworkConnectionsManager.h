@@ -1,6 +1,8 @@
 // Copyright (C) 2015-2026 Michael Kazakov. Subject to GNU General Public License version 3.
 #pragma once
 
+#include "Remote/RemoteConnectionRegistry.h"
+
 #include <Panel/NetworkConnectionsManager.h>
 #include <VFS/VFS.h>
 #include <Config/Config.h>
@@ -46,6 +48,15 @@ public:
 
     bool MountShareAsync(const Connection &_conn, const std::string &_password, MountShareCallback _callback) override;
 
+    /**
+     * Live state per connection, keyed by the connection's own UUID.
+     *
+     * Every spawn made through this manager is recorded here, so a manager surface can show what
+     * §46 asks for - status, last successful connection, failure history - without repeating any of
+     * the connections to find out.
+     */
+    [[nodiscard]] nc::core::RemoteConnectionRegistry &ConnectionStates() noexcept { return m_ConnectionStates; }
+
 private:
     void Save();
     void Load();
@@ -58,6 +69,7 @@ private:
     nc::utility::NativeFSManager &m_NativeFSManager;
     std::vector<nc::config::Token> m_ConfigObservations;
     bool m_IsWritingConfig{false};
+    nc::core::RemoteConnectionRegistry m_ConnectionStates;
 
     mutable std::mutex m_PendingMountRequestsLock;
     std::vector<std::pair<void *, MountShareCallback>> m_PendingMountRequests;

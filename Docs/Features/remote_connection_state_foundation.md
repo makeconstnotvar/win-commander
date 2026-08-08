@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-10: Remote connection state, retry, host trust, pinning, presentation, enforcement, classification, scheduling and the loop
+# Q2-5 RC-1…RC-11: Remote connection state, retry, host trust, pinning, presentation, enforcement, classification, scheduling, the loop and the first real caller
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -275,6 +275,38 @@ The recorded detail is the provider's own description of the error and nothing c
 - Focused `WinCommanderUT 'nc::core::RemoteReconnectDriver*'`: **6/6 cases, 43 assertions** — the three decisions asked in order with nothing attempted before its deadline; the same connection never attempted twice in one pass under a zero backoff; **a refused host key carried from the connector through classification to a retry that is never armed and never picked up again**, which is the end of the chain built across RC-6…RC-9; several due connections in one pass with a blocked one not attempted at all and the next deadline armed from the failure; a throwing connector kept out of the retryable set; and a success established by hand disarming a pending retry.
 - Full `WinCommanderUT --rng-seed 424242`: **765/765 cases, 11,573 assertions**.
 
+### Coverage gap at RC-10
+
+**No production caller yet** — the first one arrives in RC-11 below.
+
+---
+
+# RC-11: the first real outcomes
+
+Everything from RC-1 to RC-10 reasoned about outcomes nobody produced. `ConfigBackedNetworkConnectionsManager::SpawnHostFromConnection` is where a connection actually succeeds or fails, and it now records what happened, keyed by the connection's own UUID.
+
+## Nothing about the existing behaviour changes
+
+`RecordConnectionAttempt` returns whatever the spawn returned and re-raises whatever it raised, after recording it. Every caller of `SpawnHostFromConnection` handles success and failure exactly as it did — the recording is invisible to them, which is what makes this safe to put on a path that several surfaces already depend on.
+
+## A null host is not a failure
+
+That is what a cancelled password prompt returns, and nothing was ever asked of the server. Recording it as a failure would spend a retry budget and eventually mark a connection blocked because somebody pressed Cancel. It is the case that makes this a function with a name rather than two lines at the call site.
+
+## An exception that is not an `Error` is recorded as unretryable
+
+Something we cannot name is not evidence that trying again will help. It is rethrown all the same.
+
+## The identity is the connection's own UUID
+
+Not a composed one. A second identity scheme is how one connection ends up filed under two names — and RC-9 already refused to invent one for exactly that reason.
+
+## Verification
+
+- `WinCommanderUT`, `WinCommanderIT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::RecordConnectionAttempt*'`: **8/8 cases, 31 assertions** — a host recorded and handed straight back; read-only carried through from the host; a cancelled prompt recording nothing at all; a raised error recorded *and rethrown unchanged*, with a deadline armed for the retryable case; **a refused host key arriving as `Blocked` with nothing armed**, which is the handshake-to-policy chain end to end; an unnameable exception kept out of the retryable set; a success clearing what an earlier failure left behind; and nothing recorded when there is nothing to run.
+- Full `WinCommanderUT --rng-seed 424242`: **812/812 cases, 11,796 assertions**.
+
 ### Coverage gap
 
-**No production caller yet.** `ConfigBackedNetworkConnectionsManager` still returns a raw host pointer or null; handing it a driver — and arming a real timer from `next_deadline` — is the wiring increment. The manager UI and system SMB/NFS mounts remain, and are what is left of Q2-5.
+**Nothing reads the states yet, and nothing drives the retries.** The registry is exposed on the manager for a surface that does not exist, and `RemoteReconnectDriver` still has no timer arming it — a reconnect also needs an owner for the host it produces, since a panel holds its own. That, the manager UI, and system SMB/NFS mounts are what remain of Q2-5.

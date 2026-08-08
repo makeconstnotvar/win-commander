@@ -89,6 +89,8 @@
 		D9FC000132A00000000000A0 /* RemoteFailureClassification.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000A2 /* RemoteFailureClassification.cpp */; };
 		D9FC000132A00000000000B0 /* RemoteConnectionRegistry.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000B2 /* RemoteConnectionRegistry.cpp */; };
 		D9FC000132A00000000000C0 /* RemoteReconnectDriver.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000C2 /* RemoteReconnectDriver.cpp */; };
+		D9FC000132A0000000000121 /* RemoteConnectionAttempt.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000123 /* RemoteConnectionAttempt.cpp */; };
+		D9FC000132A0000000000122 /* RemoteConnectionAttempt_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000124 /* RemoteConnectionAttempt_UT.cpp */; };
 		D9FC000132A00000000000C1 /* RemoteReconnectDriver_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000C3 /* RemoteReconnectDriver_UT.cpp */; };
 		D9FC000132A00000000000B1 /* RemoteConnectionRegistry_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000B3 /* RemoteConnectionRegistry_UT.cpp */; };
 		D9FC000132A00000000000A1 /* RemoteFailureClassification_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000A3 /* RemoteFailureClassification_UT.cpp */; };
@@ -1153,6 +1155,9 @@
 		D9FC000132A0000000000038 /* RemoteConnectionPresentation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteConnectionPresentation.h; path = WinCommander/Core/Remote/RemoteConnectionPresentation.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000039 /* RemoteConnectionPresentation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionPresentation.cpp; path = WinCommander/Core/Remote/RemoteConnectionPresentation.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionPresentation_UT.cpp; path = WinCommander/Tests/RemoteConnectionPresentation_UT.cpp; sourceTree = "<group>"; };
+		D9FC000132A0000000000123 /* RemoteConnectionAttempt.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionAttempt.cpp; path = WinCommander/Core/Remote/RemoteConnectionAttempt.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000125 /* RemoteConnectionAttempt.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteConnectionAttempt.h; path = WinCommander/Core/Remote/RemoteConnectionAttempt.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000124 /* RemoteConnectionAttempt_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionAttempt_UT.cpp; path = WinCommander/Tests/RemoteConnectionAttempt_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A00000000000C2 /* RemoteReconnectDriver.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteReconnectDriver.cpp; path = WinCommander/Core/Remote/RemoteReconnectDriver.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000000C4 /* RemoteReconnectDriver.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteReconnectDriver.h; path = WinCommander/Core/Remote/RemoteReconnectDriver.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000000C3 /* RemoteReconnectDriver_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteReconnectDriver_UT.cpp; path = WinCommander/Tests/RemoteReconnectDriver_UT.cpp; sourceTree = "<group>"; };
@@ -2307,6 +2312,7 @@
 				D9FC000132A00000000000A3 /* RemoteFailureClassification_UT.cpp */,
 				D9FC000132A00000000000B3 /* RemoteConnectionRegistry_UT.cpp */,
 				D9FC000132A00000000000C3 /* RemoteReconnectDriver_UT.cpp */,
+				D9FC000132A0000000000124 /* RemoteConnectionAttempt_UT.cpp */,
 				D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */,
 				D9FC000132A000000000003F /* CloudSyncState_UT.cpp */,
 				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
@@ -2382,6 +2388,8 @@
 				D9FC000132A00000000000B4 /* RemoteConnectionRegistry.h */,
 				D9FC000132A00000000000C4 /* RemoteReconnectDriver.h */,
 				D9FC000132A00000000000C2 /* RemoteReconnectDriver.cpp */,
+				D9FC000132A0000000000125 /* RemoteConnectionAttempt.h */,
+				D9FC000132A0000000000123 /* RemoteConnectionAttempt.cpp */,
 				D9FC000132A00000000000B2 /* RemoteConnectionRegistry.cpp */,
 				D9FC000132A00000000000A4 /* RemoteFailureClassification.h */,
 				D9FC000132A00000000000A2 /* RemoteFailureClassification.cpp */,
@@ -3863,6 +3871,7 @@
 				D9FC000132A00000000000A0 /* RemoteFailureClassification.cpp in Sources */,
 				D9FC000132A00000000000B0 /* RemoteConnectionRegistry.cpp in Sources */,
 				D9FC000132A00000000000C0 /* RemoteReconnectDriver.cpp in Sources */,
+				D9FC000132A0000000000121 /* RemoteConnectionAttempt.cpp in Sources */,
 				D9FC000132A0000000000036 /* RemoteConnectionPresentation.cpp in Sources */,
 				D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */,
 				D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */,
@@ -4132,6 +4141,7 @@
 				D9FC000132A00000000000A1 /* RemoteFailureClassification_UT.cpp in Sources */,
 				D9FC000132A00000000000B1 /* RemoteConnectionRegistry_UT.cpp in Sources */,
 				D9FC000132A00000000000C1 /* RemoteReconnectDriver_UT.cpp in Sources */,
+				D9FC000132A0000000000122 /* RemoteConnectionAttempt_UT.cpp in Sources */,
 				D9FC000132A0000000000037 /* RemoteConnectionPresentation_UT.cpp in Sources */,
 				D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */,
 				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,
