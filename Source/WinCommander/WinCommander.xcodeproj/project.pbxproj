@@ -59,6 +59,8 @@
 		BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */; };
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
+		D9FC000132A0000000000001 /* FolderComparison.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000012 /* FolderComparison.cpp */; };
+		D9FC000132A0000000000002 /* FolderComparison_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000013 /* FolderComparison_UT.cpp */; };
 		E7AB000131FA000000000001 /* ExplorerTabsModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7AB000131FA000000000012 /* ExplorerTabsModel.cpp */; };
 		E7AB000131FA000000000002 /* ExplorerTabsModel_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7AB000131FA000000000013 /* ExplorerTabsModel_UT.cpp */; };
 		E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */; };
@@ -1065,6 +1067,9 @@
 		BAEC000241D3000000000014 /* PaneNavigationAvailability.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationAvailability.h; path = WinCommander/Core/Pane/PaneNavigationAvailability.h; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability_UT.cpp; path = WinCommander/Tests/PaneNavigationAvailability_UT.cpp; sourceTree = "<group>"; };
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000011 /* FolderComparison.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FolderComparison.h; path = WinCommander/Core/Compare/FolderComparison.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000012 /* FolderComparison.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FolderComparison.cpp; path = WinCommander/Core/Compare/FolderComparison.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000013 /* FolderComparison_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FolderComparison_UT.cpp; path = WinCommander/Tests/FolderComparison_UT.cpp; sourceTree = "<group>"; };
 		E7AB000131FA000000000011 /* ExplorerTabsModel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ExplorerTabsModel.h; path = WinCommander/Core/Pane/ExplorerTabsModel.h; sourceTree = SOURCE_ROOT; };
 		E7AB000131FA000000000012 /* ExplorerTabsModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerTabsModel.cpp; path = WinCommander/Core/Pane/ExplorerTabsModel.cpp; sourceTree = SOURCE_ROOT; };
 		E7AB000131FA000000000013 /* ExplorerTabsModel_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ExplorerTabsModel_UT.cpp; path = WinCommander/Tests/ExplorerTabsModel_UT.cpp; sourceTree = "<group>"; };
@@ -2164,6 +2169,7 @@
 				D84A000131F8000000000013 /* ExplorerInspectorView_UT.mm */,
 				A7B700013201000000000013 /* ExplorerPaneStateView_UT.mm */,
 				E7AB000131FA000000000013 /* ExplorerTabsModel_UT.cpp */,
+				D9FC000132A0000000000013 /* FolderComparison_UT.cpp */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
 				A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */,
 				B6F5000131FC000000000012 /* ExplorerViewSettingsBinding_UT.cpp */,
@@ -2210,6 +2216,15 @@
 				CFD2D26028A03DC0003C18F9 /* ThemesManager_UT.mm */,
 			);
 			name = Tests;
+			sourceTree = "<group>";
+		};
+		D9FC000132A0000000000020 /* Compare */ = {
+			isa = PBXGroup;
+			children = (
+				D9FC000132A0000000000011 /* FolderComparison.h */,
+				D9FC000132A0000000000012 /* FolderComparison.cpp */,
+			);
+			name = Compare;
 			sourceTree = "<group>";
 		};
 		FDE3E28A7F15994A517A24AA /* Pane */ = {
@@ -2517,6 +2532,7 @@
 		CFAC50D5171557E100A3E5C5 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				D9FC000132A0000000000020 /* Compare */,
 				D4C04D2031A2C0DE00000001 /* Commands */,
 				E220E02031A2C0DE00000001 /* Errors */,
 				F19F000131F6000000000020 /* Metadata */,
@@ -3603,6 +3619,7 @@
 				C0CA000131D7000000000001 /* OperationCancelCommand.cpp in Sources */,
 				C0CB000131D8000000000001 /* OperationCenterOpenCommand.cpp in Sources */,
 				E7AB000131FA000000000001 /* ExplorerTabsModel.cpp in Sources */,
+				D9FC000132A0000000000001 /* FolderComparison.cpp in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
 				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
 				C6E6000131FD000000000001 /* ExplorerSessionPersistency.cpp in Sources */,
@@ -3847,6 +3864,7 @@
 				D84A000131F8000000000002 /* ExplorerInspectorView_UT.mm in Sources */,
 				A7B700013201000000000002 /* ExplorerPaneStateView_UT.mm in Sources */,
 				E7AB000131FA000000000002 /* ExplorerTabsModel_UT.cpp in Sources */,
+				D9FC000132A0000000000002 /* FolderComparison_UT.cpp in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
 				A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */,
 				B6F5000131FC000000000002 /* ExplorerViewSettingsBinding_UT.cpp in Sources */,
