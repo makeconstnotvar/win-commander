@@ -109,6 +109,8 @@
 		D9FC000132A0000000000151 /* LocalizationCatalog_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000153 /* LocalizationCatalog_UT.cpp */; };
 		D9FC000132A0000000000161 /* ArchiveFormatReachability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000163 /* ArchiveFormatReachability_UT.cpp */; };
 		D9FC000132A0000000000005 /* CommandPaletteFilter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */; };
+		D9FC000132A0000000000181 /* CrossPaneCommands.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000183 /* CrossPaneCommands.cpp */; };
+		D9FC000132A0000000000182 /* CrossPaneCommands_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000184 /* CrossPaneCommands_UT.cpp */; };
 		D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */; };
 		D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */; };
 		D9FC000132A0000000000003 /* FolderSyncPlan.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000015 /* FolderSyncPlan.cpp */; };
@@ -1198,6 +1200,9 @@
 		D9FC000132A0000000000153 /* LocalizationCatalog_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalizationCatalog_UT.cpp; path = WinCommander/Tests/LocalizationCatalog_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000017 /* CommandPaletteFilter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandPaletteFilter.h; path = WinCommander/Core/Commands/CommandPaletteFilter.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandPaletteFilter.cpp; path = WinCommander/Core/Commands/CommandPaletteFilter.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000183 /* CrossPaneCommands.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CrossPaneCommands.cpp; path = WinCommander/Core/Commands/CrossPaneCommands.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000185 /* CrossPaneCommands.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CrossPaneCommands.h; path = WinCommander/Core/Commands/CrossPaneCommands.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000184 /* CrossPaneCommands_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CrossPaneCommands_UT.cpp; path = WinCommander/Tests/CrossPaneCommands_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerCommandPaletteView_UT.mm; path = WinCommander/Tests/ExplorerCommandPaletteView_UT.mm; sourceTree = "<group>"; };
 		D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandPaletteFilter_UT.cpp; path = WinCommander/Tests/CommandPaletteFilter_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000014 /* FolderSyncPlan.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FolderSyncPlan.h; path = WinCommander/Core/Compare/FolderSyncPlan.h; sourceTree = SOURCE_ROOT; };
@@ -1884,6 +1889,8 @@
 			children = (
 				D9FC000132A0000000000017 /* CommandPaletteFilter.h */,
 				D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */,
+				D9FC000132A0000000000185 /* CrossPaneCommands.h */,
+				D9FC000132A0000000000183 /* CrossPaneCommands.cpp */,
 				D9FC000132A000000000001D /* ShortcutProfiles.h */,
 				D9FC000132A000000000001E /* ShortcutProfiles.cpp */,
 				D4C04D1131A2C0DE00000001 /* CommandId.h */,
@@ -2318,6 +2325,7 @@
 				D9FC000132A0000000000174 /* RecursiveFolderComparison_UT.cpp */,
 				D9FC000132A0000000000016 /* FolderSyncPlan_UT.cpp */,
 				D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */,
+				D9FC000132A0000000000184 /* CrossPaneCommands_UT.cpp */,
 				D9FC000132A000000000001F /* ShortcutProfiles_UT.cpp */,
 				D9FC000132A0000000000143 /* ShippedShortcutTables_UT.cpp */,
 				D9FC000132A0000000000153 /* LocalizationCatalog_UT.cpp */,
@@ -3885,6 +3893,7 @@
 				D9FC000132A0000000000171 /* RecursiveFolderComparison.cpp in Sources */,
 				D9FC000132A0000000000003 /* FolderSyncPlan.cpp in Sources */,
 				D9FC000132A0000000000005 /* CommandPaletteFilter.cpp in Sources */,
+				D9FC000132A0000000000181 /* CrossPaneCommands.cpp in Sources */,
 				D9FC000132A0000000000009 /* ShortcutProfiles.cpp in Sources */,
 				D9FC000132A000000000000B /* RemoteConnectionState.cpp in Sources */,
 				D9FC000132A000000000000D /* RemoteHostTrust.cpp in Sources */,
@@ -4157,6 +4166,7 @@
 				D9FC000132A0000000000172 /* RecursiveFolderComparison_UT.cpp in Sources */,
 				D9FC000132A0000000000004 /* FolderSyncPlan_UT.cpp in Sources */,
 				D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */,
+				D9FC000132A0000000000182 /* CrossPaneCommands_UT.cpp in Sources */,
 				D9FC000132A000000000000A /* ShortcutProfiles_UT.cpp in Sources */,
 				D9FC000132A0000000000141 /* ShippedShortcutTables_UT.cpp in Sources */,
 				D9FC000132A0000000000151 /* LocalizationCatalog_UT.cpp in Sources */,

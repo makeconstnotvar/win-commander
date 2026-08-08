@@ -48,3 +48,39 @@ Built and run in this session (same Xcode 26.6 toolchain as DP-1):
 The full happy path — F5/F6 actually moving files through a real VFS and a real window's sheet/`Pool` — is not exercised by this session's `WinCommanderUT` cases: the mock `PanelController`/`PanelView` fixture used throughout `ExplorerTabsState_UT.mm` has no real listing (so `-isUniform` is false and the guard returns early before ever touching `NCOpsCopyingDialog`/`nc::ops::Copying`), and `-mainWindowController`/sheet presentation need a real window. This mirrors how legacy `CopyTo`/`MoveTo`'s own file-moving behavior is proven at the `WinCommanderIT` (Docker/real-filesystem) tier, not `WinCommanderUT`. A `WinCommanderIT` case exercising an actual cross-pane copy/move end to end is recommended follow-up work, not done here.
 
 Not run: a local UI smoke via `Scripts/build_stable_dev_and_run.sh` (same reason as DP-1 — no tool in this session drives a running native macOS app's UI).
+
+---
+
+# DP-4: what each cross-pane command may offer
+
+DP-2 deferred the command-bar buttons — Copy→, ←Copy, Move→, ←Move, Swap (§28.2) — because the keyboard already reached the functionality. What it also left undone was the question a button forces and a key does not: **when should it be greyed out?**
+
+The command bar and the function keys have to answer that identically. A button that is enabled while its key does nothing, or the reverse, is the kind of disagreement a user reads as the application being broken.
+
+## Direction decides which side must be writable
+
+A copy needs the **receiving** side writable and does not care about the giving one. A move needs that *and* the giving side, because it has to remove the originals — offering a move that can copy but not delete would leave the user with two copies and a failure, which is worse than not offering it.
+
+That asymmetry is why the four transfers are four questions and not one with a flag.
+
+## Same-directory is refused for the transfers, and only for them
+
+Copying a folder onto itself is not a thing to offer. Swapping two panes that happen to show one directory is harmless and still does exactly what it says, so it stays enabled.
+
+## "Same" is by provider as well as path
+
+The same path in two different providers — a local folder and its counterpart on a remote host — is not the same directory. Comparing paths alone would refuse the most ordinary thing a two-pane file manager does.
+
+## Swap asks almost nothing
+
+It moves no data, so it needs neither writability, nor a selection, nor even a uniform listing. Only a second pane to swap with.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::EvaluateCrossPaneCommand*'`: **8/8 cases, 35 assertions** — every transfer offered when both sides can play their part; writability asked of whichever side receives, in both directions; a move refused where the same pair permits a copy; the selection that matters being the giving side's, whichever that is; same-directory refused for all four transfers and not for swap; one path in two providers treated as two directories; a non-uniform listing refused for transfers but not for swap; and everything refused when there is no second pane.
+- Full `WinCommanderUT --rng-seed 424242`: **840/840 cases, 11,913 assertions**.
+
+### Coverage gap
+
+**No buttons yet, and the existing keyboard actions do not consult it.** Wiring both to this one answer is what makes the disagreement above impossible rather than merely unlikely.
