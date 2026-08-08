@@ -32,6 +32,7 @@
 #include <WinCommander/States/FilePanels/List/PanelListViewGeometry.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewProjection.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewRowView.h>
+#include <WinCommander/States/FilePanels/List/PanelListViewTableHeaderView.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -2943,3 +2944,15 @@ TEST_CASE(PREFIX "breadcrumb keeps address callbacks current and distinguishes a
     CHECK([control.accessibilityValue isEqual:@"/fixture/"]);
 }
 #pragma clang diagnostic pop
+
+#undef PREFIX
+#define PREFIX "PanelListViewTableHeaderView "
+
+TEST_CASE(PREFIX "exposes an accessibility identifier and label for the column header row")
+{
+    PanelListViewTableHeaderView *const header = [[PanelListViewTableHeaderView alloc] init];
+    CHECK([header.accessibilityIdentifier isEqualToString:@"wincommander.panel.list.header"]);
+    CHECK(header.accessibilityLabel.length > 0);
+}
+
+#undef PREFIX

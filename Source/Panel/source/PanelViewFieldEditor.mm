@@ -3,6 +3,7 @@
 #include <Operations/FilenameTextControl.h>
 #include <Utility/StringExtras.h>
 #include <Utility/NSEventModifierFlagsHolder.h>
+#include <Panel/Internal.h>
 #include <Panel/Log.h>
 
 using nc::panel::Log;
@@ -72,6 +73,9 @@ static NSRange NextFilenameSelectionRange(NSString *_Nonnull _string, NSRange _c
     tv.defaultParagraphStyle = ps;
     tv.textContainer.widthTracksTextView = tv.textContainer.heightTracksTextView = false;
     tv.textContainer.containerSize = CGSizeMake(FLT_MAX, FLT_MAX);
+    tv.accessibilityIdentifier = @"wincommander.panel.renameField";
+    tv.accessibilityLabel =
+        nc::panel::NSLocalizedString(@"Rename", "Accessibility label for the inline filename rename field");
     m_TextView = tv;
 }
 
