@@ -1,4 +1,4 @@
-# Q2-10 RH-1…RH-4: Atomic-write durability, localization, and accessibility
+# Q2-10 RH-1…RH-5: Atomic-write durability, localization, accessibility, crash leftovers
 
 > Status: defect found and fixed; see §Verification.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-10 ("atomic persistence", "локализация").
@@ -123,3 +123,40 @@ One new catalogue key, in both languages.
 ### Coverage gap
 
 The audit was a ratio check plus reading, which finds a surface with *nothing* but would miss a surface with *something and a hole*. A real pass would enumerate interactive controls and assert each carries a label — worth doing, and still open, along with the regression guard RH-3 called for.
+
+---
+
+# RH-5: leftovers from an interrupted atomic write
+
+## The problem RH-1 left behind
+
+RH-1 made `WriteAtomically` durable, and its tests confirm no temporary survives a *successful* write. But if the process dies between `mkstemp` and `rename`, the temporary survives forever — nothing cleans it up, and it accumulates one per crash in the user's own directory.
+
+## The defect this slice found in itself
+
+The first version recognised leftovers by shape: target name, a dot, then six characters from `mkstemp`'s alphabet. Its own test disproved it immediately.
+
+`notes.txt.backup` is **exactly** six alphanumerics after the dot. So is `notes.txt.bak123`. A shape-only sweep would have deleted a user's backup file — turning crash cleanup into precisely the data loss it exists to prevent. (The first draft's test comment even claimed `backup` was "wrong length", which it is not; the assertion was right and the reasoning behind it was wrong.)
+
+## The fix: change the writer, not the guesser
+
+Shape cannot decide this, because `mkstemp`'s suffix is indistinguishable from names people actually choose. So `WriteAtomically` now emits `.<target>.nctmp.XXXXXX` instead of `<target>.XXXXXX`:
+
+- **`.nctmp.` is not a name anyone picks by accident**, which makes the judgement unambiguous rather than probabilistic.
+- **The leading dot** means an interrupted write leaves no *visible* litter either.
+
+The matcher requires all of: the leading dot, the exact target name, the marker, and exactly six characters from the alphabet. `notes.txt.backup` no longer matches, and neither does a hand-written imitation like `.notes.txt.nctemp.a1B2c3`.
+
+The general shape of this fix is worth naming: when a read-side heuristic cannot be made safe, the answer is usually to make the write side unambiguous rather than to sharpen the guess.
+
+## Verification
+
+- `xcodebuild` for `WinCommanderUT`, `BaseUT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::IsOrphanedAtomicWriteTemporary*' --rng-seed 424242`: **5/5 cases, 21/21 assertions** — real leftovers matched; user-owned lookalikes refused, including the two that defeated the first draft; suffix shape enforced; the target itself, a neighbour's temporary and a prefix relationship all refused; no target means no answer.
+- Full `BaseUT --rng-seed 424242`: **80/80 cases, 70,576/70,576 assertions** — the suite covering the changed temp-name path, including RH-1's "leaves no temporary behind".
+- Full `ConfigUT --rng-seed 424242`: **38/38 cases** — the consumer.
+- Full `WinCommanderUT --rng-seed 424242`: **738/738 cases, 11,405/11,405 assertions**.
+
+### Coverage gap
+
+**Nothing sweeps yet.** This decides safely *which* files are leftovers; a startup pass that actually removes them is the next step, and it should log what it deletes rather than doing so silently.

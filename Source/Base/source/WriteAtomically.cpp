@@ -32,9 +32,19 @@ WriteAtomically(const std::filesystem::path &_path, std::span<const std::byte> _
         }
     }
 
-    // Open a temporary file next to the destination
-    std::pmr::string temp_path(target_path, &alloc);
-    temp_path += ".XXXXXX";
+    // Open a temporary file next to the destination.
+    //
+    // The name carries an explicit marker rather than being "<target>.XXXXXX". mkstemp's suffix is
+    // six alphanumerics, which is indistinguishable from names people actually choose - "notes.txt"
+    // plus "backup" or "bak123" fits it exactly - so a crash-recovery sweep could not tell a
+    // leftover temporary from a user's own file without risking their data. The marker makes that
+    // judgement unambiguous. The leading dot additionally keeps an interrupted write from leaving
+    // visible litter in the user's directory.
+    const std::filesystem::path target_fs{target_path.c_str()};
+    std::pmr::string temp_path(target_fs.parent_path().native(), &alloc);
+    temp_path += "/.";
+    temp_path += target_fs.filename().native();
+    temp_path += ".nctmp.XXXXXX";
     const auto fd = mkstemp(temp_path.data());
     if( fd < 0 )
         return std::unexpected(Error{Error::POSIX, errno});
