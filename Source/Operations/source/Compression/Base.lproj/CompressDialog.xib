@@ -12,6 +12,7 @@
                 <outlet property="compressButton" destination="RZR-re-mhm" id="SO4-5v-77p"/>
                 <outlet property="destinationTextField" destination="Xkn-9n-JfE" id="pf3-gg-vrV"/>
                 <outlet property="destinationTitleTextField" destination="sfe-25-dPf" id="OmU-cI-DdW"/>
+                <outlet property="formatPopUp" destination="Fmt-pu-btn" id="Fmt-ol-pop"/>
                 <outlet property="passwordTextField" destination="qUL-dQ-JyV" id="Q7n-Vg-U6x"/>
                 <outlet property="protectWithPasswordCheckbox" destination="4ep-eG-eMc" id="rMD-dK-kd6"/>
                 <outlet property="window" destination="F0z-JX-Cv5" id="gIp-Ho-8D9"/>
@@ -22,10 +23,10 @@
         <window allowsToolTipsWhenApplicationIsInactive="NO" autorecalculatesKeyViewLoop="NO" visibleAtLaunch="NO" animationBehavior="default" id="F0z-JX-Cv5" customClass="NSPanel">
             <windowStyleMask key="styleMask" titled="YES" closable="YES" miniaturizable="YES" resizable="YES"/>
             <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
-            <rect key="contentRect" x="196" y="240" width="541" height="180"/>
+            <rect key="contentRect" x="196" y="240" width="541" height="221"/>
             <rect key="screenRect" x="0.0" y="0.0" width="1920" height="1080"/>
             <view key="contentView" misplaced="YES" id="se5-gp-TjO">
-                <rect key="frame" x="0.0" y="0.0" width="541" height="180"/>
+                <rect key="frame" x="0.0" y="0.0" width="541" height="221"/>
                 <autoresizingMask key="autoresizingMask"/>
                 <subviews>
                     <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="RZR-re-mhm">
@@ -89,6 +90,28 @@ Gw
                             <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                     </textField>
+                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Fmt-lb-txt">
+                        <rect key="frame" x="18" y="121" width="52" height="17"/>
+                        <textFieldCell key="cell" lineBreakMode="clipping" title="Format:" id="Fmt-lb-cel">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <popUpButton verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Fmt-pu-btn">
+                        <rect key="frame" x="74" y="114" width="180" height="25"/>
+                        <constraints>
+                            <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="160" id="Fmt-cs-wid"/>
+                        </constraints>
+                        <popUpButtonCell key="cell" type="push" bezelStyle="rounded" alignment="left" lineBreakMode="truncatingTail" borderStyle="borderAndBezel" imageScaling="proportionallyDown" inset="2" arrowPosition="arrowAtCenter" preferredEdge="maxY" id="Fmt-pu-cel">
+                            <behavior key="behavior" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu"/>
+                            <menu key="menu" id="Fmt-pu-mnu"/>
+                        </popUpButtonCell>
+                        <connections>
+                            <action selector="onFormatChanged:" target="-2" id="Fmt-ac-sel"/>
+                        </connections>
+                    </popUpButton>
                     <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="4ep-eG-eMc">
                         <rect key="frame" x="18" y="80" width="161" height="18"/>
                         <buttonCell key="cell" type="check" title="Protect with password:" bezelStyle="regularSquare" imagePosition="left" continuous="YES" inset="2" id="CUD-IL-ZRp">
@@ -98,6 +121,7 @@ Gw
                         <connections>
                             <action selector="onProtectWithPassword:" target="-2" id="paS-k8-3wZ"/>
                             <binding destination="-2" name="value" keyPath="self.protectWithPassword" id="bf1-nR-i2B"/>
+                            <binding destination="-2" name="enabled" keyPath="self.formatSupportsEncryption" id="Fmt-bd-ena"/>
                         </connections>
                     </button>
                     <textField verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="qUL-dQ-JyV" customClass="NSSecureTextField">
@@ -135,7 +159,11 @@ Gw
                     <constraint firstItem="Xkn-9n-JfE" firstAttribute="leading" secondItem="se5-gp-TjO" secondAttribute="leading" constant="20" symbolic="YES" id="i22-iI-wQa"/>
                     <constraint firstItem="RZR-re-mhm" firstAttribute="firstBaseline" secondItem="svN-iq-mOy" secondAttribute="firstBaseline" id="nhK-M4-KAd"/>
                     <constraint firstItem="RZR-re-mhm" firstAttribute="leading" secondItem="svN-iq-mOy" secondAttribute="trailing" constant="12" symbolic="YES" id="xud-Id-O5E"/>
-                    <constraint firstItem="4ep-eG-eMc" firstAttribute="top" secondItem="Xkn-9n-JfE" secondAttribute="bottom" constant="16" id="zdh-sq-yhI"/>
+                    <constraint firstItem="Fmt-lb-txt" firstAttribute="leading" secondItem="se5-gp-TjO" secondAttribute="leading" constant="20" symbolic="YES" id="Fmt-cs-lbl"/>
+                    <constraint firstItem="Fmt-pu-btn" firstAttribute="top" secondItem="Xkn-9n-JfE" secondAttribute="bottom" constant="14" id="Fmt-cs-top"/>
+                    <constraint firstItem="Fmt-pu-btn" firstAttribute="leading" secondItem="Fmt-lb-txt" secondAttribute="trailing" constant="8" symbolic="YES" id="Fmt-cs-lead"/>
+                    <constraint firstItem="Fmt-lb-txt" firstAttribute="centerY" secondItem="Fmt-pu-btn" secondAttribute="centerY" id="Fmt-cs-cy"/>
+                    <constraint firstItem="4ep-eG-eMc" firstAttribute="top" secondItem="Fmt-pu-btn" secondAttribute="bottom" constant="16" id="zdh-sq-yhI"/>
                 </constraints>
             </view>
             <connections>

@@ -11,6 +11,8 @@ namespace {
 using nc::ops::ArchiveCreationFormat;
 using nc::ops::ArchiveCreationFormatForFilename;
 using nc::ops::DescribeArchiveCreationFormat;
+using nc::ops::ArchiveCreationRequestVerdict;
+using nc::ops::EvaluateArchiveCreationRequest;
 using nc::ops::SupportedArchiveCreationFormats;
 
 } // namespace
@@ -83,6 +85,47 @@ TEST_CASE(PREFIX "records the metadata trade-off a picker has to explain")
     CHECK_FALSE(DescribeArchiveCreationFormat(ArchiveCreationFormat::Tar).compresses);
     CHECK(DescribeArchiveCreationFormat(ArchiveCreationFormat::TarGzip).compresses);
     CHECK(DescribeArchiveCreationFormat(ArchiveCreationFormat::Zip).compresses);
+}
+
+TEST_CASE(PREFIX "records that only one format can carry a passphrase")
+{
+    // A surface that forgot this would let a user ask for protection, watch an archive appear, and
+    // never learn it is not protected.
+    CHECK(DescribeArchiveCreationFormat(ArchiveCreationFormat::Zip).supports_encryption);
+    CHECK_FALSE(DescribeArchiveCreationFormat(ArchiveCreationFormat::Tar).supports_encryption);
+    CHECK_FALSE(DescribeArchiveCreationFormat(ArchiveCreationFormat::TarGzip).supports_encryption);
+    CHECK_FALSE(DescribeArchiveCreationFormat(ArchiveCreationFormat::TarBzip2).supports_encryption);
+}
+
+TEST_CASE(PREFIX "judges a create request before anything is written")
+{
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Zip, true, false, false) ==
+          ArchiveCreationRequestVerdict::Submittable);
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Zip, true, true, true) ==
+          ArchiveCreationRequestVerdict::Submittable);
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::TarGzip, true, false, false) ==
+          ArchiveCreationRequestVerdict::Submittable);
+
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Zip, false, false, false) ==
+          ArchiveCreationRequestVerdict::DestinationMissing);
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Zip, true, true, false) ==
+          ArchiveCreationRequestVerdict::PasswordMissing);
+
+    // Protection asked of a format that cannot carry it is reported as unsupported rather than as a
+    // missing password: typing one would not help, and asking for it is the more misleading answer.
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Tar, true, true, false) ==
+          ArchiveCreationRequestVerdict::PasswordUnsupported);
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::TarBzip2, true, true, true) ==
+          ArchiveCreationRequestVerdict::PasswordUnsupported);
+
+    // A password left over in a field nobody is reading does not make a request unsubmittable - only
+    // asking for protection does.
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Tar, true, false, true) ==
+          ArchiveCreationRequestVerdict::Submittable);
+
+    // The missing destination outranks everything: there is nowhere to put an archive either way.
+    CHECK(EvaluateArchiveCreationRequest(ArchiveCreationFormat::Tar, false, true, false) ==
+          ArchiveCreationRequestVerdict::DestinationMissing);
 }
 
 #undef PREFIX

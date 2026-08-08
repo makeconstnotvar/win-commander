@@ -142,10 +142,8 @@ ArchiveCreateSubmissionResult PresentArchiveCreate(const std::span<const VFSList
           return;
       }
 
-      // Named rather than left to the default, so the format is visibly a decision this layer makes
-      // - which is where a picker belongs once there is one.
       auto op = std::make_shared<nc::ops::Compression>(
-          entries, dialog.destination, destination_vfs, dialog.password, nc::ops::ArchiveCreationFormat::Zip);
+          entries, dialog.destination, destination_vfs, dialog.password, dialog.format);
       const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
       __weak PanelController *weak_focus_target = target;
       op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_focus_target, weak_op] {
@@ -214,7 +212,7 @@ void CompressToOpposite::Perform(PanelController *_target, id /*_sender*/) const
           return;
 
       auto op = std::make_shared<nc::ops::Compression>(
-          entries, dialog.destination, opposite_panel.vfs, dialog.password, nc::ops::ArchiveCreationFormat::Zip);
+          entries, dialog.destination, opposite_panel.vfs, dialog.password, dialog.format);
       const auto weak_op = std::weak_ptr<nc::ops::Compression>{op};
       __weak PanelController *weak_target = opposite_panel;
       op->ObserveUnticketed(nc::ops::Operation::NotifyAboutCompletion, [weak_target, weak_op] {

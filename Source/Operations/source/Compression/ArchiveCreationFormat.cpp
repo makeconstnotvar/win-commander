@@ -12,13 +12,13 @@ namespace {
 // construction rather than by a separate length comparison.
 constexpr std::array g_Formats{
     ArchiveCreationFormatInfo{
-        .format = ArchiveCreationFormat::TarBzip2, .extension = "tar.bz2", .preserves_posix_metadata = true, .compresses = true},
+        .format = ArchiveCreationFormat::TarBzip2, .extension = "tar.bz2", .preserves_posix_metadata = true, .compresses = true, .supports_encryption = false},
     ArchiveCreationFormatInfo{
-        .format = ArchiveCreationFormat::TarGzip, .extension = "tar.gz", .preserves_posix_metadata = true, .compresses = true},
+        .format = ArchiveCreationFormat::TarGzip, .extension = "tar.gz", .preserves_posix_metadata = true, .compresses = true, .supports_encryption = false},
     ArchiveCreationFormatInfo{
-        .format = ArchiveCreationFormat::Zip, .extension = "zip", .preserves_posix_metadata = false, .compresses = true},
+        .format = ArchiveCreationFormat::Zip, .extension = "zip", .preserves_posix_metadata = false, .compresses = true, .supports_encryption = true},
     ArchiveCreationFormatInfo{
-        .format = ArchiveCreationFormat::Tar, .extension = "tar", .preserves_posix_metadata = true, .compresses = false},
+        .format = ArchiveCreationFormat::Tar, .extension = "tar", .preserves_posix_metadata = true, .compresses = false, .supports_encryption = false},
 };
 
 std::string AsciiLowered(const std::string_view _text)
@@ -64,6 +64,24 @@ std::optional<ArchiveCreationFormat> ArchiveCreationFormatForFilename(const std:
             return info.format;
     }
     return std::nullopt;
+}
+
+ArchiveCreationRequestVerdict EvaluateArchiveCreationRequest(const ArchiveCreationFormat _format,
+                                                             const bool _has_destination,
+                                                             const bool _protect_with_password,
+                                                             const bool _has_password) noexcept
+{
+    if( !_has_destination )
+        return ArchiveCreationRequestVerdict::DestinationMissing;
+    if( _protect_with_password ) {
+        // The unsupported format is reported before the missing password: typing one would not help,
+        // and saying "enter a password" to someone who cannot use one is the more misleading answer.
+        if( !DescribeArchiveCreationFormat(_format).supports_encryption )
+            return ArchiveCreationRequestVerdict::PasswordUnsupported;
+        if( !_has_password )
+            return ArchiveCreationRequestVerdict::PasswordMissing;
+    }
+    return ArchiveCreationRequestVerdict::Submittable;
 }
 
 } // namespace nc::ops

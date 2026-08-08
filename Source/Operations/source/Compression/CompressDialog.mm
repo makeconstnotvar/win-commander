@@ -13,7 +13,9 @@
 @property(weak, nonatomic) IBOutlet NSSecureTextField *passwordTextField;
 @property(weak, nonatomic) IBOutlet NSTextField *destinationTextField;
 @property(weak, nonatomic) IBOutlet NSTextField *destinationTitleTextField;
+@property(weak, nonatomic) IBOutlet NSPopUpButton *formatPopUp;
 @property(nonatomic) bool protectWithPassword;
+@property(nonatomic) bool formatSupportsEncryption;
 @property(nonatomic) bool validInput;
 @property(nonatomic) NSString *destinationString;
 @property(nonatomic) NSString *passwordString;
@@ -26,6 +28,7 @@
     std::string m_InitialDestination;
     std::string m_FinalDestination;
     std::string m_FinalPassword;
+    nc::ops::ArchiveCreationFormat m_SelectedFormat;
     std::shared_ptr<nc::ops::DirectoryPathAutoCompetion> m_AutoCompletion;
     NCFilepathAutoCompletionDelegate *m_AutoCompletionDelegate;
 }
@@ -38,7 +41,10 @@
 @synthesize passwordTextField;
 @synthesize destinationTextField;
 @synthesize destinationTitleTextField;
+@synthesize formatPopUp;
+@synthesize format = m_SelectedFormat;
 @synthesize protectWithPassword;
+@synthesize formatSupportsEncryption;
 @synthesize validInput;
 @synthesize destinationString;
 @synthesize passwordString;
@@ -55,6 +61,8 @@
         m_DestinationHost = _destination_host;
         m_InitialDestination = _initial_destination;
         self.protectWithPassword = false;
+        m_SelectedFormat = nc::ops::ArchiveCreationFormat::Zip;
+        self.formatSupportsEncryption = true;
         self.destinationString = [NSString stringWithUTF8StdString:m_InitialDestination];
         self.validInput = false;
         m_AutoCompletion = std::make_shared<nc::ops::DirectoryPathAutoCompletionImpl>(m_DestinationHost);
@@ -70,6 +78,19 @@
 {
     using namespace nc::ops;
     [super windowDidLoad];
+
+    // Built from the model rather than listed in the nib, so the menu cannot come to offer a format
+    // the engine does not produce - which is the whole reason the creatable set is modelled apart
+    // from the extractable one.
+    [self.formatPopUp removeAllItems];
+    for( const ArchiveCreationFormatInfo &info : SupportedArchiveCreationFormats() ) {
+        NSMenuItem *const item = [[NSMenuItem alloc] init];
+        item.title = [NSString stringWithUTF8StdStringView:info.extension];
+        item.tag = static_cast<NSInteger>(info.format);
+        [self.formatPopUp.menu addItem:item];
+    }
+    [self.formatPopUp selectItemWithTag:static_cast<NSInteger>(m_SelectedFormat)];
+    [self applyFormatSelection];
     const auto amount = static_cast<int>(m_SourceItems.size());
     if( amount > 1 )
         self.destinationTitleTextField.stringValue = [NSString
@@ -81,12 +102,35 @@
 
 - (void)validate
 {
-    bool valid = true;
-    if( self.destinationString.length == 0 )
-        valid = false;
-    if( self.protectWithPassword && self.passwordString.length == 0 )
-        valid = false;
-    self.validInput = valid;
+    // The same rule the compression job enforces before it writes anything, asked here so the user
+    // is stopped at the dialog rather than told no after pressing a button.
+    const nc::ops::ArchiveCreationRequestVerdict verdict =
+        nc::ops::EvaluateArchiveCreationRequest(m_SelectedFormat,
+                                                self.destinationString.length != 0,
+                                                self.protectWithPassword,
+                                                self.passwordString.length != 0);
+    self.validInput = verdict == nc::ops::ArchiveCreationRequestVerdict::Submittable;
+}
+
+- (void)applyFormatSelection
+{
+    const bool encryptable = nc::ops::DescribeArchiveCreationFormat(m_SelectedFormat).supports_encryption;
+    // Bound in the nib rather than assigned to the control here. A control whose `value` is bound has
+    // its `enabled` managed by the bindings machinery, so a direct assignment is overwritten the next
+    // time the bound value changes - which is exactly what happens on the line below.
+    self.formatSupportsEncryption = encryptable;
+    // Switching to a format that cannot carry a passphrase clears the request rather than leaving a
+    // ticked box that would produce an unprotected archive. What was typed stays in the field, so
+    // switching back to a format that can encrypt restores it instead of asking for it again.
+    if( !encryptable && self.protectWithPassword )
+        self.protectWithPassword = false;
+    [self validate];
+}
+
+- (IBAction)onFormatChanged:(id) [[maybe_unused]] _sender
+{
+    m_SelectedFormat = static_cast<nc::ops::ArchiveCreationFormat>(self.formatPopUp.selectedTag);
+    [self applyFormatSelection];
 }
 
 - (IBAction)onCompress:(id) [[maybe_unused]] _sender

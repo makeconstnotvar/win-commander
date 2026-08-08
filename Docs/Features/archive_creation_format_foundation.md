@@ -1,4 +1,4 @@
-# Q2-6 AR-1…AR-2: Creatable archive formats, and creating them
+# Q2-6 AR-1…AR-3: Creatable archive formats, creating them, and choosing one
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-6.
@@ -67,6 +67,40 @@ Only zip can carry one. Producing a tarball anyway and quietly discarding the pr
 - Full `OperationsIT 'Operations::Compression*'`: **17/17 cases, 284 assertions**, and again under **ASAN+UBSAN** and under **TSan** — the slice changes an operation that writes files, which is where that budget applies.
 - Focused `OperationsUT 'nc::ops::ArchiveCreationFormat*'`: **6/6 cases, 34 assertions** (moved from `WinCommanderUT` unchanged). Full `OperationsUT`: **228/228, 5,965 assertions**. Full `WinCommanderUT`: **745/745, 11,441 assertions** — six fewer cases than before, exactly the ones that moved.
 
-### Coverage gap
+### Coverage gap at AR-2
 
-**The user still cannot choose.** The compress dialog offers a destination directory and a password, and the action layer names `Zip` explicitly at each call site so the choice is visible where a picker belongs. Adding that picker — and deciding what the destination field should do when someone types a name ending in `.tar.gz` — is the next increment.
+**The user still cannot choose** — closed by AR-3 below.
+
+---
+
+# AR-3: choosing one, and the rule the choice creates
+
+## The menu is built from the model, not listed in the nib
+
+Four items in a nib would be a second copy of the table, and the day it drifted the picker would offer a format the engine cannot produce — the exact failure `ArchiveCreationFormat` exists to prevent. The pop-up ships empty and is filled from `SupportedArchiveCreationFormats()`, in the order the model gives.
+
+## One choice creates a rule: only zip can carry a passphrase
+
+That is now a fact on the format (`supports_encryption`), not knowledge scattered across surfaces. AR-2 made the compression job refuse an impossible combination; AR-3 makes the dialog prevent it, so the user is stopped where they are working rather than told no after pressing a button. Both read the same model, so they cannot reach different conclusions — and the job's refusal remains as the last line of defence for any caller that does not ask first.
+
+`EvaluateArchiveCreationRequest` reports **`PasswordUnsupported` before `PasswordMissing`**. Typing a password would not help, and telling someone to enter one they cannot use is the more misleading of the two answers.
+
+Switching to a format that cannot encrypt **withdraws** the request rather than leaving a ticked box that would produce an unprotected archive. What was typed stays in the field, so returning to a format that can encrypt does not ask for it again — but protection is not silently re-engaged either; asking for it is the user's call.
+
+## What the nib test caught
+
+Disabling the checkbox by assigning `enabled` on the control **did not stick**. A control whose `value` is bound has its `enabled` managed by the bindings machinery, and the assignment was overwritten the moment the bound value changed — which is the very next line, where protection is withdrawn. The result would have shipped as a checkbox that stayed clickable for tar, letting a user tick it and get an unprotected archive.
+
+Nothing short of loading the real nib would have found it: the logic was right, the model was right, and every value the code set was right. `formatSupportsEncryption` is now a bound property, so AppKit owns the enabled state and there is nothing to overwrite.
+
+## Verification
+
+- `OperationsUT`, `OperationsIT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED** (the nib compiles, which is what validates the added row).
+- New `OperationsIT 'Operations::CompressDialog*'`: **2/2 cases, 24 assertions** — the pop-up exists and is connected (a mistyped outlet would leave it nil, every menu call would quietly do nothing, and the picker would ship empty), its items match the model item for item in title and tag, and the password interaction holds in both directions.
+- Focused `OperationsUT 'nc::ops::ArchiveCreationFormat*'`: **8/8 cases, 47 assertions** — the encryption fact for all four formats, every verdict including the two orderings that matter, and a stale password in a field nobody reads not blocking a submission.
+- Full `OperationsUT`: **230/230, 5,978 assertions**. Full `OperationsIT 'Operations::Compress*'`: **19/19, 308 assertions**, and again under **ASAN+UBSAN**.
+
+### Coverage gaps
+
+- **The destination field still means a directory.** Typing `backup.tar.gz` there creates a directory path, not a format choice; `ArchiveCreationFormatForFilename` remains unused by any surface. Deciding whether that field should accept a filename is its own increment, and it interacts with the picker.
+- Nothing yet checks the creatable set against the extraction whitelist, and archive operations do not go through Operation Center plans — both still open in Q2-6.

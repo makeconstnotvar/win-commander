@@ -3,6 +3,7 @@
 
 #include <Cocoa/Cocoa.h>
 #include <VFS/VFS.h>
+#include "ArchiveCreationFormat.h"
 
 @interface NCOpsCompressDialog : NSWindowController <NSTextFieldDelegate>
 
@@ -12,5 +13,7 @@
 
 @property(readonly, nonatomic) const std::string &destination;
 @property(readonly, nonatomic) const std::string &password;
+/** The format the user picked. Valid once the sheet ended with OK. */
+@property(readonly, nonatomic) nc::ops::ArchiveCreationFormat format;
 
 @end

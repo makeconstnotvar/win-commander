@@ -35,6 +35,7 @@
 		CF91790E2EEAC60100A5A578 /* _OperationsUT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF91790D2EEAC60100A5A578 /* _OperationsUT.mm */; };
 		CF9179102EEAC76900A5A578 /* _OperationsUT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF91790F2EEAC76900A5A578 /* _OperationsUT.cpp */; };
 		CF9179122EEAC9BB00A5A578 /* _OperationsIT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CF9179112EEAC9BB00A5A578 /* _OperationsIT.cpp */; };
+		CF9179302EEAC9BB00A5A578 /* _OperationsIT.mm in Sources */ = {isa = PBXBuildFile; fileRef = CF9179312EEAC9BB00A5A578 /* _OperationsIT.mm */; };
 		F10100012F01000100A5A578 /* _PhysicalOperationsIT.mm in Sources */ = {isa = PBXBuildFile; fileRef = F10100002F01000100A5A578 /* _PhysicalOperationsIT.mm */; };
 		CFB7BD43260F696C00E2EA4D /* DeletionJobCallbacks.h in Headers */ = {isa = PBXBuildFile; fileRef = CFB7BD41260F696C00E2EA4D /* DeletionJobCallbacks.h */; };
 		CFCFAC712D3D2F8D008C6E26 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CFCFAC702D3D2F8D008C6E26 /* Localizable.xcstrings */; };
@@ -206,6 +207,7 @@
 		CF91790D2EEAC60100A5A578 /* _OperationsUT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = _OperationsUT.mm; sourceTree = "<group>"; };
 		CF91790F2EEAC76900A5A578 /* _OperationsUT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _OperationsUT.cpp; sourceTree = "<group>"; };
 		CF9179112EEAC9BB00A5A578 /* _OperationsIT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = _OperationsIT.cpp; sourceTree = "<group>"; };
+		CF9179312EEAC9BB00A5A578 /* _OperationsIT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = _OperationsIT.mm; sourceTree = "<group>"; };
 		F10100002F01000100A5A578 /* _PhysicalOperationsIT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = _PhysicalOperationsIT.mm; sourceTree = "<group>"; };
 		F10100022F01000100A5A578 /* ConditionalCopyPhysicalVolume_IT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ConditionalCopyPhysicalVolume_IT.cpp; sourceTree = "<group>"; };
 		CFAAF0721FA9D8B8009230B3 /* CopyingTitleBuilder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = CopyingTitleBuilder.h; path = source/Copying/CopyingTitleBuilder.h; sourceTree = "<group>"; };
@@ -620,6 +622,7 @@
 			isa = PBXGroup;
 			children = (
 				CF9179112EEAC9BB00A5A578 /* _OperationsIT.cpp */,
+				CF9179312EEAC9BB00A5A578 /* _OperationsIT.mm */,
 				F10100002F01000100A5A578 /* _PhysicalOperationsIT.mm */,
 				F10100022F01000100A5A578 /* ConditionalCopyPhysicalVolume_IT.cpp */,
 				CF91790F2EEAC76900A5A578 /* _OperationsUT.cpp */,
@@ -968,6 +971,7 @@
 				CF2C102622A4116F00A5359D /* DirectoryPathAutoCompetion_IT.mm in Sources */,
 				CFE08AFE23D3719B007E99B8 /* TestEnv.mm in Sources */,
 				CF9179122EEAC9BB00A5A578 /* _OperationsIT.cpp in Sources */,
+				CF9179302EEAC9BB00A5A578 /* _OperationsIT.mm in Sources */,
 				F10100012F01000100A5A578 /* _PhysicalOperationsIT.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

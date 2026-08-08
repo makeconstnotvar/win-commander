@@ -30,6 +30,11 @@ struct ArchiveCreationFormatInfo {
     bool preserves_posix_metadata = false;
     /** The container itself compresses; false means bytes are stored as-is. */
     bool compresses = false;
+    /**
+     * The format can carry a passphrase. Only zip can, and a surface that forgets it would let a
+     * user ask for protection, watch an archive appear, and never learn it is not protected.
+     */
+    bool supports_encryption = false;
 
     friend bool operator==(const ArchiveCreationFormatInfo &, const ArchiveCreationFormatInfo &) = default;
 };
@@ -51,5 +56,26 @@ struct ArchiveCreationFormatInfo {
  * the first character, so a dotfile named `.zip` is a file called `.zip`, not an archive.
  */
 [[nodiscard]] std::optional<ArchiveCreationFormat> ArchiveCreationFormatForFilename(std::string_view _filename);
+
+/** Why a request to create an archive cannot be submitted as it stands. */
+enum class ArchiveCreationRequestVerdict : uint8_t {
+    Submittable,
+    DestinationMissing,
+    PasswordMissing,
+    /** Protection was asked of a format that cannot carry it. */
+    PasswordUnsupported
+};
+
+/**
+ * Judges a create request before anything is written.
+ *
+ * The compression job enforces the same passphrase rule as a last line of defence; this exists so a
+ * surface can stop the user *before* they submit, rather than letting them press a button and be
+ * told no. Both read the one model, so they cannot come to different conclusions.
+ */
+[[nodiscard]] ArchiveCreationRequestVerdict EvaluateArchiveCreationRequest(ArchiveCreationFormat _format,
+                                                                           bool _has_destination,
+                                                                           bool _protect_with_password,
+                                                                           bool _has_password) noexcept;
 
 } // namespace nc::ops
