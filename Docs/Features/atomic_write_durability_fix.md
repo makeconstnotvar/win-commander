@@ -1,4 +1,4 @@
-# Q2-10 RH-1/RH-2: Atomic-write durability, and the localization catalogue
+# Q2-10 RH-1…RH-3: Atomic-write durability, localization, and an accessibility gap
 
 > Status: defect found and fixed; see §Verification.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-10 ("atomic persistence", "локализация").
@@ -73,3 +73,25 @@ The fix was to locate each key's block by brace matching, edit only within those
 ### Coverage gap
 
 **No automated guard against regression.** Nothing prevents the next added key from shipping untranslated; catching that needs a check over the catalogue in the build or a script, which is worth adding but is its own increment. This slice fixed the state, not the process.
+
+---
+
+# RH-3: an accessibility gap in this session's own code
+
+## What was wrong
+
+The Pause/Resume buttons added to the Operation Center panel in OC-4 set only a title, target and action. Their sibling in the same panel — Cancel — receives a tooltip *and* `accessibilityHelp` from the shared `CommandPresentationAdapter`, because it is routed through the Registry. The pause control is not, so it inherited nothing and was the only control in that panel announcing no context to VoiceOver.
+
+A title alone does give VoiceOver something to read, so the button was not silent. But "Pause op-3" says what the control is named, not what pressing it does or whether the effect can be undone — which is precisely what the help text on every neighbouring control provides. Being the one inconsistent control is its own defect: a user who has learned that these controls explain themselves gets no explanation from exactly the one that changes an operation's state.
+
+Fixed by supplying both from the same string, with the reason recorded at the call site so the next control added outside the Registry path does not repeat it.
+
+## Verification
+
+- `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED**.
+- `xcodebuild -scheme WinCommanderUT -configuration Debug build` — **BUILD SUCCEEDED**; full `WinCommanderUT --rng-seed 424242` passes **733/733 cases, 11,384/11,384 assertions**.
+- Two new keys added to the catalogue in both languages, verified with the same duplicate-rejecting parse RH-2 introduced. Every key without a Russian entry is still only the two symbols.
+
+### Coverage gap
+
+This was found by reading the code I had just written, not by a check. Nothing enforces that a newly added control carries accessibility help — an audit pass over the existing Explorer surfaces, and some form of guard, both remain open under Q2-10's "полный accessibility".

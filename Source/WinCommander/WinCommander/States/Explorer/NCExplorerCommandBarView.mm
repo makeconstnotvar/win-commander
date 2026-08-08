@@ -1409,6 +1409,14 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
                                           : NSLocalizedString(@"explorer.operations.resume", "Explorer operation menu"),
                                  StringFromUTF8(record.operation_id.ToString())];
             toggle.bezelStyle = NSBezelStyleRounded;
+            // The sibling Cancel control gets its tooltip and accessibility help from the shared
+            // presentation adapter; this one does not go through the Registry, so it has to supply
+            // them itself or it would be the only control in the panel that announces no context.
+            NSString *const help =
+                pausing ? NSLocalizedString(@"explorer.operations.pause.help", "Explorer operation control")
+                        : NSLocalizedString(@"explorer.operations.resume.help", "Explorer operation control");
+            toggle.toolTip = help;
+            toggle.accessibilityHelp = help;
             toggle.target = self;
             toggle.action = @selector(performOperationCenterSnapshotPause:);
             [m_OperationCenterSnapshotControls addArrangedSubview:toggle];

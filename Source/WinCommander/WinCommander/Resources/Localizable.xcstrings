@@ -2717,6 +2717,40 @@
         }
       }
     },
+    "explorer.operations.pause.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause this operation. It can be resumed later."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приостановить эту операцию. Её можно будет продолжить."
+          }
+        }
+      }
+    },
+    "explorer.operations.resume.help" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume this paused operation."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Продолжить приостановленную операцию."
+          }
+        }
+      }
+    },
     "explorer.operations.resume" : {
       "extractionState" : "manual",
       "localizations" : {
