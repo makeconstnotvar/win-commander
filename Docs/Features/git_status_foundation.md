@@ -55,3 +55,44 @@ A trailing slash is stripped except on the root, because tools accept both but s
 - Porcelain v2 is not parsed. v1 carries everything the badge vocabulary needs, and adding v2 without a consumer that wants its extra fields would be speculative.
 - Submodule status codes are classified by their XY pair like any other path, which is right for a badge but says nothing about the submodule's own contents.
 - **Nothing launches a terminal or editor yet.** TL-1 decides which directory is legitimate to hand over; the launching, and the "reveal in editor" paths, are later increments.
+
+---
+
+# GT-2: which repository a directory belongs to
+
+GT-1 could read a status. Nothing could say *whose* status to read.
+
+`FindGitRepositoryRoot` walks up from a directory to the root of the repository containing it. The walk itself is three lines; the refusals are the content.
+
+## `.git` is not always a directory
+
+A linked worktree and a submodule both have a `.git` **file** pointing elsewhere. Accepting only a directory would report both as not repositories at all — and a submodule is exactly the case where getting it wrong is worst, because the enclosing repository *is* found instead, and its status knows nothing about the submodule's files.
+
+Nearest wins for the same reason: a path inside a submodule belongs to the submodule.
+
+## The walk stops at a filesystem boundary
+
+This is what git itself does by default, and the reason survives restating: a volume mounted inside a checkout is not part of that checkout. Letting it inherit the repository would badge files git has never heard of, using a status that will never mention them.
+
+The mirror case matters too — a repository that begins exactly *at* a mount point is still found, because the walk starts there and has no boundary to cross.
+
+## An unreadable directory ends the walk
+
+Not "skip it and keep going". Continuing past a directory we could not check means crossing a boundary we failed to look for, which is the thing the boundary rule exists to prevent.
+
+## A relative path is refused, not resolved
+
+The caller's "here" is a panel's directory. Resolving a relative path against the process working directory would answer confidently about a completely different place — the same failure mode as `ResolveLocalWorkingDirectory` in TL-1, where a path that *looks* absolute and local turns out not to be.
+
+A dangling `.git` symlink is refused as well: it is not a usable marker, and accepting it would point every later git call at a repository that is not there.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::FindGitRepositoryRoot*'`: **9/9 cases, 25 assertions** — the walk up and its absence; nearest-wins for submodules; the filesystem boundary in both directions; an unreadable directory ending the walk rather than being stepped over; relative, empty and dotted paths refused, and an empty probe not guessing; path normalization; and two cases against the **real** filesystem — a `.git` file accepted, and a dangling `.git` symlink rejected.
+- Full `WinCommanderUT --rng-seed 424242`: **774/774 cases, 11,598 assertions**.
+- The probe is injected, so the walk's decisions are tested without needing mounts or permissions the test cannot arrange.
+
+### Coverage gap
+
+**Nothing runs git yet.** Discovery finds the root and GT-1 parses the output; between them sits launching the process — with the flags, timeout and output bound that a badge refresh has to have — which is the next increment.
