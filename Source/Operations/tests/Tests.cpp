@@ -14,6 +14,7 @@
 
 #include <spdlog/sinks/stdout_sinks.h>
 #include <VFS/Log.h>
+#include <VFS/NetSFTP.h>
 
 static auto g_TestDirPrefix = "_nc__operations__test_";
 
@@ -25,8 +26,24 @@ static bool RunMainLoopUntilExpectationOrTimeout(std::chrono::nanoseconds _timeo
 static bool WaitUntilNativeFSManSeesVolumeAtPath(const std::filesystem::path &volume_path,
                                                  std::chrono::nanoseconds _time_limit);
 
+namespace {
+
+/**
+ * Accepts every host key.
+ *
+ * SFTP refuses to authenticate unless a host-key policy is installed, and several tests here reach a
+ * real SFTP server to exercise copying rather than trust decisions - which have their own tests, and
+ * need no server. Installed here, in one visible place, rather than left implicit.
+ */
+struct AcceptAnyHostKey final : nc::vfs::sftp::HostKeyVerifier {
+    bool VerifyHostKey(const nc::vfs::sftp::HostKeyPresentation &) override { return true; }
+};
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
+    nc::vfs::sftp::SetHostKeyVerifier(std::make_shared<AcceptAnyHostKey>());
     //    g_Log->set_level(spdlog::level::trace);
     //    nc::vfs::Log::Set(g_Log);
 

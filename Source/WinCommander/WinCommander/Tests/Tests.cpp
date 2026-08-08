@@ -15,8 +15,27 @@
 
 static auto g_TestDirPrefix = "_nc__common__test_";
 
+#include <VFS/NetSFTP.h>
+#include <memory>
+
+namespace {
+
+/**
+ * Accepts every host key.
+ *
+ * SFTP refuses to authenticate unless a host-key policy is installed, and the panel's remote
+ * integration tests reach a real SFTP server to exercise navigation rather than trust decisions -
+ * which have their own tests, and need no server. Installed here, in one visible place.
+ */
+struct AcceptAnyHostKey final : nc::vfs::sftp::HostKeyVerifier {
+    bool VerifyHostKey(const nc::vfs::sftp::HostKeyPresentation &) override { return true; }
+};
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
+    nc::vfs::sftp::SetHostKeyVerifier(std::make_shared<AcceptAnyHostKey>());
     ::testing::GTEST_FLAG(throw_on_failure) = true;
     ::testing::InitGoogleMock(&argc, argv);
     const int result = Catch::Session().run(argc, argv);
