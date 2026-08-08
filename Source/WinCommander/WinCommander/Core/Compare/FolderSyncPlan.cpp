@@ -155,4 +155,43 @@ FolderSyncPlan PlanOneWaySync(const FolderComparison &_comparison,
     return plan;
 }
 
+std::optional<FolderSyncSubmission> BindSyncPlan(const FolderSyncPlan &_plan,
+                                                 const std::span<const std::string> _source_names,
+                                                 const std::span<const std::string> _destination_names)
+{
+    FolderSyncSubmission submission;
+
+    // Every failure below returns nullopt for the whole plan rather than dropping one action: a
+    // partially bound plan would mutate files the user never saw in the preview they approved.
+    const auto resolve = [](const std::optional<size_t> &_index,
+                            const std::span<const std::string> _names,
+                            const std::string &_expected,
+                            std::vector<size_t> &_out) {
+        if( !_index || *_index >= _names.size() || _names[*_index] != _expected )
+            return false;
+        _out.push_back(*_index);
+        return true;
+    };
+
+    for( const FolderSyncAction &action : _plan.actions ) {
+        switch( action.kind ) {
+            case FolderSyncActionKind::Create:
+            case FolderSyncActionKind::Overwrite:
+                if( !resolve(action.source_index, _source_names, action.name, submission.copy_source_indices) )
+                    return std::nullopt;
+                break;
+            case FolderSyncActionKind::Delete:
+                if( !resolve(action.destination_index,
+                             _destination_names,
+                             action.name,
+                             submission.delete_destination_indices) )
+                    return std::nullopt;
+                break;
+            case FolderSyncActionKind::Skip:
+                break;
+        }
+    }
+    return submission;
+}
+
 } // namespace nc::core

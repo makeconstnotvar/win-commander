@@ -321,6 +321,12 @@ DQ
                                     <action selector="OnCompareDirectories:" target="-1" id="wc-compare-dirs-action"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Synchronize Directories…" tag="13300" id="wc-sync-dirs-item">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="OnSynchronizeDirectories:" target="-1" id="wc-sync-dirs-action"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Refresh" tag="13040" keyEquivalent="r" id="897">
                                 <connections>
                                     <action selector="OnRefreshPanel:" target="-1" id="898"/>

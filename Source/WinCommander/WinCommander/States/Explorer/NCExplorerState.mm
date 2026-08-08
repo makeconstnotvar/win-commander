@@ -27,8 +27,10 @@
 #include "../../Bootstrap/AppDelegate.h"
 #include "../../Bootstrap/AppDelegate+MainWindowCreation.h"
 #include "../../Bootstrap/Config.h"
+#include <WinCommander/Core/Alert.h>
 #include <WinCommander/Core/Commands/CommandRegistry.h>
 #include <WinCommander/Core/Compare/FolderComparison.h>
+#include <WinCommander/Core/Compare/FolderSyncPlan.h>
 #include <WinCommander/Core/Pane/ExplorerTabsModel.h>
 #include <WinCommander/Core/VisualState/VisualStateMapper.h>
 #include <WinCommander/Bootstrap/NativeVFSHostInstance.h>
@@ -38,6 +40,7 @@
 #include <Operations/Pool.h>
 #include <Operations/Copying.h>
 #include <Operations/CopyingDialog.h>
+#include <Operations/Deletion.h>
 #include <Utility/ObjCpp.h>
 #include <Utility/StringExtras.h>
 #include <VFS/VFS.h>
@@ -523,6 +526,15 @@ struct ExplorerCompareSide {
 - (void)applyCompareMarks:(const std::vector<bool> &)_marks
                 positions:(const std::vector<int> &)_positions
                   toPanel:(PanelController *)_panel;
+- (BOOL)canSynchronizeDualPaneDirectories;
+- (IBAction)OnSynchronizeDirectories:(id)_sender;
+- (void)submitSyncPlan:(const nc::core::FolderSyncPlan &)_plan
+                 source:(PanelController *)_source
+          sourceListing:(const VFSListingPtr &)_source_listing
+       sourcePositions:(const std::vector<int> &)_source_positions
+           destination:(PanelController *)_destination
+    destinationListing:(const VFSListingPtr &)_destination_listing
+  destinationPositions:(const std::vector<int> &)_destination_positions;
 - (void)rollbackSessionRestoreForContent:(NCExplorerPaneContent &)_content;
 - (void)applyPaneDividerRatio;
 - (std::optional<CGFloat>)measuredPaneDividerRatio;
@@ -2096,6 +2108,235 @@ private:
     [_panel setEntriesSelection:selection];
 }
 
+/**
+ * Whether a one-way sync can run at all: everything Compare needs, plus a writable destination.
+ * Shared by -validateMenuItem: and the action, for the same reason the compare/copy predicates are.
+ */
+- (BOOL)canSynchronizeDualPaneDirectories
+{
+    if( ![self canCompareDualPaneDirectories] )
+        return false;
+    PanelController *const destination = [self dualPaneOppositePanelControllerFor:self.panelController];
+    return destination.vfs != nullptr && destination.vfs->IsWritable();
+}
+
+/** Names currently at each collected position, in the index space the comparison was built from. */
+static std::vector<std::string> CollectedNames(const ExplorerCompareSide &_side)
+{
+    std::vector<std::string> names;
+    names.reserve(_side.items.size());
+    for( const nc::core::FolderCompareItem &item : _side.items )
+        names.push_back(item.name);
+    return names;
+}
+
+/** Human-readable dry-run body: what would change, with the destructive part called out first. */
+static NSString *SyncPreviewText(const nc::core::FolderSyncPlan &_plan,
+                                 const nc::core::FolderSyncPlan &_deleting_plan)
+{
+    const nc::core::FolderSyncSummary summary = _plan.Summarize();
+    NSMutableArray<NSString *> *const lines = [NSMutableArray new];
+    [lines addObject:[NSString stringWithFormat:NSLocalizedString(@"Copy %lu new item(s).",
+                                                                   "Explorer sync preview"),
+                                                 static_cast<unsigned long>(summary.create)]];
+    [lines addObject:[NSString stringWithFormat:NSLocalizedString(@"Replace %lu changed item(s).",
+                                                                   "Explorer sync preview"),
+                                                 static_cast<unsigned long>(summary.overwrite)]];
+    if( summary.overwrite_newer_destination > 0 ) {
+        // The one case a one-way sync silently loses data the user may want: say it plainly.
+        [lines addObject:[NSString stringWithFormat:NSLocalizedString(
+                                                        @"%lu of those are NEWER in the destination and will be lost.",
+                                                        "Explorer sync preview"),
+                                                     static_cast<unsigned long>(summary.overwrite_newer_destination)]];
+    }
+    [lines addObject:[NSString stringWithFormat:NSLocalizedString(@"Leave %lu item(s) untouched.",
+                                                                   "Explorer sync preview"),
+                                                 static_cast<unsigned long>(summary.skip)]];
+
+    const std::vector<const nc::core::FolderSyncAction *> deletions = _deleting_plan.Deletions();
+    if( !deletions.empty() ) {
+        [lines addObject:@""];
+        [lines addObject:[NSString stringWithFormat:NSLocalizedString(
+                                                        @"%lu item(s) exist only in the destination:",
+                                                        "Explorer sync preview"),
+                                                     static_cast<unsigned long>(deletions.size())]];
+        constexpr size_t max_listed = 10;
+        for( size_t index = 0; index < deletions.size() && index < max_listed; ++index )
+            [lines addObject:[NSString stringWithFormat:@"    %s", deletions[index]->name.c_str()]];
+        if( deletions.size() > max_listed ) {
+            [lines addObject:[NSString stringWithFormat:NSLocalizedString(@"    …and %lu more.",
+                                                                           "Explorer sync preview"),
+                                                         static_cast<unsigned long>(deletions.size() - max_listed)]];
+        }
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+
+/**
+ * Compares both sides, shows the dry run, and submits only what the user approved.
+ *
+ * The plan built here is the dry run - nothing simulates separately - and execution re-binds it to
+ * the live listings before submitting, so a plan reviewed against listings that have since moved is
+ * abandoned rather than applied to files the user never saw.
+ */
+- (IBAction)OnSynchronizeDirectories:(id) [[maybe_unused]] _sender
+{
+    if( ![self canSynchronizeDualPaneDirectories] )
+        return;
+    PanelController *const source = self.panelController;
+    PanelController *const destination = [self dualPaneOppositePanelControllerFor:source];
+
+    const VFSListingPtr source_listing = source.data.ListingPtr();
+    const VFSListingPtr destination_listing = destination.data.ListingPtr();
+    const ExplorerCompareSide source_side = [self collectCompareSideForPanel:source];
+    const ExplorerCompareSide destination_side = [self collectCompareSideForPanel:destination];
+
+    nc::core::FolderCompareOptions compare_options;
+    compare_options.compare_modification_time =
+        source_side.has_all_modification_times && destination_side.has_all_modification_times;
+    // The comparison is built with the source as its left side, so the plan direction is fixed and
+    // the "left/right" of the model never has to be reconciled with which pane happens to be focused.
+    const nc::core::FolderComparisonResult comparison =
+        nc::core::CompareFolders(source_side.items, destination_side.items, compare_options);
+    if( !comparison )
+        return;
+
+    const nc::core::FolderSyncPlan plan =
+        nc::core::PlanOneWaySync(*comparison, nc::core::FolderSyncDirection::LeftToRight);
+    const nc::core::FolderSyncPlan deleting_plan = nc::core::PlanOneWaySync(
+        *comparison, nc::core::FolderSyncDirection::LeftToRight, {.delete_extraneous = true});
+
+    if( plan.IsEmpty() && !deleting_plan.HasDeletions() ) {
+        Alert *const nothing = [[Alert alloc] init];
+        nothing.messageText = NSLocalizedString(@"These folders are already synchronized.",
+                                                 "Explorer sync preview");
+        nothing.informativeText = SyncPreviewText(plan, deleting_plan);
+        [nothing beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse){
+        }];
+        return;
+    }
+
+    Alert *const alert = [[Alert alloc] init];
+    alert.messageText = [NSString stringWithFormat:NSLocalizedString(@"Synchronize “%s” into “%s”?",
+                                                                      "Explorer sync preview"),
+                                                    source.currentDirectoryPath.c_str(),
+                                                    destination.currentDirectoryPath.c_str()];
+    alert.informativeText = SyncPreviewText(plan, deleting_plan);
+    [alert addButtonWithTitle:NSLocalizedString(@"Synchronize", "Explorer sync preview")];
+    [alert addButtonWithTitle:NSLocalizedString(@"Cancel", "Explorer sync preview")];
+    const bool offers_deletion = deleting_plan.HasDeletions() && destination.vfs->IsNativeFS();
+    if( offers_deletion ) {
+        // Deletion is a separate, explicitly labelled choice rather than a checkbox on the safe
+        // one, so it can never be armed by accident (§45: deletion is separate and highlighted).
+        [alert addButtonWithTitle:[NSString
+                                      stringWithFormat:NSLocalizedString(@"Synchronize and Trash %lu Item(s)",
+                                                                          "Explorer sync preview"),
+                                                        static_cast<unsigned long>(
+                                                            deleting_plan.Deletions().size())]];
+    }
+
+    __weak NCExplorerState *weak_self = self;
+    __weak PanelController *weak_source = source;
+    __weak PanelController *weak_destination = destination;
+    [alert beginSheetModalForWindow:self.window
+                  completionHandler:^(NSModalResponse _response) {
+                    if( _response != NSAlertFirstButtonReturn && _response != NSAlertThirdButtonReturn )
+                        return;
+                    if( _response == NSAlertThirdButtonReturn && !offers_deletion )
+                        return;
+                    NCExplorerState *const state = weak_self;
+                    if( !state )
+                        return;
+                    [state submitSyncPlan:_response == NSAlertThirdButtonReturn ? deleting_plan : plan
+                                   source:weak_source
+                             sourceListing:source_listing
+                          sourcePositions:source_side.sorted_positions
+                              destination:weak_destination
+                       destinationListing:destination_listing
+                     destinationPositions:destination_side.sorted_positions];
+                  }];
+}
+
+/**
+ * The mutation gate. Nothing reaches the Pool until both listings are still the exact ones the plan
+ * was reviewed against and every referenced name still resolves to itself.
+ */
+- (void)submitSyncPlan:(const nc::core::FolderSyncPlan &)_plan
+                 source:(PanelController *)_source
+          sourceListing:(const VFSListingPtr &)_source_listing
+       sourcePositions:(const std::vector<int> &)_source_positions
+           destination:(PanelController *)_destination
+    destinationListing:(const VFSListingPtr &)_destination_listing
+  destinationPositions:(const std::vector<int> &)_destination_positions
+{
+    if( !_source || !_destination || ![self canSynchronizeDualPaneDirectories] )
+        return;
+    // The panes must still hold the very listings the preview described. A refresh or a navigation
+    // between review and confirmation invalidates the whole plan, not part of it.
+    if( _source.isDoingBackgroundLoading || _destination.isDoingBackgroundLoading ||
+        _source.data.ListingPtr() != _source_listing || _destination.data.ListingPtr() != _destination_listing )
+        return;
+
+    const ExplorerCompareSide source_side = [self collectCompareSideForPanel:_source];
+    const ExplorerCompareSide destination_side = [self collectCompareSideForPanel:_destination];
+    const std::optional<nc::core::FolderSyncSubmission> submission =
+        nc::core::BindSyncPlan(_plan, CollectedNames(source_side), CollectedNames(destination_side));
+    if( !submission || source_side.sorted_positions != _source_positions ||
+        destination_side.sorted_positions != _destination_positions )
+        return;
+
+    const auto resolve = [](PanelController *_panel,
+                            const std::vector<int> &_positions,
+                            const std::vector<size_t> &_indices) -> std::optional<std::vector<VFSListingItem>> {
+        std::vector<VFSListingItem> items;
+        items.reserve(_indices.size());
+        for( const size_t index : _indices ) {
+            if( index >= _positions.size() )
+                return std::nullopt;
+            const VFSListingItem item = _panel.data.EntryAtSortPosition(_positions[index]);
+            if( !item )
+                return std::nullopt;
+            items.push_back(item);
+        }
+        return items;
+    };
+    const std::optional<std::vector<VFSListingItem>> copy_items =
+        resolve(_source, source_side.sorted_positions, submission->copy_source_indices);
+    const std::optional<std::vector<VFSListingItem>> delete_items =
+        resolve(_destination, destination_side.sorted_positions, submission->delete_destination_indices);
+    if( !copy_items || !delete_items )
+        return;
+
+    __weak PanelController *weak_source = _source;
+    __weak PanelController *weak_destination = _destination;
+    const auto refresh = [weak_source, weak_destination] {
+        dispatch_to_main_queue([weak_source, weak_destination] {
+          [weak_source refreshPanel];
+          [weak_destination refreshPanel];
+        });
+    };
+
+    if( !copy_items->empty() ) {
+        nc::ops::CopyingOptions options;
+        // A sync's whole purpose is to make the destination match, so a changed entry is replaced
+        // outright instead of raising the interactive conflict sheet for every single file.
+        options.exist_behavior = nc::ops::CopyingOptions::ExistBehavior::OverwriteAll;
+        const auto copying = std::make_shared<nc::ops::Copying>(
+            *copy_items, _destination.currentDirectoryPath, _destination.vfs, options);
+        copying->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, refresh);
+        [_source.mainWindowController enqueueOperation:copying];
+    }
+    if( !delete_items->empty() ) {
+        // Trash rather than permanent removal, per the destructive-action rules; the offer is only
+        // made for a native destination, which is the only place a Trash actually exists.
+        nc::ops::DeletionOptions options;
+        options.type = nc::ops::DeletionType::Trash;
+        const auto deletion = std::make_shared<nc::ops::Deletion>(*delete_items, options);
+        deletion->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, refresh);
+        [_source.mainWindowController enqueueOperation:deletion];
+    }
+}
+
 - (IBAction)OnFileCopyCommand:(id) [[maybe_unused]] _sender
 {
     PanelController *const active = self.panelController;
@@ -2362,6 +2603,8 @@ private:
     }
     if( _item.action == @selector(OnCompareDirectories:) )
         return [self canCompareDualPaneDirectories];
+    if( _item.action == @selector(OnSynchronizeDirectories:) )
+        return [self canSynchronizeDualPaneDirectories];
     return false;
 }
 

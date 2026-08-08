@@ -178,6 +178,69 @@ TEST_CASE(PREFIX "honours disabled overwrite and reports an inert plan as empty"
     CHECK(nothing_to_do.Summarize() == FolderSyncSummary{.skip = 2});
 }
 
+TEST_CASE("nc::core::BindSyncPlan resolves a reviewed plan onto the listings it decided about")
+{
+    const std::vector<std::string> left{"source-only", "changed", "identical", "shared-dir", "clash"};
+    const std::vector<std::string> right{"changed", "identical", "shared-dir", "clash", "destination-only"};
+    const FolderSyncPlan plan =
+        PlanOneWaySync(MixedComparison(), FolderSyncDirection::LeftToRight, {.delete_extraneous = true});
+
+    const auto submission = nc::core::BindSyncPlan(plan, left, right);
+    REQUIRE(submission);
+    // Create("source-only") at 0 and Overwrite("changed") at 1 on the source side.
+    CHECK(submission->copy_source_indices == std::vector<size_t>{0, 1});
+    // Delete("destination-only") at 4 on the destination side.
+    CHECK(submission->delete_destination_indices == std::vector<size_t>{4});
+}
+
+TEST_CASE("nc::core::BindSyncPlan fails atomically when a listing no longer matches the reviewed plan")
+{
+    const std::vector<std::string> left{"source-only", "changed", "identical", "shared-dir", "clash"};
+    const std::vector<std::string> right{"changed", "identical", "shared-dir", "clash", "destination-only"};
+    const FolderSyncPlan plan =
+        PlanOneWaySync(MixedComparison(), FolderSyncDirection::LeftToRight, {.delete_extraneous = true});
+
+    SECTION("a different name now sits at a copy position")
+    {
+        std::vector<std::string> moved = left;
+        moved[0] = "something-else";
+        // The unrelated Overwrite would still resolve, but binding must not submit that subset.
+        CHECK_FALSE(nc::core::BindSyncPlan(plan, moved, right));
+    }
+    SECTION("a different name now sits at a delete position")
+    {
+        std::vector<std::string> moved = right;
+        moved[4] = "someone-elses-file";
+        CHECK_FALSE(nc::core::BindSyncPlan(plan, left, moved));
+    }
+    SECTION("a listing shrank below a referenced position")
+    {
+        CHECK_FALSE(nc::core::BindSyncPlan(plan, std::vector<std::string>{"source-only"}, right));
+        CHECK_FALSE(nc::core::BindSyncPlan(plan, left, std::vector<std::string>{}));
+    }
+    SECTION("both listings emptied")
+    {
+        CHECK_FALSE(nc::core::BindSyncPlan(plan, std::vector<std::string>{}, std::vector<std::string>{}));
+    }
+}
+
+TEST_CASE("nc::core::BindSyncPlan binds an inert plan to no work at all")
+{
+    const std::vector<std::string> names{"a", "d"};
+    const FolderSyncPlan plan = PlanOneWaySync(Compare({File("a", 1, 1), Directory("d")},
+                                                       {File("a", 1, 1), Directory("d")}),
+                                               FolderSyncDirection::LeftToRight,
+                                               {.overwrite_changed = true, .delete_extraneous = true});
+    REQUIRE(plan.IsEmpty());
+
+    const auto submission = nc::core::BindSyncPlan(plan, names, names);
+    REQUIRE(submission);
+    CHECK(submission->copy_source_indices.empty());
+    CHECK(submission->delete_destination_indices.empty());
+    // A plan that touches nothing binds cleanly even against listings that changed entirely.
+    CHECK(nc::core::BindSyncPlan(plan, std::vector<std::string>{}, std::vector<std::string>{}));
+}
+
 TEST_CASE(PREFIX "plans nothing for an empty comparison")
 {
     const FolderSyncPlan plan = PlanOneWaySync(Compare({}, {}), FolderSyncDirection::LeftToRight,

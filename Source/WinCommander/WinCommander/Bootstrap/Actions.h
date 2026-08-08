@@ -82,6 +82,7 @@ static constexpr std::pair<const char*,int> g_ActionsTags[] = {
     {"menu.view.sorting_extensionless_folders",         13'270},
     {"menu.view.toggle_preview_pane",                   13'280},
     {"menu.view.compare_directories",                   13'290},
+    {"menu.view.synchronize_directories",               13'300},
 //  {"menu.view.sorting_case_sensitive",                13'160}, // no longer used
 //  {"menu.view.sorting_numeric_comparison",            13'170}, // no longer used
     {"menu.view.sorting_natural",                       13'161},
@@ -296,6 +297,7 @@ static constinit std::pair<const char*, const char*> g_DefaultActionShortcuts[] 
     {"menu.view.sorting_extensionless_folders",             ""        },
     {"menu.view.toggle_preview_pane",                       "^⌘p"     }, // ctrl+cmd+p
     {"menu.view.compare_directories",                       ""        }, // Explorer dual pane only
+    {"menu.view.synchronize_directories",                   ""        }, // Explorer dual pane only
 //  {"menu.view.sorting_case_sensitive",                    ""        }, // no longer used
 //  {"menu.view.sorting_numeric_comparison",                ""        }, // no longer used
     {"menu.view.sorting_natural",                           ""        },

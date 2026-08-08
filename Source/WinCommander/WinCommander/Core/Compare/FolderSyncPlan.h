@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -113,5 +114,32 @@ struct FolderSyncPlan {
  */
 [[nodiscard]] FolderSyncPlan
 PlanOneWaySync(const FolderComparison &_comparison, FolderSyncDirection _direction, const FolderSyncOptions &_options = {});
+
+/** Listing positions a plan resolves to, ready to be turned into concrete items for submission. */
+struct FolderSyncSubmission {
+    /** Source-side positions to copy over the destination (the Create and Overwrite actions). */
+    std::vector<size_t> copy_source_indices;
+    /** Destination-side positions to remove (the Delete actions). */
+    std::vector<size_t> delete_destination_indices;
+
+    friend bool operator==(const FolderSyncSubmission &, const FolderSyncSubmission &) = default;
+};
+
+/**
+ * The gate between a reviewed plan and execution.
+ *
+ * A plan is built from listings sampled at compare time, but the user reviews it before anything
+ * runs, and either side can change underneath in between. Binding therefore re-reads the names
+ * currently at every position the plan references and requires each to still be the name the plan
+ * decided about. Anything else - a position now out of range, or a different name at it - means the
+ * reviewed plan no longer describes reality, so binding fails **atomically** rather than submitting
+ * the subset that still matches. Submitting a partial plan would mutate files the user never
+ * reviewed, which is precisely the failure this exists to prevent.
+ *
+ * Names must be supplied in the same index space the comparison was built from.
+ */
+[[nodiscard]] std::optional<FolderSyncSubmission> BindSyncPlan(const FolderSyncPlan &_plan,
+                                                               std::span<const std::string> _source_names,
+                                                               std::span<const std::string> _destination_names);
 
 } // namespace nc::core

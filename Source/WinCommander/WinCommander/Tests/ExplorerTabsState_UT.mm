@@ -45,6 +45,8 @@
 - (PanelController *)dualPaneOppositePanelControllerFor:(PanelController *)_panel;
 - (IBAction)OnCompareDirectories:(id)_sender;
 - (BOOL)canCompareDualPaneDirectories;
+- (IBAction)OnSynchronizeDirectories:(id)_sender;
+- (BOOL)canSynchronizeDualPaneDirectories;
 @property(nonatomic, readonly) BOOL dualPaneEnabledForTesting;
 @property(nonatomic, readonly) PanelController *rightPanelControllerForTesting;
 @property(nonatomic, readonly) NSView *rightPanelContainerForTesting;
@@ -890,6 +892,32 @@ TEST_CASE(PREFIX "Compare Directories is gated on dual pane with two uniform sid
     CHECK_FALSE([fixture.state canCompareDualPaneDirectories]);
     CHECK_FALSE([fixture.state validateMenuItem:compare_item]);
     [fixture.state OnCompareDirectories:nil];
+    CHECK(fixture.state.dualPaneEnabledForTesting);
+    CHECK(fixture.state.panelController == fixture.first);
+}
+
+TEST_CASE(PREFIX "Synchronize Directories is gated at least as tightly as Compare")
+{
+    Fixture fixture;
+    NSMenuItem *const sync_item = [NSMenuItem new];
+    sync_item.action = @selector(OnSynchronizeDirectories:);
+
+    CHECK_FALSE([fixture.state canSynchronizeDualPaneDirectories]);
+    CHECK_FALSE([fixture.state validateMenuItem:sync_item]);
+    // A directly invoked destructive action must not outrun its own gate, and must enqueue nothing.
+    [fixture.state OnSynchronizeDirectories:nil];
+    CHECK(fixture.state.panelController == fixture.first);
+
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+
+    // Sync additionally needs a writable destination, so it can never be available where Compare is
+    // not - this fixture's mock panels satisfy neither.
+    CHECK_FALSE([fixture.state canCompareDualPaneDirectories]);
+    CHECK_FALSE([fixture.state canSynchronizeDualPaneDirectories]);
+    CHECK_FALSE([fixture.state validateMenuItem:sync_item]);
+    [fixture.state OnSynchronizeDirectories:nil];
     CHECK(fixture.state.dualPaneEnabledForTesting);
     CHECK(fixture.state.panelController == fixture.first);
 }
