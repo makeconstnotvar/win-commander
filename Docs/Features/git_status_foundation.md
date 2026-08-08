@@ -93,6 +93,55 @@ A dangling `.git` symlink is refused as well: it is not a usable marker, and acc
 - Full `WinCommanderUT --rng-seed 424242`: **774/774 cases, 11,598 assertions**.
 - The probe is injected, so the walk's decisions are tested without needing mounts or permissions the test cannot arrange.
 
+### Coverage gap at GT-2
+
+**Nothing runs git yet** — closed by GT-3 below.
+
+---
+
+# GT-3: asking git, on terms a badge refresh can live with
+
+GT-2 finds the root, GT-1 parses the output. Between them sat launching a process, and the launch is where the decisions are.
+
+## Never through a shell
+
+The argument vector is explicit. A repository path may contain spaces, quotes, semicolons and newlines, and a command line would let all of them be re-read as syntax. A test creates a repository literally named `a dir; rm -rf $x 'quoted' & odd` and reads it successfully.
+
+**That test caught the flaw in its own helper first.** The fixture builder was pasting the directory into a shell command with single quotes, so the quoted directory name broke it — the helper failed on exactly the input the code under test handles. It now spawns with an argument vector too.
+
+## Every `GIT_*` variable is removed from the child's environment
+
+A stray `GIT_DIR` or `GIT_WORK_TREE` inherited from whoever launched the application would silently point git at a different repository, and every badge would then describe someone else's working tree. A test sets both to a decoy repository and asserts the answer is still about the real one, with none of the decoy's files in it.
+
+## `--no-optional-locks`
+
+A badge refresh must not take the index lock. Refreshing the index behind the user's back is how a background redraw ends up fighting the git command they typed themselves.
+
+## stdin and stderr go to `/dev/null`
+
+git must never be able to ask a question. A credential prompt or an editor launch would block a refresh forever, on a thread the user is waiting on.
+
+## Both budgets report rather than apply
+
+A timeout stops the child and says so; an over-budget repository is refused rather than truncated. Truncating would be the silent wrong answer GT-1 exists to refuse: a partial status is indistinguishable from a clean tree for the paths it omits.
+
+## What the frame-size check caught
+
+The read buffer started as a 64 KB `std::array` on the stack and broke the project's frame-size limit. The limit was right — this runs on whatever thread a listing refresh happens to use — and the buffer moved to the heap.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::ReadGitStatus*'`: **7/7 cases, 42 assertions**, all against a **real git and real repositories** built in a temporary directory — a modified file and an untracked one read from a subdirectory with the root reported; a filename containing a newline surviving end to end, which is the whole reason GT-1 insists on the NUL-separated form; a decoy `GIT_DIR` ignored; a repository path full of shell syntax; a non-repository refused without launching git at all; an over-budget repository reported and then read fine with a budget that fits; and a timeout.
+- Focused `'nc::core::ReadGitStatus*'` plus `'nc::core::FindGitRepositoryRoot*'` again under **ASAN+UBSAN**: **16/16 cases, 67 assertions** — this slice spawns a child, hands it descriptors and reads a pipe, which is where that budget applies.
+- Full `WinCommanderUT --rng-seed 424242`: **781/781 cases, 11,640 assertions**.
+
+### The sanitizers are blocked by two unrelated tests
+
+`WinCommanderUT` **cannot be built under ASAN or TSan as it stands**. Two test cases sit just under the 32,768-byte frame limit and cross it once instrumented — `Theme_UT.mm:40` at 34,688 under ASAN, `PanelPresentationGeometry_UT.mm:1696` at 33,536 under TSan. It is a `-Werror` error, so the whole scheme fails to build.
+
+The ASAN run above was obtained by relaxing that one warning for the build only, which silences the check for every file and is therefore a workaround, not a fix. Fixing the two tests is spun off separately. The limit should not be raised — it caught a real oversized buffer in this slice's own production code.
+
 ### Coverage gap
 
-**Nothing runs git yet.** Discovery finds the root and GT-1 parses the output; between them sits launching the process — with the flags, timeout and output bound that a badge refresh has to have — which is the next increment.
+**No caller yet.** A panel does not refresh badges, nothing watches for changes to re-read a status, and porcelain v2 is unparsed. Rendering the badges is the next increment; so is deciding when a refresh is worth running at all.
