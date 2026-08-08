@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-9: Remote connection state, retry, host trust, pinning, presentation, enforcement, classification and scheduling
+# Q2-5 RC-1…RC-10: Remote connection state, retry, host trust, pinning, presentation, enforcement, classification, scheduling and the loop
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -243,6 +243,38 @@ Connections are keyed by whatever identity the caller already uses. Inventing a 
 
 The TSan run above was obtained by relaxing that one warning for the build only (`-Wno-frame-larger-than`), which is a workaround rather than a fix: it silences the check for every file. Fixing the oversized test is spun off separately; the limit is doing its job and should not be raised.
 
+### Coverage gap at RC-9
+
+**Still nothing drives it** — closed by RC-10 below.
+
+---
+
+# RC-10: the loop that asks the three decisions in order
+
+Three decisions existed with no caller. `IsRetryableRemoteFailure` says *whether*, `ClassifyRemoteFailure` says *what a failure was*, `RemoteConnectionRegistry` says *when*. `RemoteReconnectDriver` is the piece that asks them in order: claim what is due, attempt it, classify the outcome, fold it back.
+
+## It owns no timer
+
+Arming one is the caller's business, and the caller needs only `next_deadline` from the pass report to do it. Keeping the timer out means this type is tested against a supplied instant rather than against real elapsed time — the difference between a suite that runs in milliseconds and one that sleeps.
+
+## A connection is never attempted twice in one pass
+
+The due list is claimed up front, and the pass works only from that list. Without the rule, a failure whose fresh backoff lands in the past — a zero-backoff policy, or simply a slow pass — would be claimed again inside the same call, and the loop would spin against a server that is plainly not answering. A test uses exactly that configuration and asserts the connector was asked once.
+
+## A connector that threw told us nothing about the server
+
+It is recorded as a protocol error, which is not retryable. A broken caller is not evidence that the server will answer next time, and putting it on a timer would spin on our own bug. The same reasoning covers a driver constructed with no connector at all.
+
+## What the failure detail may contain
+
+The recorded detail is the provider's own description of the error and nothing composed on top. It is the one field on a connection that a careless caller could use to leak a credential, which `RemoteConnectionState` calls out and this is the first code that has to answer.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::RemoteReconnectDriver*'`: **6/6 cases, 43 assertions** — the three decisions asked in order with nothing attempted before its deadline; the same connection never attempted twice in one pass under a zero backoff; **a refused host key carried from the connector through classification to a retry that is never armed and never picked up again**, which is the end of the chain built across RC-6…RC-9; several due connections in one pass with a blocked one not attempted at all and the next deadline armed from the failure; a throwing connector kept out of the retryable set; and a success established by hand disarming a pending retry.
+- Full `WinCommanderUT --rng-seed 424242`: **765/765 cases, 11,573 assertions**.
+
 ### Coverage gap
 
-**Still nothing drives it.** The registry decides *when*, RC-8 decides *what a failure was*, and RC-1 decides *whether*. What is missing is the loop that calls them: a timer armed from `NextDeadline`, a connect attempt per claimed key, and the outcome fed back. That, plus the manager UI and system SMB/NFS mounts, is what remains of Q2-5.
+**No production caller yet.** `ConfigBackedNetworkConnectionsManager` still returns a raw host pointer or null; handing it a driver — and arming a real timer from `next_deadline` — is the wiring increment. The manager UI and system SMB/NFS mounts remain, and are what is left of Q2-5.
