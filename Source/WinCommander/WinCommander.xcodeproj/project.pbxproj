@@ -60,6 +60,8 @@
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
 		D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */; };
+		D9FC000132A000000000000D /* RemoteHostTrust.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000029 /* RemoteHostTrust.cpp */; };
+		D9FC000132A000000000000E /* RemoteHostTrust_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000002A /* RemoteHostTrust_UT.cpp */; };
 		D9FC000132A000000000000B /* RemoteConnectionState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000025 /* RemoteConnectionState.cpp */; };
 		D9FC000132A000000000000C /* RemoteConnectionState_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000026 /* RemoteConnectionState_UT.cpp */; };
 		D9FC000132A0000000000009 /* ShortcutProfiles.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001E /* ShortcutProfiles.cpp */; };
@@ -1079,6 +1081,9 @@
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandPaletteView.h; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandPaletteView.mm; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.mm; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000028 /* RemoteHostTrust.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteHostTrust.h; path = WinCommander/Core/Remote/RemoteHostTrust.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000029 /* RemoteHostTrust.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteHostTrust.cpp; path = WinCommander/Core/Remote/RemoteHostTrust.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000002A /* RemoteHostTrust_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteHostTrust_UT.cpp; path = WinCommander/Tests/RemoteHostTrust_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000024 /* RemoteConnectionState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteConnectionState.h; path = WinCommander/Core/Remote/RemoteConnectionState.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000025 /* RemoteConnectionState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionState.cpp; path = WinCommander/Core/Remote/RemoteConnectionState.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000026 /* RemoteConnectionState_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionState_UT.cpp; path = WinCommander/Tests/RemoteConnectionState_UT.cpp; sourceTree = "<group>"; };
@@ -2205,6 +2210,7 @@
 				D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */,
 				D9FC000132A000000000001F /* ShortcutProfiles_UT.cpp */,
 				D9FC000132A0000000000026 /* RemoteConnectionState_UT.cpp */,
+				D9FC000132A000000000002A /* RemoteHostTrust_UT.cpp */,
 				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
 				A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */,
@@ -2259,6 +2265,8 @@
 			children = (
 				D9FC000132A0000000000024 /* RemoteConnectionState.h */,
 				D9FC000132A0000000000025 /* RemoteConnectionState.cpp */,
+				D9FC000132A0000000000028 /* RemoteHostTrust.h */,
+				D9FC000132A0000000000029 /* RemoteHostTrust.cpp */,
 			);
 			name = Remote;
 			sourceTree = "<group>";
@@ -3672,6 +3680,7 @@
 				D9FC000132A0000000000005 /* CommandPaletteFilter.cpp in Sources */,
 				D9FC000132A0000000000009 /* ShortcutProfiles.cpp in Sources */,
 				D9FC000132A000000000000B /* RemoteConnectionState.cpp in Sources */,
+				D9FC000132A000000000000D /* RemoteHostTrust.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
 				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
@@ -3922,6 +3931,7 @@
 				D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */,
 				D9FC000132A000000000000A /* ShortcutProfiles_UT.cpp in Sources */,
 				D9FC000132A000000000000C /* RemoteConnectionState_UT.cpp in Sources */,
+				D9FC000132A000000000000E /* RemoteHostTrust_UT.cpp in Sources */,
 				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
 				A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */,

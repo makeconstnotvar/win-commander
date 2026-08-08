@@ -1,4 +1,4 @@
-# Q2-5 RC-1: Remote connection state and retry policy
+# Q2-5 RC-1/RC-2: Remote connection state, retry policy and host trust
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -8,7 +8,11 @@
 
 The connection-state and retry rules Q2-5 needs before any of its surfaces can be built: what a remote connection's status is, which failures may be retried automatically, how long to wait, and what a connection remembers.
 
-This is where the decisions with consequences live, and none of it needs a socket. Not here: Keychain storage, the manager UI, actual reconnect scheduling, and system SMB/NFS mounts.
+This is where the decisions with consequences live, and none of it needs a socket.
+
+**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place.
+
+Not here: the manager UI, actual reconnect scheduling, and system SMB/NFS mounts. Credential *storage* already exists (`KeychainServices` via `ConfigBackedNetworkConnectionsManager`); what §46 was missing was host verification, which is RC-2.
 
 ## The decision that matters: what must never be retried
 
@@ -36,17 +40,33 @@ Because of that split, a connection that gives up does **not** land in one gener
 - A failed attempt clears the latency sample: keeping the old one would show a stale "fast" reading beside an offline connection.
 - An explicit disconnect is not a failure — it clears the budget but keeps the last-success timestamp and the history, which are what the manager lists.
 
+## RC-2: host trust
+
+`ClassifyRemoteHost` compares a presented fingerprint against the pin held for that host and returns one of four verdicts. It is total and side-effect free: it never stores a pin and never upgrades a `Mismatch`. Deciding to pin a first-use host belongs to the caller that can actually ask the user.
+
+**Normalization is a security control, not a convenience.** Providers spell one fingerprint several ways — `AA:BB:CC`, `aa bb cc`, `aabbcc` — and comparing them literally would warn about a host that never changed. That trains users to click through the one warning that must never become routine. So comparison is on lowercased hex with separators stripped.
+
+But normalization *rejects* rather than coerces: anything that is not hex-or-separator, or that leaves an odd number of digits, is unusable. Silently dropping unexpected characters could map two different inputs onto the same normalized form, which is the opposite of what a fingerprint is for.
+
+Three refusals worth naming:
+
+- **An unusable presented fingerprint is `Unusable`, not `Mismatch` and not trust** — even when a pin exists, because there was nothing to compare against. It is a failure to verify, and it is reported as such.
+- **An unparseable *stored* pin is `Mismatch`, not "no pin".** Degrading a corrupted or tampered store to first-use would silently downgrade an established host into one the user is invited to accept — which is exactly the attack pinning exists to stop.
+- **`Mismatch` is never offered as a routine accept.** `MayPromptToTrust` admits only `UnknownFirstUse`. An established pin that suddenly disagrees puts a question to the user they cannot honestly answer from a dialog; replacing such a pin has to be a separate, explicit action.
+
 ## Verification
 
 Built and run in this session (Xcode 26.6 toolchain):
 
 - `xcodebuild -scheme WinCommanderUT -configuration Debug build` — **BUILD SUCCEEDED**.
 - `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED** (the slice adds files to the Xcode project).
+- Focused `WinCommanderUT 'nc::core::RemoteHostTrust*' --rng-seed 424242`: **7/7 cases, 44/44 assertions** — six spellings of one fingerprint accepted; malformed and odd-length values rejected rather than coerced; unusable-presented handled with and without a pin; first use never an automatic yes; mismatch neither self-resolving nor promptable; an unparseable stored pin treated as mismatch; only a pinned match connecting unprompted.
 - Focused `WinCommanderUT 'nc::core::RemoteConnection*' --rng-seed 424242`: **8/8 cases, 69/69 assertions** — the non-retryable set refused even on a fresh budget; the exponential sequence, ceiling clamp, sub-1 multiplier, and zero-attempt policy; a retryable failure exhausting into `Offline` versus a non-retryable one blocking at once; bounded newest-first history; success resetting the budget and restoring the full backoff sequence; read-only reporting and stale-latency clearing; explicit disconnect; a no-op outcome.
-- Full unfiltered `WinCommanderUT --rng-seed 424242`: **674/674 cases, 11,107/11,107 assertions**.
+- Full unfiltered `WinCommanderUT --rng-seed 424242`: **681/681 cases, 11,151/11,151 assertions**.
 - No ASAN/UBSAN/TSan run: a pure value model with no allocation ownership, concurrency or `Operations`/`VFS`/`RoutedIO` involvement. The increment that performs real reconnection scheduling is where that budget changes.
 
 ### Coverage gaps
 
 - **Latency is stored but nothing classifies it.** §46 asks for a status; a "degraded" threshold is a presentation decision the manager surface should own, and inventing one here without a surface to show it would be guessing.
-- No Keychain, no scheduler, no UI, and no system SMB/NFS mount handling — all later Q2-5 increments.
+- **Nothing stores or retrieves a pin yet.** RC-2 classifies; wiring it to a pin store (the existing `KeychainServices` is the natural home, since a pin's integrity matters more than its secrecy) and to the providers that present fingerprints is the next increment.
+- No scheduler, no UI, and no system SMB/NFS mount handling — all later Q2-5 increments.
