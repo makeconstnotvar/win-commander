@@ -60,6 +60,8 @@
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
 		D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */; };
+		D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000003E /* CloudSyncState.cpp */; };
+		D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000003F /* CloudSyncState_UT.cpp */; };
 		D9FC000132A0000000000036 /* RemoteConnectionPresentation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000039 /* RemoteConnectionPresentation.cpp */; };
 		D9FC000132A0000000000037 /* RemoteConnectionPresentation_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */; };
 		D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000034 /* KeychainHostPinStore.cpp */; };
@@ -1087,6 +1089,9 @@
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandPaletteView.h; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandPaletteView.mm; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.mm; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000003D /* CloudSyncState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CloudSyncState.h; path = WinCommander/Core/Cloud/CloudSyncState.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000003E /* CloudSyncState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CloudSyncState.cpp; path = WinCommander/Core/Cloud/CloudSyncState.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000003F /* CloudSyncState_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CloudSyncState_UT.cpp; path = WinCommander/Tests/CloudSyncState_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000038 /* RemoteConnectionPresentation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteConnectionPresentation.h; path = WinCommander/Core/Remote/RemoteConnectionPresentation.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000039 /* RemoteConnectionPresentation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionPresentation.cpp; path = WinCommander/Core/Remote/RemoteConnectionPresentation.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionPresentation_UT.cpp; path = WinCommander/Tests/RemoteConnectionPresentation_UT.cpp; sourceTree = "<group>"; };
@@ -2229,6 +2234,7 @@
 				D9FC000132A000000000002D /* RemoteHostPinStore_UT.cpp */,
 				D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */,
 				D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */,
+				D9FC000132A000000000003F /* CloudSyncState_UT.cpp */,
 				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
 				A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */,
@@ -2293,6 +2299,15 @@
 				D9FC000132A0000000000039 /* RemoteConnectionPresentation.cpp */,
 			);
 			name = Remote;
+			sourceTree = "<group>";
+		};
+		D9FC000132A0000000000040 /* Cloud */ = {
+			isa = PBXGroup;
+			children = (
+				D9FC000132A000000000003D /* CloudSyncState.h */,
+				D9FC000132A000000000003E /* CloudSyncState.cpp */,
+			);
+			name = Cloud;
 			sourceTree = "<group>";
 		};
 		D9FC000132A0000000000020 /* Compare */ = {
@@ -2611,6 +2626,7 @@
 		CFAC50D5171557E100A3E5C5 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				D9FC000132A0000000000040 /* Cloud */,
 				D9FC000132A0000000000020 /* Compare */,
 				D9FC000132A0000000000027 /* Remote */,
 				D4C04D2031A2C0DE00000001 /* Commands */,
@@ -3708,6 +3724,7 @@
 				D9FC000132A000000000000F /* RemoteHostPinStore.cpp in Sources */,
 				D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */,
 				D9FC000132A0000000000036 /* RemoteConnectionPresentation.cpp in Sources */,
+				D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
 				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
@@ -3962,6 +3979,7 @@
 				D9FC000132A0000000000010 /* RemoteHostPinStore_UT.cpp in Sources */,
 				D9FC000132A0000000000032 /* KeychainHostPinStore_UT.cpp in Sources */,
 				D9FC000132A0000000000037 /* RemoteConnectionPresentation_UT.cpp in Sources */,
+				D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */,
 				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
 				A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */,
