@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <stdexcept>
 #include <unordered_set>
 
 #define PREFIX "VFSNative "
@@ -33,6 +34,41 @@ static bool ListingHas(const VFSListingPtr &listing, const std::string &_filenam
 {
     return ListingHas(*listing, _filename);
 };
+
+static void CheckListingsEqual(const Listing &_lhs, const Listing &_rhs)
+{
+    REQUIRE(_lhs.Count() == _rhs.Count());
+    for( unsigned index = 0; index != _lhs.Count(); ++index ) {
+        CHECK(_lhs.Host(index) == _rhs.Host(index));
+        CHECK(_lhs.Directory(index) == _rhs.Directory(index));
+        CHECK(_lhs.Filename(index) == _rhs.Filename(index));
+        CHECK(_lhs.UnixMode(index) == _rhs.UnixMode(index));
+        CHECK(_lhs.UnixType(index) == _rhs.UnixType(index));
+
+#define CHECK_OPTIONAL_FIELD(_has, _value)                                                                             \
+    CHECK(_lhs._has(index) == _rhs._has(index));                                                                       \
+    if( _lhs._has(index) && _rhs._has(index) )                                                                         \
+    CHECK(_lhs._value(index) == _rhs._value(index))
+
+        CHECK_OPTIONAL_FIELD(HasDisplayFilename, DisplayFilename);
+        CHECK_OPTIONAL_FIELD(HasSize, Size);
+        CHECK_OPTIONAL_FIELD(HasInode, Inode);
+        CHECK_OPTIONAL_FIELD(HasATime, ATime);
+        CHECK_OPTIONAL_FIELD(HasMTime, MTime);
+        CHECK_OPTIONAL_FIELD(HasCTime, CTime);
+        CHECK_OPTIONAL_FIELD(HasBTime, BTime);
+        CHECK_OPTIONAL_FIELD(HasAddTime, AddTime);
+        CHECK_OPTIONAL_FIELD(HasUID, UID);
+        CHECK_OPTIONAL_FIELD(HasGID, GID);
+        CHECK_OPTIONAL_FIELD(HasUnixFlags, UnixFlags);
+        CHECK_OPTIONAL_FIELD(HasSymlink, Symlink);
+#undef CHECK_OPTIONAL_FIELD
+
+        CHECK(_lhs.HasTags(index) == _rhs.HasTags(index));
+        if( _lhs.HasTags(index) && _rhs.HasTags(index) )
+            CHECK(std::ranges::equal(_lhs.Tags(index), _rhs.Tags(index)));
+    }
+}
 
 TEST_CASE(PREFIX "Does produces unified Application directory")
 {
@@ -254,6 +290,223 @@ TEST_CASE(PREFIX "FetchDirectoryListing reads symlink value and resolves target 
         CHECK(listing.IsReg(i));
         CHECK(listing.Size(i) == file_size);
     }
+}
+
+TEST_CASE(PREFIX "progressive directory batches are enriched immutable deltas matching the final listing")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+
+    constexpr size_t regular_files_count = 1024;
+    for( size_t index = 0; index != regular_files_count; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("regular-{:04}", index)).c_str(), 0600)) == 0);
+
+    const std::filesystem::path target_path = test_dir / "target.txt";
+    std::ofstream{target_path} << "progressive-target";
+    REQUIRE_NOTHROW(std::filesystem::create_symlink("target.txt", test_dir / "target-link"));
+
+    const std::filesystem::path tagged_path = test_dir / "tagged.txt";
+    REQUIRE(close(creat(tagged_path.c_str(), 0600)) == 0);
+    const std::vector<utility::Tags::Tag> expected_tags{
+        {utility::Tags::Tag::Internalize("Progressive"), utility::Tags::Color::Green}};
+    REQUIRE(utility::Tags::WriteTags(tagged_path, expected_tags));
+
+    std::vector<VFSListingPtr> batches;
+    size_t next_batch_index = 0;
+    bool saw_dot_dot = false;
+    bool saw_enriched_symlink = false;
+    bool saw_enriched_tags = false;
+    const auto result = host().FetchDirectoryListingProgressively(
+        test_dir.c_str(),
+        Flags::F_LoadTags,
+        [&](DirectoryListingBatch &&_batch) {
+            REQUIRE(_batch.entries);
+            CHECK(_batch.first_index == next_batch_index);
+            if( _batch.first_index == 0 ) {
+                REQUIRE(_batch.entries->Count() > 0);
+                CHECK(_batch.entries->Filename(0) == "..");
+                saw_dot_dot = _batch.entries->Filename(0) == "..";
+            }
+
+            for( unsigned index = 0; index != _batch.entries->Count(); ++index ) {
+                if( _batch.entries->Filename(index) == "target-link" ) {
+                    CHECK(_batch.entries->IsSymlink(index));
+                    CHECK(_batch.entries->HasSymlink(index));
+                    CHECK(_batch.entries->Symlink(index) == "target.txt");
+                    CHECK(_batch.entries->IsReg(index));
+                    CHECK(_batch.entries->Size(index) == std::string_view("progressive-target").size());
+                    saw_enriched_symlink = true;
+                }
+                if( _batch.entries->Filename(index) == "tagged.txt" ) {
+                    REQUIRE(_batch.entries->HasTags(index));
+                    CHECK(std::ranges::equal(_batch.entries->Tags(index), expected_tags));
+                    saw_enriched_tags = true;
+                }
+            }
+
+            next_batch_index += _batch.entries->Count();
+            batches.emplace_back(std::move(_batch.entries));
+            return DirectoryListingBatchDisposition::Continue;
+        });
+
+    REQUIRE(result);
+    REQUIRE(*result);
+    CHECK(batches.size() > 1);
+    CHECK(saw_dot_dot);
+    CHECK(saw_enriched_symlink);
+    CHECK(saw_enriched_tags);
+    CHECK(next_batch_index == (*result)->Count());
+
+    const VFSListingPtr concatenated = VFSListing::Build(VFSListing::Compose(batches));
+    REQUIRE(concatenated);
+    CheckListingsEqual(*concatenated, **result);
+}
+
+TEST_CASE(PREFIX "progressive directory callback cancellation fails closed")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+    for( size_t index = 0; index != 600; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("entry-{:04}", index)).c_str(), 0600)) == 0);
+
+    size_t callback_count = 0;
+    const auto result = host().FetchDirectoryListingProgressively(
+        test_dir.c_str(),
+        Flags::F_NoDotDot,
+        [&](DirectoryListingBatch &&) {
+            ++callback_count;
+            return DirectoryListingBatchDisposition::Cancel;
+        });
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == Error{Error::POSIX, ECANCELED});
+    CHECK(callback_count == 1);
+}
+
+TEST_CASE(PREFIX "progressive directory callback can stop publishing while the final fetch continues")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+    constexpr size_t files_count = 1024;
+    for( size_t index = 0; index != files_count; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("entry-{:04}", index)).c_str(), 0600)) == 0);
+
+    size_t callback_count = 0;
+    size_t preview_count = 0;
+    const auto result = host().FetchDirectoryListingProgressively(
+        test_dir.c_str(),
+        Flags::F_NoDotDot,
+        [&](DirectoryListingBatch &&_batch) {
+            ++callback_count;
+            preview_count = _batch.entries->Count();
+            return DirectoryListingBatchDisposition::StopPublishing;
+        });
+
+    REQUIRE(result);
+    REQUIRE(*result);
+    CHECK(callback_count == 1);
+    CHECK(preview_count > 0);
+    CHECK(preview_count < files_count);
+    CHECK((*result)->Count() == files_count);
+    for( size_t index = 0; index != files_count; ++index )
+        CHECK(ListingHas(*result, fmt::format("entry-{:04}", index)));
+}
+
+TEST_CASE(PREFIX "progressive directory cancellation checker suppresses later batches and final result")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+    for( size_t index = 0; index != 600; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("entry-{:04}", index)).c_str(), 0600)) == 0);
+
+    bool cancelled = false;
+    size_t callback_count = 0;
+    const auto result = host().FetchDirectoryListingProgressively(
+        test_dir.c_str(),
+        Flags::F_NoDotDot,
+        [&](DirectoryListingBatch &&) {
+            ++callback_count;
+            cancelled = true;
+            return DirectoryListingBatchDisposition::Continue;
+        },
+        [&] { return cancelled; });
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == Error{Error::POSIX, ECANCELED});
+    CHECK(callback_count == 1);
+}
+
+TEST_CASE(PREFIX "progressive directory callback exceptions retain their original type and message")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+    for( size_t index = 0; index != 600; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("entry-{:04}", index)).c_str(), 0600)) == 0);
+
+    size_t callback_count = 0;
+    bool caught_expected_exception = false;
+    try {
+        static_cast<void>(host().FetchDirectoryListingProgressively(
+            test_dir.c_str(),
+            Flags::F_NoDotDot,
+            [&](DirectoryListingBatch &&) -> DirectoryListingBatchDisposition {
+                ++callback_count;
+                throw std::runtime_error("progressive consumer failure");
+            }));
+    } catch( const std::runtime_error &exception ) {
+        caught_expected_exception = true;
+        CHECK(std::string_view(exception.what()) == "progressive consumer failure");
+    }
+
+    CHECK(caught_expected_exception);
+    CHECK(callback_count == 1);
+}
+
+TEST_CASE(PREFIX "progressive directory cancellation interrupts final enrichment after publishing stops")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+    constexpr size_t files_count = 2048;
+    for( size_t index = 0; index != files_count; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("entry-{:04}", index)).c_str(), 0600)) == 0);
+
+    size_t raw_batch_count = 0;
+    size_t first_batch_count = 0;
+    const auto probe = host().FetchDirectoryListingProgressively(
+        test_dir.c_str(),
+        Flags::F_NoDotDot,
+        [&](DirectoryListingBatch &&_batch) {
+            ++raw_batch_count;
+            if( first_batch_count == 0 )
+                first_batch_count = _batch.entries->Count();
+            return DirectoryListingBatchDisposition::Continue;
+        });
+    REQUIRE(probe);
+    REQUIRE(raw_batch_count > 1);
+    REQUIRE(first_batch_count + 256 < files_count);
+
+    bool stopped_publishing = false;
+    size_t callback_count = 0;
+    size_t cancellation_checks_after_stop = 0;
+    const auto result = host().FetchDirectoryListingProgressively(
+        test_dir.c_str(),
+        Flags::F_NoDotDot,
+        [&](DirectoryListingBatch &&) {
+            ++callback_count;
+            stopped_publishing = true;
+            return DirectoryListingBatchDisposition::StopPublishing;
+        },
+        [&] {
+            if( !stopped_publishing )
+                return false;
+            ++cancellation_checks_after_stop;
+            return cancellation_checks_after_stop >= raw_batch_count + 3;
+        });
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == Error{Error::POSIX, ECANCELED});
+    CHECK(callback_count == 1);
+    CHECK(cancellation_checks_after_stop == raw_batch_count + 3);
 }
 
 } // namespace VFSNativeTests

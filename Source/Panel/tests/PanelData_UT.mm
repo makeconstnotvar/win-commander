@@ -6,6 +6,7 @@
 #include "PanelDataItemVolatileData.h"
 #include "PanelDataSelection.h"
 #include <atomic>
+#include <chrono>
 #include <future>
 #include <memory>
 #include <set>
@@ -148,6 +149,52 @@ TEST_CASE(PREFIX "detached preparation preserves presentation and selection sema
     sort.sort = data::SortMode::SortByName;
     live.SetSortMode(sort);
     CHECK_FALSE(live.MatchesPreparationOptions(options));
+}
+
+TEST_CASE(PREFIX "detached snapshot preparation preserves volatile data and cancels cooperatively")
+{
+    std::vector<std::tuple<std::string, bool>> entries;
+    entries.reserve(20'000);
+    entries.emplace_back("..", true);
+    entries.emplace_back("folder", true);
+    for( size_t index = 0; index != 19'998; ++index )
+        entries.emplace_back("item-" + std::to_string(index), false);
+
+    Model live;
+    live.Load(ProduceDummyListing(entries), Model::PanelType::Directory);
+    const int folder_raw = live.RawIndexForName("folder");
+    REQUIRE(folder_raw >= 0);
+    live.VolatileDataAtRawPosition(folder_raw).icon = 77;
+    live.CustomFlagsSelectSorted(live.SortedIndexForName("folder"), true);
+    REQUIRE(live.SetCalculatedSizeForDirectory("folder", "/", 123'456));
+    const auto snapshot = live.CapturePreparationSnapshot();
+
+    auto options = snapshot.options;
+    options.sort_mode.sort = data::SortMode::SortByNameRev;
+    auto prepared_future = std::async(std::launch::async, [&] {
+        return Model::PrepareDetachedFromSnapshot(snapshot, options);
+    });
+    auto prepared = prepared_future.get();
+    REQUIRE(prepared);
+    const int prepared_folder_raw = prepared->RawIndexForName("folder");
+    REQUIRE(prepared_folder_raw >= 0);
+    CHECK(prepared->VolatileDataAtRawPosition(prepared_folder_raw).icon == 77);
+    CHECK(prepared->VolatileDataAtRawPosition(prepared_folder_raw).size == 123'456);
+    REQUIRE(prepared->SelectedEntriesSorted().size() == 1);
+    CHECK(prepared->SelectedEntriesSorted().front().Filename() == "folder");
+
+    std::atomic_int cancellation_polls = 0;
+    auto cancelled_future = std::async(std::launch::async, [&] {
+        return Model::PrepareDetachedFromSnapshot(snapshot, options, [&] {
+            return cancellation_polls.fetch_add(1, std::memory_order_acq_rel) >= 8;
+        });
+    });
+    const auto cancel_started = std::chrono::steady_clock::now();
+    auto cancelled = cancelled_future.get();
+    const auto cancellation_latency = std::chrono::steady_clock::now() - cancel_started;
+    CHECK_FALSE(cancelled);
+    CHECK(cancellation_polls.load(std::memory_order_acquire) > 8);
+    CHECK(cancellation_latency < std::chrono::milliseconds{500});
 }
 
 TEST_CASE(PREFIX "RawIndicesForName")

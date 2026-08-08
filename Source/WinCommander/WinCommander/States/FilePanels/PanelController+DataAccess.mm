@@ -11,7 +11,7 @@
 
 - (std::string)currentFocusedEntryFilename
 {
-    if( !self.view )
+    if( !self.view || !self.isDisplayingCommittedData )
         return "";
 
     if( auto item = self.view.item )
@@ -22,7 +22,7 @@
 
 - (std::string)currentFocusedEntryPath
 {
-    if( !self.view )
+    if( !self.view || !self.isDisplayingCommittedData )
         return "";
 
     return self.data.FullPathForEntry(self.data.RawIndexForSortIndex(self.view.curpos));
@@ -30,7 +30,7 @@
 
 - (std::vector<std::string>)selectedEntriesOrFocusedEntryFilenames
 {
-    if( !self.view )
+    if( !self.view || !self.isDisplayingCommittedData )
         return {};
 
     if( self.data.Stats().selected_entries_amount )
@@ -45,6 +45,9 @@
 
 - (std::vector<unsigned>)selectedEntriesOrFocusedEntryIndeces
 {
+    if( !self.view || !self.isDisplayingCommittedData )
+        return {};
+
     std::vector<unsigned> inds;
     auto &d = self.data;
     for( auto ind : d.SortedDirectoryEntries() ) {
@@ -69,6 +72,9 @@
 
 - (std::vector<VFSListingItem>)selectedEntriesOrFocusedEntry
 {
+    if( !self.view || !self.isDisplayingCommittedData )
+        return {};
+
     std::vector<VFSListingItem> items;
     auto &d = self.data;
     for( unsigned ind : d.SortedDirectoryEntries() )
@@ -85,6 +91,9 @@
 
 - (std::vector<VFSListingItem>)selectedEntriesOrFocusedEntryWithDotDot
 {
+    if( !self.view || !self.isDisplayingCommittedData )
+        return {};
+
     std::vector<VFSListingItem> items;
     auto &d = self.data;
     for( auto ind : d.SortedDirectoryEntries() )
@@ -100,7 +109,7 @@
 
 - (std::vector<std::string>)selectedEntriesOrFocusedEntryFilenamesWithDotDot
 {
-    if( !self.view )
+    if( !self.view || !self.isDisplayingCommittedData )
         return {};
 
     if( self.data.Stats().selected_entries_amount )
@@ -114,16 +123,19 @@
 
 - (std::string)currentDirectoryPath
 {
-    return self.data.DirectoryPathWithTrailingSlash();
+    return self.isDisplayingCommittedData ? self.data.DirectoryPathWithTrailingSlash() : std::string{};
 }
 
 - (const VFSHostPtr &)vfs
 {
-    return self.data.Host();
+    static const auto *const empty = new VFSHostPtr;
+    return self.isDisplayingCommittedData ? self.data.Host() : *empty;
 }
 
 - (std::string)expandPath:(const std::string &)_ref
 {
+    if( !self.isDisplayingCommittedData )
+        return {};
     auto &listing = self.data.Listing();
     if( listing.HasCommonHost() && listing.Host()->IsNativeFS() ) {
         return nc::utility::PathManip::Expand(_ref, nc::base::CommonPaths::Home(), self.currentDirectoryPath);

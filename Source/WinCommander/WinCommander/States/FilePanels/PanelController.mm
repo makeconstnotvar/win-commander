@@ -67,8 +67,54 @@ namespace {
 constexpr std::string_view g_PanelNavigationErrorDomain = "PanelController.Navigation";
 constexpr std::string_view g_PanelRefreshErrorDomain = "PanelController.Refresh";
 constexpr int g_LargeModelPreparationThreshold = 10'000;
+constexpr size_t g_MaxProgressiveNavigationPreviewEntries = 2'048;
 static_assert(std::is_nothrow_move_assignable_v<data::Model>);
 static_assert(std::is_nothrow_move_constructible_v<data::Model>);
+
+struct ProgressiveNavigationPreviewCandidate {
+    PaneRequestId request_id;
+    std::shared_ptr<DirectoryChangeRequest> request;
+    unsigned long fetch_flags = 0;
+    unsigned long content_generation = 0;
+    data::Model::PreparationOptions preparation_options;
+    VFSListingPtr listing;
+    std::unique_ptr<data::Model> prepared_model;
+};
+
+struct ProgressiveNavigationPreviewState {
+    PaneRequestId request_id;
+    std::shared_ptr<DirectoryChangeRequest> request;
+    unsigned long content_generation = 0;
+    std::shared_ptr<std::atomic_bool> callback_allowed;
+    std::shared_ptr<std::atomic_bool> worker_finished;
+    data::Model::PreparationOptions preparation_options;
+    std::string committed_focused_entry;
+    std::unique_ptr<data::Model> model;
+};
+
+struct ProgressiveNavigationSelectionState {
+    std::string filename;
+    bool selected = false;
+};
+
+struct ProgressiveNavigationReconcile {
+    bool active = false;
+    std::string committed_focused_entry;
+    std::string preview_focused_entry;
+    std::vector<ProgressiveNavigationSelectionState> selection;
+};
+
+[[nodiscard]] bool IsExactUniformDirectoryListing(const VFSListingPtr &_listing,
+                                                   const VFSHostPtr &_host,
+                                                   const std::string_view _path) noexcept
+{
+    try {
+        return _listing && _host && _listing->IsUniform() && _listing->Host() == _host &&
+               _listing->Directory() == EnsureTrailingSlash(std::string{_path});
+    } catch( ... ) {
+        return false;
+    }
+}
 
 struct NavigationFetchOutcome {
     VFSListingPtr listing;
@@ -96,15 +142,58 @@ struct NavigationAdmissionState {
     const std::shared_ptr<DirectoryChangeRequest> &_request,
     const unsigned long _fetch_flags,
     const std::shared_ptr<std::atomic_bool> &_callback_allowed,
-    data::Model::PreparationOptions _preparation_options)
+    data::Model::PreparationOptions _preparation_options,
+    const PaneRequestId _request_id,
+    const unsigned long _content_generation,
+    const std::function<void(std::shared_ptr<ProgressiveNavigationPreviewCandidate>)> &_publish_preview)
 {
     NavigationFetchOutcome outcome;
     try {
         const auto is_cancelled =
             [_callback_allowed] { return !_callback_allowed->load(std::memory_order_acquire); };
         const auto canceller = VFSCancelChecker(is_cancelled);
+        bool preview_batch_seen = false;
         const std::expected<VFSListingPtr, Error> listing =
-            _request->VFS->FetchDirectoryListing(_request->RequestedDirectory, _fetch_flags, canceller);
+            _request->VFS->FetchDirectoryListingProgressively(
+                _request->RequestedDirectory,
+                _fetch_flags,
+                [&](vfs::DirectoryListingBatch &&_batch) {
+                    if( preview_batch_seen )
+                        return vfs::DirectoryListingBatchDisposition::StopPublishing;
+                    preview_batch_seen = true;
+                    if( is_cancelled() )
+                        return vfs::DirectoryListingBatchDisposition::Cancel;
+                    if( _batch.first_index != 0 || !_batch.entries || _batch.entries->Count() == 0 ||
+                        _batch.entries->Count() > g_MaxProgressiveNavigationPreviewEntries ||
+                        !IsExactUniformDirectoryListing(
+                            _batch.entries, _request->VFS, _request->RequestedDirectory) ) {
+                        return vfs::DirectoryListingBatchDisposition::StopPublishing;
+                    }
+
+                    try {
+                        auto candidate = std::make_shared<ProgressiveNavigationPreviewCandidate>();
+                        candidate->request_id = _request_id;
+                        candidate->request = _request;
+                        candidate->fetch_flags = _fetch_flags;
+                        candidate->content_generation = _content_generation;
+                        candidate->preparation_options = _preparation_options;
+                        candidate->listing = std::move(_batch.entries);
+                        candidate->prepared_model = data::Model::PrepareDetached(
+                            candidate->listing,
+                            data::Model::PanelType::Directory,
+                            candidate->preparation_options,
+                            _request->RequestSelectedEntries,
+                            is_cancelled);
+                        if( candidate->prepared_model && !is_cancelled() )
+                            _publish_preview(std::move(candidate));
+                    } catch( ... ) {
+                        // Progressive presentation is optional. The authoritative fetch and its
+                        // detached full-model preparation continue through the established path.
+                    }
+                    return is_cancelled() ? vfs::DirectoryListingBatchDisposition::Cancel
+                                          : vfs::DirectoryListingBatchDisposition::StopPublishing;
+                },
+                canceller);
 
         if( listing ) {
             outcome.listing = *listing;
@@ -580,6 +669,14 @@ struct CalculatedSizesBatch {
 - (void)refreshQueueDidBecomeDry;
 - (void)refreshWorkerDidFinish:(PaneRequestId)_request_id
                  finishedToken:(const std::shared_ptr<std::atomic_bool> &)_finished_token;
+- (void)presentProgressiveNavigationPreview:
+            (const std::shared_ptr<ProgressiveNavigationPreviewCandidate> &)_candidate
+                               callbackToken:(const std::shared_ptr<std::atomic_bool> &)_callback_token
+                                 workerToken:(const std::shared_ptr<std::atomic_bool> &)_worker_token;
+- (ProgressiveNavigationReconcile)consumeProgressiveNavigationPreviewForCommit:
+    (PaneRequestId)_request_id;
+- (void)restoreProgressiveNavigationPreviewForRequest:(std::optional<PaneRequestId>)_request_id;
+- (void)restoreProgressiveNavigationPreview;
 - (bool)scheduleLargePresentationPreparation:
             (const std::function<void(data::Model::PreparationOptions &)> &)_mutator
                                           kind:(PresentationPreparationKind)_kind;
@@ -664,6 +761,7 @@ struct CalculatedSizesBatch {
     nc::core::PaneId m_PaneId;
     std::unique_ptr<nc::core::PanelControllerLifecycle> m_PaneLifecycle;
     std::optional<NavigationWorkerSlot> m_NavigationWorker;
+    std::optional<ProgressiveNavigationPreviewState> m_ProgressiveNavigationPreview;
     std::optional<RefreshWorkerSlot> m_RefreshWorker;
     std::optional<PendingRefreshWork> m_PendingRefresh;
     std::shared_ptr<std::atomic_bool> m_NavigationAdmissionCallbackAllowed;
@@ -838,6 +936,11 @@ struct CalculatedSizesBatch {
     m_RefreshWorker.reset();
     m_PendingRefresh.reset();
     m_DirectoryLoadingQ.reset();
+    if( m_ProgressiveNavigationPreview ) {
+        auto preview = std::move(m_ProgressiveNavigationPreview->model);
+        m_ProgressiveNavigationPreview.reset();
+        dispatch_to_default([preview = std::move(preview)] {});
+    }
 
     // we need to manually set data to nullptr, since PanelView can be destroyed a bit later due
     // to other strong pointers. in that case view will contain a dangling pointer, which can lead
@@ -887,6 +990,128 @@ struct CalculatedSizesBatch {
     };
 }
 
+- (bool)isDisplayingCommittedData
+{
+    dispatch_assert_main_queue();
+    return m_View != nil && m_View.data == &m_Data;
+}
+
+- (bool)isPresentingProgressiveNavigationPreview
+{
+    dispatch_assert_main_queue();
+    return m_View != nil && m_ProgressiveNavigationPreview &&
+           m_View.data == m_ProgressiveNavigationPreview->model.get();
+}
+
+- (void)presentProgressiveNavigationPreview:
+            (const std::shared_ptr<ProgressiveNavigationPreviewCandidate> &)_candidate
+                               callbackToken:(const std::shared_ptr<std::atomic_bool> &)_callback_token
+                                 workerToken:(const std::shared_ptr<std::atomic_bool> &)_worker_token
+{
+    dispatch_assert_main_queue();
+    if( !_candidate || !_candidate->request || !_candidate->prepared_model || !_candidate->listing ||
+        !_callback_token || !_worker_token || !_candidate->request->PerformAsynchronous ||
+        !_callback_token->load(std::memory_order_acquire) || !m_AcceptsNavigation || m_View == nil ||
+        m_ProgressiveNavigationPreview || m_View.data != &m_Data ||
+        _candidate->content_generation !=
+            m_ContentRequestGeneration->load(std::memory_order_acquire) ||
+        _candidate->fetch_flags != m_VFSFetchingFlags ||
+        !m_Data.MatchesPreparationOptions(_candidate->preparation_options) ||
+        _candidate->prepared_model->ListingPtr() != _candidate->listing ||
+        !IsExactUniformDirectoryListing(
+            _candidate->listing, _candidate->request->VFS, _candidate->request->RequestedDirectory) ) {
+        return;
+    }
+
+    const auto active = m_PaneLifecycle ? m_PaneLifecycle->Active() : std::nullopt;
+    if( !active || active->request_id != _candidate->request_id || !m_NavigationWorker ||
+        m_NavigationWorker->request_id != _candidate->request_id ||
+        m_NavigationWorker->callback_allowed != _callback_token ||
+        m_NavigationWorker->worker_finished != _worker_token ) {
+        return;
+    }
+
+    std::string committed_focused_entry;
+    if( const VFSListingItem focused = m_View.item )
+        committed_focused_entry = focused.Filename();
+    [m_View savePathState];
+    [m_View removeKeystrokeSink:m_QuickSearch];
+    m_ProgressiveNavigationPreview.emplace(ProgressiveNavigationPreviewState{
+        .request_id = _candidate->request_id,
+        .request = _candidate->request,
+        .content_generation = _candidate->content_generation,
+        .callback_allowed = _callback_token,
+        .worker_finished = _worker_token,
+        .preparation_options = _candidate->preparation_options,
+        .committed_focused_entry = std::move(committed_focused_entry),
+        .model = std::move(_candidate->prepared_model),
+    });
+    m_View.data = m_ProgressiveNavigationPreview->model.get();
+    [m_View dataUpdated];
+    [m_View panelChangedWithFocusedFilename:_candidate->request->RequestFocusedEntry
+                          loadPreviousState:_candidate->request->LoadPreviousViewState];
+}
+
+- (ProgressiveNavigationReconcile)consumeProgressiveNavigationPreviewForCommit:
+    (const PaneRequestId)_request_id
+{
+    dispatch_assert_main_queue();
+    ProgressiveNavigationReconcile reconcile;
+    if( !m_ProgressiveNavigationPreview || m_ProgressiveNavigationPreview->request_id != _request_id )
+        return reconcile;
+
+    reconcile.active = true;
+    reconcile.committed_focused_entry = m_ProgressiveNavigationPreview->committed_focused_entry;
+    data::Model *const preview = m_ProgressiveNavigationPreview->model.get();
+    if( m_View != nil && m_View.data == preview ) {
+        if( const VFSListingItem focused = m_View.item )
+            reconcile.preview_focused_entry = focused.Filename();
+        reconcile.selection.reserve(
+            std::min(preview->SortedDirectoryEntries().size(), g_MaxProgressiveNavigationPreviewEntries));
+        for( const unsigned raw_index : preview->SortedDirectoryEntries() ) {
+            const VFSListingItem item = preview->EntryAtRawPosition(raw_index);
+            if( !item || item.IsDotDot() )
+                continue;
+            reconcile.selection.emplace_back(ProgressiveNavigationSelectionState{
+                .filename = item.Filename(),
+                .selected = preview->VolatileDataAtRawPosition(raw_index).is_selected(),
+            });
+        }
+    }
+
+    auto displaced = std::move(m_ProgressiveNavigationPreview->model);
+    m_ProgressiveNavigationPreview.reset();
+    if( m_View != nil ) {
+        m_View.data = &m_Data;
+        [m_View addKeystrokeSink:m_QuickSearch];
+    }
+    dispatch_to_default([displaced = std::move(displaced)] {});
+    return reconcile;
+}
+
+- (void)restoreProgressiveNavigationPreviewForRequest:
+    (const std::optional<PaneRequestId>)_request_id
+{
+    dispatch_assert_main_queue();
+    if( !m_ProgressiveNavigationPreview ||
+        (_request_id && m_ProgressiveNavigationPreview->request_id != *_request_id) ) {
+        return;
+    }
+
+    const PaneRequestId request_id = m_ProgressiveNavigationPreview->request_id;
+    ProgressiveNavigationReconcile reconcile =
+        [self consumeProgressiveNavigationPreviewForCommit:request_id];
+    if( !reconcile.active || m_View == nil )
+        return;
+    [m_View dataUpdated];
+    [m_View panelChangedWithFocusedFilename:reconcile.committed_focused_entry loadPreviousState:false];
+}
+
+- (void)restoreProgressiveNavigationPreview
+{
+    [self restoreProgressiveNavigationPreviewForRequest:std::nullopt];
+}
+
 - (MainWindowFilePanelState *)state
 {
     return m_FilePanelState;
@@ -904,7 +1129,7 @@ struct CalculatedSizesBatch {
 
 - (bool)isUniform
 {
-    return m_Data.Listing().IsUniform();
+    return self.isDisplayingCommittedData && m_Data.Listing().IsUniform();
 }
 
 - (bool)receivesUpdateNotifications
@@ -1455,6 +1680,7 @@ struct CalculatedSizesBatch {
                 }
                 if( m_NavigationWorker )
                     m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+                [self restoreProgressiveNavigationPreview];
                 const unsigned long content_generation =
                     m_ContentRequestGeneration->fetch_add(1, std::memory_order_acq_rel) + 1;
                 auto cancel_requested = std::make_shared<std::atomic_bool>(false);
@@ -1679,6 +1905,7 @@ struct CalculatedSizesBatch {
     }
     if( m_NavigationWorker )
         m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+    [self restoreProgressiveNavigationPreview];
     if( m_RefreshWorker )
         m_RefreshWorker->cancel_requested->store(true, std::memory_order_release);
     if( m_PendingRefresh ) {
@@ -1745,6 +1972,8 @@ struct CalculatedSizesBatch {
 
 - (void)selectEntriesWithFilenames:(const std::vector<std::string> &)_filenames
 {
+    if( !self.isDisplayingCommittedData )
+        return;
     for( auto &i : _filenames )
         m_Data.CustomFlagsSelectSorted(m_Data.SortedIndexForName(i), true);
     [m_View volatileDataChanged];
@@ -1752,12 +1981,16 @@ struct CalculatedSizesBatch {
 
 - (void)setEntriesSelection:(const std::vector<bool> &)_selection
 {
+    if( !self.isDisplayingCommittedData )
+        return;
     if( m_Data.CustomFlagsSelectSorted(_selection) )
         [m_View volatileDataChanged];
 }
 
 - (void)setSelectionForItemAtIndex:(int)_index selected:(bool)_selected
 {
+    if( !self.isDisplayingCommittedData )
+        return;
     if( m_Data.VolatileDataAtSortPosition(_index).is_selected() == _selected )
         return;
     m_Data.CustomFlagsSelectSorted(_index, _selected);
@@ -1836,6 +2069,9 @@ struct CalculatedSizesBatch {
 - (NCPanelContextMenu *)panelView:(PanelView *)_view requestsContextMenuForItemNo:(int)_sort_pos
 {
     dispatch_assert_main_queue();
+
+    if( !self.isDisplayingCommittedData )
+        return nil;
 
     if( _sort_pos < 0 )
         return m_ContextMenuProvider({}, self);
@@ -1928,6 +2164,8 @@ struct CalculatedSizesBatch {
 {
     assert(dispatch_is_main_queue());
     assert(_workload);
+    if( !self.isDisplayingCommittedData )
+        return;
 
     if( m_Data.IsLoaded() && m_Data.RawEntriesCount() >= g_LargeModelPreparationThreshold ) {
         const auto base_options = m_PendingPresentationOptions.value_or(m_Data.CapturePreparationOptions());
@@ -2268,13 +2506,16 @@ struct CalculatedSizesBatch {
             PresentNavigationException(std::current_exception());
         }
     };
+    const auto restore_progressive_preview = [&] {
+        [self restoreProgressiveNavigationPreviewForRequest:std::optional{_request_id}];
+    };
 
     if( _content_generation != m_ContentRequestGeneration->load(std::memory_order_acquire) ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
         [[maybe_unused]] const auto result =
             m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+        restore_progressive_preview();
         clear_worker_slot();
-        report_cancelled_callback();
         return;
     }
 
@@ -2282,6 +2523,7 @@ struct CalculatedSizesBatch {
         FileManagerError error = MapNavigationException(_outcome.exception, _request);
         set_synchronous_error(error.original_error);
         const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        restore_progressive_preview();
         clear_worker_slot();
         if( result == PaneLifecycleProducer::FinishResult::Published )
             PresentNavigationException(_outcome.exception);
@@ -2293,6 +2535,7 @@ struct CalculatedSizesBatch {
         set_synchronous_error(error);
         [[maybe_unused]] const auto result =
             m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::QueueStopped);
+        restore_progressive_preview();
         clear_worker_slot();
         return;
     }
@@ -2301,6 +2544,7 @@ struct CalculatedSizesBatch {
         set_synchronous_error(*_outcome.error);
         [[maybe_unused]] const auto result =
             m_PaneLifecycle->Fail(_request_id, MapNavigationError(*_outcome.error, _request));
+        restore_progressive_preview();
         clear_worker_slot();
         return;
     }
@@ -2310,6 +2554,7 @@ struct CalculatedSizesBatch {
         FileManagerError error = MapNavigationException(exception, _request);
         set_synchronous_error(error.original_error);
         const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        restore_progressive_preview();
         clear_worker_slot();
         if( result == PaneLifecycleProducer::FinishResult::Published )
             PresentNavigationException(exception);
@@ -2319,8 +2564,8 @@ struct CalculatedSizesBatch {
     const auto active = m_PaneLifecycle->Active();
     if( !active || active->request_id != _request_id ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
+        restore_progressive_preview();
         clear_worker_slot();
-        report_cancelled_callback();
         return;
     }
 
@@ -2331,6 +2576,7 @@ struct CalculatedSizesBatch {
                 std::make_exception_ptr(std::logic_error{"Asynchronous navigation returned no prepared model"});
             FileManagerError error = MapNavigationException(exception, _request);
             const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+            restore_progressive_preview();
             clear_worker_slot();
             if( result == PaneLifecycleProducer::FinishResult::Published )
                 PresentNavigationException(exception);
@@ -2339,6 +2585,7 @@ struct CalculatedSizesBatch {
         if( !m_Data.MatchesPreparationOptions(*_outcome.preparation_options) ) {
             [[maybe_unused]] const auto result =
                 m_PaneLifecycle->Cancel(_request_id, PaneCancellationReason::InternalAbort);
+            restore_progressive_preview();
             clear_worker_slot();
             report_cancelled_callback();
             return;
@@ -2356,6 +2603,7 @@ struct CalculatedSizesBatch {
             FileManagerError error = MapNavigationException(exception, _request);
             set_synchronous_error(error.original_error);
             const auto result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+            restore_progressive_preview();
             clear_worker_slot();
             if( result == PaneLifecycleProducer::FinishResult::Published )
                 PresentNavigationException(exception);
@@ -2363,8 +2611,20 @@ struct CalculatedSizesBatch {
         }
     }
 
+    ProgressiveNavigationReconcile progressive_reconcile =
+        [self consumeProgressiveNavigationPreviewForCommit:_request_id];
+    for( const auto &selection : progressive_reconcile.selection ) {
+        const int sort_index = prepared->SortedIndexForName(selection.filename);
+        if( sort_index >= 0 )
+            prepared->CustomFlagsSelectSorted(sort_index, selection.selected);
+    }
+    const std::string final_focused_entry = progressive_reconcile.preview_focused_entry.empty()
+                                                ? _request->RequestFocusedEntry
+                                                : progressive_reconcile.preview_focused_entry;
+
     const unsigned long next_generation = m_DataGeneration + 1;
-    [m_View savePathState];
+    if( !progressive_reconcile.active )
+        [m_View savePathState];
     m_DirectorySizeCountingQ.Stop();
     std::optional<data::Model> displaced_model;
 
@@ -2384,6 +2644,11 @@ struct CalculatedSizesBatch {
         FileManagerError error = MapNavigationException(exception, _request);
         set_synchronous_error(error.original_error);
         const auto failure_result = m_PaneLifecycle->Fail(_request_id, std::move(error));
+        if( progressive_reconcile.active ) {
+            [m_View dataUpdated];
+            [m_View panelChangedWithFocusedFilename:progressive_reconcile.committed_focused_entry
+                                  loadPreviousState:false];
+        }
         clear_worker_slot();
         if( failure_result == PaneLifecycleProducer::FinishResult::Published )
             PresentNavigationException(exception);
@@ -2397,6 +2662,14 @@ struct CalculatedSizesBatch {
     if( commit_result != PaneLifecycleProducer::FinishResult::Published ||
         m_DataGeneration != next_generation || m_Data.ListingPtr() != _outcome.listing ) {
         set_synchronous_error(Error{Error::POSIX, ECANCELED});
+        if( progressive_reconcile.active ) {
+            [m_View dataUpdated];
+            const bool full_model_installed = m_Data.ListingPtr() == _outcome.listing;
+            [m_View panelChangedWithFocusedFilename:
+                        (full_model_installed ? final_focused_entry
+                                              : progressive_reconcile.committed_focused_entry)
+                                  loadPreviousState:false];
+        }
         report_cancelled_callback();
         return;
     }
@@ -2404,8 +2677,10 @@ struct CalculatedSizesBatch {
     if( _synchronous_result )
         *_synchronous_result = {};
     [m_View dataUpdated];
-    [m_View panelChangedWithFocusedFilename:_request->RequestFocusedEntry
-                          loadPreviousState:_request->LoadPreviousViewState];
+    [m_View panelChangedWithFocusedFilename:final_focused_entry
+                          loadPreviousState:progressive_reconcile.active
+                                                ? false
+                                                : _request->LoadPreviousViewState];
     [self onPathChanged];
     if( _request->LoadingResultCallback ) {
         const auto weak_panel =
@@ -2521,6 +2796,7 @@ struct CalculatedSizesBatch {
                     m_ContentRequestGeneration->fetch_add(1, std::memory_order_acq_rel) + 1;
                 if( m_NavigationWorker )
                     m_NavigationWorker->callback_allowed->store(false, std::memory_order_release);
+                [self restoreProgressiveNavigationPreview];
                 if( !asynchronous ) {
                     m_NavigationWorker = NavigationWorkerSlot{
                         .request_id = _request_id,
@@ -2653,9 +2929,36 @@ struct CalculatedSizesBatch {
                                content_generation ==
                                    panel->m_ContentRequestGeneration->load(std::memory_order_acquire);
                     };
-                    auto outcome = std::make_shared<NavigationFetchOutcome>(
-                        FetchNavigationRequestDetached(
-                            request, fetch_flags, callback_allowed, preparation_options));
+                    const auto publish_preview = [request_id,
+                                                  callback_allowed,
+                                                  worker_finished,
+                                                  weak_panel](
+                                                     std::shared_ptr<ProgressiveNavigationPreviewCandidate>
+                                                         _candidate) {
+                        dispatch_to_main_queue([candidate = std::move(_candidate),
+                                                request_id,
+                                                callback_allowed,
+                                                worker_finished,
+                                                weak_panel] {
+                            PanelController *const panel = weak_panel->panel;
+                            if( panel && candidate && candidate->request_id == request_id ) {
+                                [panel presentProgressiveNavigationPreview:candidate
+                                                             callbackToken:callback_allowed
+                                                               workerToken:worker_finished];
+                            }
+                            // Rejected detached model/listing destruction is proportional to the
+                            // provider batch and never runs on the AppKit queue.
+                            dispatch_to_default([candidate = std::move(candidate)] {});
+                        });
+                    };
+                    auto outcome = std::make_shared<NavigationFetchOutcome>(FetchNavigationRequestDetached(
+                        request,
+                        fetch_flags,
+                        callback_allowed,
+                        preparation_options,
+                        request_id,
+                        content_generation,
+                        publish_preview));
                     const std::expected<void, Error> callback_result = outcome->cancelled
                         ? std::expected<void, Error>{std::unexpected(Error{Error::POSIX, ECANCELED})}
                         : outcome->error ? std::expected<void, Error>{std::unexpected(*outcome->error)}
@@ -3003,6 +3306,8 @@ struct CalculatedSizesBatch {
                       requestsDragReceiverForDragging:(id<NSDraggingInfo>)_dragging
                                                onItem:(int)_on_sorted_index
 {
+    if( !self.isDisplayingCommittedData )
+        return nullptr;
     return std::make_unique<nc::panel::DragReceiver>(
         self, _dragging, _on_sorted_index, *m_NativeFSManager, *m_NativeHost);
 }

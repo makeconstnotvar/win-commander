@@ -32,6 +32,7 @@ public:
     };
 
     using Callback = std::function<void(const CallbackParams &_params)>;
+    using BatchDrained = std::function<bool(size_t _produced_count)>;
 
     /**
      * will not set .filename field.
@@ -48,7 +49,8 @@ public:
     static int ReadDirAttributesStat(const int _dir_fd,
                                      const char *_dir_path,
                                      const std::function<void(size_t _fetched_now)> &_cb_fetch,
-                                     const Callback &_cb_param);
+                                     const Callback &_cb_param,
+                                     const BatchDrained &_cb_batch_drained = {});
 
     /**
      * the most performant way to fetch data
@@ -56,7 +58,8 @@ public:
      */
     static int ReadDirAttributesBulk(const int _dir_fd,
                                      const std::function<void(size_t _fetched_now)> &_cb_fetch,
-                                     const Callback &_cb_param);
+                                     const Callback &_cb_param,
+                                     const BatchDrained &_cb_batch_drained = {});
 };
 
 } // namespace nc::vfs::native

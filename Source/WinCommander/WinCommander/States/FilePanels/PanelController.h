@@ -178,6 +178,10 @@ using PaneLifecycleSubscription = core::PaneLifecycleProducer::Subscription;
 @property(nonatomic, readonly) nc::panel::PanelViewLayoutsStorage &layoutStorage;
 @property(nonatomic, readonly) nc::core::VFSInstanceManager &vfsInstanceManager;
 @property(nonatomic, readonly) bool isDoingBackgroundLoading;
+/** True only while the view renders a provisional listing owned by an active async navigation. */
+@property(nonatomic, readonly) bool isPresentingProgressiveNavigationPreview;
+/** False while the view is rendering provisional content instead of the committed controller model. */
+@property(nonatomic, readonly) bool isDisplayingCommittedData;
 @property(nonatomic, readonly) bool isDirectorySizeCalculationBusy;
 // Defaults to PanelViewHeader. Explorer replaces it with a floating presenter.
 @property(nonatomic, weak) id<NCPanelQuickSearchPresentation> quickSearchPresentation;

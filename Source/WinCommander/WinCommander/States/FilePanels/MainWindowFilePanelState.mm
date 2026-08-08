@@ -71,6 +71,33 @@ static bool GoToForcesPanelActivation()
     return force;
 }
 
+static void LoadFirstReachableNativePathAsync(std::shared_ptr<const std::vector<std::string>> _paths,
+                                              size_t _index,
+                                              PanelController *_panel)
+{
+    if( !_panel || !_paths || _index >= _paths->size() )
+        return;
+
+    auto request = std::make_shared<DirectoryChangeRequest>();
+    request->RequestedDirectory = (*_paths)[_index];
+    request->VFS = nc::bootstrap::NativeVFSHostInstance().SharedPtr();
+    request->PerformAsynchronous = true;
+    __weak PanelController *weak_panel = _panel;
+    request->LoadingResultCallback = [_paths, _index, weak_panel](
+                                         const std::expected<void, Error> &_result,
+                                         DirectoryChangeResultSource,
+                                         const std::function<bool()> &_is_current) {
+        if( _result || !_is_current() )
+            return;
+        dispatch_to_main_queue([paths = _paths, index = _index, weak_panel, is_current = _is_current] {
+            PanelController *const panel = weak_panel;
+            if( panel && is_current() )
+                LoadFirstReachableNativePathAsync(std::move(paths), index + 1, panel);
+        });
+    };
+    [[maybe_unused]] const auto submission = [_panel GoToDirWithContext:std::move(request)];
+}
+
 static NSString *TrimmedTitleForWindow(NSString *_title, NSWindow *_window);
 static NSString *TitleForData(const data::Model *_data);
 
@@ -144,11 +171,11 @@ static NSString *TitleForData(const data::Model *_data);
 
     const auto left_it = defaults.FindMember(g_InitialStateLeftDefaults);
     if( left_it != defaults.MemberEnd() )
-        m_ControllerStateJSONDecoder->Decode(left_it->value, m_LeftPanelControllers.front());
+        (void)m_ControllerStateJSONDecoder->Decode(left_it->value, m_LeftPanelControllers.front());
 
     const auto right_it = defaults.FindMember(g_InitialStateRightDefaults);
     if( right_it != defaults.MemberEnd() )
-        m_ControllerStateJSONDecoder->Decode(right_it->value, m_RightPanelControllers.front());
+        (void)m_ControllerStateJSONDecoder->Decode(right_it->value, m_RightPanelControllers.front());
 }
 
 - (void)setupNotificationsCallbacks
@@ -249,20 +276,10 @@ static NSString *TitleForData(const data::Model *_data);
     left_panel_desired_paths.emplace_back(nc::base::CommonPaths::StartupCWD());
     right_panel_desired_paths.emplace_back(nc::base::CommonPaths::StartupCWD());
 
-    const auto try_to_load = [&](const std::vector<std::string> &_paths_to_try, PanelController *_panel) {
-        for( auto &p : _paths_to_try ) {
-            auto request = std::make_shared<DirectoryChangeRequest>();
-            request->RequestedDirectory = p;
-            request->VFS = nc::bootstrap::NativeVFSHostInstance().SharedPtr();
-            request->PerformAsynchronous = false;
-            const std::expected<void, Error> result = [_panel GoToDirWithContext:request];
-            if( result )
-                break;
-        }
-    };
-
-    try_to_load(left_panel_desired_paths, left_controller);
-    try_to_load(right_panel_desired_paths, right_controller);
+    LoadFirstReachableNativePathAsync(
+        std::make_shared<const std::vector<std::string>>(std::move(left_panel_desired_paths)), 0, left_controller);
+    LoadFirstReachableNativePathAsync(
+        std::make_shared<const std::vector<std::string>>(std::move(right_panel_desired_paths)), 0, right_controller);
 }
 
 - (void)CreateControls
@@ -599,6 +616,8 @@ static nc::config::Value EncodeUIState(MainWindowFilePanelState *_state)
     if( !_state.IsObject() )
         return false;
 
+    bool left_content_recovery_scheduled = false;
+    bool right_content_recovery_scheduled = false;
     if( _state.HasMember(g_ResorationPanelsKey) ) {
         const auto &json_panels = _state[g_ResorationPanelsKey];
         if( json_panels.IsArray() && json_panels.Size() == 2 ) {
@@ -609,10 +628,11 @@ static nc::config::Value EncodeUIState(MainWindowFilePanelState *_state)
                         auto pc = m_PanelFactory();
                         [self attachPanel:pc];
                         [self addNewControllerOnLeftPane:pc];
-                        m_ControllerStateJSONDecoder->Decode(*i, pc);
+                        (void)m_ControllerStateJSONDecoder->Decode(*i, pc);
                     }
                     else
-                        m_ControllerStateJSONDecoder->Decode(*i, m_LeftPanelControllers.front());
+                        left_content_recovery_scheduled =
+                            m_ControllerStateJSONDecoder->Decode(*i, m_LeftPanelControllers.front());
                 }
 
             const auto &right = json_panels[1];
@@ -622,10 +642,11 @@ static nc::config::Value EncodeUIState(MainWindowFilePanelState *_state)
                         auto pc = m_PanelFactory();
                         [self attachPanel:pc];
                         [self addNewControllerOnRightPane:pc];
-                        m_ControllerStateJSONDecoder->Decode(*i, pc);
+                        (void)m_ControllerStateJSONDecoder->Decode(*i, pc);
                     }
                     else
-                        m_ControllerStateJSONDecoder->Decode(*i, m_RightPanelControllers.front());
+                        right_content_recovery_scheduled =
+                            m_ControllerStateJSONDecoder->Decode(*i, m_RightPanelControllers.front());
                 }
         }
     }
@@ -657,9 +678,9 @@ static nc::config::Value EncodeUIState(MainWindowFilePanelState *_state)
         }
     }
 
-    return (m_LeftPanelControllers.front().data.IsLoaded() ||
+    return (left_content_recovery_scheduled || m_LeftPanelControllers.front().data.IsLoaded() ||
             m_LeftPanelControllers.front().isDoingBackgroundLoading) &&
-           (m_RightPanelControllers.front().data.IsLoaded() ||
+           (right_content_recovery_scheduled || m_RightPanelControllers.front().data.IsLoaded() ||
             m_RightPanelControllers.front().isDoingBackgroundLoading);
 }
 

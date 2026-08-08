@@ -131,6 +131,8 @@ bool ShouldPresent(const PaneVisualState &_state) noexcept
     if( _state.kind == PaneVisualKind::Unavailable || _state.kind == PaneVisualKind::Ready ||
         _state.kind == PaneVisualKind::Refreshing )
         return false;
+    if( _state.kind == PaneVisualKind::Loading && _state.content_visible )
+        return false;
     if( IsErrorKind(_state.kind) && _state.content_visible )
         return false;
     return true;

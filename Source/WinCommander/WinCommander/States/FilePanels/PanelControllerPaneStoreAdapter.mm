@@ -440,8 +440,16 @@ private:
     core::PaneState ReadState() const
     {
         dispatch_assert_main_queue();
-        const VFSListingItem focused_item = m_SuppressFocusedItem ? VFSListingItem{} : m_View.item;
         const data::Model &model = m_Controller.data;
+        const bool displaying_committed_data = m_Controller.isDisplayingCommittedData;
+        VFSListingItem focused_item;
+        if( !displaying_committed_data ) {
+            focused_item = m_FocusedItem;
+        }
+        else if( !m_SuppressFocusedItem ) {
+            focused_item = m_View.item;
+            m_FocusedItem = focused_item;
+        }
         const core::PaneGroupingState grouping_state =
             ProjectPaneGroupingState(model.SortMode(), m_View.explorerDetailsGroupingEnabled);
         PanelViewLayout active_layout;
@@ -569,6 +577,7 @@ private:
     // The model commit callback runs before PanelView restores its cursor. Its exact projection
     // therefore clears focus; the deferred context rebuild samples the restored live item later.
     bool m_SuppressFocusedItem = false;
+    mutable VFSListingItem m_FocusedItem;
     mutable bool m_HasSelectionCache = false;
     mutable VFSListingPtr m_SelectionListing;
     mutable uint64_t m_SelectionGeneration = 0;

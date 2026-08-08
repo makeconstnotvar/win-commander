@@ -45,15 +45,12 @@ public:
                                PanelDataPersistency &_persistency,
                                PanelDataPersistency::VFSRestoreOptions _vfs_restore_options = {});
 
-    void Decode(const config::Value &_state, PanelController *_panel);
+    [[nodiscard]] bool Decode(const config::Value &_state, PanelController *_panel);
 
 private:
     void RecoverSavedContentAsync(PersistentLocation _location, PanelController *_panel);
-    void RecoverSavedContentSync(const PersistentLocation &_location, PanelController *_panel);
-    void RecoverSavedContent(const config::Value &_saved_state, PanelController *_panel);
-    [[nodiscard]] bool AllowSyncRecovery(const PersistentLocation &_location) const;
+    bool RecoverSavedContent(const config::Value &_saved_state, PanelController *_panel);
 
-    const utility::NativeFSManager &m_NativeFSManager;
     nc::core::VFSInstanceManager &m_VFSInstanceManager;
     PanelDataPersistency &m_Persistency;
     PanelDataPersistency::VFSRestoreOptions m_VFSRestoreOptions;

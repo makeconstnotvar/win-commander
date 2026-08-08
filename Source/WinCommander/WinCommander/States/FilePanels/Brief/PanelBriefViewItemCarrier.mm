@@ -406,9 +406,11 @@ static bool HasNoModifiers(NSEvent *_event)
 
 - (void)buildTextAttributes
 {
-    const auto tm = GetCurrentFilenamesTrimmingMode();
+    NCPanelBriefView *const brief_view = m_Controller.briefView;
+    const auto tm = brief_view ? GetCurrentFilenamesTrimmingMode() : PanelViewFilenameTrimming::Trailing;
+    NSFont *const font = brief_view ? brief_view.font : [NSFont systemFontOfSize:NSFont.systemFontSize];
     NSDictionary *attrs = @{
-        NSFontAttributeName: m_Controller.briefView.font,
+        NSFontAttributeName: font,
         NSForegroundColorAttributeName: m_TextColor,
         NSParagraphStyleAttributeName: ParagraphStyle(tm)
     };
@@ -573,7 +575,7 @@ static bool HasNoModifiers(NSEvent *_event)
 {
     if( m_LayoutConstants != layoutConstants ) {
         m_LayoutConstants = layoutConstants;
-        [self setNeedsDisplay:true];
+        [self buildTextAttributes];
     }
 }
 

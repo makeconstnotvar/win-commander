@@ -254,6 +254,11 @@ nc::core::FileManagerError NavigationFailure()
     return m_TestData;
 }
 
+- (bool)isDisplayingCommittedData
+{
+    return true;
+}
+
 - (unsigned long)dataGeneration
 {
     return m_TestGeneration;

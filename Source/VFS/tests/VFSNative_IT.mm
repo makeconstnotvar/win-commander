@@ -191,8 +191,12 @@ TEST_CASE(PREFIX "Fetching")
     auto close_fd = at_scope_end([fd] { close(fd); });
 
     size_t fetched_notification = 0;
+    size_t params_since_batch = 0;
+    size_t drained_notification = 0;
+    size_t batch_notifications = 0;
     auto fetch = [&](size_t _fetched) { fetched_notification += _fetched; };
     auto param = [&](const Fetching::CallbackParams &p) {
+        ++params_since_batch;
         REQUIRE(p.filename != nullptr);
         const std::string_view filename(p.filename);
         REQUIRE(to_visit.contains(filename));
@@ -235,18 +239,67 @@ TEST_CASE(PREFIX "Fetching")
             FAIL();
         }
     };
+    auto batch_drained = [&](size_t _produced_count) {
+        CHECK(_produced_count == params_since_batch);
+        drained_notification += _produced_count;
+        params_since_batch = 0;
+        ++batch_notifications;
+        return true;
+    };
 
     SECTION("ReadDirAttributesStat")
     {
-        CHECK(Fetching::ReadDirAttributesStat(fd, test_dir.c_str(), fetch, param) == 0);
+        CHECK(Fetching::ReadDirAttributesStat(fd, test_dir.c_str(), fetch, param, batch_drained) == 0);
+        CHECK(batch_notifications > 1);
     }
     SECTION("ReadDirAttributesBulk")
     {
-        CHECK(Fetching::ReadDirAttributesBulk(fd, fetch, param) == 0);
+        CHECK(Fetching::ReadDirAttributesBulk(fd, fetch, param, batch_drained) == 0);
+        CHECK(batch_notifications > 1);
     }
 
     CHECK(fetched_notification == total_items_number);
+    CHECK(drained_notification == total_items_number);
+    CHECK(params_since_batch == 0);
     CHECK(to_visit.empty());
+}
+
+TEST_CASE(PREFIX "Fetching stops after a rejected post-decode batch")
+{
+    const TestDir test_dir_holder;
+    const std::filesystem::path test_dir = test_dir_holder.directory;
+    constexpr size_t files_count = 600;
+    for( size_t index = 0; index != files_count; ++index )
+        REQUIRE(close(creat((test_dir / fmt::format("entry-{:04}", index)).c_str(), 0600)) == 0);
+
+    const int fd = ::open(test_dir.c_str(), O_RDONLY | O_NONBLOCK | O_DIRECTORY | O_CLOEXEC);
+    REQUIRE(fd > 0);
+    auto close_fd = at_scope_end([fd] { close(fd); });
+
+    size_t parameter_count = 0;
+    size_t batch_count = 0;
+    auto fetch = [](size_t) {};
+    auto param = [&](const Fetching::CallbackParams &) { ++parameter_count; };
+    auto reject_first_batch = [&](size_t _produced_count) {
+        CHECK(_produced_count == parameter_count);
+        ++batch_count;
+        return false;
+    };
+
+    int result = 0;
+    SECTION("ReadDirAttributesStat")
+    {
+        result = Fetching::ReadDirAttributesStat(fd, test_dir.c_str(), fetch, param, reject_first_batch);
+        CHECK(parameter_count == 256);
+    }
+    SECTION("ReadDirAttributesBulk")
+    {
+        result = Fetching::ReadDirAttributesBulk(fd, fetch, param, reject_first_batch);
+    }
+
+    CHECK(result == ECANCELED);
+    CHECK(parameter_count > 0);
+    CHECK(batch_count == 1);
 }
 
 static int Execute(const std::string &_command)

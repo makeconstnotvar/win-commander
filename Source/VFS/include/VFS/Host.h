@@ -85,6 +85,20 @@ enum class HostErrorKind : uint8_t {
     Other
 };
 
+struct DirectoryListingBatch {
+    size_t first_index = 0;
+    VFSListingPtr entries;
+};
+
+enum class DirectoryListingBatchDisposition : uint8_t {
+    Continue,
+    StopPublishing,
+    Cancel
+};
+
+using DirectoryListingBatchCallback =
+    std::function<DirectoryListingBatchDisposition(DirectoryListingBatch &&_batch)>;
+
 class Host : public std::enable_shared_from_this<Host>
 {
 public:
@@ -290,6 +304,15 @@ public:
     virtual std::expected<VFSListingPtr, Error> FetchDirectoryListing(std::string_view _path,                        //
                                                                       unsigned long _flags,                          //
                                                                       const VFSCancelChecker &_cancel_checker = {}); //
+
+    // Produces a regular directory listing while optionally publishing immutable, provisional batches.
+    // A successful return remains the only authoritative terminal result. The default implementation
+    // delegates to FetchDirectoryListing() without publishing intermediate batches.
+    virtual std::expected<VFSListingPtr, Error>
+    FetchDirectoryListingProgressively(std::string_view _path,
+                                       unsigned long _flags,
+                                       DirectoryListingBatchCallback _callback,
+                                       const VFSCancelChecker &_cancel_checker = {});
 
     // Produces a regular listing, consisting of a single element.
     // If there's no overriden implementaition in derived class, VFSHost will try to produce this listing with Stat().

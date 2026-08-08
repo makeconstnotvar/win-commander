@@ -72,6 +72,21 @@ TEST_CASE(PREFIX "renders loading as one accessible state with a skeleton")
     CHECK([view.backgroundColorForTesting isEqual:NSColor.controlBackgroundColor]);
 }
 
+TEST_CASE(PREFIX "keeps Loading semantics while progressive content replaces the skeleton")
+{
+    NCExplorerPaneStateView *const view = View();
+    PaneVisualState loading = State(PaneVisualKind::Loading, true);
+    loading.status.kind = PaneStatusVisualKind::Loading;
+
+    [view updateWithVisualState:loading];
+
+    CHECK(view.hidden);
+    CHECK(view.renderedKindForTesting == PaneVisualKind::Loading);
+    CHECK_FALSE(view.skeletonVisibleForTesting);
+    CHECK_FALSE(view.loadingIndicatorVisibleForTesting);
+    CHECK_FALSE(view.iconVisibleForTesting);
+}
+
 TEST_CASE(PREFIX "keeps the neutral unavailable state hidden")
 {
     NCExplorerPaneStateView *const view = View();

@@ -1244,6 +1244,10 @@ struct StateStorage {
 
 - (void)panelItem:(int)_sorted_index mouseDragged:(NSEvent *)_event
 {
+    PanelController *const controller = self.controller;
+    if( !controller || !controller.isDisplayingCommittedData )
+        return;
+
     auto icon_producer = DragSender::IconCallback{[self](const VFSListingItem &_item) -> NSImage * {
         assert(m_Data->ListingPtr() == _item.Listing());
         const auto vd = m_Data->VolatileDataAtRawPosition(_item.Index());
@@ -1253,7 +1257,7 @@ struct StateStorage {
             return m_IconRepository->AvailableIconForListingItem(_item);
     }};
 
-    DragSender sender{self.controller, std::move(icon_producer), *m_NativeHost};
+    DragSender sender{controller, std::move(icon_producer), *m_NativeHost};
     sender.Start(self, _event, _sorted_index);
 }
 
@@ -1302,7 +1306,16 @@ struct StateStorage {
 
 - (NSDragOperation)panelItem:(int)_sorted_index operationForDragging:(id<NSDraggingInfo>)_dragging
 {
+    PanelController *const controller = self.controller;
+    if( !controller || !controller.isDisplayingCommittedData ) {
+        m_ValidatedDragReceiver.reset();
+        m_ValidatedDraggingInfo = nil;
+        m_ValidatedDraggingIndex = -2;
+        return NSDragOperationNone;
+    }
     auto receiver = [self.delegate panelView:self requestsDragReceiverForDragging:_dragging onItem:_sorted_index];
+    if( !receiver )
+        return NSDragOperationNone;
     const NSDragOperation operation = receiver->Validate();
     if( operation == NSDragOperationNone ) {
         m_ValidatedDragReceiver.reset();
@@ -1319,6 +1332,13 @@ struct StateStorage {
 
 - (bool)panelItem:(int)_sorted_index performDragOperation:(id<NSDraggingInfo>)_dragging
 {
+    PanelController *const controller = self.controller;
+    if( !controller || !controller.isDisplayingCommittedData ) {
+        m_ValidatedDragReceiver.reset();
+        m_ValidatedDraggingInfo = nil;
+        m_ValidatedDraggingIndex = -2;
+        return false;
+    }
     if( !m_ValidatedDragReceiver || m_ValidatedDraggingInfo != _dragging ||
         m_ValidatedDraggingIndex != _sorted_index ) {
         return false;

@@ -372,6 +372,15 @@ Host::FetchDirectoryListing([[maybe_unused]] std::string_view _path,
     return std::unexpected(nc::Error{nc::Error::POSIX, ENOTSUP});
 }
 
+std::expected<VFSListingPtr, Error>
+Host::FetchDirectoryListingProgressively(std::string_view _path,
+                                         unsigned long _flags,
+                                         [[maybe_unused]] DirectoryListingBatchCallback _callback,
+                                         const VFSCancelChecker &_cancel_checker)
+{
+    return FetchDirectoryListing(_path, _flags, _cancel_checker);
+}
+
 std::expected<VFSListingPtr, Error> Host::FetchSingleItemListing(std::string_view _path,
                                                                  [[maybe_unused]] unsigned long _flags,
                                                                  const VFSCancelChecker &_cancel_checker)

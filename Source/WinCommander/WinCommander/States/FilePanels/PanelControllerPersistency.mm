@@ -54,9 +54,10 @@ ControllerStateJSONDecoder::ControllerStateJSONDecoder(
     nc::core::VFSInstanceManager &_vfs_instance_manager,
     PanelDataPersistency &_persistency,
     const PanelDataPersistency::VFSRestoreOptions _vfs_restore_options)
-    : m_NativeFSManager(_fs_manager), m_VFSInstanceManager(_vfs_instance_manager), m_Persistency(_persistency),
+    : m_VFSInstanceManager(_vfs_instance_manager), m_Persistency(_persistency),
       m_VFSRestoreOptions(_vfs_restore_options)
 {
+    (void)_fs_manager;
 }
 
 static void LoadHomeDirectory(PanelController *_panel)
@@ -115,72 +116,6 @@ static void RecoverSavedPathAtVFSAsync(const VFSHostPtr &_host, const std::strin
     [_panel GoToDirWithContext:shared_request];
 }
 
-/**
- * This is a pessimistic procedure which task is to allow synchronous panel loading only when
- * following is true:
- *   - the FS is Native
- *   - Native FS description can be retrieved
- *   - the volume is attached directly and isn't removable
- */
-bool ControllerStateJSONDecoder::AllowSyncRecovery(const PersistentLocation &_location) const
-{
-    if( !_location.is_native() )
-        return false;
-
-    const auto &path = _location.path;
-    const auto fs_info = m_NativeFSManager.VolumeFromPath(path);
-    if( fs_info == nullptr )
-        return false;
-
-    const auto mount_flags = fs_info->mount_flags;
-    return !mount_flags.ejectable && !mount_flags.removable && mount_flags.local && mount_flags.internal;
-}
-
-void ControllerStateJSONDecoder::RecoverSavedContentSync(const PersistentLocation &_location, PanelController *_panel)
-{
-    const std::expected<VFSHostPtr, Error> exp_host =
-        m_Persistency.CreateVFSFromLocation(_location, m_VFSInstanceManager, m_VFSRestoreOptions);
-    if( !exp_host ) {
-        EnsureNonEmptyState(_panel);
-        return;
-    }
-    const VFSHostPtr &host = *exp_host;
-
-    auto &path = _location.path;
-    auto request = std::make_shared<DirectoryChangeRequest>();
-    request->VFS = host;
-    request->PerformAsynchronous = false;
-    request->RequestedDirectory = _location.path;
-    __weak PanelController *weak_panel = _panel;
-    request->LoadingResultCallback = [host, path, weak_panel](const std::expected<void, Error> &_result,
-                                                              DirectoryChangeResultSource,
-                                                              const std::function<bool()> &_is_current) {
-        if( !_result ) {
-            // failed to load a listing on this VFS on specified path
-            // will try upper directories on this VFS up to the root,
-            // in case if everyone fails we will fallback to Home Directory on native VFS.
-            auto fs_path = std::filesystem::path{EnsureNoTrailingSlash(path)};
-
-            if( fs_path.has_parent_path() ) {
-                auto upper_dir = fs_path.parent_path().native();
-                dispatch_to_main_queue([host, upper_dir, weak_panel, is_current = _is_current] {
-                    PanelController *const panel = weak_panel;
-                    if( panel && is_current() && !panel.data.IsLoaded() )
-                        RecoverSavedPathAtVFSAsync(host, upper_dir, panel);
-                });
-            }
-            else {
-                dispatch_to_main_queue([weak_panel, is_current = _is_current] {
-                    PanelController *const panel = weak_panel;
-                    if( panel && is_current() && !panel.data.IsLoaded() )
-                        LoadHomeDirectory(panel);
-                });
-            }
-        }
-    };
-    [_panel GoToDirWithContext:request];
-}
-
 void ControllerStateJSONDecoder::RecoverSavedContentAsync(PersistentLocation _location, PanelController *_panel)
 {
     auto workload =
@@ -201,24 +136,22 @@ void ControllerStateJSONDecoder::RecoverSavedContentAsync(PersistentLocation _lo
     [_panel commitCancelableLoadingTask:std::move(workload)];
 }
 
-void ControllerStateJSONDecoder::RecoverSavedContent(const config::Value &_saved_state, PanelController *_panel)
+bool ControllerStateJSONDecoder::RecoverSavedContent(const config::Value &_saved_state, PanelController *_panel)
 {
     auto location = m_Persistency.JSONToLocation(_saved_state);
     if( location == std::nullopt )
-        return;
+        return false;
 
-    if( AllowSyncRecovery(*location) )
-        RecoverSavedContentSync(*location, _panel);
-    else
-        RecoverSavedContentAsync(std::move(*location), _panel);
+    RecoverSavedContentAsync(std::move(*location), _panel);
+    return true;
 }
 
-void ControllerStateJSONDecoder::Decode(const config::Value &_state, PanelController *_panel)
+bool ControllerStateJSONDecoder::Decode(const config::Value &_state, PanelController *_panel)
 {
     assert(dispatch_is_main_queue());
 
     if( !_state.IsObject() )
-        return;
+        return false;
 
     if( _state.HasMember(g_RestorationSortingKey) )
         [_panel changeDataOptions:[&](data::Model &_data) {
@@ -229,8 +162,9 @@ void ControllerStateJSONDecoder::Decode(const config::Value &_state, PanelContro
         _panel.layoutIndex = *layout_index;
 
     if( auto it = _state.FindMember(g_RestorationDataKey); it != _state.MemberEnd() ) {
-        RecoverSavedContent(it->value, _panel);
+        return RecoverSavedContent(it->value, _panel);
     }
+    return false;
 }
 
 } // namespace nc::panel

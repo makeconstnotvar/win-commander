@@ -53,6 +53,30 @@ using nc::panel::PasteboardFileOperation;
 using nc::panel::PasteboardSupport;
 using nc::panel::gallery::BuildItemLayout;
 
+@interface ExplorerTabFocusableTestView : NSView
+@end
+
+@implementation ExplorerTabFocusableTestView
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
+}
+@end
+
+@interface ExplorerTabFocusHandoffTestDelegate : NSObject <NCPanelTabBarViewDelegate>
+@property(nonatomic, weak) NSWindow *window;
+@end
+
+@implementation ExplorerTabFocusHandoffTestDelegate
+@synthesize window = _window;
+
+- (void)tabView:(NSTabView *) [[maybe_unused]] _tab_view
+    didSelectTabViewItem:(NSTabViewItem *)_item
+{
+    [self.window makeFirstResponder:_item.view];
+}
+@end
+
 namespace {
 
 class NativePasteboardTestHost final : public nc::vfs::Host
@@ -1268,14 +1292,18 @@ TEST_CASE(PREFIX "tab bar exposes stable VoiceOver controls and selected state")
     [window.contentView addSubview:tab_view];
     NSTabViewItem *const first = [[NSTabViewItem alloc] initWithIdentifier:@(101)];
     first.label = @"Documents";
-    first.view = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
+    first.view = [[ExplorerTabFocusableTestView alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
     NSTabViewItem *const second = [[NSTabViewItem alloc] initWithIdentifier:@(202)];
     second.label = @"Downloads";
-    second.view = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
+    second.view = [[ExplorerTabFocusableTestView alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
     [tab_view addTabViewItem:first];
     [tab_view addTabViewItem:second];
     bar.tabView = tab_view;
     tab_view.delegate = bar;
+    ExplorerTabFocusHandoffTestDelegate *const focus_handoff =
+        [[ExplorerTabFocusHandoffTestDelegate alloc] init];
+    focus_handoff.window = window;
+    bar.delegate = focus_handoff;
     [bar reloadTabs];
     [bar layoutSubtreeIfNeeded];
 
@@ -1314,7 +1342,6 @@ TEST_CASE(PREFIX "tab bar exposes stable VoiceOver controls and selected state")
     CHECK(tab_view.selectedTabViewItem == second);
     CHECK(second_tab.accessibilitySelected);
     CHECK_FALSE(second_close.hidden);
-    REQUIRE([window makeFirstResponder:second.view]);
     CHECK(window.firstResponder == second.view);
     CHECK_FALSE(second_tab.accessibilityFocused);
 

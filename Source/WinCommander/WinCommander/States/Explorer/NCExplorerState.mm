@@ -145,6 +145,18 @@ ExplorerTabEntry *FindTabEntry(std::vector<ExplorerTabEntry> &_entries, PanelCon
     return entry && entry->panel == _panel ? entry : nullptr;
 }
 
+nc::core::PaneVisualState ExplorerPaneVisualState(const nc::core::PaneSnapshot &_snapshot,
+                                                  PanelController *_panel)
+{
+    nc::core::PaneVisualState visual = nc::core::VisualStateMapper::MapPane(_snapshot);
+    if( _panel && _snapshot.pane_id == _panel.paneId &&
+        _snapshot.state.load_phase == nc::core::PaneLoadPhase::Loading &&
+        _panel.isPresentingProgressiveNavigationPreview ) {
+        visual.content_visible = true;
+    }
+    return visual;
+}
+
 std::optional<nc::core::PaneId> PaneIdFromTabItem(NSTabViewItem *_item)
 {
     const NSNumber *const number = nc::objc_cast<NSNumber>(_item.identifier);
@@ -1137,7 +1149,7 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
     [m_CommandBar applyPaneSnapshot:_snapshot];
     [m_Panel.view applyExplorerPaneSnapshot:_snapshot];
     [m_Inspector applyPaneSnapshot:_snapshot];
-    [m_PaneStateView updateWithVisualState:nc::core::VisualStateMapper::MapPane(_snapshot)];
+    [m_PaneStateView updateWithVisualState:ExplorerPaneVisualState(_snapshot, m_Panel)];
 }
 
 - (void)applyViewSettingsForSnapshot:(const nc::core::PaneSnapshot &)_snapshot
@@ -1272,7 +1284,19 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
                                                           return;
                                                       ExplorerTabEntry *const live_entry =
                                                           FindTabEntry(strong_self->m_TabEntries, strong_panel);
-                                                      if( !live_entry || live_entry->view_settings_context_sample_scheduled )
+                                                      if( !live_entry )
+                                                          return;
+                                                      if( strong_self->m_Panel == strong_panel &&
+                                                          strong_self->m_LatestPaneSnapshot &&
+                                                          strong_self->m_LatestPaneSnapshot->pane_id ==
+                                                              strong_panel.paneId ) {
+                                                          const nc::core::PaneSnapshot &snapshot =
+                                                              *strong_self->m_LatestPaneSnapshot;
+                                                          [strong_self->m_PaneStateView
+                                                              updateWithVisualState:
+                                                                  ExplorerPaneVisualState(snapshot, strong_panel)];
+                                                      }
+                                                      if( live_entry->view_settings_context_sample_scheduled )
                                                           return;
                                                       live_entry->view_settings_context_sample_scheduled = true;
                                                       dispatch_async(dispatch_get_main_queue(), ^{
@@ -1816,6 +1840,8 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
         if( nc::panel::PasteboardSupport::CurrentCutToken(pasteboard) &&
             !nc::panel::PasteboardSupport::IsCutInFlight(pasteboard) )
             return nc::panel::view::BiddingPriority::High;
+        if( m_Panel.isPresentingProgressiveNavigationPreview )
+            return nc::panel::view::BiddingPriority::High;
     }
     return nc::panel::view::BiddingPriority::Skip;
 }
@@ -1824,10 +1850,18 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
 {
     if( _panel_view != m_Panel.view )
         return;
-    if( _event.keyCode == 53 )
-        nc::panel::PasteboardSupport::CancelCut(NSPasteboard.generalPasteboard);
-    else
-        [self focusAddressFieldShowingToolbarIfNeeded];
+    if( _event.keyCode == 53 ) {
+        NSPasteboard *const pasteboard = NSPasteboard.generalPasteboard;
+        if( nc::panel::PasteboardSupport::CurrentCutToken(pasteboard) &&
+            !nc::panel::PasteboardSupport::IsCutInFlight(pasteboard) ) {
+            nc::panel::PasteboardSupport::CancelCut(pasteboard);
+            return;
+        }
+        if( m_Panel.isPresentingProgressiveNavigationPreview )
+            [m_Panel CancelBackgroundOperations];
+        return;
+    }
+    [self focusAddressFieldShowingToolbarIfNeeded];
 }
 
 - (instancetype)initForTestingWithFrame:(NSRect)_frame
@@ -1903,7 +1937,7 @@ static bool IsFocusAddressShortcut(NSEvent *_event)
 {
     m_LatestPaneSnapshot = _snapshot;
     [m_Inspector applyPaneSnapshot:_snapshot];
-    [m_PaneStateView updateWithVisualState:nc::core::VisualStateMapper::MapPane(_snapshot)];
+    [m_PaneStateView updateWithVisualState:ExplorerPaneVisualState(_snapshot, m_Panel)];
 }
 
 - (BOOL)setSearchControllerForTesting:(ExplorerSearchController *)_controller forPanel:(PanelController *)_panel

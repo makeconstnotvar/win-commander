@@ -112,13 +112,18 @@
 @end
 
 @interface ExplorerTabsTestPanelController : PanelController
+@property(nonatomic) BOOL progressiveNavigationPreviewPresented;
+@property(nonatomic, readonly) NSUInteger cancelBackgroundOperationsCount;
 - (instancetype)initWithPaneID:(nc::core::PaneId)_pane_id view:(ExplorerTabsTestPanelView *)_view;
 @end
 
 @implementation ExplorerTabsTestPanelController {
     nc::core::PaneId m_TestPaneID;
     ExplorerTabsTestPanelView *m_TestView;
+    BOOL _progressiveNavigationPreviewPresented;
+    NSUInteger _cancelBackgroundOperationsCount;
 }
+@synthesize progressiveNavigationPreviewPresented = _progressiveNavigationPreviewPresented;
 - (instancetype)initWithPaneID:(nc::core::PaneId)_pane_id view:(ExplorerTabsTestPanelView *)_view
 {
     self = [super init];
@@ -135,6 +140,18 @@
 - (PanelView *)view
 {
     return reinterpret_cast<PanelView *>(m_TestView);
+}
+- (bool)isPresentingProgressiveNavigationPreview
+{
+    return self.progressiveNavigationPreviewPresented;
+}
+- (NSUInteger)cancelBackgroundOperationsCount
+{
+    return _cancelBackgroundOperationsCount;
+}
+- (void)CancelBackgroundOperations
+{
+    ++_cancelBackgroundOperationsCount;
 }
 @end
 
@@ -349,6 +366,29 @@ TEST_CASE(PREFIX "single-tab Cmd-W action uses the ordinary window close path")
 
     CHECK(window.performCloseCount == 1);
     CHECK(fixture.state.panelController == fixture.first);
+}
+
+TEST_CASE(PREFIX "Escape explicitly cancels progressive navigation preview")
+{
+    Fixture fixture;
+    fixture.first.progressiveNavigationPreviewPresented = YES;
+    NSEvent *const escape = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                             location:NSZeroPoint
+                                        modifierFlags:0
+                                            timestamp:0
+                                         windowNumber:0
+                                              context:nil
+                                           characters:@"\x1b"
+                          charactersIgnoringModifiers:@"\x1b"
+                                            isARepeat:NO
+                                              keyCode:53];
+
+    CHECK([fixture.state bidForHandlingKeyDown:escape forPanelView:fixture.first.view] ==
+          nc::panel::view::BiddingPriority::High);
+    [fixture.state handleKeyDown:escape forPanelView:fixture.first.view];
+
+    CHECK(fixture.first.cancelBackgroundOperationsCount == 1);
+    CHECK(fixture.second.cancelBackgroundOperationsCount == 0);
 }
 
 TEST_CASE(PREFIX "switch atomically rebinds active chrome and retires pane-local UI")

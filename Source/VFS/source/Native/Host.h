@@ -50,6 +50,12 @@ public:
                                                               unsigned long _flags,
                                                               const VFSCancelChecker &_cancel_checker = {}) override;
 
+    std::expected<VFSListingPtr, Error>
+    FetchDirectoryListingProgressively(std::string_view _path,
+                                       unsigned long _flags,
+                                       DirectoryListingBatchCallback _callback,
+                                       const VFSCancelChecker &_cancel_checker = {}) override;
+
     std::expected<VFSListingPtr, Error> FetchSingleItemListing(std::string_view _path_to_item,
                                                                unsigned long _flags,
                                                                const VFSCancelChecker &_cancel_checker = {}) override;

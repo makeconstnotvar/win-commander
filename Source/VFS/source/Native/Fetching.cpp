@@ -202,64 +202,89 @@ int Fetching::ReadSingleEntryAttributesByPath(nc::routedio::PosixIOInterface &_i
 int Fetching::ReadDirAttributesStat(const int _dir_fd,
                                     const char *_dir_path,
                                     const std::function<void(size_t _fetched_now)> &_cb_fetch,
-                                    const Callback &_cb_param)
+                                    const Callback &_cb_param,
+                                    const BatchDrained &_cb_batch_drained)
 {
-    // initial directory lookup
+    constexpr size_t batch_size = 256;
     std::vector<std::tuple<std::string, uint64_t, uint8_t>> dirents; // name, inode, entry_type
-    if( auto dirp = fdopendir(dup(_dir_fd)) ) {
-        auto close_dir = at_scope_end([=] { closedir(dirp); });
-        static const auto dirents_reserve_amount = 64;
-        dirents.reserve(dirents_reserve_amount);
-        while( auto entp = ::readdir(dirp) ) {
-            if( entp->d_ino == 0 ||                      // apple's documentation suggest to skip such files
-                entp->d_name == std::string_view{"."} || // do not process self entry
-                entp->d_name == std::string_view{".."} ) // do not process parent entry
-                continue;
+    dirents.reserve(batch_size);
 
-            dirents.emplace_back(std::string(entp->d_name, entp->d_namlen), entp->d_ino, entp->d_type);
-        }
-    }
-    else
-        return errno;
+    auto drain = [&]() -> int {
+        if( dirents.empty() )
+            return 0;
 
-    // call stat() for every directory entry
-    auto &io = nc::routedio::RoutedIO::Default;
-    for( auto &e : dirents ) {
-        // need absolute paths
-        const std::string entry_path = _dir_path + std::get<0>(e);
-
-        // stat the file
-        struct stat stat_buffer;
-        if( io.lstat(entry_path.c_str(), &stat_buffer) == 0 ) {
+        struct SuccessfulRecord {
+            std::string filename;
             CallbackParams params;
-            params.filename = std::get<0>(e).c_str();
-            params.crt_time = stat_buffer.st_birthtimespec.tv_sec;
-            params.mod_time = stat_buffer.st_mtimespec.tv_sec;
-            params.chg_time = stat_buffer.st_mtimespec.tv_sec;
-            params.acc_time = stat_buffer.st_ctimespec.tv_sec;
-            params.add_time = -1;
-            params.uid = stat_buffer.st_uid;
-            params.gid = stat_buffer.st_gid;
-            params.mode = stat_buffer.st_mode;
-            params.dev = stat_buffer.st_dev;
-            params.inode = stat_buffer.st_ino;
-            params.flags = stat_buffer.st_flags;
-            params.ext_flags = 0;
-            params.size = -1;
-            if( !S_ISDIR(stat_buffer.st_mode) )
-                params.size = stat_buffer.st_size;
+        };
+        std::vector<SuccessfulRecord> successful_records;
+        successful_records.reserve(dirents.size());
 
-            _cb_fetch(1);
-            _cb_param(params);
+        for( auto &e : dirents ) {
+            // need absolute paths
+            const std::string entry_path = _dir_path + std::get<0>(e);
+
+            // stat the file
+            struct stat stat_buffer;
+            if( nc::routedio::RoutedIO::Default.lstat(entry_path.c_str(), &stat_buffer) == 0 ) {
+                auto &record = successful_records.emplace_back();
+                record.filename = std::move(std::get<0>(e));
+                record.params.crt_time = stat_buffer.st_birthtimespec.tv_sec;
+                record.params.mod_time = stat_buffer.st_mtimespec.tv_sec;
+                record.params.chg_time = stat_buffer.st_mtimespec.tv_sec;
+                record.params.acc_time = stat_buffer.st_ctimespec.tv_sec;
+                record.params.add_time = -1;
+                record.params.uid = stat_buffer.st_uid;
+                record.params.gid = stat_buffer.st_gid;
+                record.params.mode = stat_buffer.st_mode;
+                record.params.dev = stat_buffer.st_dev;
+                record.params.inode = stat_buffer.st_ino;
+                record.params.flags = stat_buffer.st_flags;
+                record.params.ext_flags = 0;
+                record.params.size = S_ISDIR(stat_buffer.st_mode) ? -1 : stat_buffer.st_size;
+            }
+        }
+
+        if( !successful_records.empty() )
+            _cb_fetch(successful_records.size());
+        for( auto &record : successful_records ) {
+            record.params.filename = record.filename.c_str();
+            _cb_param(record.params);
+        }
+
+        const size_t produced_count = successful_records.size();
+        dirents.clear();
+        if( _cb_batch_drained && !_cb_batch_drained(produced_count) )
+            return ECANCELED;
+        return 0;
+    };
+
+    auto dirp = fdopendir(dup(_dir_fd));
+    if( dirp == nullptr )
+        return errno;
+    auto close_dir = at_scope_end([=] { closedir(dirp); });
+
+    while( auto entp = ::readdir(dirp) ) {
+        if( entp->d_ino == 0 ||                      // apple's documentation suggest to skip such files
+            entp->d_name == std::string_view{"."} || // do not process self entry
+            entp->d_name == std::string_view{".."} ) // do not process parent entry
+            continue;
+
+        dirents.emplace_back(std::string(entp->d_name, entp->d_namlen), entp->d_ino, entp->d_type);
+        if( dirents.size() == batch_size ) {
+            const int ret = drain();
+            if( ret != 0 )
+                return ret;
         }
     }
 
-    return 0;
+    return drain();
 }
 
 int Fetching::ReadDirAttributesBulk(const int _dir_fd,
                                     const std::function<void(size_t _fetched_now)> &_cb_fetch,
-                                    const Callback &_cb_param)
+                                    const Callback &_cb_param,
+                                    const BatchDrained &_cb_batch_drained)
 {
     attrlist attr_list;
     memset(&attr_list, 0, sizeof(attr_list));
@@ -289,6 +314,7 @@ int Fetching::ReadDirAttributesBulk(const int _dir_fd,
         _cb_fetch(retcount);
 
         const char *entry_start = &attr_buf[0];
+        size_t produced_count = 0;
         for( int index = 0; index < retcount; index++ ) {
             const char *field = entry_start;
             const uint32_t length = *reinterpret_cast<const uint32_t *>(field);
@@ -415,7 +441,11 @@ int Fetching::ReadDirAttributesBulk(const int _dir_fd,
             }
 
             _cb_param(params);
+            ++produced_count;
         }
+
+        if( _cb_batch_drained && !_cb_batch_drained(produced_count) )
+            return ECANCELED;
     }
 }
 

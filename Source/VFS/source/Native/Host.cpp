@@ -27,6 +27,7 @@
 #include <pstld/pstld.h>
 #include <fmt/ranges.h>
 #include <algorithm>
+#include <exception>
 #include <mutex>
 
 namespace nc::vfs {
@@ -485,6 +486,57 @@ bool NativeConditionalCopyCancelled(const VFSCancelChecker &_cancel_checker) noe
     }
 }
 
+template <class T>
+void CopyNativeListingVariableRange(const base::variable_container<T> &_source,
+                                    base::variable_container<T> &_destination,
+                                    size_t _begin,
+                                    size_t _end)
+{
+    _destination.reset(base::variable_container<>::type::sparse);
+    for( size_t source_index = _begin, destination_index = 0; source_index != _end;
+         ++source_index, ++destination_index )
+        if( _source.has(source_index) )
+            _destination.insert(destination_index, _source[source_index]);
+}
+
+VFSListingPtr BuildNativeListingRange(const ListingInput &_source, size_t _begin, size_t _end)
+{
+    assert(_begin < _end);
+
+    ListingInput destination;
+    destination.hosts[0] = _source.hosts[_begin];
+    destination.directories[0] = _source.directories[_begin];
+    destination.filenames.reserve(_end - _begin);
+    destination.unix_modes.reserve(_end - _begin);
+    destination.unix_types.reserve(_end - _begin);
+
+    for( size_t source_index = _begin; source_index != _end; ++source_index ) {
+        destination.filenames.emplace_back(_source.filenames[source_index]);
+        destination.unix_modes.emplace_back(_source.unix_modes[source_index]);
+        destination.unix_types.emplace_back(_source.unix_types[source_index]);
+    }
+
+    CopyNativeListingVariableRange(_source.display_filenames, destination.display_filenames, _begin, _end);
+    CopyNativeListingVariableRange(_source.sizes, destination.sizes, _begin, _end);
+    CopyNativeListingVariableRange(_source.inodes, destination.inodes, _begin, _end);
+    CopyNativeListingVariableRange(_source.atimes, destination.atimes, _begin, _end);
+    CopyNativeListingVariableRange(_source.mtimes, destination.mtimes, _begin, _end);
+    CopyNativeListingVariableRange(_source.ctimes, destination.ctimes, _begin, _end);
+    CopyNativeListingVariableRange(_source.btimes, destination.btimes, _begin, _end);
+    CopyNativeListingVariableRange(_source.add_times, destination.add_times, _begin, _end);
+    CopyNativeListingVariableRange(_source.uids, destination.uids, _begin, _end);
+    CopyNativeListingVariableRange(_source.gids, destination.gids, _begin, _end);
+    CopyNativeListingVariableRange(_source.unix_flags, destination.unix_flags, _begin, _end);
+    CopyNativeListingVariableRange(_source.symlinks, destination.symlinks, _begin, _end);
+
+    for( size_t source_index = _begin, destination_index = 0; source_index != _end;
+         ++source_index, ++destination_index )
+        if( const auto tag = _source.tags.find(source_index); tag != _source.tags.end() )
+            destination.tags.emplace(destination_index, tag->second);
+
+    return VFSListing::Build(std::move(destination));
+}
+
 } // namespace
 
 const char *NativeHost::UniqueTag = "native";
@@ -543,7 +595,16 @@ std::expected<VFSListingPtr, Error> NativeHost::FetchDirectoryListing(std::strin
                                                                       const unsigned long _flags,
                                                                       const VFSCancelChecker &_cancel_checker)
 {
-    Log::Trace("NativeHost::FetchDirectoryListing() called with path='{}',_flags: {}", _path, _flags);
+    return FetchDirectoryListingProgressively(_path, _flags, {}, _cancel_checker);
+}
+
+std::expected<VFSListingPtr, Error>
+NativeHost::FetchDirectoryListingProgressively(std::string_view _path,
+                                               const unsigned long _flags,
+                                               DirectoryListingBatchCallback _callback,
+                                               const VFSCancelChecker &_cancel_checker)
+{
+    Log::Trace("NativeHost::FetchDirectoryListingProgressively() called with path='{}',_flags: {}", _path, _flags);
 
     using namespace native;
     if( !_path.starts_with("/") )
@@ -637,33 +698,11 @@ std::expected<VFSListingPtr, Error> NativeHost::FetchDirectoryListing(std::strin
         listing_source.filenames[0] = "..";
     }
 
-    auto cb_fetch = [&](size_t _fetched_now) {
-        // check if final entries count is more than previous approximate
-        if( next_entry_index + _fetched_now > allocated_size )
-            resize_dense(next_entry_index + _fetched_now);
-    };
-
-    // when Admin Mode is on - we use different fetch route
-    const int ret =
-        is_native_io ? Fetching::ReadDirAttributesBulk(fd, cb_fetch, cb_param)
-                     : Fetching::ReadDirAttributesStat(fd, listing_source.directories[0].c_str(), cb_fetch, cb_param);
-    if( ret != 0 )
-        return std::unexpected(Error{Error::POSIX, ret});
-
-    if( _cancel_checker && _cancel_checker() )
-        return std::unexpected(Error{Error::POSIX, ECANCELED});
-
-    // check if final entries count is less than approximate
-    if( next_entry_index < allocated_size )
-        resize_dense(next_entry_index);
-
-    // Now the main fetching is done there's a second pass to gather optional attributes per item:
-    // - symlinks
-    // - tags
-    // Run the pass in parallel to reduce the latency of the critical path.
+    // Enrich every row before it can be published. The same enriched storage is retained for the authoritative final
+    // listing, so progressive delivery never performs a second directory enumeration or weakens listing semantics.
     const bool tags_reading_enabled = TagsFetchingAllowed(_flags, _path);
-    std::mutex listing_source_tags_mut;     // guard access to 'listing_source.tags'
-    std::mutex listing_source_symlinks_mut; // guard access to 'listing_source.symlinks'
+    std::mutex listing_source_tags_mut;
+    std::mutex listing_source_symlinks_mut;
     auto epilogue_pass = [fd,
                           tags_reading_enabled,
                           is_native_io,
@@ -672,26 +711,22 @@ std::expected<VFSListingPtr, Error> NativeHost::FetchDirectoryListing(std::strin
                           &listing_source_tags_mut,
                           &listing_source_symlinks_mut,
                           &ext_flags](const std::string &filename) {
-        // index of the item in the listing
         const size_t n = &filename - listing_source.filenames.data();
 
-        // If this entry is symbolic link - read the target path, stat it and the target into in the listing.
         if( listing_source.unix_types[n] == DT_LNK ) {
-            // read an actual link path
             char linkpath[MAXPATHLEN];
             const ssize_t sz = is_native_io
                                    ? readlinkat(fd, listing_source.filenames[n].c_str(), linkpath, MAXPATHLEN)
                                    : io.readlink((listing_source.directories[0] + listing_source.filenames[n]).c_str(),
                                                  linkpath,
                                                  MAXPATHLEN);
-            if( sz >= 0 ) {
+            if( sz >= 0 && sz < MAXPATHLEN ) {
                 linkpath[sz] = 0;
                 {
                     const std::lock_guard<std::mutex> lock(listing_source_symlinks_mut);
                     listing_source.symlinks.insert(n, linkpath);
                 }
 
-                // stat the target file
                 struct ::stat stat_buffer;
                 const int stat_ret =
                     is_native_io
@@ -707,33 +742,115 @@ std::expected<VFSListingPtr, Error> NativeHost::FetchDirectoryListing(std::strin
             }
         }
 
-        // Fetch FinderTags if they were requested AND
-        // if an entry doesn't have an EF_NO_XATTRS flag (to do less unnecessary syscalls).
-        // Tags are stored in xattrs and if we know in advance that there are no xattrs in this entry - there's no
-        // point trying. Unfortunately, some filesystems (like SMB) don't report EF_NO_XATTRS, so this algorithm
-        // has to check every single item...
         if( tags_reading_enabled && !(ext_flags[n] & EF_NO_XATTRS) ) {
-            // TODO: is it worth routing the I/O here? guess not atm
             const int entry_fd = openat(fd, filename.c_str(), O_RDONLY | O_NONBLOCK);
             if( entry_fd >= 0 ) {
                 auto close_entry_fd = at_scope_end([entry_fd] { close(entry_fd); });
-
                 if( auto tags = utility::Tags::ReadTags(entry_fd); !tags.empty() ) {
                     Log::Debug("Extracted the tags of the file '{}': {}", filename, fmt::join(tags, ", "));
-
                     const std::lock_guard<std::mutex> lock(listing_source_tags_mut);
                     listing_source.tags.emplace(n, std::move(tags));
                 }
             }
         }
     };
-    pstld::for_each_n(listing_source.filenames.begin(), next_entry_index, [epilogue_pass](const std::string &filename) {
+
+    auto cancelled = [&] {
         try {
-            epilogue_pass(filename);
+            return _cancel_checker && _cancel_checker();
         } catch( ... ) {
-            // PSTL gets very upset when the functor throws an exception, so swallow it silently instead of terminating.
+            return true;
         }
-    });
+    };
+    auto enrich_range = [&](size_t _begin, size_t _end) -> bool {
+        constexpr size_t enrichment_chunk_size = 256;
+        while( _begin != _end ) {
+            if( cancelled() )
+                return false;
+            const size_t count = std::min(enrichment_chunk_size, _end - _begin);
+            pstld::for_each_n(listing_source.filenames.begin() + static_cast<ptrdiff_t>(_begin),
+                              count,
+                              [epilogue_pass](const std::string &filename) {
+                                  try {
+                                      epilogue_pass(filename);
+                                  } catch( ... ) {
+                                      // PSTL gets very upset when the functor throws; an unavailable optional attribute
+                                      // is represented by its absence, matching the existing full-listing behaviour.
+                                  }
+                              });
+            _begin += count;
+            if( cancelled() )
+                return false;
+        }
+        return true;
+    };
+
+    size_t enriched_entry_index = 0;
+    size_t published_entry_index = 0;
+    bool publishing_enabled = static_cast<bool>(_callback);
+    std::exception_ptr callback_exception;
+    auto publish_pending = [&]() -> bool {
+        if( cancelled() )
+            return false;
+        const size_t end = next_entry_index;
+        if( !publishing_enabled || published_entry_index == end )
+            return true;
+
+        if( !enrich_range(enriched_entry_index, end) )
+            return false;
+        enriched_entry_index = end;
+
+        DirectoryListingBatch batch;
+        batch.first_index = published_entry_index;
+        batch.entries = BuildNativeListingRange(listing_source, published_entry_index, end);
+        DirectoryListingBatchDisposition disposition = DirectoryListingBatchDisposition::Cancel;
+        try {
+            disposition = _callback(std::move(batch));
+        } catch( ... ) {
+            callback_exception = std::current_exception();
+            return false;
+        }
+        if( disposition == DirectoryListingBatchDisposition::Cancel )
+            return false;
+
+        published_entry_index = end;
+        if( disposition == DirectoryListingBatchDisposition::StopPublishing )
+            publishing_enabled = false;
+        return !cancelled();
+    };
+
+    auto cb_fetch = [&](size_t _fetched_now) {
+        // check if final entries count is more than previous approximate
+        if( next_entry_index + _fetched_now > allocated_size )
+            resize_dense(next_entry_index + _fetched_now);
+    };
+
+    auto cb_batch_drained = [&](size_t) { return publish_pending(); };
+
+    // when Admin Mode is on - we use different fetch route
+    const int ret =
+        is_native_io ? Fetching::ReadDirAttributesBulk(fd, cb_fetch, cb_param, cb_batch_drained)
+                     : Fetching::ReadDirAttributesStat(
+                           fd, listing_source.directories[0].c_str(), cb_fetch, cb_param, cb_batch_drained);
+    if( callback_exception )
+        std::rethrow_exception(callback_exception);
+    if( ret != 0 )
+        return std::unexpected(Error{Error::POSIX, ret});
+
+    if( cancelled() )
+        return std::unexpected(Error{Error::POSIX, ECANCELED});
+
+    // check if final entries count is less than approximate
+    if( next_entry_index < allocated_size )
+        resize_dense(next_entry_index);
+
+    if( publishing_enabled ) {
+        if( !publish_pending() )
+            return std::unexpected(Error{Error::POSIX, ECANCELED});
+    }
+
+    if( !enrich_range(enriched_entry_index, next_entry_index) )
+        return std::unexpected(Error{Error::POSIX, ECANCELED});
 
     // And, finally, compose the listing source into a compact immutable listing object.
     return VFSListing::Build(std::move(listing_source));

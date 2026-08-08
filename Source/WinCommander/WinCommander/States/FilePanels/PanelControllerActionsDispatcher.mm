@@ -113,6 +113,9 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
                 forPanelView:(PanelView *) [[maybe_unused]] _panel_view
                    andHandle:(bool)_handle
 {
+    if( !m_PC.isDisplayingCommittedData )
+        return view::BiddingPriority::Skip;
+
     struct Tags {
         int file_enter = -1;
         int file_open = -1;
@@ -212,6 +215,8 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 - (BOOL)validateMenuItem:(NSMenuItem *)item
 {
     try {
+        if( !m_PC.isDisplayingCommittedData )
+            return false;
         if( item.action == @selector(copy:) ) {
             const CommandInvocationSource source =
                 [self commandInvocationSourceForSender:item commandId:command_ids::FileCopy];
@@ -412,6 +417,9 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 
 - (bool)validateActionBySelector:(SEL)_selector
 {
+    if( !m_PC.isDisplayingCommittedData )
+        return false;
+
     if( _selector == @selector(copy:) )
         return self.fileCopyCommandState.enabled;
     if( _selector == @selector(cut:) )
@@ -482,6 +490,11 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 
 - (void)executeBySelectorIfValidOrBeep:(SEL)_selector withSender:(id)_sender
 {
+    if( !m_PC.isDisplayingCommittedData ) {
+        NSBeep();
+        return;
+    }
+
     if( _selector == @selector(copy:) ) {
         [self executeFileCopyCommandFromSource:[self commandInvocationSourceForSender:_sender
                                                                              commandId:command_ids::FileCopy]
@@ -1626,6 +1639,8 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 
 - (nc::core::CommandState)fileRenameCommandStateFromSource:(nc::core::CommandInvocationSource)_source
 {
+    if( !m_PC.isDisplayingCommittedData )
+        return FailedFileRenameCommandState();
     try {
         std::vector<VFSListingItem> items;
         if( const VFSListingItem item = m_PC.view.item )
@@ -1643,6 +1658,8 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 - (nc::core::CommandState)fileRenameCommandStateForItems:(std::span<const nc::vfs::ListingItem>)_items
                                                   source:(nc::core::CommandInvocationSource)_source
 {
+    if( !m_PC.isDisplayingCommittedData )
+        return FailedFileRenameCommandState();
     try {
         const CommandContext context{
             .source = _source,
@@ -1662,6 +1679,10 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 
 - (void)executeFileRenameCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender
 {
+    if( !m_PC.isDisplayingCommittedData ) {
+        NSBeep();
+        return;
+    }
     try {
         std::vector<VFSListingItem> items;
         if( const VFSListingItem item = m_PC.view.item )
@@ -1681,6 +1702,10 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
                                    source:(nc::core::CommandInvocationSource)_source
                                    sender:(id)_sender
 {
+    if( !m_PC.isDisplayingCommittedData ) {
+        NSBeep();
+        return;
+    }
     try {
         const CommandContext context{
             .source = _source,
@@ -1708,6 +1733,8 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 
 - (nc::core::CommandState)viewToggleHiddenFilesCommandStateFromSource:(nc::core::CommandInvocationSource)_source
 {
+    if( !m_PC.isDisplayingCommittedData )
+        return FailedViewToggleHiddenFilesCommandState();
     return [self viewToggleHiddenFilesCommandStateForVisibility:m_PC.data.HardFiltering().show_hidden
                                                           source:_source];
 }
@@ -1715,6 +1742,8 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 - (nc::core::CommandState)viewToggleHiddenFilesCommandStateForVisibility:(std::optional<bool>)_shows_hidden_files
                                                                   source:(nc::core::CommandInvocationSource)_source
 {
+    if( !m_PC.isDisplayingCommittedData )
+        return FailedViewToggleHiddenFilesCommandState();
     try {
         const CommandContext context{
             .source = _source,
@@ -1734,6 +1763,10 @@ static id<NCExplorerInspectorPresenting> InspectorPresenter(PanelController *_pa
 
 - (void)executeViewToggleHiddenFilesCommandFromSource:(nc::core::CommandInvocationSource)_source sender:(id)_sender
 {
+    if( !m_PC.isDisplayingCommittedData ) {
+        NSBeep();
+        return;
+    }
     try {
         const CommandContext context{
             .source = _source,

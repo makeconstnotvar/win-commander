@@ -6,6 +6,7 @@
 #include <Config/ConfigImpl.h>
 #include <Config/NonPersistentOverwritesStorage.h>
 #include <Panel/PanelData.h>
+#include <Panel/QuickSearch.h>
 #include <Panel/PanelViewFieldEditor.h>
 #include <Utility/ActionsShortcutsManager.h>
 #include <Utility/FSEventsFileUpdate.h>
@@ -24,6 +25,7 @@
 #include <WinCommander/Core/Commands/TogglePreviewPaneCommand.h>
 #include <WinCommander/States/FilePanels/FilesDraggingSource.h>
 #include <WinCommander/States/FilePanels/PanelController.h>
+#include <WinCommander/States/FilePanels/PanelControllerPaneStoreAdapter.h>
 #include <WinCommander/States/FilePanels/PanelControllerActions.h>
 #include <WinCommander/States/FilePanels/PanelControllerActionsDispatcher.h>
 #include <WinCommander/States/FilePanels/PanelHistory.h>
@@ -49,6 +51,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <objc/runtime.h>
 #include <string>
 #include <string_view>
 #include <sys/dirent.h>
@@ -309,6 +312,7 @@ public:
     struct Plan {
         std::mutex mutex;
         std::condition_variable changed;
+        VFSListingPtr preview_listing;
         VFSListingPtr listing;
         std::optional<nc::Error> error;
         std::optional<nc::Error> exception_error;
@@ -317,6 +321,9 @@ public:
         bool completed = false;
         bool honor_cancellation = true;
         unsigned long fetch_flags = 0;
+        size_t preview_first_index = 0;
+        size_t preview_callback_count = 0;
+        std::optional<nc::vfs::DirectoryListingBatchDisposition> preview_disposition;
     };
 
     ControllableNavigationHost() : Host("/", nullptr, "panel_controller_navigation_test")
@@ -352,6 +359,34 @@ public:
         auto plan = std::make_shared<Plan>();
         plan->error = std::move(_error);
         plan->released = !_gated;
+        const std::lock_guard lock{m_PlansMutex};
+        m_Plans[std::move(_path)].emplace_back(plan);
+        return plan;
+    }
+
+    std::shared_ptr<Plan> ScriptProgressiveSuccess(std::string _path,
+                                                   VFSListingPtr _preview,
+                                                   VFSListingPtr _listing,
+                                                   const bool _gate_final = true)
+    {
+        auto plan = std::make_shared<Plan>();
+        plan->preview_listing = std::move(_preview);
+        plan->listing = std::move(_listing);
+        plan->released = !_gate_final;
+        const std::lock_guard lock{m_PlansMutex};
+        m_Plans[std::move(_path)].emplace_back(plan);
+        return plan;
+    }
+
+    std::shared_ptr<Plan> ScriptProgressiveError(std::string _path,
+                                                 VFSListingPtr _preview,
+                                                 nc::Error _error,
+                                                 const bool _gate_final = true)
+    {
+        auto plan = std::make_shared<Plan>();
+        plan->preview_listing = std::move(_preview);
+        plan->error = std::move(_error);
+        plan->released = !_gate_final;
         const std::lock_guard lock{m_PlansMutex};
         m_Plans[std::move(_path)].emplace_back(plan);
         return plan;
@@ -394,6 +429,19 @@ public:
         return _plan->fetch_flags;
     }
 
+    static size_t PreviewCallbackCount(const std::shared_ptr<Plan> &_plan)
+    {
+        const std::lock_guard lock{_plan->mutex};
+        return _plan->preview_callback_count;
+    }
+
+    static std::optional<nc::vfs::DirectoryListingBatchDisposition>
+    PreviewDisposition(const std::shared_ptr<Plan> &_plan)
+    {
+        const std::lock_guard lock{_plan->mutex};
+        return _plan->preview_disposition;
+    }
+
     int FetchCount() const noexcept { return m_FetchCount.load(std::memory_order_acquire); }
 
     void SetNativeFilesystem(const bool _native) noexcept { m_IsNativeFilesystem = _native; }
@@ -421,6 +469,26 @@ public:
                           const unsigned long _flags,
                           const VFSCancelChecker &_cancel_checker = {}) override
     {
+        return FetchDirectoryListingImpl(_path, _flags, {}, _cancel_checker);
+    }
+
+    std::expected<VFSListingPtr, nc::Error>
+    FetchDirectoryListingProgressively(
+        std::string_view _path,
+        const unsigned long _flags,
+        nc::vfs::DirectoryListingBatchCallback _callback,
+        const VFSCancelChecker &_cancel_checker = {}) override
+    {
+        return FetchDirectoryListingImpl(_path, _flags, std::move(_callback), _cancel_checker);
+    }
+
+private:
+    std::expected<VFSListingPtr, nc::Error>
+    FetchDirectoryListingImpl(std::string_view _path,
+                              const unsigned long _flags,
+                              nc::vfs::DirectoryListingBatchCallback _callback,
+                              const VFSCancelChecker &_cancel_checker)
+    {
         m_FetchCount.fetch_add(1, std::memory_order_acq_rel);
         std::shared_ptr<Plan> plan;
         {
@@ -438,6 +506,24 @@ public:
         plan->fetch_flags = _flags;
         plan->entered = true;
         plan->changed.notify_all();
+        if( _callback && plan->preview_listing ) {
+            nc::vfs::DirectoryListingBatch batch{
+                .first_index = plan->preview_first_index,
+                .entries = plan->preview_listing,
+            };
+            ++plan->preview_callback_count;
+            lock.unlock();
+            const auto disposition = _callback(std::move(batch));
+            lock.lock();
+            plan->preview_disposition = disposition;
+            plan->changed.notify_all();
+            if( disposition == nc::vfs::DirectoryListingBatchDisposition::Cancel ) {
+                plan->completed = true;
+                lock.unlock();
+                plan->changed.notify_all();
+                return std::unexpected(nc::Error{nc::Error::POSIX, ECANCELED});
+            }
+        }
         while( !plan->released ) {
             if( plan->honor_cancellation && _cancel_checker && _cancel_checker() ) {
                 plan->completed = true;
@@ -468,7 +554,6 @@ public:
         return listing;
     }
 
-private:
     std::mutex m_PlansMutex;
     std::map<std::string, std::deque<std::shared_ptr<Plan>>, std::less<>> m_Plans;
     std::mutex m_AccessibleDirectoriesMutex;
@@ -506,6 +591,29 @@ VFSListingPtr UniformListing(const VFSHostPtr &_host,
         input.unix_modes.emplace_back(mode);
         input.unix_types.emplace_back(type);
         input.sizes.insert(index, size);
+    }
+    return VFSListing::Build(std::move(input));
+}
+
+VFSListingPtr UniformListing(const VFSHostPtr &_host,
+                             std::string _directory,
+                             const std::vector<std::string> &_filenames)
+{
+    nc::vfs::ListingInput input;
+    input.directories.reset(nc::base::variable_container<>::type::common);
+    input.directories[0] = std::move(_directory);
+    input.hosts.reset(nc::base::variable_container<>::type::common);
+    input.hosts[0] = _host;
+
+    input.filenames.emplace_back("..");
+    input.unix_modes.emplace_back(S_IFDIR | S_IRUSR);
+    input.unix_types.emplace_back(DT_DIR);
+    for( const std::string &filename : _filenames ) {
+        const size_t index = input.filenames.size();
+        input.filenames.emplace_back(filename);
+        input.unix_modes.emplace_back(S_IFREG | S_IRUSR);
+        input.unix_types.emplace_back(DT_REG);
+        input.sizes.insert(index, index * 10);
     }
     return VFSListing::Build(std::move(input));
 }
@@ -593,6 +701,43 @@ private:
     mutable std::mutex m_Mutex;
     std::vector<CallbackCall> m_Calls;
 };
+
+struct MainHeartbeatState {
+    std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point last = started;
+    std::chrono::steady_clock::duration max_gap{};
+    std::chrono::steady_clock::duration elapsed{};
+    int ticks = 0;
+};
+
+NSTimer *StartMainHeartbeat(const std::shared_ptr<MainHeartbeatState> &_state)
+{
+    NSTimer *const timer = [NSTimer timerWithTimeInterval:0.01
+                                                 repeats:YES
+                                                   block:^(NSTimer *) {
+                                                     const auto now = std::chrono::steady_clock::now();
+                                                     _state->max_gap =
+                                                         std::max(_state->max_gap, now - _state->last);
+                                                     _state->last = now;
+                                                     ++_state->ticks;
+                                                   }];
+    [NSRunLoop.mainRunLoop addTimer:timer forMode:NSRunLoopCommonModes];
+    return timer;
+}
+
+void StopMainHeartbeat(NSTimer *_timer, const std::shared_ptr<MainHeartbeatState> &_state)
+{
+    const auto now = std::chrono::steady_clock::now();
+    _state->max_gap = std::max(_state->max_gap, now - _state->last);
+    _state->elapsed = now - _state->started;
+    [_timer invalidate];
+}
+
+NCPanelQuickSearch *QuickSearchForController(PanelController *_controller)
+{
+    const Ivar ivar = class_getInstanceVariable(PanelController.class, "m_QuickSearch");
+    return ivar ? static_cast<NCPanelQuickSearch *>(object_getIvar(_controller, ivar)) : nil;
+}
 
 } // namespace
 
@@ -1065,6 +1210,7 @@ public:
     TestDirectoryAccessProvider &AccessProvider() { return m_AccessProvider; }
     const std::shared_ptr<nc::vfs::NativeHost> &NativeHost() const { return m_NativeHost; }
     TestNativeFSManager &NativeFSManager() { return m_NativeFSManager; }
+    nc::config::ConfigImpl &Config() { return m_Config; }
     const VFSListingPtr &SeedListing() const { return m_SeedListing; }
     const std::shared_ptr<nc::panel::PanelViewLayoutsStorage> &Layouts() const { return m_Layouts; }
     bool WaitForPersistedLayoutName(const int _slot, const std::string_view _name)
@@ -1488,6 +1634,195 @@ TEST_CASE(PREFIX "forwards only its matching Store snapshot to the Explorer foot
     CHECK(footer.itemCount == 3);
 }
 
+TEST_CASE(PREFIX "presents one progressive batch without publishing provisional pane state")
+{
+    using nc::core::PaneLoadPhase;
+
+    PanelControllerNavigationFixture fixture;
+    const unsigned long initial_generation = fixture.Controller().dataGeneration;
+    const auto initial_history = fixture.Controller().history.GetNavigationState();
+    const int seed_index = fixture.Controller().data.SortedIndexForName("seed.txt");
+    REQUIRE(seed_index >= 0);
+    fixture.View().data->CustomFlagsSelectSorted(seed_index, true);
+    fixture.View().curpos = seed_index;
+
+    nc::panel::PanelControllerPaneStoreAdapter pane_store{fixture.Controller()};
+    const nc::core::PaneSnapshot committed = pane_store.Store().Snapshot();
+    REQUIRE(committed.state.focused_item);
+    REQUIRE(committed.state.selected_items.size() == 1);
+
+    const auto preview = UniformListing(
+        fixture.Host(), "/progressive/", std::vector<std::string>{"alpha.txt", "beta.txt"});
+    const auto complete = UniformListing(
+        fixture.Host(),
+        "/progressive/",
+        std::vector<std::string>{"alpha.txt", "beta.txt", "gamma.txt"});
+    const auto plan =
+        fixture.Host()->ScriptProgressiveSuccess("/progressive/", preview, complete, true);
+    auto request = fixture.Request("/progressive/", true);
+    request->RequestFocusedEntry = "alpha.txt";
+    request->RequestSelectedEntries = {"alpha.txt"};
+
+    REQUIRE([fixture.Controller() GoToDirWithContext:request].has_value());
+    REQUIRE(ControllableNavigationHost::WaitEntered(plan));
+    REQUIRE(RunMainLoopUntil([&] {
+        return fixture.Controller().isPresentingProgressiveNavigationPreview;
+    }));
+
+    CHECK(ControllableNavigationHost::PreviewCallbackCount(plan) == 1);
+    REQUIRE(ControllableNavigationHost::PreviewDisposition(plan));
+    CHECK(*ControllableNavigationHost::PreviewDisposition(plan) ==
+          nc::vfs::DirectoryListingBatchDisposition::StopPublishing);
+    CHECK(fixture.View().data->ListingPtr() == preview);
+    CHECK_FALSE(fixture.Controller().isDisplayingCommittedData);
+    CHECK(fixture.Controller().data.ListingPtr() == fixture.SeedListing());
+    CHECK(fixture.Controller().dataGeneration == initial_generation);
+    CHECK(fixture.Controller().history.GetNavigationState().current_entry_id ==
+          initial_history.current_entry_id);
+
+    [NSNotificationCenter.defaultCenter postNotificationName:NCPanelViewContextDidChangeNotification
+                                                       object:fixture.View()];
+    const auto context_rebuild_drained = std::make_shared<std::atomic_bool>(false);
+    dispatch_async(dispatch_get_main_queue(), ^{ context_rebuild_drained->store(true); });
+    REQUIRE(RunMainLoopUntil([&] { return context_rebuild_drained->load(); }));
+    const nc::core::PaneSnapshot loading = pane_store.Store().Snapshot();
+    CHECK(loading.state.load_phase == PaneLoadPhase::Loading);
+    CHECK(loading.state.listing == committed.state.listing);
+    CHECK(loading.state.host == committed.state.host);
+    CHECK(loading.state.path == committed.state.path);
+    CHECK(loading.state.location_generation == committed.state.location_generation);
+    CHECK(loading.state.focused_item == committed.state.focused_item);
+    CHECK(loading.state.selected_items == committed.state.selected_items);
+
+    CHECK(fixture.Controller().currentFocusedEntryFilename.empty());
+    CHECK(fixture.Controller().currentDirectoryPath.empty());
+    CHECK(fixture.Controller().selectedEntriesOrFocusedEntry.empty());
+    CHECK_FALSE(fixture.Controller().isUniform);
+    CHECK_FALSE(fixture.Controller().vfs);
+    const uint64_t committed_selection_generation =
+        fixture.Controller().data.SelectionProjectionGeneration();
+    [fixture.Controller() setEntriesSelection:std::vector<bool>(
+                                                  fixture.Controller().data.SortedEntriesCount(), false)];
+    CHECK(fixture.Controller().data.SelectionProjectionGeneration() == committed_selection_generation);
+
+    nc::panel::data::Model *const preview_model = fixture.View().data;
+    const int alpha = preview_model->SortedIndexForName("alpha.txt");
+    const int beta = preview_model->SortedIndexForName("beta.txt");
+    REQUIRE(alpha >= 0);
+    REQUIRE(beta >= 0);
+    preview_model->CustomFlagsSelectSorted(alpha, false);
+    preview_model->CustomFlagsSelectSorted(beta, true);
+    fixture.View().curpos = beta;
+    CHECK(fixture.View().item.Filename() == "beta.txt");
+
+    ControllableNavigationHost::Release(plan);
+    REQUIRE(RunMainLoopUntil([&] {
+        return fixture.Controller().data.ListingPtr() == complete &&
+               !fixture.Controller().isPresentingProgressiveNavigationPreview &&
+               !fixture.Controller().isDoingBackgroundLoading;
+    }));
+    CHECK(fixture.Controller().isDisplayingCommittedData);
+    CHECK(fixture.View().data == std::addressof(fixture.Controller().data));
+    CHECK(fixture.Controller().dataGeneration == initial_generation + 1);
+    CHECK(fixture.View().lastPanelChangeFocus == "beta.txt");
+    CHECK_FALSE(fixture.Controller()
+                    .data.VolatileDataAtSortPosition(
+                        fixture.Controller().data.SortedIndexForName("alpha.txt"))
+                    .is_selected());
+    CHECK(fixture.Controller()
+              .data.VolatileDataAtSortPosition(
+                  fixture.Controller().data.SortedIndexForName("beta.txt"))
+              .is_selected());
+}
+
+TEST_CASE(PREFIX "restores committed presentation when a progressive navigation cannot commit")
+{
+    SECTION("cancel") {
+        PanelControllerNavigationFixture fixture;
+        const unsigned long generation = fixture.Controller().dataGeneration;
+        const auto preview = UniformListing(fixture.Host(), "/cancel-preview/", "partial.txt");
+        const auto complete = UniformListing(fixture.Host(), "/cancel-preview/", "complete.txt");
+        const auto plan =
+            fixture.Host()->ScriptProgressiveSuccess("/cancel-preview/", preview, complete, true);
+        REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/cancel-preview/", true)].has_value());
+        REQUIRE(RunMainLoopUntil([&] {
+            return fixture.Controller().isPresentingProgressiveNavigationPreview;
+        }));
+
+        [fixture.Controller() CancelBackgroundOperations];
+        REQUIRE(RunMainLoopUntil([&] {
+            return !fixture.Controller().isPresentingProgressiveNavigationPreview;
+        }));
+        CHECK(fixture.View().data == std::addressof(fixture.Controller().data));
+        CHECK(fixture.Controller().data.ListingPtr() == fixture.SeedListing());
+        CHECK(fixture.Controller().dataGeneration == generation);
+        ControllableNavigationHost::Release(plan);
+    }
+
+    SECTION("provider failure") {
+        PanelControllerNavigationFixture fixture;
+        const unsigned long generation = fixture.Controller().dataGeneration;
+        const auto preview = UniformListing(fixture.Host(), "/failed-preview/", "partial.txt");
+        const auto plan = fixture.Host()->ScriptProgressiveError(
+            "/failed-preview/", preview, nc::Error{nc::Error::POSIX, EIO}, true);
+        REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/failed-preview/", true)].has_value());
+        REQUIRE(RunMainLoopUntil([&] {
+            return fixture.Controller().isPresentingProgressiveNavigationPreview;
+        }));
+
+        ControllableNavigationHost::Release(plan);
+        REQUIRE(RunMainLoopUntil([&] {
+            return !fixture.Controller().isPresentingProgressiveNavigationPreview &&
+                   !fixture.Controller().isDoingBackgroundLoading;
+        }));
+        CHECK(fixture.View().data == std::addressof(fixture.Controller().data));
+        CHECK(fixture.Controller().data.ListingPtr() == fixture.SeedListing());
+        CHECK(fixture.Controller().dataGeneration == generation);
+    }
+
+    SECTION("superseded worker") {
+        PanelControllerNavigationFixture fixture;
+        const auto preview = UniformListing(fixture.Host(), "/stale-preview/", "partial.txt");
+        const auto stale_complete = UniformListing(fixture.Host(), "/stale-preview/", "stale.txt");
+        const auto replacement = UniformListing(fixture.Host(), "/replacement/", "fresh.txt");
+        const auto stale = fixture.Host()->ScriptProgressiveSuccess(
+            "/stale-preview/", preview, stale_complete, true);
+        const auto fresh = fixture.Host()->ScriptSuccess("/replacement/", replacement, false);
+        REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/stale-preview/", true)].has_value());
+        REQUIRE(RunMainLoopUntil([&] {
+            return fixture.Controller().isPresentingProgressiveNavigationPreview;
+        }));
+
+        REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/replacement/", false)].has_value());
+        CHECK_FALSE(fixture.Controller().isPresentingProgressiveNavigationPreview);
+        CHECK(fixture.View().data == std::addressof(fixture.Controller().data));
+        CHECK(fixture.Controller().data.ListingPtr() == replacement);
+        ControllableNavigationHost::Release(stale);
+        CHECK(ControllableNavigationHost::Completed(fresh));
+    }
+
+    SECTION("non-first batch") {
+        PanelControllerNavigationFixture fixture;
+        const auto preview = UniformListing(fixture.Host(), "/wrong-batch/", "partial.txt");
+        const auto complete = UniformListing(fixture.Host(), "/wrong-batch/", "complete.txt");
+        const auto plan =
+            fixture.Host()->ScriptProgressiveSuccess("/wrong-batch/", preview, complete, true);
+        plan->preview_first_index = 4;
+        REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/wrong-batch/", true)].has_value());
+        REQUIRE(ControllableNavigationHost::WaitEntered(plan));
+        const auto main_drained = std::make_shared<std::atomic_bool>(false);
+        dispatch_async(dispatch_get_main_queue(), ^{ main_drained->store(true); });
+        REQUIRE(RunMainLoopUntil([&] { return main_drained->load(); }));
+        CHECK_FALSE(fixture.Controller().isPresentingProgressiveNavigationPreview);
+        CHECK(fixture.View().data == std::addressof(fixture.Controller().data));
+        ControllableNavigationHost::Release(plan);
+        REQUIRE(RunMainLoopUntil([&] {
+            return fixture.Controller().data.ListingPtr() == complete &&
+                   !fixture.Controller().isDoingBackgroundLoading;
+        }));
+    }
+}
+
 TEST_CASE(PREFIX "publishes Committed only after the async worker mutates the model")
 {
     PanelControllerNavigationFixture fixture;
@@ -1496,6 +1831,8 @@ TEST_CASE(PREFIX "publishes Committed only after the async worker mutates the mo
     const auto callback = std::make_shared<CallbackRecorder>();
     std::vector<PaneLifecycleEvent> events;
     bool committed_model_visible = false;
+    bool callback_saw_committed_model = false;
+    bool callback_ran_on_main = false;
     int view_updates_at_commit = -1;
     auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
         events.emplace_back(_event);
@@ -1507,8 +1844,17 @@ TEST_CASE(PREFIX "publishes Committed only after the async worker mutates the mo
     }];
     const int initial_view_updates = fixture.View().dataUpdateCount;
 
-    const auto submission = [fixture.Controller() GoToDirWithContext:fixture.Request(
-                                                                          "/success/", true, callback)];
+    auto request = fixture.Request("/success/", true);
+    request->LoadingResultCallback = [&, callback](const std::expected<void, nc::Error> &_result,
+                                                   const DirectoryChangeResultSource _source,
+                                                   const std::function<bool()> &_is_current) {
+        callback_saw_committed_model =
+            events.size() == 2 && std::holds_alternative<PaneLifecycleCommitted>(events.back().payload) &&
+            fixture.Controller().data.ListingPtr() == target;
+        callback_ran_on_main = NSThread.isMainThread;
+        callback->Record(_result, _source, _is_current);
+    };
+    const auto submission = [fixture.Controller() GoToDirWithContext:request];
     CHECK(submission.has_value());
     REQUIRE(events.size() == 1);
     CHECK(std::holds_alternative<PaneLifecycleStarted>(events.front().payload));
@@ -1523,6 +1869,8 @@ TEST_CASE(PREFIX "publishes Committed only after the async worker mutates the mo
     CHECK(view_updates_at_commit == initial_view_updates);
     CHECK(fixture.View().dataUpdateCount == initial_view_updates + 1);
     CHECK(fixture.Controller().data.ListingPtr() == target);
+    CHECK(callback_saw_committed_model);
+    CHECK(callback_ran_on_main);
     const auto calls = callback->Calls();
     REQUIRE(calls.size() == 1);
     CHECK(calls.front().succeeded);
@@ -1583,7 +1931,7 @@ TEST_CASE(PREFIX "keeps the main heartbeat responsive through a 100k prepared co
     [timer invalidate];
 
     CHECK(heartbeat->ticks >= 3);
-    CHECK(heartbeat->max_gap < 250ms);
+    CHECK(heartbeat->max_gap < 100ms);
     CHECK(fixture.Controller().data.ListingPtr() == target);
     CHECK(fixture.Controller().data.RawEntriesCount() == 100'002);
     CHECK(fixture.Controller().data.SortedIndexForName(".hidden-large-test") == -1);
@@ -1599,12 +1947,15 @@ TEST_CASE(PREFIX "rejects a prepared result after a newer sort preference")
     const auto initial_generation = fixture.Controller().dataGeneration;
     const auto target = UniformListing(fixture.Host(), "/stale-options/", "stale.txt");
     const auto plan = fixture.Host()->ScriptSuccess("/stale-options/", target, true);
+    const auto callback = std::make_shared<CallbackRecorder>();
     std::vector<PaneLifecycleEvent> events;
     auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
         events.emplace_back(_event);
     }];
 
-    REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request("/stale-options/", true)].has_value());
+    REQUIRE([fixture.Controller() GoToDirWithContext:fixture.Request(
+                                                      "/stale-options/", true, callback)]
+                .has_value());
     REQUIRE(ControllableNavigationHost::WaitEntered(plan));
     auto newer_sort = fixture.Controller().data.SortMode();
     newer_sort.sort = nc::panel::data::SortMode::SortByNameRev;
@@ -1619,6 +1970,12 @@ TEST_CASE(PREFIX "rejects a prepared result after a newer sort preference")
     CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
     CHECK(fixture.Controller().dataGeneration == initial_generation);
     CHECK(fixture.Controller().data.SortMode() == newer_sort);
+    const auto calls = callback->Calls();
+    REQUIRE(calls.size() == 1);
+    CHECK_FALSE(calls.front().succeeded);
+    REQUIRE(calls.front().error);
+    CHECK(*calls.front().error == nc::Error{nc::Error::POSIX, ECANCELED});
+    CHECK_FALSE(calls.front().current);
 }
 
 TEST_CASE(PREFIX "cancels a detached 100k preparation without committing it")
@@ -1652,6 +2009,158 @@ TEST_CASE(PREFIX "cancels a detached 100k preparation without committing it")
     CHECK(fixture.Controller().data.ListingPtr() == initial_listing);
     CHECK(fixture.Controller().dataGeneration == initial_generation);
     CHECK(callback->Calls().empty());
+}
+
+TEST_CASE(PREFIX "keeps a 100k refresh responsive and preserves volatile item data")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.View().forwardsDataUpdatedToProduction = true;
+    const auto initial = LargeUniformListing(fixture.Host(), "/seed/", 100'000);
+    [fixture.Controller() loadListing:initial];
+    auto &live = const_cast<nc::panel::data::Model &>(fixture.Controller().data);
+    const int selected_position = live.SortedIndexForName("item-050000.txt");
+    REQUIRE(selected_position >= 0);
+    live.CustomFlagsSelectSorted(selected_position, true);
+    const int selected_raw = live.RawIndexForName("item-050000.txt");
+    REQUIRE(selected_raw >= 0);
+    live.VolatileDataAtRawPosition(selected_raw).icon = 91;
+
+    const auto refreshed = LargeUniformListing(fixture.Host(), "/seed/", 100'000);
+    fixture.Host()->ScriptSuccess("/seed/", refreshed, false);
+    std::vector<PaneLifecycleEvent> events;
+    auto subscription = [fixture.Controller() subscribeToPaneLifecycle:[&](const PaneLifecycleEvent &_event) {
+        events.emplace_back(_event);
+    }];
+    const auto heartbeat = std::make_shared<MainHeartbeatState>();
+    NSTimer *const timer = StartMainHeartbeat(heartbeat);
+
+    REQUIRE([fixture.Controller() submitUserRefresh]);
+    CHECK(fixture.Controller().isDoingBackgroundLoading);
+    REQUIRE(RunMainLoopUntil(
+        [&] {
+            return events.size() == 2 &&
+                   std::holds_alternative<PaneLifecycleCommitted>(events.back().payload) &&
+                   !fixture.Controller().isDoingBackgroundLoading;
+        },
+        20s));
+    StopMainHeartbeat(timer, heartbeat);
+
+    CHECK((heartbeat->elapsed < 100ms || heartbeat->ticks >= 1));
+    CHECK(heartbeat->max_gap < 100ms);
+    CHECK(fixture.Controller().data.ListingPtr() == refreshed);
+    const int refreshed_raw = fixture.Controller().data.RawIndexForName("item-050000.txt");
+    REQUIRE(refreshed_raw >= 0);
+    CHECK(fixture.Controller().data.VolatileDataAtRawPosition(refreshed_raw).icon == 91);
+    REQUIRE(fixture.Controller().data.SelectedEntriesSorted().size() == 1);
+    CHECK(fixture.Controller().data.SelectedEntriesSorted().front().Filename() == "item-050000.txt");
+}
+
+TEST_CASE(PREFIX "coalesces 100k sort and hard-filter preparation without blocking main")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.View().forwardsDataUpdatedToProduction = true;
+    [fixture.Controller() loadListing:LargeUniformListing(fixture.Host(), "/seed/", 100'000)];
+    const auto heartbeat = std::make_shared<MainHeartbeatState>();
+    NSTimer *const timer = StartMainHeartbeat(heartbeat);
+
+    auto superseded_sort = fixture.Controller().data.SortMode();
+    superseded_sort.sort = nc::panel::data::SortMode::SortByNameRev;
+    superseded_sort.collation = nc::panel::data::SortMode::Collation::Natural;
+    [fixture.Controller() changeSortingModeTo:superseded_sort];
+    CHECK(fixture.Controller().isDoingBackgroundLoading);
+
+    auto final_sort = superseded_sort;
+    final_sort.sort = nc::panel::data::SortMode::SortBySize;
+    [fixture.Controller() changeSortingModeTo:final_sort];
+    REQUIRE(RunMainLoopUntil(
+        [&] {
+            return fixture.Controller().data.SortMode() == final_sort &&
+                   !fixture.Controller().isDoingBackgroundLoading;
+        },
+        20s));
+    CHECK(fixture.Controller().data.SortMode() != superseded_sort);
+
+    auto hard_filter = fixture.Controller().data.HardFiltering();
+    hard_filter.show_hidden = false;
+    [fixture.Controller() changeHardFilteringTo:hard_filter];
+    CHECK(fixture.Controller().isDoingBackgroundLoading);
+    REQUIRE(RunMainLoopUntil(
+        [&] {
+            return fixture.Controller().data.HardFiltering() == hard_filter &&
+                   !fixture.Controller().isDoingBackgroundLoading;
+        },
+        20s));
+    StopMainHeartbeat(timer, heartbeat);
+
+    CHECK((heartbeat->elapsed < 100ms || heartbeat->ticks >= 1));
+    CHECK(heartbeat->max_gap < 100ms);
+    CHECK(fixture.Controller().data.SortedIndexForName(".hidden-large-test") == -1);
+}
+
+TEST_CASE(PREFIX "cancels an active 100k presentation preparation without stale commit")
+{
+    PanelControllerNavigationFixture fixture;
+    [fixture.Controller() loadListing:LargeUniformListing(fixture.Host(), "/seed/", 100'000)];
+    const auto original_sort = fixture.Controller().data.SortMode();
+    const int initial_updates = fixture.View().dataUpdateCount;
+    auto requested_sort = original_sort;
+    requested_sort.sort = nc::panel::data::SortMode::SortByNameRev;
+    requested_sort.collation = nc::panel::data::SortMode::Collation::Natural;
+    [fixture.Controller() changeSortingModeTo:requested_sort];
+    REQUIRE(fixture.Controller().isDoingBackgroundLoading);
+    REQUIRE(RunMainLoopUntil([&] { return fixture.Controller().isDoingBackgroundLoading; }, 1s));
+
+    const auto cancel_started = std::chrono::steady_clock::now();
+    [fixture.Controller() CancelBackgroundOperations];
+    REQUIRE(RunMainLoopUntil([&] { return !fixture.Controller().isDoingBackgroundLoading; }, 2s));
+    const auto cancellation_latency = std::chrono::steady_clock::now() - cancel_started;
+
+    CHECK(cancellation_latency < 1s);
+    CHECK(fixture.Controller().data.SortMode() == original_sort);
+    CHECK(fixture.View().dataUpdateCount == initial_updates);
+}
+
+TEST_CASE(PREFIX "coalesces rapid 100k QuickSearch criteria and Escape cancels pending soft filtering")
+{
+    PanelControllerNavigationFixture fixture;
+    fixture.Config().Set(nc::panel::QuickSearch::g_ConfigIsSoftFiltering, true);
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, false);
+    REQUIRE(RunMainLoopUntil([&] {
+        return fixture.Config().GetBool(nc::panel::QuickSearch::g_ConfigIsSoftFiltering);
+    }));
+    [fixture.Controller() loadListing:LargeUniformListing(fixture.Host(), "/seed/", 100'000)];
+    NCPanelQuickSearch *const quick_search = QuickSearchForController(fixture.Controller());
+    REQUIRE(quick_search != nil);
+    const auto heartbeat = std::make_shared<MainHeartbeatState>();
+    NSTimer *const timer = StartMainHeartbeat(heartbeat);
+
+    [quick_search setSearchCriteria:@"item"];
+    [quick_search setSearchCriteria:@"item-09"];
+    [quick_search setSearchCriteria:@"item-09999"];
+    CHECK([quick_search.searchCriteria isEqualToString:@"item-09999"]);
+    CHECK(fixture.Controller().isDoingBackgroundLoading);
+    REQUIRE(RunMainLoopUntil(
+        [&] {
+            return [fixture.Controller().data.SoftFiltering().text isEqualToString:@"item-09999"] &&
+                   !fixture.Controller().isDoingBackgroundLoading;
+        },
+        20s));
+    CHECK([quick_search.searchCriteria isEqualToString:@"item-09999"]);
+    CHECK(fixture.Controller().data.EntriesBySoftFiltering().size() == 10);
+
+    [quick_search setSearchCriteria:@"no-such-item"];
+    REQUIRE(fixture.Controller().isDoingBackgroundLoading);
+    [quick_search setSearchCriteria:nil];
+    CHECK(quick_search.searchCriteria == nil);
+    REQUIRE(RunMainLoopUntil([&] { return !fixture.Controller().isDoingBackgroundLoading; }, 2s));
+    StopMainHeartbeat(timer, heartbeat);
+
+    CHECK((heartbeat->elapsed < 100ms || heartbeat->ticks >= 1));
+    CHECK(heartbeat->max_gap < 100ms);
+    CHECK(fixture.Controller().data.SoftFiltering().text == nil);
+    CHECK(fixture.Controller().data.HardFiltering().text.text == nil);
+    CHECK(fixture.Controller().data.EntriesBySoftFiltering().size() ==
+          static_cast<size_t>(fixture.Controller().data.SortedEntriesCount()));
 }
 
 TEST_CASE(PREFIX "loads and force-refreshes a real local NativeHost directory")

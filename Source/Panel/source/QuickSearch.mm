@@ -383,7 +383,8 @@ static NSString *ModifyStringByKeyDownString(NSString *_str, NSString *_key);
     __weak NCPanelQuickSearch *weak_self = self;
     auto clear_filtering = [=] {
         if( NCPanelQuickSearch *const strong_self = weak_self ) {
-            if( strong_self->m_SoftFilteringLastAction + g_SoftFilteringTimeout <= nc::base::machtime() )
+            if( strong_self->m_Delegate != nil &&
+                strong_self->m_SoftFilteringLastAction + g_SoftFilteringTimeout <= nc::base::machtime() )
                 [strong_self setSearchCriteria:nil];
         }
     };
