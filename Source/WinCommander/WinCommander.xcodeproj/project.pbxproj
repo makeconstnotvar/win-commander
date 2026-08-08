@@ -59,7 +59,9 @@
 		BAEC000241D3000000000002 /* PaneNavigationCommand_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000013 /* PaneNavigationCommand_UT.cpp */; };
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
+		D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */; };
 		D9FC000132A0000000000005 /* CommandPaletteFilter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */; };
+		D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */; };
 		D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */; };
 		D9FC000132A0000000000003 /* FolderSyncPlan.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000015 /* FolderSyncPlan.cpp */; };
 		D9FC000132A0000000000004 /* FolderSyncPlan_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000016 /* FolderSyncPlan_UT.cpp */; };
@@ -1071,8 +1073,11 @@
 		BAEC000241D3000000000014 /* PaneNavigationAvailability.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = PaneNavigationAvailability.h; path = WinCommander/Core/Pane/PaneNavigationAvailability.h; sourceTree = SOURCE_ROOT; };
 		BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability_UT.cpp; path = WinCommander/Tests/PaneNavigationAvailability_UT.cpp; sourceTree = "<group>"; };
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandPaletteView.h; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandPaletteView.mm; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.mm; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000017 /* CommandPaletteFilter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandPaletteFilter.h; path = WinCommander/Core/Commands/CommandPaletteFilter.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandPaletteFilter.cpp; path = WinCommander/Core/Commands/CommandPaletteFilter.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerCommandPaletteView_UT.mm; path = WinCommander/Tests/ExplorerCommandPaletteView_UT.mm; sourceTree = "<group>"; };
 		D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandPaletteFilter_UT.cpp; path = WinCommander/Tests/CommandPaletteFilter_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000014 /* FolderSyncPlan.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = FolderSyncPlan.h; path = WinCommander/Core/Compare/FolderSyncPlan.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000015 /* FolderSyncPlan.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = FolderSyncPlan.cpp; path = WinCommander/Core/Compare/FolderSyncPlan.cpp; sourceTree = SOURCE_ROOT; };
@@ -2088,6 +2093,8 @@
 				D8E801013205000000000014 /* NCExplorerOperationProgressView.mm */,
 				AD8A7BD10209170D0BBF6F10 /* NCPanelControllerHostingState.h */,
 				E82EE413095991A772595753 /* NCExplorerState.h */,
+				D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */,
+				D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */,
 				72A17403241CCD58B1CAF648 /* NCExplorerState.mm */,
 				A67CCC557B0BEA9C306817AF /* NCExplorerToolbarDelegate.h */,
 				1FB1B7A080C443ECC6E3BCA5 /* NCExplorerToolbarDelegate.mm */,
@@ -2184,6 +2191,7 @@
 				D9FC000132A0000000000013 /* FolderComparison_UT.cpp */,
 				D9FC000132A0000000000016 /* FolderSyncPlan_UT.cpp */,
 				D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */,
+				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
 				E7AC000131FA000000000013 /* ExplorerTabsState_UT.mm */,
 				A5E5000131FB000000000013 /* ExplorerViewSettingsPersistence_UT.cpp */,
 				B6F5000131FC000000000012 /* ExplorerViewSettingsBinding_UT.cpp */,
@@ -3638,6 +3646,7 @@
 				D9FC000132A0000000000001 /* FolderComparison.cpp in Sources */,
 				D9FC000132A0000000000003 /* FolderSyncPlan.cpp in Sources */,
 				D9FC000132A0000000000005 /* CommandPaletteFilter.cpp in Sources */,
+				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
 				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
 				C6E6000131FD000000000001 /* ExplorerSessionPersistency.cpp in Sources */,
@@ -3885,6 +3894,7 @@
 				D9FC000132A0000000000002 /* FolderComparison_UT.cpp in Sources */,
 				D9FC000132A0000000000004 /* FolderSyncPlan_UT.cpp in Sources */,
 				D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */,
+				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
 				E7AC000131FA000000000002 /* ExplorerTabsState_UT.mm in Sources */,
 				A5E5000131FB000000000002 /* ExplorerViewSettingsPersistence_UT.cpp in Sources */,
 				B6F5000131FC000000000002 /* ExplorerViewSettingsBinding_UT.cpp in Sources */,

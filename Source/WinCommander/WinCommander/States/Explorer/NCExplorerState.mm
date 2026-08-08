@@ -7,6 +7,7 @@
 #include "NCExplorerPaneStateView.h"
 #include "NCExplorerOperationProgressView.h"
 #include "NCExplorerSearchModeView.h"
+#include "NCExplorerCommandPaletteView.h"
 #include "ExplorerOperationProgressController.h"
 #include "ExplorerSearchController.h"
 #include "ExplorerSpotlightSearchBackend.h"
@@ -157,6 +158,55 @@ ExplorerTabEntry *FindTabEntry(std::vector<ExplorerTabEntry> &_entries, PanelCon
     return entry && entry->panel == _panel ? entry : nullptr;
 }
 
+/** Grouping label shown and searched as a palette row's subtitle. */
+std::string CommandPaletteCategoryName(const nc::core::CommandCategory _category)
+{
+    switch( _category ) {
+        case nc::core::CommandCategory::Navigation:
+            return "Navigation";
+        case nc::core::CommandCategory::Pane:
+            return "Pane";
+        case nc::core::CommandCategory::File:
+            return "File";
+        case nc::core::CommandCategory::Edit:
+            return "Edit";
+        case nc::core::CommandCategory::View:
+            return "View";
+        case nc::core::CommandCategory::Search:
+            return "Search";
+        case nc::core::CommandCategory::Operation:
+            return "Operation";
+        case nc::core::CommandCategory::Archive:
+            return "Archive";
+        case nc::core::CommandCategory::Remote:
+            return "Remote";
+        case nc::core::CommandCategory::Sync:
+            return "Sync";
+        case nc::core::CommandCategory::Developer:
+            return "Developer";
+        case nc::core::CommandCategory::Settings:
+            return "Settings";
+        case nc::core::CommandCategory::Window:
+            return "Window";
+        case nc::core::CommandCategory::Help:
+            return "Help";
+    }
+    return {};
+}
+
+/**
+ * Resolves a descriptor's localization key. The key doubles as the fallback value, so an untranslated
+ * command is still findable by its key rather than appearing as an unselectable blank row.
+ */
+std::string CommandPaletteTitle(const std::string &_title_key)
+{
+    NSString *const key = [NSString stringWithUTF8String:_title_key.c_str()];
+    if( !key )
+        return _title_key;
+    NSString *const localized = [NSBundle.mainBundle localizedStringForKey:key value:key table:nil];
+    return localized.UTF8String != nullptr ? std::string{localized.UTF8String} : _title_key;
+}
+
 nc::core::PaneVisualState ExplorerPaneVisualState(const nc::core::PaneSnapshot &_snapshot,
                                                   PanelController *_panel)
 {
@@ -250,7 +300,7 @@ void ConfigureExplorerRootAccessibility(NSView *_view)
 
 } // namespace
 
-@interface NCExplorerState () <NSSplitViewDelegate>
+@interface NCExplorerState () <NSSplitViewDelegate, NCExplorerCommandPaletteDelegate>
 - (instancetype)initForTestingWithFrame:(NSRect)_frame
                         panelController:(PanelController *)_panel
                               panelView:(NSView *)_panel_view
@@ -526,6 +576,9 @@ struct ExplorerCompareSide {
 - (void)applyCompareMarks:(const std::vector<bool> &)_marks
                 positions:(const std::vector<int> &)_positions
                   toPanel:(PanelController *)_panel;
+- (BOOL)canOpenCommandPalette;
+- (IBAction)OnCommandPaletteOpen:(id)_sender;
+- (nc::core::CommandContext)commandPaletteContextWithItems:(const std::vector<VFSListingItem> &)_items;
 - (BOOL)canSynchronizeDualPaneDirectories;
 - (IBAction)OnSynchronizeDirectories:(id)_sender;
 - (void)submitSyncPlan:(const nc::core::FolderSyncPlan &)_plan
@@ -938,6 +991,7 @@ private:
     NSSplitView *m_PaneSplitView;
     NCExplorerInspectorView *m_Inspector;
     NCPanelQLPanelAdaptor *m_QLPanelAdaptor;
+    NCExplorerCommandPaletteView *m_CommandPalette;
     CGFloat m_LastInspectorWidth;
     /** Left side's share of the dual-pane split's usable width. Retained across dual-pane toggles
      *  and window sessions; the live split view only exists while dual-pane is on. */
@@ -2108,6 +2162,91 @@ private:
     [_panel setEntriesSelection:selection];
 }
 
+#pragma mark - Command palette (Q2-3 CP-2)
+
+/**
+ * The one context the palette both queries and executes with.
+ *
+ * Building it once and reusing it is the safety property of this surface: a row is offered because
+ * the registry reported it enabled *for this exact context*, and the command later runs against the
+ * same one. Re-deriving a context between listing and running would let a row be offered under one
+ * set of facts and executed under another.
+ */
+- (nc::core::CommandContext)commandPaletteContextWithItems:(const std::vector<VFSListingItem> &)_items
+{
+    nc::core::CommandContext context;
+    context.source = nc::core::CommandInvocationSource::Palette;
+    context.native_target = (__bridge void *)self.panelController;
+    context.items = _items;
+    return context;
+}
+
+- (BOOL)canOpenCommandPalette
+{
+    return NCAppDelegate.me != nil && self.panelController != nil;
+}
+
+- (IBAction)OnCommandPaletteOpen:(id) [[maybe_unused]] _sender
+{
+    if( ![self canOpenCommandPalette] || m_CommandPalette != nil )
+        return;
+    nc::core::CommandRegistry &registry = NCAppDelegate.me.commandRegistry;
+    const std::vector<VFSListingItem> items = self.panelController.selectedEntriesOrFocusedEntry;
+    const nc::core::CommandContext context = [self commandPaletteContextWithItems:items];
+
+    std::vector<nc::core::CommandPaletteSource> sources;
+    sources.reserve(registry.All().size());
+    for( const nc::core::CommandDescriptor &descriptor : registry.All() ) {
+        const nc::core::CommandRegistry::StateResult state = registry.QueryState(descriptor.id, context);
+        if( state.status != nc::core::CommandRegistry::LookupStatus::Found )
+            continue;
+        sources.push_back({.id = std::string{descriptor.id.Value()},
+                           .title = CommandPaletteTitle(descriptor.title_key),
+                           .category = CommandPaletteCategoryName(descriptor.category),
+                           .visible = state.state.visible,
+                           .enabled = state.state.enabled});
+    }
+
+    m_CommandPalette = [[NCExplorerCommandPaletteView alloc] initWithFrame:NSZeroRect];
+    m_CommandPalette.paletteDelegate = self;
+    m_CommandPalette.translatesAutoresizingMaskIntoConstraints = false;
+    [m_CommandPalette setRoster:nc::core::BuildCommandPaletteRoster(sources)];
+    [self addSubview:m_CommandPalette positioned:NSWindowAbove relativeTo:nil];
+    const NSSize size = [NCExplorerCommandPaletteView preferredSize];
+    [NSLayoutConstraint activateConstraints:@[
+        [m_CommandPalette.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [m_CommandPalette.topAnchor constraintEqualToAnchor:self.topAnchor constant:80.0],
+        [m_CommandPalette.widthAnchor constraintEqualToConstant:size.width],
+        [m_CommandPalette.heightAnchor constraintEqualToConstant:size.height],
+    ]];
+    [self layoutSubtreeIfNeeded];
+    [m_CommandPalette focusQueryField];
+}
+
+- (void)commandPaletteDidDismiss:(NCExplorerCommandPaletteView *) [[maybe_unused]] _palette
+{
+    if( !m_CommandPalette )
+        return;
+    [m_CommandPalette removeFromSuperview];
+    m_CommandPalette = nil;
+    if( PanelController *const panel = self.panelController )
+        [self.window makeFirstResponder:panel.view];
+}
+
+- (void)commandPalette:(NCExplorerCommandPaletteView *) [[maybe_unused]] _palette
+    didChooseCommandId:(const std::string &)_command_id
+{
+    if( ![self canOpenCommandPalette] )
+        return;
+    // The items are re-read here rather than captured when the palette opened: the palette is modal
+    // to the keyboard but not to the world, and executing against a stale selection would act on
+    // files the user is no longer pointing at. The registry re-checks the state either way.
+    const std::vector<VFSListingItem> items = self.panelController.selectedEntriesOrFocusedEntry;
+    const nc::core::CommandContext context = [self commandPaletteContextWithItems:items];
+    [[maybe_unused]] const auto result =
+        NCAppDelegate.me.commandRegistry.Execute(nc::core::CommandId{_command_id}, context);
+}
+
 /**
  * Whether a one-way sync can run at all: everything Compare needs, plus a writable destination.
  * Shared by -validateMenuItem: and the action, for the same reason the compare/copy predicates are.
@@ -2605,6 +2744,8 @@ static NSString *SyncPreviewText(const nc::core::FolderSyncPlan &_plan,
         return [self canCompareDualPaneDirectories];
     if( _item.action == @selector(OnSynchronizeDirectories:) )
         return [self canSynchronizeDualPaneDirectories];
+    if( _item.action == @selector(OnCommandPaletteOpen:) )
+        return [self canOpenCommandPalette];
     return false;
 }
 

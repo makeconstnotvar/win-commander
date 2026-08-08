@@ -75,4 +75,29 @@ struct CommandPaletteOptions {
                                                                     std::string_view _query,
                                                                     const CommandPaletteOptions &_options = {});
 
+/** One registry command reduced to what a palette roster needs, with its state already queried. */
+struct CommandPaletteSource {
+    std::string id;
+    std::string title;
+    /** Grouping label shown and searched as the row's subtitle. */
+    std::string category;
+    bool visible = true;
+    bool enabled = true;
+
+    friend bool operator==(const CommandPaletteSource &, const CommandPaletteSource &) = default;
+};
+
+/**
+ * Projects queried registry commands into palette rows.
+ *
+ * A command the registry reports as **not visible** never enters the roster, so it can be neither
+ * found nor run from the palette. Visibility is how the registry says a command does not apply here
+ * at all - as opposed to `enabled`, which says it applies but cannot run right now - and a palette
+ * that offered the former would route around the registry's own answer. A command with no id or no
+ * title is dropped for the same reason: it could be listed but never meaningfully chosen.
+ *
+ * Registration order is preserved, which is what makes an unqueried palette deterministic.
+ */
+[[nodiscard]] std::vector<CommandPaletteEntry> BuildCommandPaletteRoster(std::span<const CommandPaletteSource> _sources);
+
 } // namespace nc::core

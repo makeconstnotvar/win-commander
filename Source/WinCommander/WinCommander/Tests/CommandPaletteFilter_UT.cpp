@@ -178,6 +178,36 @@ TEST_CASE(PREFIX "honours the result bound and the disabled-entry filter")
     }
 }
 
+TEST_CASE("nc::core::BuildCommandPaletteRoster never offers a command the registry hides")
+{
+    using nc::core::BuildCommandPaletteRoster;
+    using nc::core::CommandPaletteSource;
+
+    const std::vector<CommandPaletteSource> sources{
+        {.id = "file.copy", .title = "Copy", .category = "File", .visible = true, .enabled = true},
+        // Hidden: the registry says this command does not apply here at all.
+        {.id = "file.paste", .title = "Paste", .category = "File", .visible = false, .enabled = true},
+        // Disabled but applicable: it belongs in the roster, greyed out.
+        {.id = "file.trash", .title = "Move to Trash", .category = "File", .visible = true, .enabled = false},
+        // Unusable rows: listable but never meaningfully choosable.
+        {.id = "", .title = "No Identity", .category = "File"},
+        {.id = "no.title", .title = "", .category = "File"},
+    };
+
+    const auto roster = BuildCommandPaletteRoster(sources);
+    REQUIRE(roster.size() == 2);
+    CHECK(roster[0].id == "file.copy");
+    CHECK(roster[0].enabled);
+    CHECK(roster[1].id == "file.trash");
+    CHECK_FALSE(roster[1].enabled);
+    // The category becomes the searchable subtitle.
+    CHECK(roster[0].subtitle == "File");
+
+    // A hidden command must not be reachable by querying for it either.
+    CHECK(FilterCommandPalette(roster, "paste").empty());
+    CHECK(BuildCommandPaletteRoster({}).empty());
+}
+
 TEST_CASE(PREFIX "handles an empty roster and empty entry text without matching on nothing")
 {
     CHECK(FilterCommandPalette({}, "copy").empty());

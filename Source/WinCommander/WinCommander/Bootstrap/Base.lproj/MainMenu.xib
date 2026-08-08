@@ -327,6 +327,12 @@ DQ
                                     <action selector="OnSynchronizeDirectories:" target="-1" id="wc-sync-dirs-action"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Command Palette…" tag="13310" keyEquivalent="k" id="wc-command-palette-item">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="OnCommandPaletteOpen:" target="-1" id="wc-command-palette-action"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Refresh" tag="13040" keyEquivalent="r" id="897">
                                 <connections>
                                     <action selector="OnRefreshPanel:" target="-1" id="898"/>

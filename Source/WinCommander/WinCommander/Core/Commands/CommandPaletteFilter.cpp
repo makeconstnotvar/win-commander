@@ -189,4 +189,23 @@ std::vector<CommandPaletteMatch> FilterCommandPalette(const std::span<const Comm
     return matches;
 }
 
+std::vector<CommandPaletteEntry> BuildCommandPaletteRoster(const std::span<const CommandPaletteSource> _sources)
+{
+    std::vector<CommandPaletteEntry> roster;
+    roster.reserve(_sources.size());
+    for( const CommandPaletteSource &source : _sources ) {
+        // Not visible means the registry says this command does not apply here at all; offering it
+        // anyway would route the palette around the registry's own answer. An entry with no id or
+        // no title could be listed but never meaningfully chosen, so it is dropped for the same
+        // reason rather than shown as a blank row.
+        if( !source.visible || source.id.empty() || source.title.empty() )
+            continue;
+        roster.push_back({.id = source.id,
+                          .title = source.title,
+                          .subtitle = source.category,
+                          .enabled = source.enabled});
+    }
+    return roster;
+}
+
 } // namespace nc::core
