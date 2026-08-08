@@ -3305,61 +3305,6 @@
         }
       }
     },
-    "__BYTECOUNTFORMATTER_BYTE_POSTFIX" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "B"
-          }
-        }
-      }
-    },
-    "__BYTECOUNTFORMATTER_BYTES_WORD" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "bytes"
-          }
-        }
-      }
-    },
-    "__BYTECOUNTFORMATTER_SI_LETTERS_ARRAY" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " KMGTP"
-          }
-        }
-      }
-    },
-    "__CLASSICPRESENTATION_FOLDER_WORD" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Folder"
-          }
-        }
-      }
-    },
-    "__CLASSICPRESENTATION_UP_WORD" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "    Up"
-          }
-        }
-      }
-    },
     "__MODERNPRESENTATION_FOLDER_WORD" : {
       "comment" : "Folders dummy string when size is not available, for English is 'Folder'",
       "localizations" : {
@@ -3607,6 +3552,12 @@
     },
     "“%@” is %@ in size.\nAre you sure you want to open it?" : {
       "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Размер «%@» — %@.\nВы уверены, что хотите его открыть?"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "new",
@@ -4712,10 +4663,24 @@
       }
     },
     "Win Commander will copy them to a temporary location before they can be opened." : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Win Commander скопирует их во временную папку, прежде чем их можно будет открыть."
+          }
+        }
+      }
     },
     "Win Commander will create a copy in a temporary location before it can be opened." : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Win Commander создаст копию во временной папке, прежде чем её можно будет открыть."
+          }
+        }
+      }
     },
     "No" : {
       "localizations" : {
@@ -5287,7 +5252,14 @@
       }
     },
     "The selected items are %@ in size.\nAre you sure you want to open them?" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Размер выбранных объектов — %@.\nВы уверены, что хотите их открыть?"
+          }
+        }
+      }
     },
     "The window has %@ tabs. Are you sure you want to close this window?" : {
       "comment" : "Asking user to close window with additional tabs",

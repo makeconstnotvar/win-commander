@@ -1,7 +1,7 @@
-# Q2-10 RH-1: `WriteAtomically` was atomic but not durable
+# Q2-10 RH-1/RH-2: Atomic-write durability, and the localization catalogue
 
 > Status: defect found and fixed; see §Verification.
-> Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-10 ("atomic persistence").
+> Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-10 ("atomic persistence", "локализация").
 
 ## The defect
 
@@ -39,3 +39,37 @@ That asymmetry is the judgement in this fix. Treating both barriers identically 
 ### Coverage gap
 
 **Nothing here proves durability.** These tests prove atomicity, cleanliness and error behaviour; whether the bytes survive a power cut can only be shown by cutting power, which is the hardware evidence `Development-Plan.md` §5.1 records as unsupported in the development cycle. What the fix does is make the code do what the durability contract requires, so that when such a fixture exists it has something correct to confirm.
+
+---
+
+# RH-2: the localization catalogue
+
+## What an audit of `Localizable.xcstrings` found
+
+547 keys, two languages. Two distinct problems, neither of which any test would have caught:
+
+**Four user-visible strings had no Russian translation** and would render in English inside a Russian interface. All four are consequential rather than incidental — they are the confirmations shown before opening a large file or a set of items, and the explanations that the application will first copy them to a temporary location. Exactly the text a user needs in their own language, because it precedes a decision.
+
+**Five keys were dead.** `__BYTECOUNTFORMATTER_BYTE_POSTFIX`, `__BYTECOUNTFORMATTER_BYTES_WORD`, `__BYTECOUNTFORMATTER_SI_LETTERS_ARRAY`, `__CLASSICPRESENTATION_FOLDER_WORD` and `__CLASSICPRESENTATION_UP_WORD` are referenced from nowhere — not from `.mm`, `.cpp`, `.h`, `.xib` or `.storyboard`, and not assembled dynamically. They are remnants of an earlier localization scheme. Removed, following the Q1-10 precedent for confirmed-dead code.
+
+Note what was *not* touched: `⏎` and `␛` remain untranslated on purpose — they are symbols, identical in every language, and "translating" them would be noise.
+
+The apparent "201 keys missing English" is not a defect: in this format the key doubles as the source-language value, so an absent `en` entry is the normal case.
+
+## A mistake worth recording
+
+The first attempt at this edit was wrong, and the way it was wrong is instructive. Three of the four translations landed **inside the wrong keys** — as duplicate `"ru"` members of `"No"` and `"The window has %@ tabs…"`.
+
+The cause: those four keys have no `localizations` block at all, so a naive "find the next `localizations` after this key" anchor walked past the key entirely and into its neighbour. And it went unnoticed at first because **JSON with duplicate keys still parses** — `json.load` silently keeps the last one. A validity check would have reported the file as fine while it was quietly overwriting real translations.
+
+The fix was to locate each key's block by brace matching, edit only within those bounds, and then verify by re-parsing with a hook that *rejects* duplicate keys rather than resolving them. The final edit is 30 insertions and 58 deletions — targeted, not a reformat.
+
+## Verification
+
+- `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED** (the target that compiles the catalogue).
+- The catalogue parses with a duplicate-rejecting hook; exactly 4 keys changed and exactly the 5 dead keys removed, with nothing else altered — asserted mechanically rather than eyeballed.
+- Every remaining key without a Russian entry is a symbol (`⏎`, `␛`), verified by listing them.
+
+### Coverage gap
+
+**No automated guard against regression.** Nothing prevents the next added key from shipping untranslated; catching that needs a check over the catalogue in the build or a script, which is worth adding but is its own increment. This slice fixed the state, not the process.
