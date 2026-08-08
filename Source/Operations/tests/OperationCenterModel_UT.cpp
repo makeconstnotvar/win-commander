@@ -5,7 +5,10 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <atomic>
 #include <chrono>
+#include <thread>
+#include <unordered_set>
 #include <concepts>
 #include <type_traits>
 
@@ -283,4 +286,99 @@ TEST_CASE("OperationCenterModel: an observer outliving the model is not invoked 
     // sanitizer run is what actually proves this, which is why this slice runs one.
     ticket = {};
     CHECK(notifications == 1);
+}
+
+TEST_CASE("OperationCenterModel: concurrent producers and observers stay consistent",
+          "[operation-center-model]")
+{
+    // Closes the gap OC-1 recorded: the reentrancy and lifetime contracts were proven
+    // single-threaded, but production has Pool threads transitioning records while a panel observes
+    // from the main thread. Under a sanitizer this is what would surface a data race in the
+    // notification path or a torn read of a snapshot.
+    OperationCenterModel model;
+
+    constexpr int operation_count = 24;
+    std::vector<OperationId> ids;
+    std::vector<uint64_t> revisions;
+    ids.reserve(operation_count);
+    revisions.reserve(operation_count);
+    for( int index = 0; index < operation_count; ++index ) {
+        auto reservation = OperationCenterModelTesting::Reserve(model);
+        REQUIRE(reservation);
+        const auto id = reservation->Id();
+        const auto admitted = OperationCenterModelTesting::Admit(
+            model, std::move(*reservation), OperationCenterModelUTPlan("plan-" + std::to_string(index)), At(0));
+        REQUIRE(admitted);
+        ids.push_back(id);
+        revisions.push_back(admitted->revision);
+    }
+
+    std::atomic_bool stop{false};
+    std::atomic_int notifications{0};
+    std::atomic_int inconsistent_snapshots{0};
+
+    // Two observers that answer every notification by reading the model, exactly as a live panel
+    // does. Every snapshot must be internally consistent: no duplicate ids, and the expected size.
+    const auto verify = [&] {
+        ++notifications;
+        const auto snapshot = model.Snapshot();
+        std::unordered_set<std::string> seen;
+        for( const auto &record : snapshot )
+            if( !seen.emplace(record.operation_id.ToString()).second )
+                ++inconsistent_snapshots;
+        if( snapshot.size() != static_cast<size_t>(operation_count) )
+            ++inconsistent_snapshots;
+    };
+    const auto first_ticket = model.ObserveChanges(verify);
+    const auto second_ticket = model.ObserveChanges(verify);
+
+    // Producers drive their own disjoint operations through Running/Paused, each owning its own
+    // revision, so every transition is legitimate and any failure is a real race rather than two
+    // threads racing for one record.
+    std::vector<std::thread> producers;
+    producers.reserve(4);
+    for( int worker = 0; worker < 4; ++worker ) {
+        producers.emplace_back([&, worker] {
+            for( int index = worker; index < operation_count; index += 4 ) {
+                uint64_t revision = revisions[static_cast<size_t>(index)];
+                const auto id = ids[static_cast<size_t>(index)];
+                const auto running = model.Transition(id, revision, OperationRecordState::Running, At(1));
+                if( !running )
+                    continue;
+                revision = running->revision;
+                for( int flip = 0; flip < 8; ++flip ) {
+                    const auto next = (flip % 2 == 0) ? OperationRecordState::Paused : OperationRecordState::Running;
+                    const auto moved = model.Transition(id, revision, next, At(2));
+                    if( !moved )
+                        break;
+                    revision = moved->revision;
+                }
+            }
+        });
+    }
+
+    // A concurrent reader that never mutates, mimicking a panel redrawing on its own timer.
+    std::thread reader([&] {
+        while( !stop.load(std::memory_order_relaxed) ) {
+            const auto snapshot = model.Snapshot();
+            if( snapshot.size() != static_cast<size_t>(operation_count) )
+                ++inconsistent_snapshots;
+        }
+    });
+
+    for( auto &producer : producers )
+        producer.join();
+    stop.store(true, std::memory_order_relaxed);
+    reader.join();
+
+    CHECK(inconsistent_snapshots.load() == 0);
+    // Every operation made at least its Running transition, so observers were certainly exercised.
+    CHECK(notifications.load() > 0);
+
+    const auto final_snapshot = model.Snapshot();
+    CHECK(final_snapshot.size() == static_cast<size_t>(operation_count));
+    for( const auto &record : final_snapshot ) {
+        CHECK((record.state == OperationRecordState::Running || record.state == OperationRecordState::Paused));
+        CHECK(record.revision >= 1);
+    }
 }
