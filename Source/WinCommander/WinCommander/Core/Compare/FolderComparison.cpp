@@ -165,4 +165,45 @@ FolderComparisonResult CompareFolders(const std::span<const FolderCompareItem> _
     return comparison;
 }
 
+FolderCompareMarks MarkDifferences(const FolderComparison &_comparison,
+                                   const size_t _left_count,
+                                   const size_t _right_count)
+{
+    FolderCompareMarks marks{.left = std::vector<bool>(_left_count, false),
+                             .right = std::vector<bool>(_right_count, false)};
+
+    const auto mark_left = [&](const std::optional<size_t> &_index) {
+        if( _index && *_index < _left_count )
+            marks.left[*_index] = true;
+    };
+    const auto mark_right = [&](const std::optional<size_t> &_index) {
+        if( _index && *_index < _right_count )
+            marks.right[*_index] = true;
+    };
+
+    for( const FolderCompareEntry &entry : _comparison.entries ) {
+        switch( entry.status ) {
+            case FolderCompareStatus::Same:
+                break;
+            case FolderCompareStatus::LeftOnly:
+                mark_left(entry.left_index);
+                break;
+            case FolderCompareStatus::RightOnly:
+                mark_right(entry.right_index);
+                break;
+            case FolderCompareStatus::Changed:
+                if( entry.newer_side != FolderCompareNewerSide::Right )
+                    mark_left(entry.left_index);
+                if( entry.newer_side != FolderCompareNewerSide::Left )
+                    mark_right(entry.right_index);
+                break;
+            case FolderCompareStatus::Conflict:
+                mark_left(entry.left_index);
+                mark_right(entry.right_index);
+                break;
+        }
+    }
+    return marks;
+}
+
 } // namespace nc::core

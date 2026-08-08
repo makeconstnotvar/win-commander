@@ -28,6 +28,7 @@
 #include "../../Bootstrap/AppDelegate+MainWindowCreation.h"
 #include "../../Bootstrap/Config.h"
 #include <WinCommander/Core/Commands/CommandRegistry.h>
+#include <WinCommander/Core/Compare/FolderComparison.h>
 #include <WinCommander/Core/Pane/ExplorerTabsModel.h>
 #include <WinCommander/Core/VisualState/VisualStateMapper.h>
 #include <WinCommander/Bootstrap/NativeVFSHostInstance.h>
@@ -472,6 +473,13 @@ constexpr size_t g_ExplorerPaneSideCount = 2;
 
 class NCExplorerPaneContent;
 
+/** One pane's visible listing reduced for comparison, retaining each item's sorted position. */
+struct ExplorerCompareSide {
+    std::vector<nc::core::FolderCompareItem> items;
+    std::vector<int> sorted_positions;
+    bool has_all_modification_times = true;
+};
+
 // Declared ahead of NCExplorerPaneContent's definition (not just ahead of @implementation) because
 // NCExplorerPaneContent's own methods (e.g. BindActiveObservation) call these on their owner, and
 // Objective-C resolves a call's selector against declarations already seen at that point in the
@@ -509,6 +517,12 @@ class NCExplorerPaneContent;
 - (BOOL)focusSide:(NCExplorerPaneSide)_side;
 - (BOOL)restoreTabs:(const nc::explorer::ExplorerTabsSession &)_session intoContent:(NCExplorerPaneContent &)_content;
 - (nc::explorer::ExplorerTabsSession)captureTabsForContent:(NCExplorerPaneContent &)_content;
+- (ExplorerCompareSide)collectCompareSideForPanel:(PanelController *)_panel;
+- (BOOL)canCompareDualPaneDirectories;
+- (IBAction)OnCompareDirectories:(id)_sender;
+- (void)applyCompareMarks:(const std::vector<bool> &)_marks
+                positions:(const std::vector<int> &)_positions
+                  toPanel:(PanelController *)_panel;
 - (void)rollbackSessionRestoreForContent:(NCExplorerPaneContent &)_content;
 - (void)applyPaneDividerRatio;
 - (std::optional<CGFloat>)measuredPaneDividerRatio;
@@ -1987,6 +2001,101 @@ private:
            _opposite.vfs->IsWritable() && !_active.selectedEntriesOrFocusedEntry.empty();
 }
 
+/**
+ * Reduces one pane's visible listing to what the comparison judges, keeping each item's sorted
+ * position so a verdict can be marked back onto the exact row it came from. Dot-dot is a navigation
+ * entry, never a comparison subject, and is dropped here rather than rejected by the model.
+ */
+- (ExplorerCompareSide)collectCompareSideForPanel:(PanelController *)_panel
+{
+    ExplorerCompareSide side;
+    const int count = _panel.data.SortedEntriesCount();
+    side.items.reserve(static_cast<size_t>(std::max(0, count)));
+    side.sorted_positions.reserve(static_cast<size_t>(std::max(0, count)));
+    for( int position = 0; position < count; ++position ) {
+        const VFSListingItem item = _panel.data.EntryAtSortPosition(position);
+        if( !item || item.IsDotDot() )
+            continue;
+        if( !item.HasMTime() )
+            side.has_all_modification_times = false;
+        side.items.push_back({.name = item.Filename(),
+                              .size = item.Size(),
+                              .modification_time = item.HasMTime() ? static_cast<int64_t>(item.MTime()) : 0,
+                              .is_directory = item.IsDir()});
+        side.sorted_positions.push_back(position);
+    }
+    return side;
+}
+
+/**
+ * Single source of truth for whether a dual-pane compare can run, shared by -validateMenuItem: and
+ * the action itself for the same reason -canCopyOrMoveFromActive:toOpposite: is (see above).
+ */
+- (BOOL)canCompareDualPaneDirectories
+{
+    if( !m_DualPaneEnabled )
+        return false;
+    PanelController *const left = [self contentForSide:NCExplorerPaneSide::Left].ActivePanel();
+    PanelController *const right = [self contentForSide:NCExplorerPaneSide::Right].ActivePanel();
+    return left != nil && right != nil && left != right && left.isUniform && right.isUniform;
+}
+
+/**
+ * Compares the two dual-pane sides and leaves each pane with exactly the entries that differ
+ * selected, which composes directly with DP-2's F5/F6: compare, then copy the marked set across.
+ */
+- (IBAction)OnCompareDirectories:(id) [[maybe_unused]] _sender
+{
+    if( ![self canCompareDualPaneDirectories] )
+        return;
+    PanelController *const left = [self contentForSide:NCExplorerPaneSide::Left].ActivePanel();
+    PanelController *const right = [self contentForSide:NCExplorerPaneSide::Right].ActivePanel();
+
+    const VFSListingPtr left_listing = left.data.ListingPtr();
+    const VFSListingPtr right_listing = right.data.ListingPtr();
+    const ExplorerCompareSide left_side = [self collectCompareSideForPanel:left];
+    const ExplorerCompareSide right_side = [self collectCompareSideForPanel:right];
+
+    // A provider that publishes no modification time cannot be judged by date; fall back to size
+    // alone rather than treating every missing timestamp as the same instant.
+    nc::core::FolderCompareOptions options;
+    options.compare_modification_time =
+        left_side.has_all_modification_times && right_side.has_all_modification_times;
+
+    const nc::core::FolderComparisonResult comparison =
+        nc::core::CompareFolders(left_side.items, right_side.items, options);
+    if( !comparison )
+        return;
+    const nc::core::FolderCompareMarks marks =
+        nc::core::MarkDifferences(*comparison, left_side.items.size(), right_side.items.size());
+
+    // Both listings are revalidated before either selection is applied, so a refresh that lands on
+    // one side mid-comparison cannot leave the two panes marked from inconsistent snapshots.
+    if( left.isDoingBackgroundLoading || right.isDoingBackgroundLoading ||
+        left.data.ListingPtr() != left_listing || right.data.ListingPtr() != right_listing )
+        return;
+
+    [self applyCompareMarks:marks.left positions:left_side.sorted_positions toPanel:left];
+    [self applyCompareMarks:marks.right positions:right_side.sorted_positions toPanel:right];
+}
+
+/** Expands a per-collected-item mark vector back onto the pane's full sorted selection vector. */
+- (void)applyCompareMarks:(const std::vector<bool> &)_marks
+                positions:(const std::vector<int> &)_positions
+                  toPanel:(PanelController *)_panel
+{
+    const int count = _panel.data.SortedEntriesCount();
+    if( count < 0 )
+        return;
+    std::vector<bool> selection(static_cast<size_t>(count), false);
+    for( size_t index = 0; index < _marks.size() && index < _positions.size(); ++index ) {
+        const int position = _positions[index];
+        if( _marks[index] && position >= 0 && position < count )
+            selection[static_cast<size_t>(position)] = true;
+    }
+    [_panel setEntriesSelection:selection];
+}
+
 - (IBAction)OnFileCopyCommand:(id) [[maybe_unused]] _sender
 {
     PanelController *const active = self.panelController;
@@ -2251,6 +2360,8 @@ private:
         PanelController *const opposite = [self dualPaneOppositePanelControllerFor:active];
         return [self canCopyOrMoveFromActive:active toOpposite:opposite];
     }
+    if( _item.action == @selector(OnCompareDirectories:) )
+        return [self canCompareDualPaneDirectories];
     return false;
 }
 

@@ -125,4 +125,27 @@ using FolderComparisonResult = std::expected<FolderComparison, FolderCompareFail
                                                     std::span<const FolderCompareItem> _right,
                                                     const FolderCompareOptions &_options = {});
 
+/** One selection vector per side, each indexed exactly like the listing that produced it. */
+struct FolderCompareMarks {
+    std::vector<bool> left;
+    std::vector<bool> right;
+
+    friend bool operator==(const FolderCompareMarks &, const FolderCompareMarks &) = default;
+};
+
+/**
+ * Projects a comparison onto the two panes as "what would have to travel to the other side":
+ *
+ * - LeftOnly marks left, RightOnly marks right - the side that holds the only copy;
+ * - Changed marks whichever side is newer, and both sides when neither is (the values differ but
+ *   no timestamp resolves the direction, so the user must choose);
+ * - Conflict marks both - a directory facing a file needs attention on both sides;
+ * - Same marks neither.
+ *
+ * Entries whose index falls outside the stated listing size are skipped rather than clamped, so a
+ * listing that changed under the caller cannot mark an unrelated row.
+ */
+[[nodiscard]] FolderCompareMarks
+MarkDifferences(const FolderComparison &_comparison, size_t _left_count, size_t _right_count);
+
 } // namespace nc::core

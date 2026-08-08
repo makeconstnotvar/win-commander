@@ -249,6 +249,68 @@ TEST_CASE(PREFIX "handles empty and identical listings without inventing work")
     }
 }
 
+TEST_CASE("nc::core::MarkDifferences projects each status onto the side that would have to send it")
+{
+    const std::vector<FolderCompareItem> left{
+        File("same", 1, 1),
+        File("left-only", 1, 1),
+        File("left-newer", 1, 2000),
+        File("right-newer", 1, 1000),
+        File("size-differs", 1, 1000),
+        Directory("clash"),
+    };
+    const std::vector<FolderCompareItem> right{
+        File("same", 1, 1),
+        File("left-newer", 1, 1000),
+        File("right-newer", 1, 2000),
+        File("size-differs", 2, 1000),
+        File("clash", 1, 1),
+        File("right-only", 1, 1),
+    };
+
+    const FolderComparison comparison = Compare(left, right);
+    const nc::core::FolderCompareMarks marks = nc::core::MarkDifferences(comparison, left.size(), right.size());
+
+    REQUIRE(marks.left.size() == 6);
+    REQUIRE(marks.right.size() == 6);
+    CHECK_FALSE(marks.left[0]);  // same
+    CHECK(marks.left[1]);        // left-only
+    CHECK(marks.left[2]);        // left-newer: left holds the copy that would travel
+    CHECK_FALSE(marks.left[3]);  // right-newer: nothing to send from the left
+    CHECK(marks.left[4]);        // size differs with no newer side: the user must choose
+    CHECK(marks.left[5]);        // conflict
+
+    CHECK_FALSE(marks.right[0]); // same
+    CHECK_FALSE(marks.right[1]); // left-newer
+    CHECK(marks.right[2]);       // right-newer
+    CHECK(marks.right[3]);       // size differs
+    CHECK(marks.right[4]);       // conflict
+    CHECK(marks.right[5]);       // right-only
+}
+
+TEST_CASE("nc::core::MarkDifferences never marks a row outside the stated listing size")
+{
+    // A listing that changed under the caller must not cause an unrelated row to be marked.
+    const FolderComparison comparison = Compare({File("a", 1, 1), File("b", 1, 1)}, {File("c", 1, 1)});
+
+    const nc::core::FolderCompareMarks shrunk = nc::core::MarkDifferences(comparison, 1, 0);
+    REQUIRE(shrunk.left.size() == 1);
+    CHECK(shrunk.left[0]);
+    CHECK(shrunk.right.empty());
+
+    const nc::core::FolderCompareMarks empty = nc::core::MarkDifferences(comparison, 0, 0);
+    CHECK(empty.left.empty());
+    CHECK(empty.right.empty());
+}
+
+TEST_CASE("nc::core::MarkDifferences marks nothing for identical listings")
+{
+    const std::vector<FolderCompareItem> items{File("a", 1, 1), Directory("d")};
+    const nc::core::FolderCompareMarks marks =
+        nc::core::MarkDifferences(Compare(items, items), items.size(), items.size());
+    CHECK(marks == nc::core::FolderCompareMarks{.left = {false, false}, .right = {false, false}});
+}
+
 TEST_CASE(PREFIX "keeps extreme timestamps from overflowing into the opposite verdict")
 {
     const int64_t minimum = std::numeric_limits<int64_t>::min();

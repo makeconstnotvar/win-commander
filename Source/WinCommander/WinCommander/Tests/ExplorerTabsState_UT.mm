@@ -43,6 +43,8 @@
 - (IBAction)OnFileCopyCommand:(id)_sender;
 - (IBAction)OnFileRenameMoveCommand:(id)_sender;
 - (PanelController *)dualPaneOppositePanelControllerFor:(PanelController *)_panel;
+- (IBAction)OnCompareDirectories:(id)_sender;
+- (BOOL)canCompareDualPaneDirectories;
 @property(nonatomic, readonly) BOOL dualPaneEnabledForTesting;
 @property(nonatomic, readonly) PanelController *rightPanelControllerForTesting;
 @property(nonatomic, readonly) NSView *rightPanelContainerForTesting;
@@ -862,6 +864,34 @@ TEST_CASE(PREFIX "swapping sides moves each side's tabs into the other side's ca
     // Swap exchanges the sides' contents, so the focused pane travels with its panel to the left.
     CHECK(fixture.state.panelController == fixture.second);
     CHECK_FALSE(after.right_focused);
+}
+
+TEST_CASE(PREFIX "Compare Directories is gated on dual pane with two uniform sides")
+{
+    Fixture fixture;
+    NSMenuItem *const compare_item = [NSMenuItem new];
+    compare_item.action = @selector(OnCompareDirectories:);
+
+    // Single pane: nothing to compare against.
+    CHECK_FALSE([fixture.state canCompareDualPaneDirectories]);
+    CHECK_FALSE([fixture.state validateMenuItem:compare_item]);
+    // Invoking it anyway must be inert rather than reach the comparison, exactly like DP-2's
+    // cross-pane copy/move - a directly invoked action can never outrun its own menu gate.
+    [fixture.state OnCompareDirectories:nil];
+    CHECK(fixture.state.panelController == fixture.first);
+
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+
+    // Dual pane is on, but this fixture's mock panels report no uniform listing, so the compare
+    // still declines instead of reading a listing that is not there.
+    CHECK_FALSE(fixture.first.isUniform);
+    CHECK_FALSE([fixture.state canCompareDualPaneDirectories]);
+    CHECK_FALSE([fixture.state validateMenuItem:compare_item]);
+    [fixture.state OnCompareDirectories:nil];
+    CHECK(fixture.state.dualPaneEnabledForTesting);
+    CHECK(fixture.state.panelController == fixture.first);
 }
 
 TEST_CASE(PREFIX "closing the last tab of a side while dual pane is active is a disabled no-op")
