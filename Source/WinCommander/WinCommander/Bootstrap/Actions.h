@@ -272,7 +272,10 @@ static constinit std::pair<const char*, const char*> g_DefaultActionShortcuts[] 
     {"menu.edit.deselect_all",                              "⌥⌘a"     }, // alt+cmd+a
     {"menu.edit.invert_selection",                          "^⌘a"     }, // ctrl+cmd+a
 
-    {"menu.view.switch_dual_single_mode",                   "⇧⌘p"     }, // shift+cmd+p
+    // Was ⇧⌘p, which page_setup already claims - and ⇧⌘p is the platform-standard Page Setup key,
+    // so the app-specific toggle is the one that moves. With both on it, one of the two menu
+    // items simply never fired from the keyboard, and which one depended on lookup order.
+    {"menu.view.switch_dual_single_mode",                   "⇧⌘\\"    }, // shift+cmd+backslash
     {"menu.view.swap_panels",                               "⌘u"      }, // cmd+u
     {"menu.view.sync_panels",                               "⌥⌘u"     }, // alt+cmd+u
     {"menu.view.refresh",                                   "⌘r"      }, // cmd+r

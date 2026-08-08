@@ -54,6 +54,10 @@ std::vector<ShortcutConflict> DetectShortcutConflicts(const std::span<const Shor
     return conflicts;
 }
 
+// Every action named below must exist in the application's own tag table: a profile binding an
+// action nobody defined does nothing at all, and does it silently - the user picks the profile,
+// presses the key it promised, and gets no response and no explanation. `ShippedShortcutTables_UT`
+// checks that, and checks that no profile collides with a default it does not itself replace.
 std::vector<ShortcutProfile> AllShortcutProfiles()
 {
     std::vector<ShortcutProfile> profiles;
@@ -65,10 +69,15 @@ std::vector<ShortcutProfile> AllShortcutProfiles()
     profiles.push_back({.kind = ShortcutProfileKind::MacOSNative,
                         .id = "macos",
                         .bindings = {
-                            Bind("menu.file.rename", "\\r"),
+                            Bind("menu.command.rename_in_place", "\\r"),
+                            // Return renames under Finder rules, so whatever else held it has to let
+                            // go. Leaving `enter` there would make Return ambiguous and one of the two
+                            // silently never fire - the profile would have promised a rename key and
+                            // then, half the time, not delivered it.
+                            Bind("menu.file.enter", ""),
                             Bind("menu.file.open", "⌘↓"),
                             Bind("menu.go.enclosing_folder", "⌘↑"),
-                            Bind("menu.file.move_to_trash", "⌘⌫"),
+                            Bind("menu.command.move_to_trash", "⌘⌫"),
                             Bind("menu.file.get_info", "⌘i"),
                             Bind("menu.file.new_folder", "⇧⌘n"),
                         }});
@@ -78,9 +87,9 @@ std::vector<ShortcutProfile> AllShortcutProfiles()
     profiles.push_back({.kind = ShortcutProfileKind::WindowsExplorer,
                         .id = "windows",
                         .bindings = {
-                            Bind("menu.file.rename", "\\uF705"),
-                            Bind("menu.file.move_to_trash", "\\u007F"),
-                            Bind("menu.file.delete_permanently", "⇧\\u007F"),
+                            Bind("menu.command.rename_in_place", "\\uF705"),
+                            Bind("menu.command.move_to_trash", "\\u007F"),
+                            Bind("menu.command.delete_permanently", "⇧\\u007F"),
                             Bind("menu.go.back", "⌥←"),
                             Bind("menu.go.forward", "⌥→"),
                             Bind("menu.go.enclosing_folder", "⌥↑"),
@@ -92,11 +101,11 @@ std::vector<ShortcutProfile> AllShortcutProfiles()
     profiles.push_back({.kind = ShortcutProfileKind::Commander,
                         .id = "commander",
                         .bindings = {
-                            Bind("menu.file.copy_to", "\\uF708"),
-                            Bind("menu.file.move_to", "\\uF709"),
-                            Bind("menu.file.rename", "⇧\\uF709"),
+                            Bind("menu.command.copy_to", "\\uF708"),
+                            Bind("menu.command.move_to", "\\uF709"),
+                            Bind("menu.command.rename_in_place", "⇧\\uF709"),
                             Bind("menu.file.new_folder", "\\uF70A"),
-                            Bind("menu.file.move_to_trash", "\\uF70B"),
+                            Bind("menu.command.move_to_trash", "\\uF70B"),
                             Bind("menu.view.swap_panels", "⌘u"),
                         }});
     return profiles;

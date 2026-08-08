@@ -1,4 +1,4 @@
-# Q2-3 HP-1: Hotkey profiles and the conflict detector
+# Q2-3 HP-1: Hotkey profiles and the conflict detector — and running both against what the application actually ships
 
 > Status: implemented and tested — see §Verification. Model increment: profiles are defined and validated but not yet selectable in the UI, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-3.
@@ -50,3 +50,42 @@ Built and run in this session (Xcode 26.6 toolchain):
 - **The profiles are not validated against the live action tables.** A binding naming an action that does not exist would be silently ignored by `SetShortcutsOverride`, and nothing here catches that yet — the check needs the real table, which `WinCommanderUT` does not bootstrap. Worth adding when the profiles become selectable, because a typo in a profile is otherwise invisible.
 - **The detector is not yet run over the shipped tables.** Doing so would have caught the ⇧⌘O collision found by hand during Q2-3 CP-2 (`menu.go.documents` already held it). That is a natural follow-up once the tables can be loaded in a test.
 - No Preferences UI, no runtime application, and no Vim-like profile.
+
+---
+
+# CP-4: pointing the detector at the tables themselves
+
+A conflict detector nobody runs on the real tables is a utility. Running it on the application's own shipped defaults, and on each profile applied over them, is what makes it a guard.
+
+It found three defects on the first run, all of them silent by nature.
+
+## `⇧⌘P` was claimed twice in the shipped defaults
+
+`menu.file.page_setup` and `menu.view.switch_dual_single_mode` both had it. One of the two menu items simply never fired from the keyboard, and which one depended on lookup order.
+
+`⇧⌘P` is the platform-standard Page Setup key, so the app-specific toggle is the one that moves — to `⇧⌘\`, which nothing else claims.
+
+## Under the Finder-like profile, Return meant two things
+
+The profile binds rename to Return, as Finder does, but `menu.file.enter` kept Return from the defaults, which the profile never replaced. So the profile promised a rename key and would have delivered it only half the time.
+
+`menu.file.enter` is now explicitly unbound in that profile. Under Finder rules opening is `⌘↓`, which the profile already binds, so nothing is lost.
+
+This is the case the check exists for: **a profile is applied over the defaults**, so a binding can be perfectly conflict-free on its own and still collide with a default it does not replace. Checking a profile in isolation would have missed it.
+
+## Every profile named actions that do not exist
+
+The worst of the three. All three profiles bound `menu.file.rename`, `menu.file.move_to_trash` and friends — and the application has no such actions. The real ones live in the `menu.command.*` domain: `rename_in_place`, `move_to_trash`, `delete_permanently`, `copy_to`, `move_to`.
+
+Nine bindings across three profiles were dead. A user picking "Windows Explorer" and pressing F2 would have got nothing at all — no rename, no error, no clue. The names are corrected against the shipped table, and the check now keeps them honest.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::ShippedShortcutTables*'`: **5/5 cases** — no same-domain collision in the shipped defaults; every default naming an action that exists; every action's name and tag distinct, since a duplicate makes one of the two unreachable depending on which side of the lookup you come from; every profile binding an action that exists; and no profile introducing a collision once applied over the defaults.
+- The existing `'nc::core::ShortcutProfiles*'` and `'nc::core::DetectShortcutConflicts*'` suites pass unchanged: the detector was already right, and this is the first time anything asked it about the real tables.
+- Full `WinCommanderUT --rng-seed 424242`: **817/817 cases, 11,804 assertions**.
+
+### Coverage gap
+
+**Choosing a profile in Preferences and applying it at runtime is still not built** — `ActionsShortcutsManager` already offers `RevertToDefaults` and `SetShortcutsOverride`, so the pieces exist. The Vim profile also remains unwritten.
