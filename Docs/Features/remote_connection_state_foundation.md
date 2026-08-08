@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-4: Remote connection state, retry policy, host trust and pinning
+# Q2-5 RC-1…RC-5: Remote connection state, retry, host trust, pinning and presentation
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -10,7 +10,7 @@ The connection-state and retry rules Q2-5 needs before any of its surfaces can b
 
 This is where the decisions with consequences live, and none of it needs a socket.
 
-**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place. **RC-3** attaches it to a pin store and enforces who may write a pin; **RC-4** implements that store on the macOS keychain.
+**RC-2** adds host verification — the classification that produces RC-1's `HostVerificationFailed` in the first place. **RC-3** attaches it to a pin store and enforces who may write a pin; **RC-4** implements that store on the macOS keychain; **RC-5** projects the whole thing into what a Connection Manager row shows.
 
 Not here: the manager UI, actual reconnect scheduling, and system SMB/NFS mounts. Credential *storage* already exists (`KeychainServices` via `ConfigBackedNetworkConnectionsManager`); what §46 was missing was host verification, which is RC-2.
 
@@ -85,22 +85,36 @@ Two guards run before any keychain call, which is also what makes them testable 
 
 The store holds no cache: a cached pin could answer a verification from memory after the stored one changed underneath it.
 
+## RC-5: what a manager row shows
+
+`PresentRemoteConnection` derives §46's row — status, credentials state, link quality, trust, last successful connection, read-only, and a failure count — from the state plus two facts the state does not own (whether a credential is stored, and the host's trust verdict).
+
+Three judgements are worth naming:
+
+- **A rejected credential is its own state, not "stored".** A credential the server refused is worse than none: it will keep failing until replaced, and labelling it merely stored leaves the user nothing to act on. It reads as `Rejected` regardless of whether anything is actually in the keychain.
+- **`needs_attention` is not just `status == Blocked`.** A mismatched host pin needs the user *while the connection sits idle and has never failed once* — so trust is folded in here rather than left for every surface to remember separately. `UnknownFirstUse` deliberately does **not** raise it: first use is a question the connect flow asks, not a standing alert on an idle row.
+- **`Offline` alone raises nothing.** It is the retryable outcome — "try again later" — and must not compete for attention with a blocked host the user actually has to resolve.
+
+Link quality thresholds are chosen for interactive browsing rather than throughput: past roughly a quarter second, typing a path and waiting for a listing stops feeling direct. A **negative** latency sample reports `Unknown`, not `Good` — it is a broken measurement, and flattering it would be the most misleading answer available.
+
+Like `RemoteConnectionState`, this value carries no credential material. It is what gets copied into the UI, and giving it somewhere to put a password is how one ends up in a log.
+
 ## Verification
 
 Built and run in this session (Xcode 26.6 toolchain):
 
 - `xcodebuild -scheme WinCommanderUT -configuration Debug build` — **BUILD SUCCEEDED**.
 - `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED** (the slice adds files to the Xcode project).
+- Focused `WinCommanderUT 'nc::core::RemoteConnectionPresentation*' --rng-seed 424242`: **6/6 cases, 31/31 assertions** — every quality band including both boundaries and the negative sample; a rejected credential reported as such with and without one stored; stored versus missing; a mismatched or unusable pin raising attention on an idle, never-failed connection while first-use and trusted do not; `Offline` raising nothing; and the row's carried-through fields.
 - Focused `WinCommanderUT 'nc::core::KeychainHostPinStore*' --rng-seed 424242`: **3/3 cases, 16/16 assertions** — no two providers sharing a service name and the `("a","b.c")` / `("a.b","c")` concatenation collision specifically excluded; pins namespaced away from credentials; every incomplete key and the empty fingerprint refused before any keychain call.
 - Focused `WinCommanderUT 'nc::core::RemoteHostTrustPolicy*' --rng-seed 424242`: **6/6 cases, 34/34 assertions** — first-use pinning stored normalized and matching later spellings, scoped per provider and host; the routine accept path refusing a mismatch, a repeat, and an unverifiable fingerprint without touching the store; `ReplacePin` accepting a mismatch but not garbage; forgetting; a failing store reported rather than assumed; and a decision taken against the live store rather than a stale verdict.
 - Focused `WinCommanderUT 'nc::core::RemoteHostTrust*' --rng-seed 424242`: **7/7 cases, 44/44 assertions** — six spellings of one fingerprint accepted; malformed and odd-length values rejected rather than coerced; unusable-presented handled with and without a pin; first use never an automatic yes; mismatch neither self-resolving nor promptable; an unparseable stored pin treated as mismatch; only a pinned match connecting unprompted.
 - Focused `WinCommanderUT 'nc::core::RemoteConnection*' --rng-seed 424242`: **8/8 cases, 69/69 assertions** — the non-retryable set refused even on a fresh budget; the exponential sequence, ceiling clamp, sub-1 multiplier, and zero-attempt policy; a retryable failure exhausting into `Offline` versus a non-retryable one blocking at once; bounded newest-first history; success resetting the budget and restoring the full backoff sequence; read-only reporting and stale-latency clearing; explicit disconnect; a no-op outcome.
-- Full unfiltered `WinCommanderUT --rng-seed 424242`: **690/690 cases, 11,201/11,201 assertions**.
+- Full unfiltered `WinCommanderUT --rng-seed 424242`: **696/696 cases, 11,232/11,232 assertions**.
 - No ASAN/UBSAN/TSan run: a pure value model with no allocation ownership, concurrency or `Operations`/`VFS`/`RoutedIO` involvement. The increment that performs real reconnection scheduling is where that budget changes.
 
 ### Coverage gaps
 
-- **Latency is stored but nothing classifies it.** §46 asks for a status; a "degraded" threshold is a presentation decision the manager surface should own, and inventing one here without a surface to show it would be guessing.
 - **The keychain round-trip itself is untested.** The tests cover key derivation and the pre-call guards; actually storing and reading a pin would touch the developer's real keychain, which a unit-test binary must not do. That belongs in an integration fixture with its own keychain.
 - **Nothing wires this to providers yet.** No VFS provider presents a fingerprint to `RemoteHostTrustPolicy` today, so host verification is built but not yet consulted on connect — the next increment.
 - No scheduler, no UI, and no system SMB/NFS mount handling — all later Q2-5 increments.
