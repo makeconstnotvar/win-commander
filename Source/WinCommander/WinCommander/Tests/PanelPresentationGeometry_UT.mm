@@ -1693,52 +1693,13 @@ TEST_CASE(PREFIX "pane model caches navigation availability only for its exact s
     CHECK_FALSE(presentation.NavigationAvailability());
 }
 
-TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
+// Split across two deliberately non-inlined helpers, and not for style: as one function this
+// test's frame crossed the project's 32 KiB limit once a sanitizer instrumented it, failing the
+// whole scheme's build - so neither ASAN nor TSan could run on this suite at all. The cut sits
+// where it does because it is the one point no local crosses.
+/** The toolbar's identity, accessibility and initial state. */
+[[clang::noinline]] static void CheckExplorerToolbarIdentity(NSButton *const back, NSButton *const forward, NSButton *const up, NSButton *const refresh, NCExplorerBreadcrumbControl *const breadcrumb, const NSArray<NSButton *> *const buttons, const NSArray<NSString *> *const identifiers, ExplorerToolbarTestActionsDispatcher *const dispatcher)
 {
-    REQUIRE(nc::dispatch_is_main_queue());
-    ExplorerBreadcrumbTestPanelController *const panel = [ExplorerBreadcrumbTestPanelController new];
-    ExplorerToolbarTestActionsDispatcher *const dispatcher = [ExplorerToolbarTestActionsDispatcher new];
-    NCExplorerToolbarDelegate *const delegate = [[NCExplorerToolbarDelegate alloc] initWithPanelController:panel
-                                                                                         actionsDispatcher:dispatcher];
-
-    NSToolbarItem *const back_item = [delegate toolbar:delegate.toolbar
-                                 itemForItemIdentifier:@"explorer_back"
-                             willBeInsertedIntoToolbar:true];
-    NSToolbarItem *const forward_item = [delegate toolbar:delegate.toolbar
-                                    itemForItemIdentifier:@"explorer_forward"
-                                willBeInsertedIntoToolbar:true];
-    NSToolbarItem *const up_item = [delegate toolbar:delegate.toolbar
-                               itemForItemIdentifier:@"explorer_up"
-                           willBeInsertedIntoToolbar:true];
-    NSToolbarItem *const refresh_item = [delegate toolbar:delegate.toolbar
-                                    itemForItemIdentifier:@"explorer_refresh"
-                                willBeInsertedIntoToolbar:true];
-    NSToolbarItem *const breadcrumb_item = [delegate toolbar:delegate.toolbar
-                                       itemForItemIdentifier:@"explorer_breadcrumb"
-                                   willBeInsertedIntoToolbar:true];
-    NSToolbarItem *const commander_item = [delegate toolbar:delegate.toolbar
-                                      itemForItemIdentifier:@"explorer_commander_mode"
-                                  willBeInsertedIntoToolbar:true];
-    REQUIRE([back_item.view isKindOfClass:NSButton.class]);
-    REQUIRE([forward_item.view isKindOfClass:NSButton.class]);
-    REQUIRE([up_item.view isKindOfClass:NSButton.class]);
-    REQUIRE([refresh_item.view isKindOfClass:NSButton.class]);
-    REQUIRE([breadcrumb_item.view isKindOfClass:NCExplorerBreadcrumbControl.class]);
-    REQUIRE([commander_item.view isKindOfClass:NSButton.class]);
-    NSButton *const back = static_cast<NSButton *>(back_item.view);
-    NSButton *const forward = static_cast<NSButton *>(forward_item.view);
-    NSButton *const up = static_cast<NSButton *>(up_item.view);
-    NSButton *const refresh = static_cast<NSButton *>(refresh_item.view);
-    NCExplorerBreadcrumbControl *const breadcrumb = static_cast<NCExplorerBreadcrumbControl *>(breadcrumb_item.view);
-    NSButton *const commander = static_cast<NSButton *>(commander_item.view);
-    const NSArray<NSButton *> *const buttons = @[back, forward, up, refresh, commander];
-    const NSArray<NSString *> *const identifiers = @[
-        @"wincommander.explorer.toolbar.back",
-        @"wincommander.explorer.toolbar.forward",
-        @"wincommander.explorer.toolbar.up",
-        @"wincommander.explorer.toolbar.refresh",
-        @"wincommander.explorer.toolbar.commanderMode",
-    ];
     for( NSUInteger index = 0; index != buttons.count; ++index ) {
         NSButton *const button = buttons[index];
         CHECK([button.accessibilityIdentifier isEqualToString:identifiers[index]]);
@@ -1768,54 +1729,12 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     CHECK_FALSE(dispatcher.lastRefreshAvailability.has_value());
     CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
 
-    const VFSHostPtr host = std::make_shared<NativePasteboardTestHost>();
-    auto snapshot = ExplorerSnapshot(nc::core::PaneLoadPhase::Loaded, host);
-    for( const bool can_go_back : {false, true} ) {
-        for( const bool can_go_forward : {false, true} ) {
-            snapshot.state.history_availability = {
-                .can_go_back = can_go_back,
-                .can_go_forward = can_go_forward,
-            };
-            [delegate applyPaneSnapshot:snapshot];
-            CHECK(back.enabled == can_go_back);
-            CHECK(forward.enabled == can_go_forward);
-            REQUIRE(dispatcher.lastBackAvailability);
-            REQUIRE(dispatcher.lastForwardAvailability);
-            CHECK(dispatcher.lastBackAvailability->can_go_back == can_go_back);
-            CHECK(dispatcher.lastBackAvailability->can_go_forward == can_go_forward);
-            CHECK(dispatcher.lastForwardAvailability == dispatcher.lastBackAvailability);
-            CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
-            CHECK(back.toolTip.length > 0);
-            CHECK(forward.toolTip.length > 0);
-            CHECK(back.accessibilityHelp.length > 0);
-            CHECK(forward.accessibilityHelp.length > 0);
-        }
-    }
-    CHECK([breadcrumb.accessibilityValue isEqual:@"/fixture/"]);
-    REQUIRE(back.enabled);
-    REQUIRE(forward.enabled);
-    [back performClick:nil];
-    [forward performClick:nil];
-    CHECK(dispatcher.backExecutionCount == 1);
-    CHECK(dispatcher.forwardExecutionCount == 1);
-    CHECK(dispatcher.lastBackExecutionSource == nc::core::CommandInvocationSource::Toolbar);
-    CHECK(dispatcher.lastForwardExecutionSource == nc::core::CommandInvocationSource::Toolbar);
-    CHECK(dispatcher.lastBackSender == back);
-    CHECK(dispatcher.lastForwardSender == forward);
+}
 
-    snapshot.state.load_phase = nc::core::PaneLoadPhase::Loading;
-    [delegate applyPaneSnapshot:snapshot];
-    CHECK_FALSE(up.enabled);
-    CHECK_FALSE(refresh.enabled);
-    REQUIRE(dispatcher.lastUpAvailability);
-    REQUIRE(dispatcher.lastRefreshAvailability);
-    CHECK(*dispatcher.lastUpAvailability == nc::core::NavigationUpAvailability::Busy);
-    CHECK(*dispatcher.lastRefreshAvailability == nc::core::NavigationRefreshAvailability::Busy);
-    CHECK(up.toolTip != nil);
-    CHECK(refresh.toolTip != nil);
-    CHECK(up.accessibilityHelp != nil);
-    CHECK(refresh.accessibilityHelp != nil);
-
+/** How the toolbar answers history snapshots, matching and not. */
+/** How availability follows the snapshot's own contents, and what a foreign snapshot does not do. */
+[[clang::noinline]] static void CheckExplorerToolbarAvailability(nc::core::PaneSnapshot &snapshot, const VFSHostPtr &host, NCExplorerToolbarDelegate *const delegate, ExplorerToolbarTestActionsDispatcher *const dispatcher, NSButton *const back, NSButton *const forward, NSButton *const up, NSButton *const refresh, NCExplorerBreadcrumbControl *const breadcrumb)
+{
     snapshot.state.load_phase = nc::core::PaneLoadPhase::Loaded;
     snapshot.state.is_uniform = true;
     snapshot.state.path = "/";
@@ -1902,6 +1821,109 @@ TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
     CHECK(dispatcher.forwardExecutionCount == 1);
     CHECK(dispatcher.upExecutionCount == 1);
     CHECK(dispatcher.refreshExecutionCount == 1);
+}
+
+[[clang::noinline]] static void CheckExplorerToolbarHistory(NCExplorerToolbarDelegate *const delegate, ExplorerToolbarTestActionsDispatcher *const dispatcher, NSButton *const back, NSButton *const forward, NSButton *const up, NSButton *const refresh, NCExplorerBreadcrumbControl *const breadcrumb)
+{
+    const VFSHostPtr host = std::make_shared<NativePasteboardTestHost>();
+    auto snapshot = ExplorerSnapshot(nc::core::PaneLoadPhase::Loaded, host);
+    for( const bool can_go_back : {false, true} ) {
+        for( const bool can_go_forward : {false, true} ) {
+            snapshot.state.history_availability = {
+                .can_go_back = can_go_back,
+                .can_go_forward = can_go_forward,
+            };
+            [delegate applyPaneSnapshot:snapshot];
+            CHECK(back.enabled == can_go_back);
+            CHECK(forward.enabled == can_go_forward);
+            REQUIRE(dispatcher.lastBackAvailability);
+            REQUIRE(dispatcher.lastForwardAvailability);
+            CHECK(dispatcher.lastBackAvailability->can_go_back == can_go_back);
+            CHECK(dispatcher.lastBackAvailability->can_go_forward == can_go_forward);
+            CHECK(dispatcher.lastForwardAvailability == dispatcher.lastBackAvailability);
+            CHECK(dispatcher.lastSource == nc::core::CommandInvocationSource::Toolbar);
+            CHECK(back.toolTip.length > 0);
+            CHECK(forward.toolTip.length > 0);
+            CHECK(back.accessibilityHelp.length > 0);
+            CHECK(forward.accessibilityHelp.length > 0);
+        }
+    }
+    CHECK([breadcrumb.accessibilityValue isEqual:@"/fixture/"]);
+    REQUIRE(back.enabled);
+    REQUIRE(forward.enabled);
+    [back performClick:nil];
+    [forward performClick:nil];
+    CHECK(dispatcher.backExecutionCount == 1);
+    CHECK(dispatcher.forwardExecutionCount == 1);
+    CHECK(dispatcher.lastBackExecutionSource == nc::core::CommandInvocationSource::Toolbar);
+    CHECK(dispatcher.lastForwardExecutionSource == nc::core::CommandInvocationSource::Toolbar);
+    CHECK(dispatcher.lastBackSender == back);
+    CHECK(dispatcher.lastForwardSender == forward);
+
+    snapshot.state.load_phase = nc::core::PaneLoadPhase::Loading;
+    [delegate applyPaneSnapshot:snapshot];
+    CHECK_FALSE(up.enabled);
+    CHECK_FALSE(refresh.enabled);
+    REQUIRE(dispatcher.lastUpAvailability);
+    REQUIRE(dispatcher.lastRefreshAvailability);
+    CHECK(*dispatcher.lastUpAvailability == nc::core::NavigationUpAvailability::Busy);
+    CHECK(*dispatcher.lastRefreshAvailability == nc::core::NavigationRefreshAvailability::Busy);
+    CHECK(up.toolTip != nil);
+    CHECK(refresh.toolTip != nil);
+    CHECK(up.accessibilityHelp != nil);
+    CHECK(refresh.accessibilityHelp != nil);
+
+    CheckExplorerToolbarAvailability(snapshot, host, delegate, dispatcher, back, forward, up, refresh, breadcrumb);
+}
+
+TEST_CASE(PREFIX "Explorer toolbar applies only matching history snapshots")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerBreadcrumbTestPanelController *const panel = [ExplorerBreadcrumbTestPanelController new];
+    ExplorerToolbarTestActionsDispatcher *const dispatcher = [ExplorerToolbarTestActionsDispatcher new];
+    NCExplorerToolbarDelegate *const delegate = [[NCExplorerToolbarDelegate alloc] initWithPanelController:panel
+                                                                                         actionsDispatcher:dispatcher];
+
+    NSToolbarItem *const back_item = [delegate toolbar:delegate.toolbar
+                                 itemForItemIdentifier:@"explorer_back"
+                             willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const forward_item = [delegate toolbar:delegate.toolbar
+                                    itemForItemIdentifier:@"explorer_forward"
+                                willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const up_item = [delegate toolbar:delegate.toolbar
+                               itemForItemIdentifier:@"explorer_up"
+                           willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const refresh_item = [delegate toolbar:delegate.toolbar
+                                    itemForItemIdentifier:@"explorer_refresh"
+                                willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const breadcrumb_item = [delegate toolbar:delegate.toolbar
+                                       itemForItemIdentifier:@"explorer_breadcrumb"
+                                   willBeInsertedIntoToolbar:true];
+    NSToolbarItem *const commander_item = [delegate toolbar:delegate.toolbar
+                                      itemForItemIdentifier:@"explorer_commander_mode"
+                                  willBeInsertedIntoToolbar:true];
+    REQUIRE([back_item.view isKindOfClass:NSButton.class]);
+    REQUIRE([forward_item.view isKindOfClass:NSButton.class]);
+    REQUIRE([up_item.view isKindOfClass:NSButton.class]);
+    REQUIRE([refresh_item.view isKindOfClass:NSButton.class]);
+    REQUIRE([breadcrumb_item.view isKindOfClass:NCExplorerBreadcrumbControl.class]);
+    REQUIRE([commander_item.view isKindOfClass:NSButton.class]);
+    NSButton *const back = static_cast<NSButton *>(back_item.view);
+    NSButton *const forward = static_cast<NSButton *>(forward_item.view);
+    NSButton *const up = static_cast<NSButton *>(up_item.view);
+    NSButton *const refresh = static_cast<NSButton *>(refresh_item.view);
+    NCExplorerBreadcrumbControl *const breadcrumb = static_cast<NCExplorerBreadcrumbControl *>(breadcrumb_item.view);
+    NSButton *const commander = static_cast<NSButton *>(commander_item.view);
+    const NSArray<NSButton *> *const buttons = @[back, forward, up, refresh, commander];
+    const NSArray<NSString *> *const identifiers = @[
+        @"wincommander.explorer.toolbar.back",
+        @"wincommander.explorer.toolbar.forward",
+        @"wincommander.explorer.toolbar.up",
+        @"wincommander.explorer.toolbar.refresh",
+        @"wincommander.explorer.toolbar.commanderMode",
+    ];
+    CheckExplorerToolbarIdentity(back, forward, up, refresh, breadcrumb, buttons, identifiers, dispatcher);
+    CheckExplorerToolbarHistory(delegate, dispatcher, back, forward, up, refresh, breadcrumb);
 }
 
 TEST_CASE(PREFIX "Explorer toolbar rebind retires old snapshot state before the new pane publishes")

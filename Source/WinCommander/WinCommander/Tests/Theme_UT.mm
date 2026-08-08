@@ -37,6 +37,103 @@ static nc::config::Value JSONToObj(std::string_view _json)
     return res;
 }
 
+// The assertions are split across several deliberately non-inlined helpers, and it is not a
+// stylistic choice: as one function this test's frame sat just under the project's 32 KiB limit
+// and crossed it once a sanitizer instrumented it, failing the whole scheme's build - so neither
+// ASAN nor TSan could be run on this suite at all. Each helper now gets its own frame.
+/** Part 1 of the JSON round-trip's assertions. */
+[[clang::noinline]] static void CheckThemePart1(const Theme &t)
+{
+    CHECK(t.FilePanelsGeneralDropBorderColor().toHexStdString == "#010101");
+    CHECK(t.FilePanelsGeneralOverlayColor().toHexStdString == "#010102");
+    CHECK(t.FilePanelsGeneralSplitterColor().toHexStdString == "#010103");
+    CHECK(t.FilePanelsGeneralTopSeparatorColor().toHexStdString == "#010104");
+    CHECK([t.FilePanelsHeaderFont() isEqualTo:[NSFont boldSystemFontOfSize:42]]);
+    CHECK(t.FilePanelsHeaderTextColor().toHexStdString == "#010105");
+    CHECK(t.FilePanelsHeaderActiveTextColor().toHexStdString == "#010106");
+    CHECK(t.FilePanelsHeaderActiveBackgroundColor().toHexStdString == "#010107");
+    CHECK(t.FilePanelsHeaderInactiveBackgroundColor().toHexStdString == "#010108");
+    CHECK(t.FilePanelsHeaderSeparatorColor().toHexStdString == "#010109");
+    CHECK([t.FilePanelsFooterFont() isEqualTo:[NSFont boldSystemFontOfSize:43]]);
+    CHECK(t.FilePanelsFooterTextColor().toHexStdString == "#01010A");
+    CHECK(t.FilePanelsFooterActiveTextColor().toHexStdString == "#01010B");
+    CHECK(t.FilePanelsFooterSeparatorsColor().toHexStdString == "#01010C");
+    CHECK(t.FilePanelsFooterActiveBackgroundColor().toHexStdString == "#01010D");
+    CHECK(t.FilePanelsFooterInactiveBackgroundColor().toHexStdString == "#01010E");
+    CHECK([t.FilePanelsTabsFont() isEqualTo:[NSFont boldSystemFontOfSize:44]]);
+    CHECK(t.FilePanelsTabsTextColor().toHexStdString == "#01010F");
+    CHECK(t.FilePanelsTabsSelectedKeyWndActiveBackgroundColor().toHexStdString == "#010110");
+}
+
+/** Part 2 of the JSON round-trip's assertions. */
+[[clang::noinline]] static void CheckThemePart2(const Theme &t)
+{
+    CHECK(t.FilePanelsTabsSelectedKeyWndInactiveBackgroundColor().toHexStdString == "#010111");
+    CHECK(t.FilePanelsTabsSelectedNotKeyWndBackgroundColor().toHexStdString == "#010112");
+    CHECK(t.FilePanelsTabsRegularKeyWndHoverBackgroundColor().toHexStdString == "#010113");
+    CHECK(t.FilePanelsTabsRegularKeyWndRegularBackgroundColor().toHexStdString == "#010114");
+    CHECK(t.FilePanelsTabsRegularNotKeyWndBackgroundColor().toHexStdString == "#010115");
+    CHECK(t.FilePanelsTabsSeparatorColor().toHexStdString == "#010116");
+    CHECK(t.FilePanelsTabsPictogramColor().toHexStdString == "#010117");
+    CHECK([t.FilePanelsBriefFont() isEqualTo:[NSFont boldSystemFontOfSize:45]]);
+    CHECK(t.FilePanelsBriefGridColor().toHexStdString == "#010118");
+    CHECK(t.FilePanelsBriefRegularEvenRowBackgroundColor().toHexStdString == "#010119");
+    CHECK(t.FilePanelsBriefRegularOddRowBackgroundColor().toHexStdString == "#01011A");
+    CHECK(t.FilePanelsBriefFocusedActiveItemBackgroundColor().toHexStdString == "#01011B");
+    CHECK(t.FilePanelsBriefFocusedInactiveItemBackgroundColor().toHexStdString == "#01011C");
+    CHECK(t.FilePanelsBriefSelectedItemBackgroundColor().toHexStdString == "#01011D");
+    CHECK([t.FilePanelsListFont() isEqualTo:[NSFont boldSystemFontOfSize:46]]);
+    CHECK(t.FilePanelsListGridColor().toHexStdString == "#01011E");
+    CHECK([t.FilePanelsListHeaderFont() isEqualTo:[NSFont boldSystemFontOfSize:47]]);
+    CHECK(t.FilePanelsListHeaderBackgroundColor().toHexStdString == "#01011F");
+    CHECK(t.FilePanelsListHeaderTextColor().toHexStdString == "#010120");
+}
+
+/** Part 3 of the JSON round-trip's assertions. */
+[[clang::noinline]] static void CheckThemePart3(const Theme &t)
+{
+    CHECK(t.FilePanelsListHeaderSeparatorColor().toHexStdString == "#010121");
+    CHECK(t.FilePanelsListFocusedActiveRowBackgroundColor().toHexStdString == "#010122");
+    CHECK(t.FilePanelsListRegularEvenRowBackgroundColor().toHexStdString == "#010123");
+    CHECK(t.FilePanelsListRegularOddRowBackgroundColor().toHexStdString == "#010124");
+    CHECK(t.FilePanelsListSelectedRowBackgroundColor().toHexStdString == "#010125");
+    CHECK([t.TerminalFont() isEqualTo:[NSFont boldSystemFontOfSize:48]]);
+    CHECK(t.TerminalOverlayColor().toHexStdString == "#010126");
+    CHECK(t.TerminalForegroundColor().toHexStdString == "#010127");
+    CHECK(t.TerminalBoldForegroundColor().toHexStdString == "#010128");
+    CHECK(t.TerminalBackgroundColor().toHexStdString == "#010129");
+    CHECK(t.TerminalSelectionColor().toHexStdString == "#01012A");
+    CHECK(t.TerminalCursorColor().toHexStdString == "#01012B");
+    CHECK(t.TerminalAnsiColor0().toHexStdString == "#01012C");
+    CHECK(t.TerminalAnsiColor1().toHexStdString == "#01012D");
+    CHECK(t.TerminalAnsiColor2().toHexStdString == "#01012E");
+    CHECK(t.TerminalAnsiColor3().toHexStdString == "#01012F");
+    CHECK(t.TerminalAnsiColor4().toHexStdString == "#010130");
+    CHECK(t.TerminalAnsiColor5().toHexStdString == "#010131");
+    CHECK(t.TerminalAnsiColor6().toHexStdString == "#010132");
+}
+
+/** Part 4 of the JSON round-trip's assertions. */
+[[clang::noinline]] static void CheckThemePart4(const Theme &t)
+{
+    CHECK(t.TerminalAnsiColor7().toHexStdString == "#010133");
+    CHECK(t.TerminalAnsiColor8().toHexStdString == "#010134");
+    CHECK(t.TerminalAnsiColor9().toHexStdString == "#010135");
+    CHECK(t.TerminalAnsiColorA().toHexStdString == "#010136");
+    CHECK(t.TerminalAnsiColorB().toHexStdString == "#010137");
+    CHECK(t.TerminalAnsiColorC().toHexStdString == "#010138");
+    CHECK(t.TerminalAnsiColorD().toHexStdString == "#010139");
+    CHECK(t.TerminalAnsiColorE().toHexStdString == "#01013A");
+    CHECK(t.TerminalAnsiColorF().toHexStdString == "#01013B");
+    CHECK([t.ViewerFont() isEqualTo:[NSFont boldSystemFontOfSize:49]]);
+    CHECK(t.ViewerOverlayColor().toHexStdString == "#01013C");
+    CHECK(t.ViewerTextColor().toHexStdString == "#01013D");
+    CHECK(t.ViewerSelectionColor().toHexStdString == "#01013E");
+    CHECK(t.ViewerBackgroundColor().toHexStdString == "#01013D");
+    CHECK(t.FilePanelsItemsColoringRules().size() == 1);
+    CHECK(t.FilePanelsItemsColoringRules().at(0) == Theme::ColoringRule{});
+}
+
 TEST_CASE(PREFIX "Constructs from JSON")
 {
     const auto json = "{\
@@ -114,77 +211,8 @@ TEST_CASE(PREFIX "Constructs from JSON")
         'viewerBackgroundColor': '#01013D'\
     }";
     const Theme t{JSONToObj(json), JSONToObj("{}")};
-    CHECK(t.FilePanelsGeneralDropBorderColor().toHexStdString == "#010101");
-    CHECK(t.FilePanelsGeneralOverlayColor().toHexStdString == "#010102");
-    CHECK(t.FilePanelsGeneralSplitterColor().toHexStdString == "#010103");
-    CHECK(t.FilePanelsGeneralTopSeparatorColor().toHexStdString == "#010104");
-    CHECK([t.FilePanelsHeaderFont() isEqualTo:[NSFont boldSystemFontOfSize:42]]);
-    CHECK(t.FilePanelsHeaderTextColor().toHexStdString == "#010105");
-    CHECK(t.FilePanelsHeaderActiveTextColor().toHexStdString == "#010106");
-    CHECK(t.FilePanelsHeaderActiveBackgroundColor().toHexStdString == "#010107");
-    CHECK(t.FilePanelsHeaderInactiveBackgroundColor().toHexStdString == "#010108");
-    CHECK(t.FilePanelsHeaderSeparatorColor().toHexStdString == "#010109");
-    CHECK([t.FilePanelsFooterFont() isEqualTo:[NSFont boldSystemFontOfSize:43]]);
-    CHECK(t.FilePanelsFooterTextColor().toHexStdString == "#01010A");
-    CHECK(t.FilePanelsFooterActiveTextColor().toHexStdString == "#01010B");
-    CHECK(t.FilePanelsFooterSeparatorsColor().toHexStdString == "#01010C");
-    CHECK(t.FilePanelsFooterActiveBackgroundColor().toHexStdString == "#01010D");
-    CHECK(t.FilePanelsFooterInactiveBackgroundColor().toHexStdString == "#01010E");
-    CHECK([t.FilePanelsTabsFont() isEqualTo:[NSFont boldSystemFontOfSize:44]]);
-    CHECK(t.FilePanelsTabsTextColor().toHexStdString == "#01010F");
-    CHECK(t.FilePanelsTabsSelectedKeyWndActiveBackgroundColor().toHexStdString == "#010110");
-    CHECK(t.FilePanelsTabsSelectedKeyWndInactiveBackgroundColor().toHexStdString == "#010111");
-    CHECK(t.FilePanelsTabsSelectedNotKeyWndBackgroundColor().toHexStdString == "#010112");
-    CHECK(t.FilePanelsTabsRegularKeyWndHoverBackgroundColor().toHexStdString == "#010113");
-    CHECK(t.FilePanelsTabsRegularKeyWndRegularBackgroundColor().toHexStdString == "#010114");
-    CHECK(t.FilePanelsTabsRegularNotKeyWndBackgroundColor().toHexStdString == "#010115");
-    CHECK(t.FilePanelsTabsSeparatorColor().toHexStdString == "#010116");
-    CHECK(t.FilePanelsTabsPictogramColor().toHexStdString == "#010117");
-    CHECK([t.FilePanelsBriefFont() isEqualTo:[NSFont boldSystemFontOfSize:45]]);
-    CHECK(t.FilePanelsBriefGridColor().toHexStdString == "#010118");
-    CHECK(t.FilePanelsBriefRegularEvenRowBackgroundColor().toHexStdString == "#010119");
-    CHECK(t.FilePanelsBriefRegularOddRowBackgroundColor().toHexStdString == "#01011A");
-    CHECK(t.FilePanelsBriefFocusedActiveItemBackgroundColor().toHexStdString == "#01011B");
-    CHECK(t.FilePanelsBriefFocusedInactiveItemBackgroundColor().toHexStdString == "#01011C");
-    CHECK(t.FilePanelsBriefSelectedItemBackgroundColor().toHexStdString == "#01011D");
-    CHECK([t.FilePanelsListFont() isEqualTo:[NSFont boldSystemFontOfSize:46]]);
-    CHECK(t.FilePanelsListGridColor().toHexStdString == "#01011E");
-    CHECK([t.FilePanelsListHeaderFont() isEqualTo:[NSFont boldSystemFontOfSize:47]]);
-    CHECK(t.FilePanelsListHeaderBackgroundColor().toHexStdString == "#01011F");
-    CHECK(t.FilePanelsListHeaderTextColor().toHexStdString == "#010120");
-    CHECK(t.FilePanelsListHeaderSeparatorColor().toHexStdString == "#010121");
-    CHECK(t.FilePanelsListFocusedActiveRowBackgroundColor().toHexStdString == "#010122");
-    CHECK(t.FilePanelsListRegularEvenRowBackgroundColor().toHexStdString == "#010123");
-    CHECK(t.FilePanelsListRegularOddRowBackgroundColor().toHexStdString == "#010124");
-    CHECK(t.FilePanelsListSelectedRowBackgroundColor().toHexStdString == "#010125");
-    CHECK([t.TerminalFont() isEqualTo:[NSFont boldSystemFontOfSize:48]]);
-    CHECK(t.TerminalOverlayColor().toHexStdString == "#010126");
-    CHECK(t.TerminalForegroundColor().toHexStdString == "#010127");
-    CHECK(t.TerminalBoldForegroundColor().toHexStdString == "#010128");
-    CHECK(t.TerminalBackgroundColor().toHexStdString == "#010129");
-    CHECK(t.TerminalSelectionColor().toHexStdString == "#01012A");
-    CHECK(t.TerminalCursorColor().toHexStdString == "#01012B");
-    CHECK(t.TerminalAnsiColor0().toHexStdString == "#01012C");
-    CHECK(t.TerminalAnsiColor1().toHexStdString == "#01012D");
-    CHECK(t.TerminalAnsiColor2().toHexStdString == "#01012E");
-    CHECK(t.TerminalAnsiColor3().toHexStdString == "#01012F");
-    CHECK(t.TerminalAnsiColor4().toHexStdString == "#010130");
-    CHECK(t.TerminalAnsiColor5().toHexStdString == "#010131");
-    CHECK(t.TerminalAnsiColor6().toHexStdString == "#010132");
-    CHECK(t.TerminalAnsiColor7().toHexStdString == "#010133");
-    CHECK(t.TerminalAnsiColor8().toHexStdString == "#010134");
-    CHECK(t.TerminalAnsiColor9().toHexStdString == "#010135");
-    CHECK(t.TerminalAnsiColorA().toHexStdString == "#010136");
-    CHECK(t.TerminalAnsiColorB().toHexStdString == "#010137");
-    CHECK(t.TerminalAnsiColorC().toHexStdString == "#010138");
-    CHECK(t.TerminalAnsiColorD().toHexStdString == "#010139");
-    CHECK(t.TerminalAnsiColorE().toHexStdString == "#01013A");
-    CHECK(t.TerminalAnsiColorF().toHexStdString == "#01013B");
-    CHECK([t.ViewerFont() isEqualTo:[NSFont boldSystemFontOfSize:49]]);
-    CHECK(t.ViewerOverlayColor().toHexStdString == "#01013C");
-    CHECK(t.ViewerTextColor().toHexStdString == "#01013D");
-    CHECK(t.ViewerSelectionColor().toHexStdString == "#01013E");
-    CHECK(t.ViewerBackgroundColor().toHexStdString == "#01013D");
-    CHECK(t.FilePanelsItemsColoringRules().size() == 1);
-    CHECK(t.FilePanelsItemsColoringRules().at(0) == Theme::ColoringRule{});
+    CheckThemePart1(t);
+    CheckThemePart2(t);
+    CheckThemePart3(t);
+    CheckThemePart4(t);
 }

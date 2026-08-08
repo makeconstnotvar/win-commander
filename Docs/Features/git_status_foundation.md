@@ -136,11 +136,13 @@ The read buffer started as a 64 KB `std::array` on the stack and broke the proje
 - Focused `'nc::core::ReadGitStatus*'` plus `'nc::core::FindGitRepositoryRoot*'` again under **ASAN+UBSAN**: **16/16 cases, 67 assertions** — this slice spawns a child, hands it descriptors and reads a pipe, which is where that budget applies.
 - Full `WinCommanderUT --rng-seed 424242`: **781/781 cases, 11,640 assertions**.
 
-### The sanitizers are blocked by two unrelated tests
+### The sanitizers were blocked by two unrelated tests — now fixed
 
-`WinCommanderUT` **cannot be built under ASAN or TSan as it stands**. Two test cases sit just under the 32,768-byte frame limit and cross it once instrumented — `Theme_UT.mm:40` at 34,688 under ASAN, `PanelPresentationGeometry_UT.mm:1696` at 33,536 under TSan. It is a `-Werror` error, so the whole scheme fails to build.
+`WinCommanderUT` could not be built under ASAN or TSan at all. Two test cases sat just under the 32,768-byte frame limit and crossed it once instrumented — `Theme_UT.mm` at 34,688 under ASAN, `PanelPresentationGeometry_UT.mm` at up to 49,184. It is a `-Werror` error, so the whole scheme failed to build.
 
-The ASAN run above was obtained by relaxing that one warning for the build only, which silences the check for every file and is therefore a workaround, not a fix. Fixing the two tests is spun off separately. The limit should not be raised — it caught a real oversized buffer in this slice's own production code.
+Both are now split across deliberately non-inlined helpers. No assertion was removed and no content changed; each helper simply gets its own frame. The limit was not raised — it caught a real oversized buffer in this slice's own production code, which is the argument for keeping it.
+
+Both schemes now build with no flag overrides, and the ASAN figures quoted above were re-obtained that way.
 
 ### Coverage gap
 
