@@ -50,3 +50,37 @@ Built and run in this session (Xcode 26.6 toolchain):
 - No ASAN/UBSAN run: this is a pure value model with no allocation ownership, concurrency, raw buffers or `Operations`/`VFS`/`RoutedIO` involvement — per `AGENTS.md`'s verification budget, a focused filter plus a Debug build is the right tier. The increment that submits real mutations (CS-4) is where that budget changes.
 
 The Xcode project gained a `Core/Compare` group plus the model and its test file; `plutil -lint` accepts the project, and both the library and test targets build, which is the project-metadata check `AGENTS.md` asks for when generated sources or project metadata change.
+
+---
+
+# CS-x: comparing trees, not just one level
+
+`CompareFolders` compares one directory level and reports a directory present on both sides as `Same`, claiming nothing about its contents — with a warning in its own header that a consumer must not read that as "nothing to do". Nothing enforced the warning, and a sync that believed it would skip a subtree that is not identical.
+
+`CompareFoldersRecursively` closes that. It walks both trees from the roots down, and **a directory's status becomes what its subtree says**: differ anywhere below, and the directory itself reports `Changed`, all the way up to the root's own child. That is the property a sync depends on — no directory above a difference may read as `Same`, however deep the difference is.
+
+## What it refuses to do
+
+Every one of these is a refusal to guess, and each protects a different way a sync could destroy something.
+
+- **An unreadable directory fails the whole comparison** rather than being reported as empty. In the result the two are indistinguishable, and the difference is everything: one means "nothing inside", the other "we do not know". A sync acting on the first would delete a subtree it never saw.
+- **Only a directory present on both sides is descended into.** A `LeftOnly` directory is reported once, whole — enumerating what is inside something the other side does not have adds nothing a sync can act on separately, and would bury the one entry that matters.
+- **A `Conflict` is never descended into.** A directory facing a file has no common structure to walk, and pairing its children against a file's non-existent ones would be inventing a comparison.
+- **Both budgets are failures, not truncations.** A truncated comparison is indistinguishable from a complete one that found less — which is exactly how a sync deletes what it never looked at. Depth exists so a symlink loop or a pathological tree cannot run forever; the entry budget bounds the answer's size.
+- **A cancel checker that threw stops the walk.** It told us nothing, and continuing on the strength of a broken predicate is how a cancelled walk keeps going.
+
+The lister is injected, because "read this directory" belongs to whatever holds the VFS host — and because a comparison of two trees has to be testable without either of them existing.
+
+## Ordering
+
+Depth-first, parents before their children, each level in the order the level comparison produced. A display can therefore indent by `depth` alone and never has to reorder.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::CompareFoldersRecursively*'`: **8/8 cases, 47 assertions** — a directory reported by its subtree rather than its presence; an identical tree staying identical with the exact depth-first order asserted; a one-sided directory reported once and whole; a conflict not descended into; an unreadable directory failing, including an unreadable root and a missing lister; both budgets failing rather than truncating, and a budget that fits answering in full; cancellation, including a checker that threw; and a difference three levels down turning every directory above it `Changed`.
+- Full `WinCommanderUT --rng-seed 424242`: **832/832 cases, 11,878 assertions**.
+
+### Coverage gap
+
+**Nothing calls it, and the sync plan is still per-level.** Feeding a recursive comparison into `BuildSyncPlan`, and the compare screen with include/exclude and per-file diff, remain what is left of Q2-2.
