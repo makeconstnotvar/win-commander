@@ -7,6 +7,7 @@
 #include "SFTPHost.h"
 #include "File.h"
 #include "Errors.h"
+#include "HostKeyVerification.h"
 #include "OSDetector.h"
 #include "AccountsFetcher.h"
 #include <sys/socket.h>
@@ -19,6 +20,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/dirent.h>
+#include <span>
 
 // libssh2 is full of macros with C-style casts, hence disabling here
 #pragma clang diagnostic push
@@ -329,6 +331,11 @@ std::expected<std::unique_ptr<SFTPHost::Connection>, Error> SFTPHost::SpawnSSH2(
     if( rc )
         return std::unexpected(Error{ErrorDomain, rc});
 
+    // Deliberately before every authentication path below. A password or a passphrase-unlocked key
+    // sent to an unverified server is already disclosed, so refusing afterwards would be too late.
+    if( const std::expected<void, Error> verified = VerifyHostKey(*connection); !verified )
+        return std::unexpected(verified.error());
+
     if( !Config().keypath.empty() ) {
         rc = libssh2_userauth_publickey_fromfile_ex(connection->ssh,
                                                     Config().user.c_str(),
@@ -362,6 +369,40 @@ std::expected<std::unique_ptr<SFTPHost::Connection>, Error> SFTPHost::SpawnSSH2(
     }
 
     return std::move(connection);
+}
+
+std::expected<void, Error> SFTPHost::VerifyHostKey(const Connection &_connection) const
+{
+    using sftp::ErrorDomain;
+    using sftp::Errors;
+
+    // No policy installed means nobody has decided what this process trusts. Connecting anyway is
+    // exactly the silent accept host verification exists to prevent, so this fails closed.
+    const std::shared_ptr<sftp::HostKeyVerifier> verifier = sftp::HostKeyVerifierOrNull();
+    if( !verifier )
+        return std::unexpected(Error{ErrorDomain, Errors::host_verification_failed});
+
+    const char *const hash =
+        libssh2_hostkey_hash(_connection.ssh, LIBSSH2_HOSTKEY_HASH_SHA256); // 32 bytes, or null
+    if( hash == nullptr )
+        return std::unexpected(Error{ErrorDomain, Errors::host_key_unavailable});
+
+    size_t key_length = 0;
+    int key_type = LIBSSH2_HOSTKEY_TYPE_UNKNOWN;
+    // Only for naming the algorithm to the user - the fingerprint above is what gets compared.
+    if( libssh2_session_hostkey(_connection.ssh, &key_length, &key_type) == nullptr )
+        key_type = LIBSSH2_HOSTKEY_TYPE_UNKNOWN;
+
+    const std::string fingerprint = sftp::FormatHostKeyFingerprint(
+        std::span{reinterpret_cast<const unsigned char *>(hash), 32}); // NOLINT
+    const sftp::HostKeyPresentation presented{.server_url = Config().server_url,
+                                              .port = Config().port > 0 ? Config().port : 22,
+                                              .algorithm = sftp::HostKeyAlgorithmName(key_type),
+                                              .fingerprint = fingerprint};
+    if( !verifier->VerifyHostKey(presented) )
+        return std::unexpected(Error{ErrorDomain, Errors::host_verification_failed});
+
+    return {};
 }
 
 std::expected<void, Error> SFTPHost::SpawnSFTP(Connection &_t)

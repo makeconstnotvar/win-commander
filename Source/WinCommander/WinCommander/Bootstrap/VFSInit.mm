@@ -9,6 +9,7 @@
 #include <VFS/NetSFTP.h>
 #include <VFS/NetWebDAV.h>
 #include <WinCommander/Bootstrap/AppDelegate.h>
+#include <WinCommander/Core/Remote/SFTPHostKeyPolicy.h>
 
 namespace nc::bootstrap {
 
@@ -27,6 +28,10 @@ void RegisterAvailableVFS()
     VFSFactory::Instance().RegisterVFS(vfs::ArchiveRawHost::Meta());
     VFSFactory::Instance().RegisterVFS(vfs::XAttrHost::Meta());
     VFSFactory::Instance().RegisterVFS(vfs::WebDAVHost::Meta());
+
+    // Before anything can spawn an SFTP host, not after: a connection made without a policy in place
+    // is refused outright, which is the correct answer but a confusing one to hand a user.
+    core::InstallSFTPHostKeyPolicy();
 }
 
 } // namespace nc::bootstrap

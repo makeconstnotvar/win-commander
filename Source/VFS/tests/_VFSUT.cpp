@@ -16,4 +16,5 @@
 #include "VFSArchive_UT.cpp"
 #include "VFSArchiveRaw_UT.cpp"
 #include "VFSNative_UT.cpp"
+#include "NetSFTP/HostKeyVerification_UT.cpp"
 #include "NetSFTP/KeyValidator_UT.cpp"

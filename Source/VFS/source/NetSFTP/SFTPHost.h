@@ -148,6 +148,12 @@ private:
                                       void **abstract);
     std::expected<void, Error> DoInit();
     std::expected<std::unique_ptr<Connection>, Error> SpawnSSH2();
+    /**
+     * Puts the server's host key to the installed policy, and fails when there is no policy or the
+     * policy refuses. Called after the handshake and before any authentication, since a credential
+     * sent to an unverified server is already disclosed.
+     */
+    std::expected<void, Error> VerifyHostKey(const Connection &_connection) const;
     static std::expected<void, Error> SpawnSFTP(Connection &_t);
     static bool ServerHasReversedSymlinkParameters(LIBSSH2_SESSION *_session);
 

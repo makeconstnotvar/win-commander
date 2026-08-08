@@ -4,3 +4,4 @@
 #include "../../source/NetSFTP/Errors.h"
 #include "../../source/NetSFTP/SFTPHost.h"
 #include "../../source/NetSFTP/KeyValidator.h"
+#include "../../source/NetSFTP/HostKeyVerification.h"

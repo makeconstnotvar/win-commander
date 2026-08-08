@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-5: Remote connection state, retry, host trust, pinning and presentation
+# Q2-5 RC-1…RC-7: Remote connection state, retry, host trust, pinning, presentation and enforcement
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -113,8 +113,62 @@ Built and run in this session (Xcode 26.6 toolchain):
 - Full unfiltered `WinCommanderUT --rng-seed 424242`: **696/696 cases, 11,232/11,232 assertions**.
 - No ASAN/UBSAN/TSan run: a pure value model with no allocation ownership, concurrency or `Operations`/`VFS`/`RoutedIO` involvement. The increment that performs real reconnection scheduling is where that budget changes.
 
-### Coverage gaps
+### Coverage gaps at RC-5
 
 - **The keychain round-trip itself is untested.** The tests cover key derivation and the pre-call guards; actually storing and reading a pin would touch the developer's real keychain, which a unit-test binary must not do. That belongs in an integration fixture with its own keychain.
-- **Nothing wires this to providers yet.** No VFS provider presents a fingerprint to `RemoteHostTrustPolicy` today, so host verification is built but not yet consulted on connect — the next increment.
+- **Nothing wires this to providers yet** — closed by RC-6 and RC-7 below.
 - No scheduler, no UI, and no system SMB/NFS mount handling — all later Q2-5 increments.
+
+---
+
+# RC-6: the gate, in VFS
+
+Until now SFTP completed its handshake and went straight on to authentication. Whatever key the server presented was accepted — including a key that had changed since last time. Everything RC-2…RC-5 built was correct and consulted by nobody.
+
+## Where the check goes, and why exactly there
+
+Immediately after the handshake and **before every authentication path**. A password, or a passphrase-unlocked private key, sent to an unverified server is already disclosed; refusing afterwards would tell the user about an interception that had already succeeded. The single call sits above both the public-key branch and the keyboard-interactive/password branch, so no future third path can be added that skips it by accident.
+
+## VFS asks; it does not decide
+
+`HostKeyVerifier` is an interface, and pinning, keychain storage and prompting all live above it. That keeps `Source/VFS` free of any dependency on the application, keeps this module testable without a keychain or a user, and means the layer that *can* ask a human is the one that does.
+
+The policy is process-wide rather than per-host. That is not a shortcut: host-key policy genuinely is a property of the process — one `known_hosts` covers every ssh session a user starts — and a host revived from a serialized configuration arrives through a factory with no call site that could hand it one.
+
+## No policy means no connection
+
+An absent policy is a refusal, not a fallback to connecting unverified. Nobody has decided what this process trusts, and proceeding anyway is precisely the silent accept host verification exists to prevent. It also makes a mis-wired build fail loudly at the first connection rather than quietly stop verifying.
+
+Two smaller decisions follow the same rule: a fingerprint the session cannot produce is `host_key_unavailable` rather than an empty fingerprint offered for comparison, and an algorithm libssh2 does not name is reported as unknown rather than guessed — that string is shown to a user making a trust decision, and an invented one is worse than none.
+
+Neither refusal is classified as `Unavailable` or `TimedOut`. That is what keeps them out of RC-1's retryable set: a host-key failure that retried until it succeeded would defeat the check entirely.
+
+The fingerprint is formatted as lowercase hex with no separators — the exact form RC-2's comparison normalizes to, so a fingerprint makes the round trip through storage and back without a normalization step that could differ between the writer and the reader.
+
+# RC-7: the policy, in the application
+
+`SFTPHostKeyPolicy` implements the interface on top of `RemoteHostTrustPolicy` and the keychain store, and it is installed beside `RegisterAvailableVFS` — before anything can spawn an SFTP host.
+
+- A pinned host connects with no interruption.
+- An unknown host asks the user once, showing host, port, algorithm and fingerprint, and is pinned on acceptance.
+- A **mismatched** host is refused without a prompt. This is where RC-2's `MayPromptToTrust` earns its keep: offering accept/decline for a key that changed would train users to click through the one warning that must never become routine.
+- An unverifiable fingerprint is refused without a prompt: nothing was compared, so there is no question worth asking.
+- An accepted host whose pin **could not be made durable** is reported as a refusal. Connecting anyway would ask again next launch with no way for the user to tell an unremembered host from a changed one.
+
+**A pin is filed under `[host]:port`.** The port is part of the identity: two services on one machine can legitimately present different keys, and one silently inheriting the other's pin would either accept a host nobody verified or warn about one that never changed. The brackets are OpenSSH's spelling and they are what makes it unambiguous for IPv6 literals, which are full of colons of their own — without them `("a", 22)` and `("a:22", 22)` would be filed in the same place.
+
+The prompt is injected rather than called directly, so the refusals — which are the security-relevant part — are testable without a user, and so no test can block on a modal window. The concrete prompt follows the threading contract this connect path already relies on for passwords: on a background queue it hops to the main thread and waits.
+
+## Verification
+
+- `WinCommanderUT`, `VFSUT`, `VFSIT`, `WinCommanderIT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- Focused `VFSUT 'nc::vfs::sftp::HostKeyVerification*'`: **6/6 cases, 22 assertions** — the hex spelling and its lowercase guarantee; every byte kept, including zeros, which is what stops two keys sharing a fingerprint; known algorithms named and unknown ones left empty; no policy until one is installed; a policy replaced mid-flight staying alive and usable for the handshake already holding it.
+- Focused `WinCommanderUT 'nc::core::SFTPHostKeyPolicy*'`: **8/8 cases, 36 assertions** — the `[host]:port` naming including IPv6 and the `("a",22)`/`("a:22",22)` collision; asked once and never again, across spellings; declining refusing and recording nothing; a changed key refused without a prompt and the old pin left intact; an unusable fingerprint refused without a prompt; two ports treated as two hosts; an accepted host that could not be stored reported as a refusal; and no prompt available meaning refusal for an unknown host but not for a pinned one.
+- Full `WinCommanderUT --rng-seed 424242`: **751/751 cases, 11,475 assertions**. Full `VFSUT`: **191/191 cases** (its assertion total varies run to run — some cases iterate over live filesystem content).
+- No ASAN/UBSAN/TSan run: the change adds no allocation ownership or concurrency beyond a mutex-guarded pointer swap, whose contract is covered by the replacement test above.
+
+### Coverage gaps
+
+- **The end-to-end refusal is not covered by an automated test.** Proving that a real handshake stops before authentication needs a server; the `VFSIT` SFTP suite runs against a Docker container and now installs an explicit accept-all policy, which is where a "reject and assert no credential was sent" case belongs.
+- **SFTP only.** FTP has no host key to verify, and WebDAV's identity is a TLS certificate — a different mechanism that needs its own slice.
+- The keychain round-trip, the reconnect scheduler, the manager UI and system SMB/NFS mounts remain as listed above.

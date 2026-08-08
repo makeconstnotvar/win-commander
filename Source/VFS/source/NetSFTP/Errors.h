@@ -65,6 +65,10 @@ struct Errors {
     static constexpr long hash_calc = -54;
     static constexpr long connect_failed = -1000000;
     static constexpr long couldnt_resolve = -1000001;
+    /** The host key was refused, or no host-key policy was installed to judge it. */
+    static constexpr long host_verification_failed = -1000002;
+    /** The handshake completed but the server's key could not be read, so nothing was verified. */
+    static constexpr long host_key_unavailable = -1000003;
     static constexpr long fx_eof = 1;
     static constexpr long fx_no_such_file = 2;
     static constexpr long fx_permission_denied = 3;

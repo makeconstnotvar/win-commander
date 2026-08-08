@@ -10,17 +10,35 @@
 #include <Base/CommonPaths.h>
 #include <Base/SysLocale.h>
 #include <ftw.h>
+#include <memory>
 
 #include <spdlog/sinks/stdout_sinks.h>
 #include <VFS/Log.h>
+#include <VFS/NetSFTP.h>
 
 static auto g_TestDirPrefix = "_nc__vfs__test_";
 
 [[clang::no_destroy]] static auto g_LogSink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
 [[clang::no_destroy]] static auto g_Log = std::make_shared<spdlog::logger>("vfs", g_LogSink);
 
+namespace {
+
+/**
+ * Accepts every host key.
+ *
+ * SFTP connections refuse to authenticate unless a host-key policy is installed, and these tests are
+ * about transfer behaviour rather than trust decisions - the policy has its own tests, which do not
+ * need a server. Installed here, in one visible place, rather than left implicit.
+ */
+struct AcceptAnyHostKey final : nc::vfs::sftp::HostKeyVerifier {
+    bool VerifyHostKey(const nc::vfs::sftp::HostKeyPresentation &) override { return true; }
+};
+
+} // namespace
+
 int main(int argc, char *argv[])
 {
+    nc::vfs::sftp::SetHostKeyVerifier(std::make_shared<AcceptAnyHostKey>());
     //    g_Log->set_level(spdlog::level::trace);
     //    nc::vfs::Log::Set(g_Log);
     nc::base::SetSystemLocaleAsCLocale();

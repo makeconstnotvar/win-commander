@@ -32,6 +32,7 @@
 #include "NetSFTP/AccountsFetcher.cpp"
 #include "NetSFTP/Errors.cpp"
 #include "NetSFTP/File.cpp"
+#include "NetSFTP/HostKeyVerification.cpp"
 #include "NetSFTP/KeyValidator.cpp"
 #include "NetSFTP/OSDetector.cpp"
 #include "NetSFTP/SFTPHost.cpp"

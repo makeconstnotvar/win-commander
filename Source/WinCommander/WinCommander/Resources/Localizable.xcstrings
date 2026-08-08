@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Verify the identity of “%@”?" : {
+      "comment" : "Title of the SFTP host key verification alert",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверить подлинность «%@»?"
+          }
+        }
+      }
+    },
     "commands.disabled.generic" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5356,6 +5367,28 @@
         }
       }
     },
+    "This server has not been connected to before. Its %@ key fingerprint is:\n\n%@\n\nAccept it only if it matches the fingerprint published by the server’s administrator." : {
+      "comment" : "Body of the SFTP host key verification alert",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение к этому серверу выполняется впервые. Отпечаток его ключа %@:\n\n%@\n\nПринимайте его, только если он совпадает с опубликованным администратором сервера."
+          }
+        }
+      }
+    },
+    "This server has not been connected to before. Its host key fingerprint is:\n\n%@\n\nAccept it only if it matches the fingerprint published by the server’s administrator." : {
+      "comment" : "Body of the SFTP host key verification alert, unnamed algorithm",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение к этому серверу выполняется впервые. Отпечаток его ключа хоста:\n\n%@\n\nПринимайте его, только если он совпадает с опубликованным администратором сервера."
+          }
+        }
+      }
+    },
     "This will erase all your custom settings." : {
       "comment" : "Asking user for confirmation on erasing custom settings - informative text",
       "localizations" : {
@@ -5438,6 +5471,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Всего:"
+          }
+        }
+      }
+    },
+    "Trust" : {
+      "comment" : "Accept button in the SFTP host key verification alert",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Доверять"
           }
         }
       }
