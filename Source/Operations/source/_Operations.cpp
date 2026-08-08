@@ -7,6 +7,7 @@
 #include "OperationPlanCodec.cpp"
 #include "OperationId.cpp"
 #include "OperationJournal.cpp"
+#include "OperationRetryPolicy.cpp"
 #include "OperationCenterModel.cpp"
 #include "OperationCenterCoordinator.cpp"
 #include "ProviderConditionalCopyJournalMapper.cpp"

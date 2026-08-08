@@ -118,3 +118,37 @@ This contract selects the model/control authority and cancellation semantics. Th
 - [`Docs/refactor_plan.md`](../refactor_plan.md)
 - [`operation_journal_foundation.md`](operation_journal_foundation.md)
 - [`copy_operation_orchestrator_foundation.md`](copy_operation_orchestrator_foundation.md)
+
+---
+
+# OC-x: what "Retry" may actually offer
+
+The Operation Center could show a finished operation and its journal. What it had no model for was the control a user reaches for next: **Retry**. Offering it means deciding, per item, whether a second attempt is safe — and the interesting answers are all refusals.
+
+## A succeeded item is never retried
+
+The file arrived. Copying it again could overwrite something the user has changed at the destination since, so "retry" would have destroyed work rather than recovered it. This is the one that matters most, and it is why a succeeded item is refused even when the publication state is also unknown: reporting *that* would send someone to inspect a file that is simply finished.
+
+## A skipped item is never retried either
+
+Skipping was an answer — from a conflict policy, or from the user. A retry that quietly revisits it overrides a decision already made, without asking again.
+
+## A failure is retryable only when a second attempt could differ
+
+`SourceChanged` and `DestinationChanged` mean the world moved under a plan; a fresh plan sees the new world. `Read`, `Write`, `Commit`, `Metadata` and `Cleanup` can be transient — a busy disk, a link that came back, a lock released.
+
+`PermissionDenied` cannot resolve itself, and an error nobody could name is not evidence that a second attempt goes better. Retrying either is how a failure becomes a loop — the same reasoning `IsRetryableRemoteFailure` applies to connections, arrived at independently for a different subsystem.
+
+## An unknown publication state outranks permission to try
+
+If it is not known whether the destination was written, a blind repeat could overwrite what did land or leave a second copy beside it. So this is checked *after* the status decides an attempt would be allowed, and it turns a yes into **NeedsInspection** — which is a different answer from "no", and should reach the user as one.
+
+## Verification
+
+- `OperationsUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `OperationsUT 'nc::ops::DecideOperationRetry*'`: **8/8 cases, 35 assertions** — a succeeded item refused, and refused as *already done* even when its publication state is unknown; a skipped item refused as a decision; a cancelled item always offered; every retryable failure kind and both non-retryable ones; an unknown publication state overriding a permitted attempt after both a failure and a cancellation, and not blocking one where the state is known; journal order preserved with indices intact; and nothing offered when every item is finished, skipped, or refused permission.
+- Full `OperationsUT --rng-seed 424242`: **241/241 cases, 6,036 assertions**.
+
+### Coverage gap
+
+**Nothing acts on the decision.** A retry has to become a *new plan* over the retryable items and go through review again, because the evidence the original plan was accepted against is exactly what a failure like `SourceChanged` says is stale. No control is wired, and log capture and persistent history beyond the current hydration remain open in Q2-4.

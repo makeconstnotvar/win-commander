@@ -4,6 +4,7 @@
 #include "Job_UT.cpp"
 #include "LegacyOperationFactory_UT.cpp"
 #include "NativeCreateCopy_UT.cpp"
+#include "OperationRetryPolicy_UT.cpp"
 #include "OperationPlan_UT.cpp"
 #include "OperationPlanCodec_UT.cpp"
 #include "OperationJournal_UT.cpp"
