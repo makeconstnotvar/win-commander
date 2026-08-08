@@ -217,3 +217,31 @@ It now goes through `ResolveLocalWorkingDirectory`. An unusable location still l
 ### Coverage gap
 
 **No menu action invokes the external launch**, and nothing yet stores which application fills each role. Both are settings-and-menu work rather than decisions.
+
+---
+
+# GT-4: the badge a folder earns
+
+`git status` reports files, not directories. Without something in between, a folder full of modified files looks exactly like an untouched one, and the only way to find a change is to open every folder in turn — which is the thing badges exist to spare.
+
+## The precedence, and what each rule is for
+
+- **`Conflicted` outranks everything.** An unresolved merge is the one state where doing nothing is wrong, and burying it under a milder summary is how it gets missed.
+- **`Untracked` does not propagate as itself.** A directory holding untracked files is not itself untracked — git may well be tracking its other contents — so it reports `Modified`. Reporting `Untracked` would invite "add this whole folder" on something already half-tracked.
+- **`Added` and `Deleted` summarise as `Modified` too.** A directory whose contents changed in those ways has changed; claiming the directory itself was added or deleted would simply be false.
+- **`Ignored` contributes nothing.** Ignored paths run into the thousands and their contents are ignored as well, so a directory does not become interesting for containing them — the same rule `ShouldBadgeGitFileState` already applies to the paths themselves, now applied to what a folder inherits.
+- **A folder with nothing to say gets no badge**, rather than an `Unmodified` one. In a repository most folders are unchanged, and badging them all buries the ones that are not.
+
+## Containment is by path component
+
+`src` must not collect what belongs to `src-vendor`. That would badge a folder for changes it does not contain — the third place in this session where the component-versus-prefix distinction decides whether an answer is about the right thing at all, after the mount table and the tool launcher.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT`: **8/8 cases, 31 assertions** — a conflict outranking each other state; every other state summarising as `Modified`; nothing for an empty, unmodified or wholly-ignored folder; a change badged at every level above it and the file's own state at the bottom; `src` not collecting `src-vendor`; unmodified and ignored children left unbadged; a conflict carried up through each folder above; and an empty status answered with nothing.
+- Full `WinCommanderUT --rng-seed 424242`: **848/848 cases, 11,944 assertions**.
+
+### Coverage gap
+
+**No panel draws them.** Feeding a listing through this, and deciding when a refresh is worth running at all, is what remains — along with porcelain v2.
