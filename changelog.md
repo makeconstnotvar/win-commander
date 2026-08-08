@@ -33,6 +33,8 @@ This file records completed development work in the Win Commander fork. Product 
 - Added list grouping/projection support and panel presentation geometry coverage used by the evolving Explorer layout.
 - Added stable local-development build/sign/install tooling and a dedicated development entitlement/configuration path.
 - Added Win Commander application artwork and icon assets.
+- Added a dual-pane layout skeleton to Explorer (Q2-1 DP-1): `View ▸ Switch to Dual Pane` mounts an independent second pane with its own tabs, history and search state next to the existing one, shared chrome (sidebar/toolbar/command bar/inspector) rebinds to whichever side is focused, and Tab switches focus between sides. Cross-pane F5/F6/F7 commands and layout persistence remain later Q2-1 increments. Debug builds of `WinCommanderUT` and `WinCommander-Unsigned` pass; focused Explorer test suites pass in full (13/13, 10/10, 4/4 cases). See [`dual_pane_explorer_skeleton_slice.md`](Docs/Features/dual_pane_explorer_skeleton_slice.md).
+- Added cross-pane F5 (copy to opposite), F6 (move to opposite) and ⌘U (swap sides) to Explorer's dual-pane mode (Q2-1 DP-2), reusing the existing copy/move destination dialog and operation submission unchanged; ⇧F7 (new folder in opposite panel) and ⌃F6 (rename in place) needed no new code, already working via DP-1's real dual-pane hosting-protocol conformance. Debug builds of `WinCommanderUT` and `WinCommander-Unsigned` pass; focused Explorer tab tests pass in full (16/16 cases). See [`dual_pane_explorer_commands_slice.md`](Docs/Features/dual_pane_explorer_commands_slice.md).
 
 ### Changed
 

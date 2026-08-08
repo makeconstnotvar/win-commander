@@ -36,6 +36,16 @@
 - (BOOL)setSearchControllerForTesting:(ExplorerSearchController *)_controller forPanel:(PanelController *)_panel;
 - (void)setSearchModeViewForTesting:(NCExplorerSearchModeView *)_view;
 - (IBAction)performClose:(id)_sender;
+- (IBAction)onSwitchDualSinglePaneMode:(id)_sender;
+- (void)changeFocusedSide;
+- (BOOL)validateMenuItem:(NSMenuItem *)_item;
+- (IBAction)OnSwapPanels:(id)_sender;
+- (IBAction)OnFileCopyCommand:(id)_sender;
+- (IBAction)OnFileRenameMoveCommand:(id)_sender;
+- (PanelController *)dualPaneOppositePanelControllerFor:(PanelController *)_panel;
+@property(nonatomic, readonly) BOOL dualPaneEnabledForTesting;
+@property(nonatomic, readonly) PanelController *rightPanelControllerForTesting;
+@property(nonatomic, readonly) NSView *rightPanelContainerForTesting;
 @end
 
 @interface NCExplorerSearchModeView (ExplorerTabsStateTesting)
@@ -142,6 +152,10 @@
 @property(nonatomic, readonly) NSProgressIndicator *busyIndicator;
 @property(nonatomic, readonly) PanelController *panelController;
 @property(nonatomic) NSUInteger rebindCount;
+// -focusAddressFieldShowingToolbarIfNeeded reads .toolbar.visible before doing anything else; a
+// nil toolbar (the default here) makes that a safe no-op and routes it into the harmless
+// NCMainWindowController-cast branch instead of a real address-field focus.
+@property(nonatomic, readonly) NSToolbar *toolbar;
 @end
 
 @implementation ExplorerTabsTestToolbar {
@@ -160,6 +174,10 @@
 - (NSProgressIndicator *)busyIndicator
 {
     return m_BusyIndicator;
+}
+- (NSToolbar *)toolbar
+{
+    return nil;
 }
 - (PanelController *)panelController
 {
@@ -235,18 +253,38 @@
 @interface ExplorerTabsTestState : NCExplorerState
 @property(nonatomic) NSUInteger closeAttachedUICount;
 @property(nonatomic, weak) PanelController *sessionAttachmentFailurePanel;
+@property(nonatomic, weak) PanelController *dualPanePanelForTesting;
 - (void)setSessionRestorePanelsForTesting:(NSArray<PanelController *> *)_panels;
 - (NSArray<PanelController *> *)restoredSessionPanelsForTesting;
+- (NSArray<PanelController *> *)loadedHomePanelsForTesting;
 @end
 
 @implementation ExplorerTabsTestState {
     NSUInteger _closeAttachedUICount;
     __weak PanelController *_sessionAttachmentFailurePanel;
+    __weak PanelController *_dualPanePanelForTesting;
     NSMutableArray<PanelController *> *m_SessionRestorePanelQueue;
     NSMutableArray<PanelController *> *m_RestoredSessionPanels;
+    NSMutableArray<PanelController *> *m_LoadedHomePanels;
 }
 @synthesize closeAttachedUICount = _closeAttachedUICount;
 @synthesize sessionAttachmentFailurePanel = _sessionAttachmentFailurePanel;
+@synthesize dualPanePanelForTesting = _dualPanePanelForTesting;
+- (instancetype)initForTestingWithFrame:(NSRect)_frame
+                        panelController:(PanelController *)_panel
+                              panelView:(NSView *)_panel_view
+                          inspectorView:(NCExplorerInspectorView *)_inspector
+                         QLPanelAdaptor:(NCPanelQLPanelAdaptor *)_ql_panel_adaptor
+{
+    self = [super initForTestingWithFrame:_frame
+                          panelController:_panel
+                                panelView:_panel_view
+                            inspectorView:_inspector
+                           QLPanelAdaptor:_ql_panel_adaptor];
+    if( self )
+        m_LoadedHomePanels = [NSMutableArray new];
+    return self;
+}
 - (BOOL)attachExplorerTabPanel:(PanelController *)_panel createPaneStore:(BOOL)_create_pane_store
 {
     if( _panel == self.sessionAttachmentFailurePanel )
@@ -262,6 +300,10 @@
 {
     return m_RestoredSessionPanels;
 }
+- (NSArray<PanelController *> *)loadedHomePanelsForTesting
+{
+    return m_LoadedHomePanels;
+}
 - (PanelController *)allocateExplorerPanelForSessionRestore
 {
     if( m_SessionRestorePanelQueue.count == 0 )
@@ -270,10 +312,36 @@
     [m_SessionRestorePanelQueue removeObjectAtIndex:0];
     return panel;
 }
+- (PanelController *)allocateExplorerPanelForDualPane
+{
+    return self.dualPanePanelForTesting;
+}
+- (BOOL)dualPaneCreatesPaneStore
+{
+    // The mock PanelController/PanelView pair does not support PanelControllerPaneStoreAdapter's
+    // real lifecycle/context observation (e.g. PanelView.item, PanelController.data), so exercising
+    // it here would crash rather than exercise this slice's actual logic.
+    return false;
+}
+- (NSView *)dualPaneRightSideTestingContentViewForPanel:(PanelController *)_panel
+{
+    // A real FilePanelsTabbedHolder needs an app-wide bootstrapped ThemesManager (asserts
+    // g_CurrentTheme != nullptr) that this test binary does not set up; route through the same
+    // bare-panel-view container the Left side already uses via -initForTestingWithFrame:....
+    return _panel.view;
+}
 - (void)restoreSessionLocation:(const std::optional<nc::panel::PersistentLocation> &) [[maybe_unused]] _location
                        forPanel:(PanelController *)_panel
 {
     [m_RestoredSessionPanels addObject:_panel];
+}
+- (void)loadNativeHomeForSessionPanel:(PanelController *)_panel
+{
+    // The base implementation submits a real native directory load, which this fixture's mock
+    // PanelController does not override - recording the call instead keeps dual-pane tests
+    // deterministic and independent of the real filesystem.
+    if( _panel )
+        [m_LoadedHomePanels addObject:_panel];
 }
 - (void)closeAttachedUI:(PanelController *) [[maybe_unused]] _panel
 {
@@ -577,6 +645,212 @@ TEST_CASE(PREFIX "reuses presented Search Mode after results replace the uniform
     [fixture.state PanelPathChanged:fixture.first];
     CHECK(search.synchronizeCount == 1);
     CHECK_FALSE([fixture.state canPresentSearchForPanel:fixture.second]);
+}
+
+TEST_CASE(PREFIX "dual pane toggle creates an independent right side and tears it down cleanly")
+{
+    Fixture fixture;
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+    CHECK(fixture.state.rightPanelControllerForTesting == nil);
+
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    REQUIRE(fixture.state.rightPanelControllerForTesting == fixture.second);
+    CHECK(fixture.state.rightPanelControllerForTesting.paneId != fixture.first.paneId);
+    REQUIRE(fixture.state.rightPanelContainerForTesting != nil);
+    CHECK(fixture.state.rightPanelContainerForTesting.superview != nil);
+    CHECK([[fixture.state loadedHomePanelsForTesting] containsObject:fixture.second]);
+    // Turning dual pane on does not steal focus/chrome from the already-focused Left side.
+    CHECK(fixture.state.panelController == fixture.first);
+    CHECK([fixture.state isLeftController:fixture.first]);
+    CHECK([fixture.state isRightController:fixture.second]);
+    CHECK_FALSE([fixture.state isRightController:fixture.first]);
+    CHECK_FALSE([fixture.state isLeftController:fixture.second]);
+    CHECK(fixture.state.bothPanelsAreVisible);
+
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+
+    CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+    CHECK(fixture.state.rightPanelControllerForTesting == nil);
+    CHECK(fixture.second.state == nil);
+    CHECK(fixture.state.panelController == fixture.first);
+    CHECK_FALSE(fixture.state.bothPanelsAreVisible);
+}
+
+TEST_CASE(PREFIX "closing the last tab of a side while dual pane is active is a disabled no-op")
+{
+    Fixture fixture;
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+
+    NSMenuItem *const close_tab_item = [NSMenuItem new];
+    close_tab_item.action = @selector(performClose:);
+    CHECK_FALSE([fixture.state validateMenuItem:close_tab_item]);
+
+    ExplorerTabsTestWindow *const window =
+        [[ExplorerTabsTestWindow alloc] initWithContentRect:NSMakeRect(0, 0, 960, 480)
+                                                  styleMask:NSWindowStyleMaskTitled
+                                                    backing:NSBackingStoreBuffered
+                                                      defer:false];
+    window.contentView = fixture.state;
+
+    [fixture.state performClose:nil];
+
+    CHECK(window.performCloseCount == 0);
+    CHECK(fixture.state.dualPaneEnabledForTesting);
+    CHECK(fixture.state.rightPanelControllerForTesting == fixture.second);
+    CHECK(fixture.state.panelController == fixture.first);
+}
+
+TEST_CASE(PREFIX "toggling dual pane off and back on leaves the Left side's tabs untouched")
+{
+    Fixture fixture;
+    REQUIRE([fixture.state addInactivePanelForTesting:fixture.second]);
+    const std::vector<nc::core::PaneId> left_tabs_before = [fixture.state tabPaneIDsForTesting];
+    REQUIRE(left_tabs_before.size() == 2);
+
+    ExplorerTabsTestPanelView *const third_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
+    ExplorerTabsTestPanelController *const third =
+        [[ExplorerTabsTestPanelController alloc] initWithPaneID:nc::core::PaneId{503} view:third_view];
+    fixture.state.dualPanePanelForTesting = third;
+
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    CHECK([fixture.state tabPaneIDsForTesting] == left_tabs_before);
+
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+    CHECK([fixture.state tabPaneIDsForTesting] == left_tabs_before);
+    CHECK(fixture.first.state == fixture.state);
+    CHECK(fixture.second.state == fixture.state);
+}
+
+TEST_CASE(PREFIX "Tab key switches focus between sides only while dual pane is active")
+{
+    Fixture fixture;
+    NSEvent *const tab_key = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                               location:NSZeroPoint
+                                          modifierFlags:0
+                                              timestamp:0
+                                           windowNumber:0
+                                                context:nil
+                                             characters:@"\t"
+                            charactersIgnoringModifiers:@"\t"
+                                              isARepeat:NO
+                                                keyCode:48];
+
+    // Single pane: Tab is not claimed, and does not change focus.
+    CHECK([fixture.state bidForHandlingKeyDown:tab_key forPanelView:fixture.first.view] ==
+          nc::panel::view::BiddingPriority::Skip);
+    [fixture.state handleKeyDown:tab_key forPanelView:fixture.first.view];
+    CHECK(fixture.state.panelController == fixture.first);
+
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    REQUIRE(fixture.state.panelController == fixture.first);
+    const NSUInteger rebind_count_before = fixture.toolbar.rebindCount;
+
+    CHECK([fixture.state bidForHandlingKeyDown:tab_key forPanelView:fixture.first.view] ==
+          nc::panel::view::BiddingPriority::Max);
+    [fixture.state handleKeyDown:tab_key forPanelView:fixture.first.view];
+
+    CHECK(fixture.state.panelController == fixture.second);
+    CHECK(fixture.toolbar.panelController == fixture.second);
+    CHECK(fixture.toolbar.rebindCount > rebind_count_before);
+
+    [fixture.state handleKeyDown:tab_key forPanelView:fixture.second.view];
+    CHECK(fixture.state.panelController == fixture.first);
+
+    // A panel view that belongs to neither side never claims or acts on the key.
+    ExplorerTabsTestPanelView *const foreign_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
+    CHECK([fixture.state bidForHandlingKeyDown:tab_key forPanelView:reinterpret_cast<PanelView *>(foreign_view)] ==
+          nc::panel::view::BiddingPriority::Skip);
+}
+
+TEST_CASE(PREFIX "Swap exchanges which panel occupies each side and rebinds focused chrome")
+{
+    Fixture fixture;
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    REQUIRE(fixture.state.panelController == fixture.first);
+    REQUIRE(fixture.state.rightPanelControllerForTesting == fixture.second);
+    const NSUInteger rebind_count_before = fixture.toolbar.rebindCount;
+
+    [fixture.state OnSwapPanels:nil];
+
+    CHECK(fixture.state.panelController == fixture.second);
+    CHECK(fixture.state.rightPanelControllerForTesting == fixture.first);
+    CHECK(fixture.toolbar.panelController == fixture.second);
+    CHECK(fixture.toolbar.rebindCount > rebind_count_before);
+    CHECK([fixture.state isLeftController:fixture.second]);
+    CHECK([fixture.state isRightController:fixture.first]);
+    CHECK_FALSE([fixture.state isLeftController:fixture.first]);
+    CHECK_FALSE([fixture.state isRightController:fixture.second]);
+
+    // Swapping back restores the original arrangement, and both PaneIds survived the round trip.
+    [fixture.state OnSwapPanels:nil];
+    CHECK(fixture.state.panelController == fixture.first);
+    CHECK(fixture.state.rightPanelControllerForTesting == fixture.second);
+    CHECK(fixture.first.paneId.value == 501);
+    CHECK(fixture.second.paneId.value == 502);
+}
+
+TEST_CASE(PREFIX "resolves the opposite panel only while dual pane is active and owns the queried panel")
+{
+    Fixture fixture;
+    CHECK([fixture.state dualPaneOppositePanelControllerFor:fixture.first] == nil);
+
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+
+    CHECK([fixture.state dualPaneOppositePanelControllerFor:fixture.first] == fixture.second);
+    CHECK([fixture.state dualPaneOppositePanelControllerFor:fixture.second] == fixture.first);
+
+    ExplorerTabsTestPanelView *const foreign_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];
+    ExplorerTabsTestPanelController *const foreign =
+        [[ExplorerTabsTestPanelController alloc] initWithPaneID:nc::core::PaneId{599} view:foreign_view];
+    CHECK([fixture.state dualPaneOppositePanelControllerFor:foreign] == nil);
+}
+
+TEST_CASE(PREFIX "cross-pane copy and move are disabled no-ops outside dual pane, swap requires both sides")
+{
+    Fixture fixture;
+    NSMenuItem *const swap_item = [NSMenuItem new];
+    swap_item.action = @selector(OnSwapPanels:);
+    NSMenuItem *const copy_item = [NSMenuItem new];
+    copy_item.action = @selector(OnFileCopyCommand:);
+    NSMenuItem *const move_item = [NSMenuItem new];
+    move_item.action = @selector(OnFileRenameMoveCommand:);
+
+    CHECK_FALSE([fixture.state validateMenuItem:swap_item]);
+    CHECK_FALSE([fixture.state validateMenuItem:copy_item]);
+    CHECK_FALSE([fixture.state validateMenuItem:move_item]);
+
+    // Safe no-ops while single-pane: nothing crashes, nothing about the Left side changes.
+    [fixture.state OnSwapPanels:nil];
+    [fixture.state OnFileCopyCommand:nil];
+    [fixture.state OnFileRenameMoveCommand:nil];
+    CHECK(fixture.state.panelController == fixture.first);
+    CHECK_FALSE(fixture.state.dualPaneEnabledForTesting);
+
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+
+    CHECK([fixture.state validateMenuItem:swap_item]);
+    // The mock PanelController's default (unnavigated) listing is never uniform/writable, so copy
+    // and move stay disabled even with a real opposite side - fail-closed, not a crash.
+    CHECK_FALSE([fixture.state validateMenuItem:copy_item]);
+    CHECK_FALSE([fixture.state validateMenuItem:move_item]);
+    [fixture.state OnFileCopyCommand:nil];
+    [fixture.state OnFileRenameMoveCommand:nil];
+    CHECK(fixture.state.panelController == fixture.first);
 }
 
 #undef PREFIX
