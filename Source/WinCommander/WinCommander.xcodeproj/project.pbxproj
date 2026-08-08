@@ -106,6 +106,7 @@
 		D9FC000132A0000000000009 /* ShortcutProfiles.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001E /* ShortcutProfiles.cpp */; };
 		D9FC000132A000000000000A /* ShortcutProfiles_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001F /* ShortcutProfiles_UT.cpp */; };
 		D9FC000132A0000000000141 /* ShippedShortcutTables_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000143 /* ShippedShortcutTables_UT.cpp */; };
+		D9FC000132A0000000000151 /* LocalizationCatalog_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000153 /* LocalizationCatalog_UT.cpp */; };
 		D9FC000132A0000000000005 /* CommandPaletteFilter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */; };
 		D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */; };
 		D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */; };
@@ -1190,6 +1191,7 @@
 		D9FC000132A000000000001E /* ShortcutProfiles.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ShortcutProfiles.cpp; path = WinCommander/Core/Commands/ShortcutProfiles.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001F /* ShortcutProfiles_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ShortcutProfiles_UT.cpp; path = WinCommander/Tests/ShortcutProfiles_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000143 /* ShippedShortcutTables_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ShippedShortcutTables_UT.cpp; path = WinCommander/Tests/ShippedShortcutTables_UT.cpp; sourceTree = "<group>"; };
+		D9FC000132A0000000000153 /* LocalizationCatalog_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = LocalizationCatalog_UT.cpp; path = WinCommander/Tests/LocalizationCatalog_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000017 /* CommandPaletteFilter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CommandPaletteFilter.h; path = WinCommander/Core/Commands/CommandPaletteFilter.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000018 /* CommandPaletteFilter.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = CommandPaletteFilter.cpp; path = WinCommander/Core/Commands/CommandPaletteFilter.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ExplorerCommandPaletteView_UT.mm; path = WinCommander/Tests/ExplorerCommandPaletteView_UT.mm; sourceTree = "<group>"; };
@@ -2310,6 +2312,7 @@
 				D9FC000132A0000000000019 /* CommandPaletteFilter_UT.cpp */,
 				D9FC000132A000000000001F /* ShortcutProfiles_UT.cpp */,
 				D9FC000132A0000000000143 /* ShippedShortcutTables_UT.cpp */,
+				D9FC000132A0000000000153 /* LocalizationCatalog_UT.cpp */,
 				D9FC000132A0000000000026 /* RemoteConnectionState_UT.cpp */,
 				D9FC000132A000000000002A /* RemoteHostTrust_UT.cpp */,
 				D9FC000132A000000000002D /* RemoteHostPinStore_UT.cpp */,
@@ -4143,6 +4146,7 @@
 				D9FC000132A0000000000006 /* CommandPaletteFilter_UT.cpp in Sources */,
 				D9FC000132A000000000000A /* ShortcutProfiles_UT.cpp in Sources */,
 				D9FC000132A0000000000141 /* ShippedShortcutTables_UT.cpp in Sources */,
+				D9FC000132A0000000000151 /* LocalizationCatalog_UT.cpp in Sources */,
 				D9FC000132A000000000000C /* RemoteConnectionState_UT.cpp in Sources */,
 				D9FC000132A000000000000E /* RemoteHostTrust_UT.cpp in Sources */,
 				D9FC000132A0000000000010 /* RemoteHostPinStore_UT.cpp in Sources */,
