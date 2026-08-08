@@ -375,7 +375,11 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         if( !_preflight.Bindings() )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingBindings));
 
-        const AcceptedOperationPlan &accepted = _preflight.AcceptedPlan();
+        // Sealed once, up front. One review yields one authority per accepted item, and the seal is
+        // what makes every one of them provably the product of this review rather than another.
+        SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(_preflight));
+
+        const AcceptedOperationPlan &accepted = sealed.AcceptedPlan();
         const OperationPlan &plan = accepted.Plan();
         const OperationPreflightReport &report = accepted.Report();
         if( plan.Type() != OperationPlanType::Copy )
@@ -445,8 +449,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             .absolute_path = destination_parts->first,
         };
 
-        const auto source_host = _preflight.Bindings()->Resolve(item.source.provider_id);
-        const auto destination_host = _preflight.Bindings()->Resolve(item.destination.provider_id);
+        const auto source_host = sealed.Bindings()->Resolve(item.source.provider_id);
+        const auto destination_host = sealed.Bindings()->Resolve(item.destination.provider_id);
         if( !source_host ) {
             return std::unexpected(
                 ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ProviderUnavailable, item.source));
@@ -643,7 +647,9 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         const OperationPlanningPath source_error_path = item.source;
         const OperationPlanningPath destination_error_path = item.destination;
         const uint64_t exact_source_bytes = source_snapshot->evidence.native_version->byte_size;
-        auto reviewed_authority = std::move(_preflight).ConsumeConditionalCopyAuthority(std::move(reviewed_claims));
+        // Index 0 because this path still handles exactly one accepted item; the batch gate above is
+        // what keeps that true, and lifting it is what the per-item issue exists for.
+        auto reviewed_authority = sealed.IssueAuthorityForItem(0, std::move(reviewed_claims));
         if( !reviewed_authority ) {
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
         }

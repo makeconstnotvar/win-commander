@@ -191,9 +191,10 @@ ReviewedVFSOperationPreflight::ReviewedVFSOperationPreflight(VFSBoundOperationPr
 
 ReviewedVFSOperationPreflight::ReviewedVFSOperationPreflight(
     ReviewedVFSOperationPreflight &&_other) noexcept
-    : m_Preflight{std::move(_other.m_Preflight)},
-      m_AuthorityConsumed{std::exchange(_other.m_AuthorityConsumed, true)}
+    : m_Preflight{std::move(_other.m_Preflight)}
 {
+    // Whether authorities have been issued is no longer carried here: it belongs to the seal, which
+    // is what a moved-from review can no longer be the source of anyway.
 }
 
 ReviewedVFSOperationPreflight &ReviewedVFSOperationPreflight::operator=(
@@ -201,7 +202,6 @@ ReviewedVFSOperationPreflight &ReviewedVFSOperationPreflight::operator=(
 {
     if( this != &_other ) {
         m_Preflight = std::move(_other.m_Preflight);
-        m_AuthorityConsumed = std::exchange(_other.m_AuthorityConsumed, true);
     }
     return *this;
 }
@@ -236,15 +236,56 @@ const AcceptedOperationPlan &ReviewedVFSOperationPreflight::AcceptedPlan() const
     return std::get<AcceptedOperationPlan>(m_Preflight.Result());
 }
 
-std::optional<nc::vfs::ProviderConditionalCopyReviewedAuthority>
-ReviewedVFSOperationPreflight::ConsumeConditionalCopyAuthority(
-    nc::vfs::ProviderConditionalCopyReviewedClaims _claims) &&
+nc::vfs::ProviderConditionalCopyReviewedAuthority
+ReviewedVFSOperationPreflight::MakeAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
+                                            nc::vfs::ProviderConditionalCopyReviewedClaims _claims)
 {
-    if( std::exchange(m_AuthorityConsumed, true) )
+    return nc::vfs::ProviderConditionalCopyReviewedAuthority{std::move(_claims), std::move(_seal)};
+}
+
+SealedReviewedPreflight::SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOperationPreflight> _review,
+                                                 const size_t _item_count)
+    : m_Review{std::move(_review)}, m_Issued(_item_count, false)
+{
+}
+
+SealedReviewedPreflight SealedReviewedPreflight::Seal(ReviewedVFSOperationPreflight _review)
+{
+    const size_t item_count = _review.AcceptedPlan().Report().items.size();
+    // The seal is made once, here, and shared by every authority this review yields. Making one per
+    // issue would let two authorities from the same review be indistinguishable from two reviews.
+    auto sealed = std::make_shared<ReviewedVFSOperationPreflight>(std::move(_review));
+    return SealedReviewedPreflight{std::move(sealed), item_count};
+}
+
+const VFSOperationPlanningBindings::Ptr &SealedReviewedPreflight::Bindings() const noexcept
+{
+    return m_Review->Bindings();
+}
+
+const AcceptedOperationPlan &SealedReviewedPreflight::AcceptedPlan() const noexcept
+{
+    return m_Review->AcceptedPlan();
+}
+
+size_t SealedReviewedPreflight::AcceptedItemCount() const noexcept
+{
+    return m_Issued.size();
+}
+
+std::optional<nc::vfs::ProviderConditionalCopyReviewedAuthority>
+SealedReviewedPreflight::IssueAuthorityForItem(const size_t _item_index,
+                                               nc::vfs::ProviderConditionalCopyReviewedClaims _claims)
+{
+    // Nobody reviewed an item the report does not contain, so there is nothing here to authorise.
+    if( _item_index >= m_Issued.size() )
         return std::nullopt;
-    auto review_seal = std::make_shared<ReviewedVFSOperationPreflight>(std::move(*this));
-    return nc::vfs::ProviderConditionalCopyReviewedAuthority{
-        std::move(_claims), std::move(review_seal)};
+    // Asked twice for one reviewed item, a caller would come away with an authority to spend
+    // somewhere nobody looked. One review, one authority per accepted item, and no seconds.
+    if( m_Issued[_item_index] )
+        return std::nullopt;
+    m_Issued[_item_index] = true;
+    return ReviewedVFSOperationPreflight::MakeAuthority(m_Review, std::move(_claims));
 }
 
 VFSOperationPlanningProbes::VFSOperationPlanningProbes(VFSOperationPlanningBindings::Ptr _bindings,

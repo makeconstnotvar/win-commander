@@ -481,6 +481,106 @@ TEST_CASE(PREFIX "maps rename access independently from creation access", "[vfs-
           OperationPlanningAccessEvidence{OperationPlanningAccessState::Denied});
 }
 
+namespace {
+
+/** Minimal claims - these tests are about who may hold an authority, not about what it asserts. */
+nc::vfs::ProviderConditionalCopyReviewedClaims SealTestClaims(const std::shared_ptr<nc::vfs::Host> &_host)
+{
+    return nc::vfs::ProviderConditionalCopyReviewedClaims{
+        .plan_id = "copy-file",
+        .source_binding = {.provider_id = "local", .host = _host},
+        .destination_binding = {.provider_id = "local", .host = _host},
+        .source = {.absolute_path = "/src/a.txt", .kind = nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile},
+        .destination_parent = {.absolute_path = "/dst",
+                               .kind = nc::vfs::ProviderConditionalCopyExpectedKind::Directory},
+        .destination = {.absolute_path = "/dst/a.txt"},
+    };
+}
+
+OperationPlan SealTestPlan()
+{
+    OperationPlanInput input{
+        .plan_id = "copy-file",
+        .type = OperationPlanType::Copy,
+        .sources = {{"local", "/src/a.txt"}},
+        .destination = OperationPlanDestinationInput{"local", "/dst", OperationPlanDestinationKind::Directory},
+        .conflict_policy =
+            OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    };
+    auto plan = OperationPlan::Create(std::move(input));
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+/** An accepted single-item copy, reviewed. */
+std::pair<std::shared_ptr<PlanningHost>, ReviewedVFSOperationPreflight> SealTestReview()
+{
+    const auto local = WriteHost(true, true);
+    local->stats.emplace("/src", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/dst", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/src/a.txt", Stat(S_IFREG | 0644, 10));
+    auto probes = MakeProbes({{"local", local}},
+                             [](const OperationPlanningPath &,
+                                OperationPlanningRequiredAccess,
+                                nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+                                 return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+                             });
+    auto reviewed = ReviewedVFSOperationPreflight::Review(probes.Preflight(SealTestPlan()),
+                                                          VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE(reviewed);
+    return {local, std::move(*reviewed)};
+}
+
+} // namespace
+
+TEST_CASE(PREFIX "issues one authority per accepted item and refuses a second for the same one",
+          "[vfs-operation-planning-probes]")
+{
+    auto [local, reviewed] = SealTestReview();
+    SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(reviewed));
+    REQUIRE(sealed.AcceptedItemCount() == 1);
+
+    CHECK(sealed.IssueAuthorityForItem(0, SealTestClaims(local)).has_value());
+    // Asked twice for one reviewed item, a caller would come away with an authority to spend
+    // somewhere nobody looked - the hole the old one-shot rule closed, which must not reopen just
+    // because a plan may now carry more than one item.
+    CHECK_FALSE(sealed.IssueAuthorityForItem(0, SealTestClaims(local)).has_value());
+    CHECK_FALSE(sealed.IssueAuthorityForItem(0, SealTestClaims(local)).has_value());
+}
+
+TEST_CASE(PREFIX "refuses an authority for an item nobody reviewed", "[vfs-operation-planning-probes]")
+{
+    auto [local, reviewed] = SealTestReview();
+    SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(reviewed));
+
+    // There is nothing to authorise for an index the accepted report does not contain, and an
+    // authority minted for it would claim a review that never happened.
+    CHECK_FALSE(sealed.IssueAuthorityForItem(1, SealTestClaims(local)).has_value());
+    CHECK_FALSE(sealed.IssueAuthorityForItem(99, SealTestClaims(local)).has_value());
+    // Refusing an out-of-range index does not spend the one that exists.
+    CHECK(sealed.IssueAuthorityForItem(0, SealTestClaims(local)).has_value());
+}
+
+TEST_CASE(PREFIX "keeps the review alive for every authority it issued", "[vfs-operation-planning-probes]")
+{
+    auto [local, reviewed] = SealTestReview();
+    SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(reviewed));
+    const AcceptedOperationPlan &accepted = sealed.AcceptedPlan();
+    CHECK(accepted.Plan().Id().Value() == "copy-file");
+    CHECK(sealed.Bindings() != nullptr);
+
+    auto authority = sealed.IssueAuthorityForItem(0, SealTestClaims(local));
+    REQUIRE(authority);
+    // The seal outlives the object that issued it: an authority in flight must not be left holding a
+    // review that has gone away.
+    {
+        SealedReviewedPreflight discarded = std::move(sealed);
+        (void)discarded;
+    }
+    CHECK(authority->Claims().plan_id == "copy-file");
+}
+
 TEST_CASE(PREFIX "does not issue a generic review token for an accepted Move", "[vfs-operation-planning-probes]")
 {
     const auto local = WriteHost(true, true);

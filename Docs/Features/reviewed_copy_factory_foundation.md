@@ -62,3 +62,42 @@ The narrow Move planner result is intentionally outside this reviewed Copy chain
 ## Next slice
 
 Add physical-volume evidence for the bounded `CopyAs::Perform` consumer. The test-only VFSUT characterization now proves that a same-euid name rebind can make `RENAME_EXCL` publish a replacement rather than the prior validated stage inode (1 / 48 focused Debug); it grants no publisher API or authority. Cross-volume staging remains `Unsupported` until a descriptor-bound namespace primitive or a revised signed-root trust model has root-acquisition/transport proof. Move needs its own reviewed factory and execution authority beyond the verified narrow preflight.
+
+---
+
+# Q2-8 slice 1: one review, one authority per accepted item
+
+Q2-8 is about carrying batch, Move and Delete through the reviewed engine. Every one of them starts at the same wall: a review could yield **exactly one** authority, ever, so a plan with two accepted items could never be executed no matter what the rest of the engine learned to do.
+
+That one-shot rule was not arbitrary. An authority is proof that a person looked at *this* operation and accepted it, and letting one review mint two authorities would let the second be spent on something nobody saw.
+
+## The rule that replaces it
+
+A review covers one plan, and a plan covers every item its report accepted. So one review yields **one authority per accepted item — no fewer, and emphatically no more.**
+
+Both halves are enforced, and the second is the security-relevant one:
+
+- **An index outside the accepted report is refused.** Nobody reviewed it, so there is nothing to authorise, and an authority minted for it would claim a review that never happened.
+- **An index is refused the second time.** Otherwise a caller could ask twice for one reviewed item and come away with a spare authority to spend elsewhere — which is exactly the hole the one-shot rule closed, and it must not reopen merely because a plan may now carry more than one item.
+
+Tying each issue to an item index rather than counting to N is what makes the second guarantee about *identity* and not just arithmetic.
+
+## Every authority from one review shares one seal
+
+The seal is created once, when the review is sealed, rather than per issue. That is what makes the authorities provably the product of the same review rather than of several — and it is why sealing is now an explicit step instead of a side effect of asking for the first authority.
+
+It also survives the object that issued it: an authority in flight holds the seal, so a discarded `SealedReviewedPreflight` cannot leave one pointing at a review that has gone away. A test discards the seal while holding an authority and reads its claims afterwards.
+
+## Nothing else changed
+
+The factory still handles exactly one accepted item; the batch gate above it is what keeps that true, and lifting that gate is what the per-item issue exists for. It asks for index 0 and behaves as it always did, which is why every existing test pins it unchanged.
+
+## Verification
+
+- `OperationsUT`, `OperationsIT`, `WinCommanderUT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**; `OperationsUT` also under **ASAN+UBSAN**.
+- New `OperationsUT` cases: **3/3, 23 assertions** — one authority per accepted item with a second refused twice over; an out-of-range index refused without spending the one that exists; and the seal outliving the object that issued it.
+- Full `OperationsUT`: **233/233, 6,001 assertions**. Full `OperationsIT`: **98 passed, 2 skipped, 973/973 assertions**. Full `WinCommanderUT`: **821/821, 11,816**.
+
+### Coverage gap
+
+**The factory does not loop yet.** Validating N items, building N transactions, and producing an execution product that journals N results is the next slice — and it is the one that finally lets the `BatchUnsupported` gate come down.

@@ -118,13 +118,61 @@ public:
 private:
     explicit ReviewedVFSOperationPreflight(VFSBoundOperationPreflight _preflight);
 
-    [[nodiscard]] std::optional<nc::vfs::ProviderConditionalCopyReviewedAuthority>
-    ConsumeConditionalCopyAuthority(nc::vfs::ProviderConditionalCopyReviewedClaims _claims) &&;
+    /** Builds an authority carrying the seal that proves which review it came from. */
+    [[nodiscard]] static nc::vfs::ProviderConditionalCopyReviewedAuthority
+    MakeAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
+                  nc::vfs::ProviderConditionalCopyReviewedClaims _claims);
 
     VFSBoundOperationPreflight m_Preflight;
-    bool m_AuthorityConsumed{false};
 
     friend class ReviewedOperationFactory;
+    friend class SealedReviewedPreflight;
+};
+
+/**
+ * One review, sealed so a whole plan's worth of authorities can be issued from it.
+ *
+ * A review is a statement that a person looked at *this plan* and accepted it, and a plan covers
+ * every item its report accepted. So one review yields one authority per accepted item - no fewer,
+ * and emphatically no more.
+ *
+ * Both halves of that are enforced, and the second is the security-relevant one:
+ *
+ * - **An index outside the accepted report is refused.** Nobody reviewed it, so there is nothing to
+ *   authorise, and an authority minted for it would claim a review that never happened.
+ * - **An index is refused the second time.** Otherwise a caller could ask twice for one reviewed
+ *   item and obtain an extra authority to spend on something else entirely - which is exactly the
+ *   hole the previous one-shot rule existed to close, and it must not reopen just because a plan may
+ *   now carry more than one item.
+ *
+ * Every authority from one review shares a single seal. That is what makes them provably the product
+ * of the same review rather than of several - and it is why the seal is created once here rather
+ * than per issue.
+ */
+class SealedReviewedPreflight final
+{
+public:
+    SealedReviewedPreflight() = delete;
+    SealedReviewedPreflight(const SealedReviewedPreflight &) = delete;
+    SealedReviewedPreflight &operator=(const SealedReviewedPreflight &) = delete;
+    SealedReviewedPreflight(SealedReviewedPreflight &&) noexcept = default;
+    SealedReviewedPreflight &operator=(SealedReviewedPreflight &&) noexcept = default;
+
+    [[nodiscard]] static SealedReviewedPreflight Seal(ReviewedVFSOperationPreflight _review);
+
+    [[nodiscard]] const VFSOperationPlanningBindings::Ptr &Bindings() const noexcept;
+    [[nodiscard]] const AcceptedOperationPlan &AcceptedPlan() const noexcept;
+    /** How many authorities this review can ever yield. */
+    [[nodiscard]] size_t AcceptedItemCount() const noexcept;
+
+    [[nodiscard]] std::optional<nc::vfs::ProviderConditionalCopyReviewedAuthority>
+    IssueAuthorityForItem(size_t _item_index, nc::vfs::ProviderConditionalCopyReviewedClaims _claims);
+
+private:
+    SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOperationPreflight> _review, size_t _item_count);
+
+    std::shared_ptr<ReviewedVFSOperationPreflight> m_Review;
+    std::vector<bool> m_Issued;
 };
 
 /**
