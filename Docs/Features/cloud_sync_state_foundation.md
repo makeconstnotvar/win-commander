@@ -1,4 +1,4 @@
-# Q2-7 CL-1/GL-1/NW-1: Cloud sync state, badge rule, Gallery eligibility and network volume state
+# Q2-7 CL-1/GL-1/NW-1…NW-2: Cloud sync state, badge rule, Gallery eligibility, network volume state and the mount table
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-7.
@@ -73,3 +73,41 @@ Two states that both mean "broken" are kept apart because they need opposite han
 - **Nothing produces `CloudItemFacts` yet.** The macOS side (`NSURLUbiquitousItemDownloadingStatusKey` and friends for iCloud, and per-provider equivalents) is the next increment; this slice deliberately fixes the vocabulary and the ordering first, so each adapter has one place to map onto rather than inventing its own.
 - The Gallery view itself is untouched; GL-1 fixes the eligibility rule, not the rendering.
 - **Nothing produces `NetworkVolumeFacts` yet.** Reading the mount table and running a non-blocking probe are the next increment; NW-1 fixes what the answers mean.
+
+---
+
+# NW-2: where the network-volume facts come from
+
+NW-1 decided what a network volume's state means and, crucially, that an unresponsive one **must not be touched from the drawing thread**. Nothing produced those facts, so the rule had no input.
+
+`MountTable` is that producer: it reads the mount table and places a path on a volume, without touching the path or the volume.
+
+## The read must not wait
+
+`getmntinfo` is asked **not** to refresh each filesystem's statistics. Requesting fresh statistics makes the call wait on every mounted filesystem in turn, and a network mount whose server has gone away will not answer — so the very call meant to *discover* unresponsive volumes would hang on one. That is the whole failure this model exists to prevent, arriving through the back door.
+
+## Network-ness comes from the mount flag, not a list of names
+
+Matching `smbfs`, `nfs`, `afpfs` and friends by name would go stale the moment a new network filesystem appears — and the failure is silent and in the worst direction: an unrecognised network volume would be reported as local and then probed synchronously while drawing. The kernel's own "not local" flag does not go stale.
+
+## Containment is by path component, never by string prefix
+
+`/Volumes/data` does not contain `/Volumes/database`. A prefix match would attribute one volume's state to another — reporting a live local disk as an unresponsive network mount, or, worse, the reverse. The innermost containing mount point wins, so a volume mounted inside another owns the paths beneath it, and a mount point belongs to its own volume rather than to its parent.
+
+## A path that cannot be placed is reported as such
+
+This one changed shape while being tested. The first version returned facts saying "not a network mount, not mounted" — and `ClassifyNetworkVolume` reads that as **`Local`**, which means *safe to touch on the drawing thread*, for exactly the path we could not account for. The test caught it immediately.
+
+The fix was not to revise NW-1's precedence, which is deliberate and pinned by its own test. Neither available answer is honest here: `Local` invites the synchronous touch, and `Unmounted` refuses operations up front — which would refuse **everything** on a machine where the mount table could not be read at all. So the absence is reported, and the caller, which knows which of those risks applies to it, decides.
+
+A local volume is also reported as answering by construction, whatever probe result is passed alongside it: carrying a stale probe into a local volume would report a working disk as unresponsive.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::MountTable*'`: **8/8 cases, 58 assertions** — the `/Volumes/data` versus `/Volumes/database` collision in both directions; innermost-wins including a mount point belonging to its own volume; the root-volume fallback and a path that cannot be placed; normalization; a local volume answering by construction despite a contrary probe; a network volume classifying as responsive, unresponsive and stale from the probe it is given, with the unresponsive one asserted unsafe to touch; the unplaceable path reported rather than invented; and one case against the **real** mount table, finding the root volume and placing `/` on it.
+- Full `WinCommanderUT --rng-seed 424242`: **789/789 cases, 11,698 assertions**.
+
+### Coverage gap
+
+**The probe itself does not exist.** Whether a server still answers is a parameter here, because finding out means touching it — which has to happen off the drawing thread, with its own budget, and be remembered. That, the cloud-facts adapter, and the Gallery view are what remain of Q2-7.
