@@ -76,6 +76,8 @@
 		D9FC000132A0000000000037 /* RemoteConnectionPresentation_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */; };
 		D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000034 /* KeychainHostPinStore.cpp */; };
 		D9FC000132A0000000000090 /* SFTPHostKeyPolicy.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000092 /* SFTPHostKeyPolicy.mm */; };
+		D9FC000132A00000000000A0 /* RemoteFailureClassification.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000A2 /* RemoteFailureClassification.cpp */; };
+		D9FC000132A00000000000A1 /* RemoteFailureClassification_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000A3 /* RemoteFailureClassification_UT.cpp */; };
 		D9FC000132A0000000000091 /* SFTPHostKeyPolicy_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000094 /* SFTPHostKeyPolicy_UT.cpp */; };
 		D9FC000132A0000000000032 /* KeychainHostPinStore_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */; };
 		D9FC000132A000000000000F /* RemoteHostPinStore.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000002C /* RemoteHostPinStore.cpp */; };
@@ -1122,6 +1124,9 @@
 		D9FC000132A0000000000038 /* RemoteConnectionPresentation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteConnectionPresentation.h; path = WinCommander/Core/Remote/RemoteConnectionPresentation.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000039 /* RemoteConnectionPresentation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionPresentation.cpp; path = WinCommander/Core/Remote/RemoteConnectionPresentation.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteConnectionPresentation_UT.cpp; path = WinCommander/Tests/RemoteConnectionPresentation_UT.cpp; sourceTree = "<group>"; };
+		D9FC000132A00000000000A2 /* RemoteFailureClassification.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteFailureClassification.cpp; path = WinCommander/Core/Remote/RemoteFailureClassification.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000000A4 /* RemoteFailureClassification.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = RemoteFailureClassification.h; path = WinCommander/Core/Remote/RemoteFailureClassification.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000000A3 /* RemoteFailureClassification_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = RemoteFailureClassification_UT.cpp; path = WinCommander/Tests/RemoteFailureClassification_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000093 /* SFTPHostKeyPolicy.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = SFTPHostKeyPolicy.h; path = WinCommander/Core/Remote/SFTPHostKeyPolicy.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000092 /* SFTPHostKeyPolicy.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = SFTPHostKeyPolicy.mm; path = WinCommander/Core/Remote/SFTPHostKeyPolicy.mm; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000094 /* SFTPHostKeyPolicy_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = SFTPHostKeyPolicy_UT.cpp; path = WinCommander/Tests/SFTPHostKeyPolicy_UT.cpp; sourceTree = "<group>"; };
@@ -2264,6 +2269,7 @@
 				D9FC000132A000000000002D /* RemoteHostPinStore_UT.cpp */,
 				D9FC000132A0000000000035 /* KeychainHostPinStore_UT.cpp */,
 				D9FC000132A0000000000094 /* SFTPHostKeyPolicy_UT.cpp */,
+				D9FC000132A00000000000A3 /* RemoteFailureClassification_UT.cpp */,
 				D9FC000132A000000000003A /* RemoteConnectionPresentation_UT.cpp */,
 				D9FC000132A000000000003F /* CloudSyncState_UT.cpp */,
 				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
@@ -2331,6 +2337,8 @@
 				D9FC000132A000000000002C /* RemoteHostPinStore.cpp */,
 				D9FC000132A0000000000033 /* KeychainHostPinStore.h */,
 				D9FC000132A0000000000034 /* KeychainHostPinStore.cpp */,
+				D9FC000132A00000000000A4 /* RemoteFailureClassification.h */,
+				D9FC000132A00000000000A2 /* RemoteFailureClassification.cpp */,
 				D9FC000132A0000000000093 /* SFTPHostKeyPolicy.h */,
 				D9FC000132A0000000000092 /* SFTPHostKeyPolicy.mm */,
 				D9FC000132A0000000000038 /* RemoteConnectionPresentation.h */,
@@ -3796,6 +3804,7 @@
 				D9FC000132A000000000000F /* RemoteHostPinStore.cpp in Sources */,
 				D9FC000132A0000000000031 /* KeychainHostPinStore.cpp in Sources */,
 				D9FC000132A0000000000090 /* SFTPHostKeyPolicy.mm in Sources */,
+				D9FC000132A00000000000A0 /* RemoteFailureClassification.cpp in Sources */,
 				D9FC000132A0000000000036 /* RemoteConnectionPresentation.cpp in Sources */,
 				D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */,
 				D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */,
@@ -4057,6 +4066,7 @@
 				D9FC000132A0000000000010 /* RemoteHostPinStore_UT.cpp in Sources */,
 				D9FC000132A0000000000032 /* KeychainHostPinStore_UT.cpp in Sources */,
 				D9FC000132A0000000000091 /* SFTPHostKeyPolicy_UT.cpp in Sources */,
+				D9FC000132A00000000000A1 /* RemoteFailureClassification_UT.cpp in Sources */,
 				D9FC000132A0000000000037 /* RemoteConnectionPresentation_UT.cpp in Sources */,
 				D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */,
 				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,

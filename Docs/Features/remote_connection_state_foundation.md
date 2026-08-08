@@ -1,4 +1,4 @@
-# Q2-5 RC-1…RC-7: Remote connection state, retry, host trust, pinning, presentation and enforcement
+# Q2-5 RC-1…RC-8: Remote connection state, retry, host trust, pinning, presentation, enforcement and classification
 
 > Status: implemented and tested — see §Verification. Model increment: no user-visible surface yet, see §Scope.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-5.
@@ -167,8 +167,40 @@ The prompt is injected rather than called directly, so the refusals — which ar
 - Full `WinCommanderUT --rng-seed 424242`: **751/751 cases, 11,475 assertions**. Full `VFSUT`: **191/191 cases** (its assertion total varies run to run — some cases iterate over live filesystem content).
 - No ASAN/UBSAN/TSan run: the change adds no allocation ownership or concurrency beyond a mutex-guarded pointer swap, whose contract is covered by the replacement test above.
 
-### Coverage gaps
+### Coverage gaps at RC-7
 
 - **The end-to-end refusal is not covered by an automated test.** Proving that a real handshake stops before authentication needs a server; the `VFSIT` SFTP suite runs against a Docker container and now installs an explicit accept-all policy, which is where a "reject and assert no credential was sent" case belongs.
 - **SFTP only.** FTP has no host key to verify, and WebDAV's identity is a TLS certificate — a different mechanism that needs its own slice.
 - The keychain round-trip, the reconnect scheduler, the manager UI and system SMB/NFS mounts remain as listed above.
+
+---
+
+# RC-8: giving the state machine something to classify
+
+RC-1 decided which failures may be retried. Nothing produced its vocabulary from a real error, so none of those decisions could ever be reached — the retry policy was correct and unreachable, in the same way host trust was before RC-6.
+
+`ClassifyRemoteFailure` is that producer: a VFS `Error` in, a `RemoteConnectionFailure` out.
+
+## The loop it closes
+
+An SFTP host key refused by RC-7 raises `host_verification_failed`. That arrives here and becomes `HostVerificationFailed`, which RC-1 refuses to retry. Without this hop, a reconnect timer would go on reaching a server whose identity failed to check out — which is precisely what verification exists to stop. The same holds for `host_key_unavailable`: nothing was verified, so it is a verification failure, not a transport one.
+
+## Unrecognised means unretryable
+
+Anything this cannot name becomes `ProtocolError`, which is not in the retryable set. Retrying is the privilege of failures we can name; an unrecognised error put on a timer is how a connection ends up hammering a server for reasons nobody understands. That covers an unknown error domain, an unknown code inside a known domain, and a zero code — callers classify only what already failed, so a zero arriving here is a caller bug, and it must land somewhere that will not be retried rather than on `None`.
+
+## Two distinctions worth keeping
+
+- **A rejected credential is not a permission refusal.** Both mean "no", but one sends the user to replace a credential and the other tells them the account may not do this. Collapsing them would send someone to change a password that is working perfectly.
+- **A timeout is not unreachability**, even though both are retryable. They differ in what the backoff is waiting for, and RC-1's history shows the user which one they have.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- Focused `WinCommanderUT 'nc::core::ClassifyRemoteFailure*'`: **6/6 cases, 38 assertions** — both host-key errors reaching `HostVerificationFailed` *and* asserted non-retryable in the same breath; all four credential failures plus POSIX `EAUTH` non-retryable; the timeout and unreachable sets, both asserted retryable; permission kept apart from credentials; an unknown domain, an unknown code and a zero code all landing on something that will not be retried.
+- Full `WinCommanderUT --rng-seed 424242`: **751/751 cases, 11,479 assertions**.
+- No sanitizer run: a pure switch over an error code, with no allocation, ownership or concurrency.
+
+### Coverage gap
+
+**Nothing calls it yet.** The connect paths still return a raw `Error`; feeding it into a `RemoteConnectionState` — and then acting on the retry decision — is the reconnect-scheduler increment, which this unblocks.
