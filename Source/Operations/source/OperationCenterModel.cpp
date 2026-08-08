@@ -193,6 +193,11 @@ OperationCenterModel::OperationCenterModel() : m_Impl(std::make_shared<Impl>()) 
 
 OperationCenterModel::~OperationCenterModel() = default;
 
+OperationCenterModel::ObservationTicket OperationCenterModel::ObserveChanges(std::function<void()> _callback)
+{
+    return AddTicketedObserver(std::move(_callback));
+}
+
 std::expected<OperationCenterModel::Reservation, OperationCenterModelError> OperationCenterModel::Reserve()
 {
     const auto guard = std::lock_guard{m_Impl->lock};
@@ -217,6 +222,7 @@ OperationCenterModel::Admit(Reservation &&_reservation,
     if( !reservation_impl || reservation_impl.get() != m_Impl.get() )
         return std::unexpected(OperationCenterModelError{.code = OperationCenterModelErrorCode::UnreservedOperationId});
 
+    DeferredNotification notify{*this};
     const auto guard = std::lock_guard{m_Impl->lock};
     const auto reservation = m_Impl->reservations.find(_reservation.m_OperationId.m_Sequence);
     if( reservation == m_Impl->reservations.end() || reservation->second != _reservation.m_Nonce )
@@ -237,6 +243,7 @@ OperationCenterModel::Admit(Reservation &&_reservation,
     m_Impl->reservations.erase(reservation);
     _reservation.m_Consumed = true;
     _reservation.m_Impl.reset();
+    notify.Arm();
     return record;
 }
 
@@ -279,6 +286,7 @@ OperationCenterModel::Publish(AdmissionDraft &&_draft, const OperationJournalAdm
     if( !draft_impl || draft_impl.get() != m_Impl.get() )
         return std::unexpected(OperationCenterModelError{.code = OperationCenterModelErrorCode::UnstagedAdmission});
 
+    DeferredNotification notify{*this};
     const auto guard = std::lock_guard{m_Impl->lock};
     if( !m_Impl->admission_drafts.contains(_draft.m_Nonce) )
         return std::unexpected(OperationCenterModelError{.code = OperationCenterModelErrorCode::UnstagedAdmission});
@@ -295,6 +303,7 @@ OperationCenterModel::Publish(AdmissionDraft &&_draft, const OperationJournalAdm
     m_Impl->admission_drafts.erase(_draft.m_Nonce);
     _draft.m_Consumed = true;
     _draft.m_Impl.reset();
+    notify.Arm();
     return {};
 }
 
@@ -304,6 +313,7 @@ OperationCenterModel::Transition(const OperationId _operation_id,
                                  const OperationRecordState _next_state,
                                  const OperationPlan::TimePoint _observed_at)
 {
+    DeferredNotification notify{*this};
     const auto guard = std::lock_guard{m_Impl->lock};
     const auto found = std::ranges::find_if(m_Impl->records, [&](const OperationRecord &_record) {
         return _record.operation_id == _operation_id;
@@ -326,6 +336,7 @@ OperationCenterModel::Transition(const OperationId _operation_id,
         found->started_at = _observed_at;
     if( IsTerminal(_next_state) )
         found->finished_at = _observed_at;
+    notify.Arm();
     return *found;
 }
 
@@ -348,6 +359,7 @@ std::vector<OperationRecord> OperationCenterModel::Snapshot() const
 
 std::expected<void, OperationCenterModelError> OperationCenterModel::Hydrate(std::vector<OperationRecord> _records)
 {
+    DeferredNotification notify{*this};
     const auto guard = std::lock_guard{m_Impl->lock};
     if( !m_Impl->records.empty() || !m_Impl->reservations.empty() || !m_Impl->admission_drafts.empty() ||
         m_Impl->next_sequence != 1 || m_Impl->next_admission_draft_nonce != 1 )
@@ -369,6 +381,7 @@ std::expected<void, OperationCenterModelError> OperationCenterModel::Hydrate(std
 
     m_Impl->next_sequence = maximum_sequence + 1;
     m_Impl->records = std::move(_records);
+    notify.Arm();
     return {};
 }
 
@@ -376,6 +389,7 @@ std::expected<void, OperationCenterModelError>
 OperationCenterModel::RefreshColdHistory(std::vector<OperationRecord> _records)
 {
     try {
+        DeferredNotification notify{*this};
         const auto guard = std::lock_guard{m_Impl->lock};
         if( !m_Impl->reservations.empty() || !m_Impl->admission_drafts.empty() ||
             std::ranges::any_of(m_Impl->records, [](const OperationRecord &_record) {
@@ -427,6 +441,7 @@ OperationCenterModel::RefreshColdHistory(std::vector<OperationRecord> _records)
 
         m_Impl->records.swap(candidate);
         m_Impl->next_sequence = std::max(m_Impl->next_sequence, maximum_sequence + 1);
+        notify.Arm();
         return {};
     } catch( ... ) {
         return std::unexpected(OperationCenterModelError{.code = OperationCenterModelErrorCode::ColdHistoryRefreshFailed});

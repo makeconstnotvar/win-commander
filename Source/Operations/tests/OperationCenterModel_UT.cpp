@@ -167,3 +167,120 @@ TEST_CASE("OperationCenterModel: snapshots retain values across later transition
     CHECK(after.front().state == OperationRecordState::Cancelling);
     CHECK(after.front().revision == 2);
 }
+
+TEST_CASE("OperationCenterModel: observers see every accepted change and nothing else",
+          "[operation-center-model]")
+{
+    OperationCenterModel model;
+    unsigned notifications = 0;
+    const auto ticket = model.ObserveChanges([&notifications] { ++notifications; });
+
+    auto reservation = OperationCenterModelTesting::Reserve(model);
+    REQUIRE(reservation);
+    // Reserving allocates nothing observable: no record exists yet for a consumer to render.
+    CHECK(notifications == 0);
+
+    const auto id = reservation->Id();
+    const auto admitted =
+        OperationCenterModelTesting::Admit(model, std::move(*reservation), OperationCenterModelUTPlan(), At(0));
+    REQUIRE(admitted);
+    CHECK(notifications == 1);
+
+    const auto running = model.Transition(id, admitted->revision, OperationRecordState::Running, At(1));
+    REQUIRE(running);
+    CHECK(notifications == 2);
+
+    // A rejected transition changed nothing, so it must not wake a consumer into a pointless redraw.
+    const auto stale = model.Transition(id, admitted->revision, OperationRecordState::Running, At(2));
+    REQUIRE_FALSE(stale);
+    CHECK(notifications == 2);
+
+    const auto invalid = model.Transition(id, running->revision, OperationRecordState::Queued, At(3));
+    REQUIRE_FALSE(invalid);
+    CHECK(notifications == 2);
+
+    const auto unknown = model.Transition(OperationCenterModelTesting::Reserve(model)->Id(),
+                                          1,
+                                          OperationRecordState::Running,
+                                          At(4));
+    REQUIRE_FALSE(unknown);
+    CHECK(notifications == 2);
+
+    // Reads never notify.
+    [[maybe_unused]] const auto snapshot = model.Snapshot();
+    [[maybe_unused]] const auto found = model.Find(id);
+    CHECK(notifications == 2);
+}
+
+TEST_CASE("OperationCenterModel: an observer may read the model without deadlocking",
+          "[operation-center-model]")
+{
+    // The whole point of being notified is to re-read, so the callback must run with the model's
+    // lock released. Firing under the lock would hang here rather than fail.
+    OperationCenterModel model;
+    std::vector<OperationRecord> observed;
+    const auto ticket = model.ObserveChanges([&model, &observed] { observed = model.Snapshot(); });
+
+    auto reservation = OperationCenterModelTesting::Reserve(model);
+    REQUIRE(reservation);
+    const auto id = reservation->Id();
+    const auto admitted =
+        OperationCenterModelTesting::Admit(model, std::move(*reservation), OperationCenterModelUTPlan(), At(0));
+    REQUIRE(admitted);
+
+    // The snapshot taken inside the callback already contains the change that triggered it.
+    REQUIRE(observed.size() == 1);
+    CHECK(observed[0].operation_id == id);
+    CHECK(observed[0].state == OperationRecordState::Queued);
+
+    REQUIRE(model.Transition(id, admitted->revision, OperationRecordState::Running, At(1)));
+    REQUIRE(observed.size() == 1);
+    CHECK(observed[0].state == OperationRecordState::Running);
+    CHECK(observed[0].revision == 2);
+}
+
+TEST_CASE("OperationCenterModel: observation stops with its ticket and survives the model outliving it",
+          "[operation-center-model]")
+{
+    OperationCenterModel model;
+    unsigned first = 0;
+    unsigned second = 0;
+    auto first_ticket = model.ObserveChanges([&first] { ++first; });
+    const auto second_ticket = model.ObserveChanges([&second] { ++second; });
+
+    auto reservation = OperationCenterModelTesting::Reserve(model);
+    REQUIRE(reservation);
+    const auto id = reservation->Id();
+    const auto admitted =
+        OperationCenterModelTesting::Admit(model, std::move(*reservation), OperationCenterModelUTPlan(), At(0));
+    REQUIRE(admitted);
+    CHECK(first == 1);
+    CHECK(second == 1);
+
+    // Releasing one ticket must retire only that observer; a consumer closing its panel cannot
+    // silently stop everyone else's updates.
+    first_ticket = {};
+    REQUIRE(model.Transition(id, admitted->revision, OperationRecordState::Running, At(1)));
+    CHECK(first == 1);
+    CHECK(second == 2);
+}
+
+TEST_CASE("OperationCenterModel: an observer outliving the model is not invoked afterwards",
+          "[operation-center-model]")
+{
+    unsigned notifications = 0;
+    nc::ops::OperationCenterModel::ObservationTicket ticket;
+    {
+        OperationCenterModel model;
+        ticket = model.ObserveChanges([&notifications] { ++notifications; });
+        auto reservation = OperationCenterModelTesting::Reserve(model);
+        REQUIRE(reservation);
+        REQUIRE(OperationCenterModelTesting::Admit(
+            model, std::move(*reservation), OperationCenterModelUTPlan(), At(0)));
+        CHECK(notifications == 1);
+    }
+    // The ticket now refers to a destroyed model; releasing it must not touch freed memory. A
+    // sanitizer run is what actually proves this, which is why this slice runs one.
+    ticket = {};
+    CHECK(notifications == 1);
+}

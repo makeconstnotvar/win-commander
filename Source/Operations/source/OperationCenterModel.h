@@ -4,7 +4,10 @@
 #include "OperationId.h"
 #include "OperationPlan.h"
 
+#include <Base/ScopedObservable.h>
+
 #include <cstdint>
+#include <functional>
 #include <expected>
 #include <memory>
 #include <optional>
@@ -85,10 +88,37 @@ struct OperationCenterModelError final {
  * The model has no authority to enqueue, stop, pause or retain an Operation. A later control port
  * resolves such authority separately and feeds its committed transitions back into this model.
  */
-class OperationCenterModel final
+class OperationCenterModel final : private base::ScopedObservableBase
 {
 private:
     class Impl;
+
+    /**
+     * Fires model observers once, after the caller's lock guard has been released.
+     *
+     * Declared *before* the guard in each mutator so that reverse destruction order runs it after
+     * the unlock. Observers are synchronous and may re-enter the model - a snapshot read is the
+     * whole point of being notified - so firing under the lock would deadlock the first observer
+     * that did the obvious thing.
+     */
+    class DeferredNotification final
+    {
+    public:
+        explicit DeferredNotification(const OperationCenterModel &_model) noexcept : m_Model(&_model) {}
+        DeferredNotification(const DeferredNotification &) = delete;
+        DeferredNotification &operator=(const DeferredNotification &) = delete;
+        ~DeferredNotification()
+        {
+            if( m_Armed )
+                m_Model->FireObservers();
+        }
+        /** Call only once the mutation has actually succeeded. */
+        void Arm() noexcept { m_Armed = true; }
+
+    private:
+        const OperationCenterModel *m_Model;
+        bool m_Armed{false};
+    };
 
 public:
     /**
@@ -163,6 +193,22 @@ public:
                uint64_t _expected_revision,
                OperationRecordState _next_state,
                OperationPlan::TimePoint _observed_at);
+
+    using ObservationTicket = ScopedObservableBase::ObservationTicket;
+
+    /**
+     * Observes every accepted change to the model: publication, lifecycle transition, startup
+     * hydration and cold-history refresh. This is what makes a live Operation Center possible
+     * without polling.
+     *
+     * The callback carries no payload by design. It is fired synchronously, after the model's
+     * lock is released, and the consumer answers it with Snapshot() - so a consumer always
+     * renders a self-consistent set of records and can never assemble a view from two different
+     * generations. A rejected mutation fires nothing.
+     *
+     * Observers may be invoked on any thread, including the one that made the change.
+     */
+    [[nodiscard]] ObservationTicket ObserveChanges(std::function<void()> _callback);
 
     /** Immutable copies; callers never receive mutable storage or executor authority. */
     [[nodiscard]] std::optional<OperationRecord> Find(OperationId _operation_id) const;
