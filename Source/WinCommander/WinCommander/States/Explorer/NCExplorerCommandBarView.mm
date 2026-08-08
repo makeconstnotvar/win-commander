@@ -1249,6 +1249,7 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
                                      backing:NSBackingStoreBuffered
                                        defer:NO];
     panel.title = NSLocalizedString(@"explorer.operationCenter.snapshot.title", "Operation Center snapshot");
+    panel.accessibilityIdentifier = @"wincommander.explorer.operationCenter.panel";
     panel.minSize = NSMakeSize(480.0, 260.0);
 
     NSView *const content = [NSView new];
@@ -1275,13 +1276,25 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     text.verticallyResizable = true;
     text.horizontallyResizable = false;
     text.textContainer.widthTracksTextView = true;
-    scroll.documentView = text;
+    // This text view IS the panel's content - the whole operation list is read through it. Without
+    // a label VoiceOver announces an unnamed text area, so the caption that sighted users read
+    // above it becomes the label here rather than being duplicated as a new string.
+    text.accessibilityLabel = caption.stringValue;
+    text.accessibilityIdentifier = @"wincommander.explorer.operationCenter.records";
+    scroll.accessibilityIdentifier = @"wincommander.explorer.operationCenter.recordsScroll";
 
     NSStackView *const controls = [NSStackView stackViewWithViews:@[]];
     controls.translatesAutoresizingMaskIntoConstraints = false;
     controls.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     controls.alignment = NSLayoutAttributeLeading;
     controls.spacing = 8.0;
+    // A group rather than an unlabelled container, so the per-operation buttons inside are reached
+    // as a named set instead of appearing loose after the record list.
+    controls.accessibilityElement = true;
+    controls.accessibilityRole = NSAccessibilityGroupRole;
+    controls.accessibilityLabel =
+        NSLocalizedString(@"explorer.operationCenter.snapshot.controls", "Operation Center snapshot");
+    controls.accessibilityIdentifier = @"wincommander.explorer.operationCenter.controls";
 
     [content addSubview:caption];
     [content addSubview:scroll];

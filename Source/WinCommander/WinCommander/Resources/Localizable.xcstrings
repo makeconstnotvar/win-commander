@@ -2683,6 +2683,23 @@
         }
       }
     },
+    "explorer.operationCenter.snapshot.controls" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operation controls"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Управление операциями"
+          }
+        }
+      }
+    },
     "explorer.operationCenter.snapshot.title" : {
       "extractionState" : "manual",
       "localizations" : {

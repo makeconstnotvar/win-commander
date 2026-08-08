@@ -1,4 +1,4 @@
-# Q2-10 RH-1…RH-3: Atomic-write durability, localization, and an accessibility gap
+# Q2-10 RH-1…RH-4: Atomic-write durability, localization, and accessibility
 
 > Status: defect found and fixed; see §Verification.
 > Execution tracker: [`Development-Plan.md`](../Development-Plan.md) row Q2-10 ("atomic persistence", "локализация").
@@ -94,4 +94,32 @@ Fixed by supplying both from the same string, with the reason recorded at the ca
 
 ### Coverage gap
 
-This was found by reading the code I had just written, not by a check. Nothing enforces that a newly added control carries accessibility help — an audit pass over the existing Explorer surfaces, and some form of guard, both remain open under Q2-10's "полный accessibility".
+This was found by reading the code I had just written, not by a check. The audit pass it called for is RH-4 below; a *guard* preventing regressions remains open.
+
+---
+
+# RH-4: the Operation Center panel had no accessibility at all
+
+## The audit
+
+Counting accessibility calls against interactive controls across the ten Explorer surfaces showed reasonable coverage everywhere — except `NCExplorerCommandBarView`, which had the lowest ratio. Looking there specifically, the Operation Center snapshot panel had **zero** accessibility attributes.
+
+That matters more than the count suggests, because of *what* is unlabelled: the panel's entire content is one `NSTextView` holding the operation records. Sighted users read a caption above it; VoiceOver users got an unnamed text area. The whole point of the panel — which operations exist and what state they are in — was reachable but unannounced.
+
+## The fix
+
+- The record view takes the panel's own caption as its accessibility label. Reusing the caption rather than inventing a second string keeps the two from drifting apart, and it is already the sentence that describes the content.
+- The controls stack becomes a labelled group, so the per-operation buttons inside are reached as a named set rather than appearing loose after the record list.
+- Identifiers are added to the panel, the record view, its scroll view and the controls stack, matching the `wincommander.explorer.*` convention the other surfaces already use.
+
+One new catalogue key, in both languages.
+
+## Verification
+
+- `xcodebuild -scheme WinCommander-Unsigned -configuration Debug build` — **BUILD SUCCEEDED**.
+- Full `WinCommanderUT --rng-seed 424242`: **733/733 cases, 11,384/11,384 assertions**.
+- Catalogue re-parsed with the duplicate-rejecting hook; every key without Russian is still only the two symbols.
+
+### Coverage gap
+
+The audit was a ratio check plus reading, which finds a surface with *nothing* but would miss a surface with *something and a hole*. A real pass would enumerate interactive controls and assert each carries a label — worth doing, and still open, along with the regression guard RH-3 called for.
