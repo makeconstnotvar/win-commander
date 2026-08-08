@@ -64,6 +64,8 @@
 		D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */; };
 		D9FC000132A0000000000041 /* GitStatus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000044 /* GitStatus.cpp */; };
 		D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000045 /* GitStatus_UT.cpp */; };
+		D9FC000132A0000000000057 /* ArchiveCreationFormat.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000005A /* ArchiveCreationFormat.cpp */; };
+		D9FC000132A0000000000058 /* ArchiveCreationFormat_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000005B /* ArchiveCreationFormat_UT.cpp */; };
 		D9FC000132A0000000000052 /* NetworkVolumeState.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000055 /* NetworkVolumeState.cpp */; };
 		D9FC000132A0000000000053 /* NetworkVolumeState_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */; };
 		D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004A /* GalleryEligibility.cpp */; };
@@ -1103,6 +1105,9 @@
 		D9FC000132A0000000000043 /* GitStatus.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GitStatus.h; path = WinCommander/Core/Git/GitStatus.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000044 /* GitStatus.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitStatus.cpp; path = WinCommander/Core/Git/GitStatus.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000045 /* GitStatus_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitStatus_UT.cpp; path = WinCommander/Tests/GitStatus_UT.cpp; sourceTree = "<group>"; };
+		D9FC000132A0000000000059 /* ArchiveCreationFormat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ArchiveCreationFormat.h; path = WinCommander/Core/Archive/ArchiveCreationFormat.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000005A /* ArchiveCreationFormat.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ArchiveCreationFormat.cpp; path = WinCommander/Core/Archive/ArchiveCreationFormat.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A000000000005B /* ArchiveCreationFormat_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = ArchiveCreationFormat_UT.cpp; path = WinCommander/Tests/ArchiveCreationFormat_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000054 /* NetworkVolumeState.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NetworkVolumeState.h; path = WinCommander/Core/Cloud/NetworkVolumeState.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000055 /* NetworkVolumeState.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NetworkVolumeState.cpp; path = WinCommander/Core/Cloud/NetworkVolumeState.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NetworkVolumeState_UT.cpp; path = WinCommander/Tests/NetworkVolumeState_UT.cpp; sourceTree = "<group>"; };
@@ -2257,6 +2262,7 @@
 				D9FC000132A000000000003F /* CloudSyncState_UT.cpp */,
 				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
 				D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */,
+				D9FC000132A000000000005B /* ArchiveCreationFormat_UT.cpp */,
 				D9FC000132A0000000000045 /* GitStatus_UT.cpp */,
 				D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */,
 				D9FC000132A000000000001C /* ExplorerCommandPaletteView_UT.mm */,
@@ -2341,6 +2347,15 @@
 				D9FC000132A0000000000044 /* GitStatus.cpp */,
 			);
 			name = Git;
+			sourceTree = "<group>";
+		};
+		D9FC000132A000000000005C /* Archive */ = {
+			isa = PBXGroup;
+			children = (
+				D9FC000132A0000000000059 /* ArchiveCreationFormat.h */,
+				D9FC000132A000000000005A /* ArchiveCreationFormat.cpp */,
+			);
+			name = Archive;
 			sourceTree = "<group>";
 		};
 		D9FC000132A0000000000040 /* Cloud */ = {
@@ -2672,6 +2687,7 @@
 		CFAC50D5171557E100A3E5C5 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				D9FC000132A000000000005C /* Archive */,
 				D9FC000132A0000000000040 /* Cloud */,
 				D9FC000132A0000000000046 /* Git */,
 				D9FC000132A0000000000051 /* Tools */,
@@ -3775,6 +3791,7 @@
 				D9FC000132A000000000003B /* CloudSyncState.cpp in Sources */,
 				D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */,
 				D9FC000132A0000000000052 /* NetworkVolumeState.cpp in Sources */,
+				D9FC000132A0000000000057 /* ArchiveCreationFormat.cpp in Sources */,
 				D9FC000132A0000000000041 /* GitStatus.cpp in Sources */,
 				D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
@@ -4034,6 +4051,7 @@
 				D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */,
 				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,
 				D9FC000132A0000000000053 /* NetworkVolumeState_UT.cpp in Sources */,
+				D9FC000132A0000000000058 /* ArchiveCreationFormat_UT.cpp in Sources */,
 				D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */,
 				D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */,
 				D9FC000132A0000000000008 /* ExplorerCommandPaletteView_UT.mm in Sources */,
