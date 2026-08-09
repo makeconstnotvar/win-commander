@@ -225,6 +225,66 @@ additionally requires `item_results.size() == plan.Sources().size()`. Three cons
    "requires reconciliation" alert, so lifting the gate without teaching that surface about a set
    would report a successful batch as a failure needing recovery.
 
+## Provider-contract slice — DONE: separating identity from a batch's own growth
+
+The wall step D pinned: every item in a Directory-kind batch shares one destination-parent
+expectation, captured once at review. Publishing the first item advances that directory's size and
+both content timestamps, so the second item's commit found the directory "changed since review" and
+refused — correctly, since the check could not tell its own batch's growth from tampering.
+
+**The fix is a per-expectation tolerance, not a rewrite of when anything is captured or checked.**
+`ProviderConditionalCopyExistingExpectation` now carries a `tolerance`: `Exact` (unchanged default,
+the only mode a lone reviewed item ever needs) or `MonotonicGrowth`. Under growth tolerance, size and
+the two content timestamps may be *at least* the reviewed value instead of *equal* to it; identity
+(device, inode, birth time) and mode are checked exactly either way, in both places the destination
+parent is checked (the narrow per-field stat comparison, and the fuller metadata-snapshot re-check
+Commit runs against what Begin itself captured — the only place ownership, BSD flags, ACL and extended
+attributes are verified for the destination parent at all, so those stayed exact there too).
+
+**Which items get which tolerance is knowable entirely at prepare time**, before any item executes:
+the factory tracks which destination-parent paths it has already assigned to an earlier item in this
+same batch, by canonical path. The first item to name a given directory gets `Exact` — nothing should
+find that directory touched at all, exactly as a lone reviewed copy has always required. Every later
+item naming the *same* directory gets `MonotonicGrowth`, because by the time its own commit runs, the
+directory has necessarily and legitimately grown by exactly this batch's own prior, authorized
+publications. No value observed at runtime is threaded forward between items; the assignment is a set
+membership check over paths the plan already names.
+
+**One assumption broke on the real provider and had to be corrected empirically, not reasoned out:**
+APFS advances a directory's `link_count` when a regular-file child is added, not only for
+subdirectories, contrary to traditional POSIX directory semantics. The first version of this fix
+treated `link_count` as an identity field and kept it exact, which meant the second item still failed
+— now correctly relaxed alongside size and the two timestamps. Found by running the real transaction
+against a live batch and reading exactly which field-equality failed, the same method that found the
+wall in the first place; reasoning about filesystem semantics in the abstract had already gotten this
+one wrong once.
+
+**What tolerance does not and cannot cover, by design:** an unrelated write landing between two items
+of an authorized batch — after the first item has already made the directory a moving target — is
+indistinguishable from the batch's own growth, since both only advance size, the content timestamps
+and `link_count`. This is not a gap left open by an incomplete fix; it is the accepted, load-bearing
+shape of the mechanism, and it is narrower than it first looked: identity and the whole
+ownership/permission surface (mode, uid, gid, BSD flags, ACL, extended attributes) still refuse on any
+change, for every item, always — an attacker who cannot touch those cannot escalate privilege or
+redirect what this operation writes, and the residual is bounded by the same non-atomicity every
+sequential multi-file copy on this platform already accepts without a directory lock. A local,
+single-user desktop tool was judged not to need one to close this last inch. Documented directly at
+the provider level rather than left to be rediscovered, in
+`NativeConditionalCopyTransaction_UT.cpp`.
+
+### Verification
+
+Three new `VFSUT` cases: growth tolerance publishes though the parent grew since review; it still
+fails closed on a mode change (the narrow check); it still fails closed on a flags change (the fuller
+metadata check, the only place flags are verified for the destination parent at all). Two new
+`OperationsUT` cases at the `ReviewedOperationFactory` level, both against the real Native transaction
+rather than the test mint: a two-item batch into one directory now completes and both files land on
+disk; a directory tampered with *before* review still refuses the whole batch before any item runs,
+unchanged from the single-item behavior. `VFSNative conditional Copy transaction *` 28/28 (570
+assertions) in Debug and the same under Release ASAN and Release UBSAN; full `VFSUT` 194/194 (82,617);
+full `OperationsUT` 260/260 (6,414) on three seeds; `OperationsIT` 98 passed / 2 skipped (973);
+`WinCommanderUT` full run unchanged.
+
 ## What must not be given up
 
 - **One review, one authority per accepted item** — already enforced; the batch path must issue by

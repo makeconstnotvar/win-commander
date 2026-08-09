@@ -37,8 +37,10 @@ static ProviderConditionalCopyTimestamp Timestamp(const timespec &_timestamp) no
     };
 }
 
-static ProviderConditionalCopyExistingExpectation Expectation(const std::string &_path,
-                                                              ProviderConditionalCopyExpectedKind _kind)
+static ProviderConditionalCopyExistingExpectation
+Expectation(const std::string &_path,
+           ProviderConditionalCopyExpectedKind _kind,
+           ProviderConditionalCopyExpectationTolerance _tolerance = ProviderConditionalCopyExpectationTolerance::Exact)
 {
     struct stat value;
     REQUIRE(stat(_path.c_str(), &value) == 0);
@@ -52,13 +54,17 @@ static ProviderConditionalCopyExistingExpectation Expectation(const std::string 
         .byte_size = static_cast<uint64_t>(value.st_size),
         .modification_time = Timestamp(value.st_mtimespec),
         .status_change_time = Timestamp(value.st_ctimespec),
+        .tolerance = _tolerance,
     };
 }
 
-static ProviderConditionalCopyReviewedClaims Claims(const std::shared_ptr<NativeHost> &_host,
-                                                    const std::string &_source,
-                                                    const std::string &_destination_parent,
-                                                    const std::string &_destination)
+static ProviderConditionalCopyReviewedClaims
+Claims(const std::shared_ptr<NativeHost> &_host,
+      const std::string &_source,
+      const std::string &_destination_parent,
+      const std::string &_destination,
+      ProviderConditionalCopyExpectationTolerance _destination_parent_tolerance =
+          ProviderConditionalCopyExpectationTolerance::Exact)
 {
     const ProviderConditionalCopyBinding binding{
         .provider_id = "native",
@@ -69,7 +75,9 @@ static ProviderConditionalCopyReviewedClaims Claims(const std::shared_ptr<Native
         .source_binding = binding,
         .destination_binding = binding,
         .source = Expectation(_source, ProviderConditionalCopyExpectedKind::RegularFile),
-        .destination_parent = Expectation(_destination_parent, ProviderConditionalCopyExpectedKind::Directory),
+        .destination_parent = Expectation(_destination_parent,
+                                          ProviderConditionalCopyExpectedKind::Directory,
+                                          _destination_parent_tolerance),
         .destination = ProviderConditionalCopyMissingExpectation{.absolute_path = _destination},
     };
 }
@@ -670,6 +678,83 @@ TEST_CASE(PREFIX "fails closed when reviewed destination parent evidence becomes
     REQUIRE(transaction);
     REQUIRE(*transaction);
     Write(paths.destination_parent + "/unrelated.txt", "namespace mutation");
+
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::DestinationParentStale,
+                                               ESTALE}));
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+}
+
+TEST_CASE(PREFIX "monotonic growth tolerance publishes though the destination parent grew since review")
+{
+    // What a reviewed batch's own earlier item does to a shared destination directory: its size,
+    // content timestamps and (confirmed empirically on APFS) its link_count all advance the moment a
+    // sibling is created, whether that sibling is this batch's or not. The mechanism cannot tell the
+    // two apart - that is the accepted, documented shape of this tolerance, not a gap closed here -
+    // so this stands for either case: a real batch's own growth looks exactly like this to a
+    // transaction, which is what makes an authorized batch able to finish at all.
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalCopyTransaction(Authority(
+        Claims(TestEnv().vfs_native,
+              paths.source,
+              paths.destination_parent,
+              paths.destination,
+              ProviderConditionalCopyExpectationTolerance::MonotonicGrowth)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    Write(paths.destination_parent + "/sibling.txt", "grown before this item's own commit");
+
+    CHECK((*transaction)->Commit() == PublishedSuccess());
+    CHECK(Read(paths.destination) == "payload");
+}
+
+TEST_CASE(PREFIX "monotonic growth tolerance still fails closed on a destination parent mode change")
+{
+    // Growth is expected; a changed permission bit is not. Content and permissions are different
+    // questions, and tolerating the first must not quietly tolerate the second.
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalCopyTransaction(Authority(
+        Claims(TestEnv().vfs_native,
+              paths.source,
+              paths.destination_parent,
+              paths.destination,
+              ProviderConditionalCopyExpectationTolerance::MonotonicGrowth)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    REQUIRE(chmod(paths.destination_parent.c_str(), 0700) == 0);
+
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::DestinationParentStale,
+                                               ESTALE}));
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+}
+
+TEST_CASE(PREFIX "monotonic growth tolerance still fails closed on a destination parent flags change")
+{
+    // The narrower stat check has no field for BSD flags at all - only the fuller metadata re-check
+    // does - so this exercises that second check specifically, the one place flags are verified for
+    // the destination parent.
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalCopyTransaction(Authority(
+        Claims(TestEnv().vfs_native,
+              paths.source,
+              paths.destination_parent,
+              paths.destination,
+              ProviderConditionalCopyExpectationTolerance::MonotonicGrowth)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    REQUIRE(chflags(paths.destination_parent.c_str(), UF_HIDDEN) == 0);
 
     CHECK(((*transaction)->Commit() ==
            ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,

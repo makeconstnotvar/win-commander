@@ -56,6 +56,25 @@ enum class ProviderConditionalCopyExpectedKind : uint8_t {
     Directory
 };
 
+/**
+ * How strictly a Commit must find the expected object unchanged.
+ *
+ * `Exact` is the only mode a single reviewed item ever needs: nothing but this transaction should be
+ * touching what it names between review and publication. `MonotonicGrowth` exists for one case only -
+ * a destination-parent directory that an authorized batch is itself publishing into. Its own earlier
+ * items legitimately advance the parent's size and timestamps; that is not staleness, it is the batch
+ * proving its own prior work. Identity (device, inode, birth time) and the whole ownership/permission
+ * surface (mode, uid, gid, BSD flags, ACL, extended attributes) still fail closed on any change under
+ * either mode. Exactly four fields may advance instead of matching: byte size, the two content-derived
+ * timestamps, and link_count - the last because APFS advances a directory's link_count for a
+ * regular-file child too, not only for a subdirectory, which is a fact about the filesystem confirmed
+ * by running it rather than derived from POSIX convention.
+ */
+enum class ProviderConditionalCopyExpectationTolerance : uint8_t {
+    Exact,
+    MonotonicGrowth
+};
+
 /** Preliminary, read-only provider eligibility for an exact source and destination parent. */
 enum class ProviderConditionalCopyPathSupport : uint8_t {
     SameVolumeClone,
@@ -81,6 +100,7 @@ struct ProviderConditionalCopyExistingExpectation final {
     uint64_t byte_size{0};
     ProviderConditionalCopyTimestamp modification_time;
     ProviderConditionalCopyTimestamp status_change_time;
+    ProviderConditionalCopyExpectationTolerance tolerance{ProviderConditionalCopyExpectationTolerance::Exact};
 
     bool operator==(const ProviderConditionalCopyExistingExpectation &) const noexcept = default;
 };

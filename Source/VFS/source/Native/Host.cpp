@@ -226,19 +226,54 @@ bool NativeConditionalCopyTimestampMatches(const timespec &_actual,
     return _actual.tv_sec == _expected.seconds && _actual.tv_nsec == _expected.nanoseconds;
 }
 
+/** Never behind: raw seconds/nanoseconds pairs, so every timestamp type here can share one rule. */
+bool NativeConditionalCopySecondsNanosAtLeast(int64_t _actual_seconds,
+                                              int64_t _actual_nanoseconds,
+                                              int64_t _expected_seconds,
+                                              int64_t _expected_nanoseconds) noexcept
+{
+    return _actual_seconds > _expected_seconds ||
+           (_actual_seconds == _expected_seconds && _actual_nanoseconds >= _expected_nanoseconds);
+}
+
+bool NativeConditionalCopyContentFieldMatches(uint64_t _actual,
+                                              uint64_t _expected,
+                                              ProviderConditionalCopyExpectationTolerance _tolerance) noexcept
+{
+    return _tolerance == ProviderConditionalCopyExpectationTolerance::Exact ? _actual == _expected
+                                                                            : _actual >= _expected;
+}
+
+bool NativeConditionalCopyContentTimestampMatches(const timespec &_actual,
+                                                  const ProviderConditionalCopyTimestamp &_expected,
+                                                  ProviderConditionalCopyExpectationTolerance _tolerance) noexcept
+{
+    if( _tolerance == ProviderConditionalCopyExpectationTolerance::Exact )
+        return NativeConditionalCopyTimestampMatches(_actual, _expected);
+    return NativeConditionalCopySecondsNanosAtLeast(
+        _actual.tv_sec, _actual.tv_nsec, _expected.seconds, _expected.nanoseconds);
+}
+
 bool NativeConditionalCopyStatMatches(const struct stat &_actual,
                                       const ProviderConditionalCopyExistingExpectation &_expected) noexcept
 {
     const bool kind_matches =
         (_expected.kind == ProviderConditionalCopyExpectedKind::RegularFile && S_ISREG(_actual.st_mode)) ||
         (_expected.kind == ProviderConditionalCopyExpectedKind::Directory && S_ISDIR(_actual.st_mode));
+    // Identity and the whole permission surface stay exact under either tolerance: only what a batch's
+    // own prior publication predictably advances - size and the two content-derived timestamps - may
+    // grow instead of matching. Everything that would signal someone else touched this object (a
+    // different inode, a different mode) still refuses immediately.
     return kind_matches && static_cast<int32_t>(_actual.st_dev) == _expected.device &&
            static_cast<uint64_t>(_actual.st_ino) == _expected.inode &&
            NativeConditionalCopyTimestampMatches(_actual.st_birthtimespec, _expected.birth_time) &&
            static_cast<uint16_t>(_actual.st_mode) == _expected.mode &&
-           static_cast<uint64_t>(_actual.st_size) == _expected.byte_size &&
-           NativeConditionalCopyTimestampMatches(_actual.st_mtimespec, _expected.modification_time) &&
-           NativeConditionalCopyTimestampMatches(_actual.st_ctimespec, _expected.status_change_time);
+           NativeConditionalCopyContentFieldMatches(
+               static_cast<uint64_t>(_actual.st_size), _expected.byte_size, _expected.tolerance) &&
+           NativeConditionalCopyContentTimestampMatches(
+               _actual.st_mtimespec, _expected.modification_time, _expected.tolerance) &&
+           NativeConditionalCopyContentTimestampMatches(
+               _actual.st_ctimespec, _expected.status_change_time, _expected.tolerance);
 }
 
 bool NativeConditionalCopyMetadataMatchesExpectation(
@@ -248,14 +283,61 @@ bool NativeConditionalCopyMetadataMatchesExpectation(
     const bool kind_matches =
         (_expected.kind == ProviderConditionalCopyExpectedKind::RegularFile && S_ISREG(_actual.mode)) ||
         (_expected.kind == ProviderConditionalCopyExpectedKind::Directory && S_ISDIR(_actual.mode));
+    const bool modification_time_matches =
+        _expected.tolerance == ProviderConditionalCopyExpectationTolerance::Exact
+           ? (_actual.modification_time.seconds == _expected.modification_time.seconds &&
+              _actual.modification_time.nanoseconds == _expected.modification_time.nanoseconds)
+           : NativeConditionalCopySecondsNanosAtLeast(_actual.modification_time.seconds,
+                                                       _actual.modification_time.nanoseconds,
+                                                       _expected.modification_time.seconds,
+                                                       _expected.modification_time.nanoseconds);
+    const bool change_time_matches =
+        _expected.tolerance == ProviderConditionalCopyExpectationTolerance::Exact
+           ? (_actual.change_time.seconds == _expected.status_change_time.seconds &&
+              _actual.change_time.nanoseconds == _expected.status_change_time.nanoseconds)
+           : NativeConditionalCopySecondsNanosAtLeast(_actual.change_time.seconds,
+                                                       _actual.change_time.nanoseconds,
+                                                       _expected.status_change_time.seconds,
+                                                       _expected.status_change_time.nanoseconds);
     return kind_matches && static_cast<int32_t>(_actual.device) == _expected.device &&
            _actual.inode == _expected.inode && _actual.birth_time.seconds == _expected.birth_time.seconds &&
            _actual.birth_time.nanoseconds == _expected.birth_time.nanoseconds &&
-           static_cast<uint16_t>(_actual.mode) == _expected.mode && _actual.size == _expected.byte_size &&
-           _actual.modification_time.seconds == _expected.modification_time.seconds &&
-           _actual.modification_time.nanoseconds == _expected.modification_time.nanoseconds &&
-           _actual.change_time.seconds == _expected.status_change_time.seconds &&
-           _actual.change_time.nanoseconds == _expected.status_change_time.nanoseconds;
+           static_cast<uint16_t>(_actual.mode) == _expected.mode &&
+           NativeConditionalCopyContentFieldMatches(_actual.size, _expected.byte_size, _expected.tolerance) &&
+           modification_time_matches && change_time_matches;
+}
+
+/**
+ * The full re-check Commit runs against what Begin itself captured on this same anchored descriptor.
+ * Identity, ownership, permissions, ACL and extended attributes stay exact regardless of tolerance -
+ * this is the one place they are checked at all for the destination parent, since the narrower
+ * expectation above never carried them. Only size, link_count and the two content timestamps may
+ * have grown.
+ */
+bool NativeConditionalCopyMetadataSnapshotMatches(const native::ConditionalCopyMetadataSnapshot &_actual,
+                                                  const native::ConditionalCopyMetadataSnapshot &_expected,
+                                                  ProviderConditionalCopyExpectationTolerance _tolerance) noexcept
+{
+    if( _tolerance == ProviderConditionalCopyExpectationTolerance::Exact )
+        return _actual == _expected;
+    // APFS advances a directory's link_count when a regular-file child is added, not only for
+    // subdirectories - empirically confirmed, not assumed. It is therefore a content signal for a
+    // directory, exactly like size, and belongs with it rather than with the identity/permission
+    // fields that must never move.
+    return _actual.device == _expected.device && _actual.inode == _expected.inode &&
+           _actual.uid == _expected.uid && _actual.gid == _expected.gid && _actual.mode == _expected.mode &&
+           _actual.flags == _expected.flags && _actual.access_time == _expected.access_time &&
+           _actual.birth_time == _expected.birth_time && _actual.acl == _expected.acl &&
+           _actual.extended_attributes == _expected.extended_attributes &&
+           _actual.link_count >= _expected.link_count && _actual.size >= _expected.size &&
+           NativeConditionalCopySecondsNanosAtLeast(_actual.modification_time.seconds,
+                                                     _actual.modification_time.nanoseconds,
+                                                     _expected.modification_time.seconds,
+                                                     _expected.modification_time.nanoseconds) &&
+           NativeConditionalCopySecondsNanosAtLeast(_actual.change_time.seconds,
+                                                     _actual.change_time.nanoseconds,
+                                                     _expected.change_time.seconds,
+                                                     _expected.change_time.nanoseconds);
 }
 
 native::CrossVolumeStagingObjectSeal
@@ -334,7 +416,8 @@ NativeConditionalCopyState::Commit(const ProviderConditionalCopyTransaction::Can
         return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
                                                  destination_parent_metadata.error());
     }
-    if( *destination_parent_metadata != m_DestinationParentMetadata ) {
+    if( !NativeConditionalCopyMetadataSnapshotMatches(
+            *destination_parent_metadata, m_DestinationParentMetadata, m_DestinationParent.tolerance) ) {
         CloseUnlocked();
         return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::DestinationParentStale, ESTALE);
     }

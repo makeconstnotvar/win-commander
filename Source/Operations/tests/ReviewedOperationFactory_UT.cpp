@@ -830,21 +830,23 @@ TEST_CASE(PREFIX "carries every source of a reviewed plan through one operation"
     CHECK(abort_calls == 0);
 }
 
-TEST_CASE(PREFIX "stops a real provider batch at the item whose destination the batch itself changed",
+TEST_CASE(PREFIX "completes a real provider batch though its own first item grows the shared destination",
           "[reviewed-operation-factory]")
 {
     // Executed against the real Native transaction rather than the test mint, which is the only way
-    // to see this: publishing the first item changes the destination directory - its size and both
-    // its timestamps - and every item carries the same reviewed expectation of that directory, so the
-    // second item's commit finds it stale and refuses.
+    // this was ever visible: publishing the first item changes the destination directory's size and
+    // both its content timestamps (and, confirmed empirically on APFS, its link_count - a directory's
+    // link_count there advances for a regular-file child too, not only for subdirectories). Every item
+    // shares one reviewed expectation of that directory, so without a second look the provider would
+    // read the second item's turn as someone else having tampered with the destination.
     //
-    // Not a defect in the batch. The provider deliberately refuses to publish into a directory that
-    // changed at all since review (`NativeConditionalCopyTransaction: fails closed when reviewed
-    // destination parent evidence becomes stale`), and a batch is a writer into its own destination.
-    // Nothing is written wrongly - the refusal is fail-closed and the rest of the batch is abandoned -
-    // but a multi-file copy into one folder cannot complete until that contract distinguishes the
-    // directory's identity and permissions, which authorise the publication, from its contents, which
-    // the batch itself is expected to change. That is the next slice, and this pins the wall.
+    // It is not tampering, and this is a fact about who published, provable without trusting a value
+    // carried forward across items: the first item to name a given destination parent is reviewed
+    // exactly as ever - nothing but this transaction should find it touched at all - and every later
+    // item sharing that same parent is told, structurally, that content growth is expected there.
+    // Identity and the whole ownership/permission surface (device, inode, birth time, mode, uid, gid,
+    // BSD flags, ACL, extended attributes) still refuse on any change, for every item, always; only
+    // size, the two content timestamps, and link_count may advance instead of matching exactly.
     TempTestDir temporary;
     const auto first = temporary.directory / "first.txt";
     const auto second = temporary.directory / "second.txt";
@@ -870,15 +872,49 @@ TEST_CASE(PREFIX "stops a real provider batch at the item whose destination the 
 
     const auto evidence = terminal_evidence();
     REQUIRE(evidence);
-    CHECK(evidence->state == OperationJournalState::Failed);
+    CHECK(evidence->state == OperationJournalState::Completed);
     REQUIRE(evidence->item_results.size() == 2);
-    CHECK(evidence->item_results[0].status == OperationJournalItemStatus::Succeeded);
-    CHECK(evidence->item_results[0].destination_publication == OperationJournalPublicationState::Published);
-    CHECK(evidence->item_results[1].status == OperationJournalItemStatus::Failed);
-    CHECK(evidence->item_results[1].error == OperationJournalItemError::DestinationChanged);
-    CHECK(evidence->item_results[1].system_error == ESTALE);
-    CHECK(evidence->item_results[1].destination_publication == OperationJournalPublicationState::NotPublished);
+    for( const auto &result : evidence->item_results ) {
+        CHECK(result.status == OperationJournalItemStatus::Succeeded);
+        CHECK(result.destination_publication == OperationJournalPublicationState::Published);
+    }
     CHECK(ReviewedReadFile(destination_directory / "first.txt") == "first payload");
+    CHECK(ReviewedReadFile(destination_directory / "second.txt") == "second payload");
+}
+
+TEST_CASE(PREFIX "still fails closed on a real provider when the shared destination was touched before review ran",
+          "[reviewed-operation-factory]")
+{
+    // The companion case to the one above: growth is tolerated once it is the batch's own doing, from
+    // its first item onward, but the FIRST item is still reviewed exactly as a lone copy always has
+    // been - nothing should have touched the destination before this batch ever started publishing.
+    // What tolerance does NOT cover - an unrelated write landing between two items, once the batch's
+    // own growth has already made the directory a moving target - is a separate, accepted question,
+    // tested directly at the provider level in NativeConditionalCopyTransaction_UT.cpp, where it can
+    // be driven synchronously instead of raced against a real batch.
+    TempTestDir temporary;
+    const auto first = temporary.directory / "first.txt";
+    const auto second = temporary.directory / "second.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    ReviewedWriteFile(first, "first payload");
+    ReviewedWriteFile(second, "second payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", first.native()}, {"local", second.native()}},
+                                                    destination_directory.native(),
+                                                    OperationPlanDestinationKind::Directory),
+                                   probes);
+    // Written into the destination before the batch runs at all: this is what the review never saw.
+    // Every item's own preparation revalidates the destination parent against that original snapshot
+    // before any transaction begins, so this is caught before the batch ever starts, not during it.
+    ReviewedWriteFile(destination_directory / "unrelated.txt", "not part of this review");
+
+    const auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE_FALSE(created);
+    CHECK(created.error().code == ReviewedOperationFactoryErrorCode::StaleDestination);
+    CHECK_FALSE(std::filesystem::exists(destination_directory / "first.txt"));
     CHECK_FALSE(std::filesystem::exists(destination_directory / "second.txt"));
 }
 

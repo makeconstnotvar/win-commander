@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <ranges>
+#include <set>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -279,10 +280,13 @@ ReviewedFactoryConditionalCopyTimestamp(OperationPlanningTimestampEvidence _time
 }
 
 nc::vfs::ProviderConditionalCopyExistingExpectation
-ReviewedFactoryConditionalCopyExpectation(const OperationPlanningPath &_path,
-                                          nc::vfs::ProviderConditionalCopyExpectedKind _kind,
-                                          const OperationPlanningNativeObjectIdentityEvidence &_identity,
-                                          const OperationPlanningNativeObjectVersionEvidence &_version)
+ReviewedFactoryConditionalCopyExpectation(
+    const OperationPlanningPath &_path,
+    nc::vfs::ProviderConditionalCopyExpectedKind _kind,
+    const OperationPlanningNativeObjectIdentityEvidence &_identity,
+    const OperationPlanningNativeObjectVersionEvidence &_version,
+    nc::vfs::ProviderConditionalCopyExpectationTolerance _tolerance =
+        nc::vfs::ProviderConditionalCopyExpectationTolerance::Exact)
 {
     return nc::vfs::ProviderConditionalCopyExistingExpectation{
         .absolute_path = _path.absolute_path,
@@ -294,6 +298,7 @@ ReviewedFactoryConditionalCopyExpectation(const OperationPlanningPath &_path,
         .byte_size = _version.byte_size,
         .modification_time = ReviewedFactoryConditionalCopyTimestamp(_version.modification_time),
         .status_change_time = ReviewedFactoryConditionalCopyTimestamp(_version.status_change_time),
+        .tolerance = _tolerance,
     };
 }
 
@@ -424,6 +429,16 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                 ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnexpectedConflictEvidence));
         }
 
+        // Which destination-parent directories this batch has already begun publishing into. The
+        // first item to target a given directory is reviewed exactly as it always was: nothing but
+        // this transaction should find that directory touched at all. Every later item sharing the
+        // same directory necessarily finds it grown by the batch's own prior, authorized publication -
+        // that is not staleness, so its expectation tolerates growth instead of refusing it. Identity
+        // and the whole permission surface stay exact for every item regardless; only what a batch's
+        // own publication predictably advances may move. Keyed on the canonical path alone: a plan
+        // this factory accepts has exactly one destination provider.
+        std::set<std::string> destination_parents_targeted;
+
         // One item's work, named and taking an index. Nothing about it changes here - what changes
         // is that it is now a unit the batch loop can call once per accepted item instead of a
         // three-hundred-line stretch that only ever ran for `front()`.
@@ -499,6 +514,13 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                 .provider_id = item.destination.provider_id,
                 .absolute_path = destination_parts->first,
             };
+            // Inserted, not merely queried: the FIRST item to reach a given directory is the one that
+            // must find it exactly as reviewed, and recording it here is what makes every later item
+            // sharing that directory see it as already-targeted.
+            const auto destination_parent_tolerance =
+                destination_parents_targeted.insert(destination_parent.absolute_path).second
+                   ? nc::vfs::ProviderConditionalCopyExpectationTolerance::Exact
+                   : nc::vfs::ProviderConditionalCopyExpectationTolerance::MonotonicGrowth;
 
             const auto source_host = sealed.Bindings()->Resolve(item.source.provider_id);
             const auto destination_host = sealed.Bindings()->Resolve(item.destination.provider_id);
@@ -692,7 +714,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                     ReviewedFactoryConditionalCopyExpectation(destination_parent,
                                                               nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
                                                               *destination_parent_snapshot->evidence.native_identity,
-                                                              *destination_parent_snapshot->evidence.native_version),
+                                                              *destination_parent_snapshot->evidence.native_version,
+                                                              destination_parent_tolerance),
                 .destination =
                     nc::vfs::ProviderConditionalCopyMissingExpectation{
                         .absolute_path = item.destination.absolute_path,
