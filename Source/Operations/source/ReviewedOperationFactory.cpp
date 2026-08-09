@@ -394,16 +394,18 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedPlanType));
         if( report.items.empty() )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::EmptyAcceptedPlan));
-        // Asked apart, because they are different limitations and lifting them is different work:
-        // several sources need several structural bindings checked against the report, while one
-        // source that expanded into several items needs only the per-item loop. Reported as one
-        // error, a caller could not tell which wall it had hit - nor could this code, later.
-        if( plan.Sources().size() != 1 ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MultipleSourcesUnsupported));
-        }
-        if( report.items.size() != 1 )
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::BatchUnsupported));
+        // Both gates are gone: several sources are executed, and one source expanding into several
+        // items needs only the loop that now exists. What stands in their place is not a limitation
+        // but the journal's own rule - it numbers results in the plan's source space and refuses a
+        // completed entry that does not carry one per source. A plan whose report covers fewer is
+        // therefore unexecutable, and refusing it here is the last place that can see both.
+        //
+        // Unreachable through the planner as it stands, and worth knowing why rather than trying:
+        // the only path that stops planning part-way is a cancelled probe, which records a blocker,
+        // and a blocked preflight is never accepted. Defence in depth against a refusal that would
+        // otherwise surface as an unfinalizable journal entry - a hang, not an error.
+        if( report.items.size() != plan.Sources().size() )
+            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::IncompleteAcceptedPlan));
         switch( plan.ConflictPolicy()->Decision() ) {
             case OperationPlanConflictDecision::Ask:
             case OperationPlanConflictDecision::Skip:

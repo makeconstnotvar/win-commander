@@ -810,40 +810,59 @@ TEST_CASE(PREFIX "custodian reconciles and releases an exact three-item terminal
     CHECK(snapshot[0].item_results == evidence);
 }
 
-TEST_CASE(PREFIX "rejects a batch review before direct admission", "[copy-operation-orchestrator][batch-durable-terminal]")
+TEST_CASE(PREFIX "carries a whole reviewed batch through one operation and one journal entry",
+          "[copy-operation-orchestrator][copy-operation-orchestrator-production][batch-durable-terminal]")
 {
     CopyOrchestratorDirectory directory;
     TempTestDir temporary;
     auto journal = CopyOrchestratorJournal(directory);
     auto pool = Pool::Make();
     auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
-    std::atomic_int factory_calls{0};
+    std::atomic_int commit_calls{0};
+    std::atomic_int abort_calls{0};
     std::atomic_int additions{0};
     pool->ObserveUnticketed(Pool::NotifyAboutAddition, [&] { ++additions; });
-    auto orchestrator = CopyOperationOrchestratorTesting::CreateInjected(
-        journal,
-        pool,
-        [&factory_calls](ReviewedVFSOperationPreflight, CopyOperationOrchestrator::CancelChecker) {
-            ++factory_calls;
-            return std::unexpected(CopyOperationExecutionFactoryError::Rejected);
-        },
-        custodian);
+    auto orchestrator = CopyOperationOrchestratorTesting::CreateProductionWithResolver(
+        journal, pool, custodian, CopyOrchestratorStrongConditionalCommitTransaction(&commit_calls, &abort_calls));
 
-    auto reviewed = CopyOrchestratorBatchReview("direct-batch-rejection", temporary);
+    auto reviewed = CopyOrchestratorBatchReview("direct-batch", temporary);
     REQUIRE(reviewed.AcceptedPlan().Plan().Sources().size() == 2);
     REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 2);
-    const auto submitted = orchestrator.Submit(std::move(reviewed));
+    auto submitted = orchestrator.Submit(std::move(reviewed));
 
-    REQUIRE_FALSE(submitted);
-    CHECK(submitted.error().code == CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan);
-    CHECK(factory_calls == 0);
-    CHECK(additions == 0);
-    CHECK(pool->Empty());
+    REQUIRE(submitted);
+    REQUIRE((*submitted)->Wait(5s));
+    REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->Empty(); }));
+
+    CHECK(commit_calls == 2);
+    CHECK(abort_calls == 0);
+    // One addition, not two: the user asked for one copy of two files, and the Operation Center is
+    // shown exactly that.
+    CHECK(additions == 1);
     CHECK(custodian->PendingCount() == 0);
-    CHECK(journal->Snapshot().empty());
+    const auto first_source = temporary.directory / "first-source.txt";
+    const auto second_source = temporary.directory / "second-source.txt";
+    CHECK(CopyOrchestratorReadFile(temporary.directory / "destination" / "first-source.txt") ==
+          CopyOrchestratorReadFile(first_source));
+    CHECK(CopyOrchestratorReadFile(temporary.directory / "destination" / "second-source.txt") ==
+          CopyOrchestratorReadFile(second_source));
+
+    const auto snapshot = journal->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Completed);
+    REQUIRE(snapshot[0].item_results.size() == 2);
+    CHECK(snapshot[0].item_results[0].item_index == 0);
+    CHECK(snapshot[0].item_results[1].item_index == 1);
+    CHECK(snapshot[0].item_results[0].bytes == std::filesystem::file_size(first_source));
+    CHECK(snapshot[0].item_results[1].bytes == std::filesystem::file_size(second_source));
+    for( const auto &result : snapshot[0].item_results ) {
+        CHECK(result.status == OperationJournalItemStatus::Succeeded);
+        CHECK(result.destination_publication == OperationJournalPublicationState::Published);
+        CHECK(result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed);
+    }
 }
 
-TEST_CASE(PREFIX "coordinator rejects a batch review before model or journal admission",
+TEST_CASE(PREFIX "coordinator admits a batch review as one operation in its model",
           "[copy-operation-orchestrator][operation-center-coordinator][batch-durable-terminal]")
 {
     CopyOrchestratorDirectory directory;
@@ -853,33 +872,33 @@ TEST_CASE(PREFIX "coordinator rejects a batch review before model or journal adm
     auto coordinator = OperationCenterCoordinator::Create(*journal);
     REQUIRE(coordinator);
     auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
-    std::atomic_int factory_calls{0};
+    std::atomic_int commit_calls{0};
+    std::atomic_int abort_calls{0};
     std::atomic_int additions{0};
     pool->ObserveUnticketed(Pool::NotifyAboutAddition, [&] { ++additions; });
-    auto orchestrator = CopyOperationOrchestratorTesting::CreateInjected(
-        journal,
-        pool,
-        [&factory_calls](ReviewedVFSOperationPreflight, CopyOperationOrchestrator::CancelChecker) {
-            ++factory_calls;
-            return std::unexpected(CopyOperationExecutionFactoryError::Rejected);
-        },
-        custodian);
+    auto orchestrator = CopyOperationOrchestratorTesting::CreateProductionWithResolver(
+        journal, pool, custodian, CopyOrchestratorStrongConditionalCommitTransaction(&commit_calls, &abort_calls));
 
-    auto reviewed = CopyOrchestratorBatchReview("coordinator-batch-rejection", temporary);
+    auto reviewed = CopyOrchestratorBatchReview("coordinator-batch", temporary);
     REQUIRE(reviewed.AcceptedPlan().Plan().Sources().size() == 2);
     REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 2);
-    const auto submitted = (*coordinator)->SubmitReviewedCopy(*journal, orchestrator, std::move(reviewed), {}, {});
+    auto submitted = (*coordinator)->SubmitReviewedCopy(*journal, orchestrator, std::move(reviewed), {}, {});
 
-    REQUIRE_FALSE(submitted);
-    CHECK(submitted.error().code == OperationCenterSubmissionErrorCode::OrchestratorRejected);
-    REQUIRE(submitted.error().orchestrator_error);
-    CHECK(submitted.error().orchestrator_error->code == CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan);
-    CHECK(factory_calls == 0);
-    CHECK(additions == 0);
-    CHECK(pool->Empty());
-    CHECK(custodian->PendingCount() == 0);
-    CHECK(journal->Snapshot().empty());
-    CHECK((*coordinator)->Model().Snapshot().empty());
+    REQUIRE(submitted);
+    REQUIRE(*submitted);
+    REQUIRE((*submitted)->Wait(5s));
+    REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->Empty(); }));
+
+    CHECK(commit_calls == 2);
+    CHECK(abort_calls == 0);
+    CHECK(additions == 1);
+    const auto snapshot = journal->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Completed);
+    CHECK(snapshot[0].item_results.size() == 2);
+    // One record in the Operation Center for one batch, which is the whole point of executing it as
+    // one operation rather than as a loop of single-item ones.
+    CHECK((*coordinator)->Model().Snapshot().size() == 1);
 }
 
 TEST_CASE(PREFIX "consumes coordinator admission without a second journal entry and sees queued model before Pool start",
@@ -1464,6 +1483,52 @@ TEST_CASE(PREFIX "final cancellation atomically records an item and never enqueu
     CHECK(snapshot[0].state == OperationJournalState::Cancelled);
     REQUIRE(snapshot[0].item_results.size() == 1);
     CHECK(snapshot[0].item_results[0].status == OperationJournalItemStatus::Cancelled);
+    CHECK(pool->Empty());
+}
+
+TEST_CASE(PREFIX "records a cancelled batch against every source it named",
+          "[copy-operation-orchestrator][batch-durable-terminal]")
+{
+    // The cancellation happens before any item runs, which is true of the whole plan. Recording it
+    // against the first source alone would be a statement about that source in particular - legal for
+    // the journal, which lets a cancelled entry omit items, and wrong.
+    CopyOrchestratorDirectory directory;
+    TempTestDir temporary;
+    auto journal = CopyOrchestratorJournal(directory);
+    auto pool = Pool::Make();
+    auto operation = std::make_shared<CopyOrchestratorControlledOperation>();
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    std::atomic_int additions{0};
+    std::atomic_int cancel_calls{0};
+    pool->ObserveUnticketed(Pool::NotifyAboutAddition, [&] { ++additions; });
+    auto orchestrator = CopyOperationOrchestratorTesting::CreateInjected(
+        journal,
+        pool,
+        [operation](ReviewedVFSOperationPreflight, CopyOperationOrchestrator::CancelChecker) {
+            return CopyOperationOrchestratorTesting::MakeExecutionProduct(operation, [] {
+                return std::expected<OperationJournalItemResult, CopyOperationTerminalResultError>{
+                    CopyOrchestratorSuccess()};
+            });
+        },
+        custodian);
+
+    const auto result = orchestrator.Submit(CopyOrchestratorBatchReview("batch-final-cancel", temporary), [&] {
+        return ++cancel_calls == 2;
+    });
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == CopyOperationOrchestratorErrorCode::Cancelled);
+    CHECK(additions == 0);
+    const auto snapshot = journal->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Cancelled);
+    REQUIRE(snapshot[0].item_results.size() == 2);
+    CHECK(snapshot[0].item_results[0].item_index == 0);
+    CHECK(snapshot[0].item_results[1].item_index == 1);
+    for( const auto &item_result : snapshot[0].item_results ) {
+        CHECK(item_result.status == OperationJournalItemStatus::Cancelled);
+        CHECK(item_result.destination_publication == OperationJournalPublicationState::NotPublished);
+    }
     CHECK(pool->Empty());
 }
 

@@ -28,14 +28,12 @@ enum class ReviewedOperationFactoryErrorCode : uint8_t {
     ConditionalCommitIntegrationUnavailable,
     EmptyAcceptedPlan,
     /**
-     * The plan names more than one source. A different limitation from a single source that expanded
-     * into several accepted items, and told apart because lifting them is different work: several
-     * sources need several structural bindings checked, while an expanded source needs only the
-     * per-item loop. Reporting both as one hid which wall a caller had hit.
+     * The report does not account for the plan's sources, one item each. Both former refusals -
+     * several sources, and one source expanded into several items - are lifted; what replaces them is
+     * the rule the journal actually imposes, since it numbers results in the plan's source space and
+     * will not record a completed entry that is missing one.
      */
-    MultipleSourcesUnsupported,
-    /** One source, but the report accepted more than one item from it. */
-    BatchUnsupported,
+    IncompleteAcceptedPlan,
     UnsupportedConflictPolicy,
     UnexpectedConflictEvidence,
     InvalidReviewedPlan,

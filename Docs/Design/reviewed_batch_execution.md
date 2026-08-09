@@ -141,6 +141,33 @@ and the journal decided the rest:
 - **Pausing between items is now real.** It is the only safe pause point (a commit cannot be
   interrupted), and until now `Pause` flipped a flag while nothing ever waited.
 
+**Step D — DONE, and the gate was not the wall.** Both refusals are gone, and what replaced them is
+not a limitation but the rule the journal imposes: a report must account for the plan's sources, one
+item each, because results are numbered in the source space and a completed entry missing one cannot
+be recorded. The same rule now stands at all three outer gates — `Submit`, `SubmitAdmitted` and the
+Operation Center coordinator each refused several sources, so lifting only the factory's would have
+changed nothing — and a batch cancelled before it runs now records that against **every** source it
+named rather than fabricating a statement about the first one.
+
+**What the gate was hiding.** Executed against the real Native provider rather than a test mint, a
+two-item batch copies the first file and refuses the second with `ESTALE`. Each item carries the same
+reviewed expectation of the destination directory — including its size and both timestamps — and
+publishing the first item changes all three. The provider refuses to publish into a directory that
+changed at all since review, deliberately and with its own test (`NativeConditionalCopyTransaction:
+fails closed when reviewed destination parent evidence becomes stale`), and a batch is a writer into
+its own destination. Nothing is written wrongly; the refusal is fail-closed and the rest of the batch
+is abandoned. But **a multi-file copy into one folder cannot complete until that contract separates
+what authorises a publication — the directory's identity and permissions — from what the batch itself
+is expected to change: its contents.** That is a provider-contract slice, not a gate, and it is now
+pinned by a test so the wall is visible rather than inferred.
+
+Nothing user-visible changed either way: the only production producer of a reviewed plan is
+`Copy As…`, which builds a single-source `ExactItem` plan and whose application boundary refuses
+anything else before submission. That is what makes deferring the single-item terminal presenter
+honest rather than convenient — it cannot be reached with a set until a producer exists.
+
+The original description follows, for the record.
+
 **Step D — lift the gate.** This is where the design was wrong when first written, and a test
 corrected it.
 
@@ -180,16 +207,19 @@ additionally requires `item_results.size() == plan.Sources().size()`. Three cons
    planner emplaces a conflict *before* that switch — a report carrying a conflict is refused at
    review. Sources are planned in order, so accepted item *i* comes from source *i*. The lookup
    introduced in step B is what keeps this true instead of trusting it.
-2. **One hole remains: a cancelled preflight can still be accepted.** The Copy finisher breaks out of
-   the source loop on cancellation and returns an accepted plan if no blocker accumulated, so the
-   report can be a strict prefix of the sources. Indices stay sound, but `Completed` becomes
-   unreachable for that plan — a fully successful batch could not be journalled. Unreachable at one
-   source (an empty report blocks with `NothingToDo`); step D must either refuse such a plan or the
-   completeness rule has to change.
-3. **The derivation is a lookup, so it is many-to-one by construction.** If step D ever makes one
-   source expand into several accepted items, they all derive that source's index and the operation
-   refuses the set at construction — fail-closed, but the wrong answer to give a user. Step D has to
-   decide what such items are actually numbered as before it lifts `BatchUnsupported`.
+2. ~~**One hole remains: a cancelled preflight can still be accepted.**~~ **False, and step D
+   disproved it.** The Copy finisher does break out of the source loop on cancellation, but
+   `m_Cancelled` is assigned in exactly one place — inside `AddProbeBlocker`, immediately after the
+   blocker is recorded — and a preflight with any blocker is never accepted. So the report can never
+   be a strict prefix of the sources, and the refusal step D added for it is defence in depth rather
+   than a reachable case. Recorded here rather than quietly deleted: the assumption was written from
+   reading the loop and not its only exit.
+3. **The derivation is a lookup, so it is many-to-one — and nothing can drive it there.** `PlanSource`
+   has exactly one site that appends an item and every other exit returns before it, so no source
+   expands into several. `OperationPlan::Create` refuses duplicate sources, and the planner refuses
+   duplicate destinations whenever there is more than one source. If that ever changes, the colliding
+   indices are refused at the operation's construction — fail-closed, but the wrong answer to give a
+   user, so it would need deciding rather than inheriting.
 4. **The application's terminal presenter is single-item.** `CopyOperationDurableTerminalOutcome::
    SingleItemResult()` returns nullptr for N != 1 and the copy presenter turns that into a
    "requires reconciliation" alert, so lifting the gate without teaching that surface about a set

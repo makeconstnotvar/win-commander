@@ -79,19 +79,30 @@ OperationPlan ReviewedCopyPlan(std::vector<OperationPlanSourceInput> _sources,
     return std::move(*plan);
 }
 
-VFSOperationPlanningProbes ReviewedNativeProbes(const std::shared_ptr<VFSHost> &_host)
+VFSOperationPlanningProbes
+ReviewedNativeProbesWithAccess(const std::shared_ptr<VFSHost> &_host,
+                               std::function<OperationPlanningProbeResult<OperationPlanningAccessEvidence>(
+                                   const OperationPlanningPath &)> _access)
 {
     auto bindings = VFSOperationPlanningBindings::Create({{"local", _host}});
     REQUIRE(bindings);
     auto probes = VFSOperationPlanningProbes::Create(
         *bindings,
-        [](const OperationPlanningPath &,
-           OperationPlanningRequiredAccess,
-           nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
-            return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+        [access = std::move(_access)](const OperationPlanningPath &_path,
+                                      OperationPlanningRequiredAccess,
+                                      nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+            return access(_path);
         });
     REQUIRE(probes);
     return std::move(*probes);
+}
+
+VFSOperationPlanningProbes ReviewedNativeProbes(const std::shared_ptr<VFSHost> &_host)
+{
+    return ReviewedNativeProbesWithAccess(_host, [](const OperationPlanningPath &) {
+        return OperationPlanningProbeResult<OperationPlanningAccessEvidence>{
+            OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted}};
+    });
 }
 
 ReviewedVFSOperationPreflight
@@ -581,11 +592,11 @@ TEST_CASE(PREFIX "rejects destructive policy, unsupported source shapes, and bat
 
     SECTION("a directory source is one item, not several")
     {
-        // Written to pin BatchUnsupported and it disproved the assumption behind it: a directory
-        // source is accepted as ONE item of kind Directory, not as several file items, so it stops
-        // at the source-kind gate and never reaches the batch one. Which means BatchUnsupported -
-        // one source, several accepted items - appears unreachable at this layer today, and the gate
-        // that actually stands between here and batching is the several-sources one below.
+        // Written to pin the refusal of one source expanded into several items, and it disproved the
+        // assumption behind that refusal: a directory source is accepted as ONE item of kind
+        // Directory, not as several file items, so it stops at the source-kind gate. Nothing at this
+        // layer expands a source, which is why the batch refusal never had a way to be reached and
+        // why what replaced it is a completeness rule rather than a limit.
         std::ofstream(source_directory / "a.txt") << "one";
         std::ofstream(source_directory / "b.txt") << "two";
         auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source_directory.native()}},
@@ -595,20 +606,6 @@ TEST_CASE(PREFIX "rejects destructive policy, unsupported source shapes, and bat
         const auto operation = ReviewedOperationFactory::Create(std::move(reviewed));
         REQUIRE_FALSE(operation);
         CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::UnsupportedSourceKind);
-    }
-
-    SECTION("several sources")
-    {
-        // Distinct from a single source that expanded into several items: several sources need
-        // several structural bindings checked, an expanded source needs only the per-item loop, and
-        // reporting both the same way hid which of the two a caller had run into.
-        auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source.native()}, {"local", second_source.native()}},
-                                                        destination_directory.native(),
-                                                        OperationPlanDestinationKind::Directory),
-                                       probes);
-        const auto operation = ReviewedOperationFactory::Create(std::move(reviewed));
-        REQUIRE_FALSE(operation);
-        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::MultipleSourcesUnsupported);
     }
 }
 
@@ -784,6 +781,138 @@ TEST_CASE(PREFIX "opens a raced source leaf without blocking and checks cancella
         CHECK((observed_flags & (O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)) ==
               (O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
     }
+}
+
+TEST_CASE(PREFIX "carries every source of a reviewed plan through one operation", "[reviewed-operation-factory]")
+{
+    TempTestDir temporary;
+    const auto first = temporary.directory / "first.txt";
+    const auto second = temporary.directory / "second.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    ReviewedWriteFile(first, "first payload");
+    ReviewedWriteFile(second, "the second payload is longer");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", first.native()}, {"local", second.native()}},
+                                                    destination_directory.native(),
+                                                    OperationPlanDestinationKind::Directory),
+                                   probes);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Sources().size() == 2);
+    REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 2);
+
+    int abort_calls = 0;
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+        std::move(reviewed), ReviewedStrongConditionalCommitTransaction(&abort_calls));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    auto &terminal_evidence = ReviewedOperationFactoryTestAccess::TerminalEvidence(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+
+    const auto evidence = terminal_evidence();
+    REQUIRE(evidence);
+    CHECK(evidence->state == OperationJournalState::Completed);
+    REQUIRE(evidence->item_results.size() == 2);
+    // Numbered in the plan's source space, which is the space the journal validates against, and
+    // complete - a completed entry that skipped a source could not be recorded at all.
+    CHECK(evidence->item_results[0].item_index == 0);
+    CHECK(evidence->item_results[1].item_index == 1);
+    CHECK(evidence->item_results[0].bytes == std::filesystem::file_size(first));
+    CHECK(evidence->item_results[1].bytes == std::filesystem::file_size(second));
+    for( const auto &result : evidence->item_results ) {
+        CHECK(result.status == OperationJournalItemStatus::Succeeded);
+        CHECK(result.destination_publication == OperationJournalPublicationState::Published);
+    }
+    CHECK(abort_calls == 0);
+}
+
+TEST_CASE(PREFIX "stops a real provider batch at the item whose destination the batch itself changed",
+          "[reviewed-operation-factory]")
+{
+    // Executed against the real Native transaction rather than the test mint, which is the only way
+    // to see this: publishing the first item changes the destination directory - its size and both
+    // its timestamps - and every item carries the same reviewed expectation of that directory, so the
+    // second item's commit finds it stale and refuses.
+    //
+    // Not a defect in the batch. The provider deliberately refuses to publish into a directory that
+    // changed at all since review (`NativeConditionalCopyTransaction: fails closed when reviewed
+    // destination parent evidence becomes stale`), and a batch is a writer into its own destination.
+    // Nothing is written wrongly - the refusal is fail-closed and the rest of the batch is abandoned -
+    // but a multi-file copy into one folder cannot complete until that contract distinguishes the
+    // directory's identity and permissions, which authorise the publication, from its contents, which
+    // the batch itself is expected to change. That is the next slice, and this pins the wall.
+    TempTestDir temporary;
+    const auto first = temporary.directory / "first.txt";
+    const auto second = temporary.directory / "second.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    ReviewedWriteFile(first, "first payload");
+    ReviewedWriteFile(second, "second payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", first.native()}, {"local", second.native()}},
+                                                    destination_directory.native(),
+                                                    OperationPlanDestinationKind::Directory),
+                                   probes);
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    auto &terminal_evidence = ReviewedOperationFactoryTestAccess::TerminalEvidence(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+
+    const auto evidence = terminal_evidence();
+    REQUIRE(evidence);
+    CHECK(evidence->state == OperationJournalState::Failed);
+    REQUIRE(evidence->item_results.size() == 2);
+    CHECK(evidence->item_results[0].status == OperationJournalItemStatus::Succeeded);
+    CHECK(evidence->item_results[0].destination_publication == OperationJournalPublicationState::Published);
+    CHECK(evidence->item_results[1].status == OperationJournalItemStatus::Failed);
+    CHECK(evidence->item_results[1].error == OperationJournalItemError::DestinationChanged);
+    CHECK(evidence->item_results[1].system_error == ESTALE);
+    CHECK(evidence->item_results[1].destination_publication == OperationJournalPublicationState::NotPublished);
+    CHECK(ReviewedReadFile(destination_directory / "first.txt") == "first payload");
+    CHECK_FALSE(std::filesystem::exists(destination_directory / "second.txt"));
+}
+
+TEST_CASE(PREFIX "cannot be handed a plan whose review stopped part-way", "[reviewed-operation-factory]")
+{
+    // The completeness refusal above it has no way to be reached, and this is why rather than a
+    // guess: the only path that stops planning before every source is a cancelled probe, which
+    // records a blocker, and a blocked preflight is never accepted. Pinning the reason keeps the next
+    // reader from writing the same unreachable test.
+    TempTestDir temporary;
+    const auto first = temporary.directory / "first.txt";
+    const auto second = temporary.directory / "second.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    ReviewedWriteFile(first, "first payload");
+    ReviewedWriteFile(second, "second payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbesWithAccess(
+        host,
+        [second_path = second.native()](const OperationPlanningPath &_path)
+            -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+            if( _path.absolute_path == second_path )
+                return std::unexpected(OperationPlanningProbeError::Cancelled);
+            return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+        });
+
+    auto reviewed = ReviewedVFSOperationPreflight::Review(
+        probes.Preflight(ReviewedCopyPlan({{"local", first.native()}, {"local", second.native()}},
+                                          destination_directory.native(),
+                                          OperationPlanDestinationKind::Directory)),
+        VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE_FALSE(reviewed);
+    CHECK(reviewed.error() == VFSOperationPreflightReviewError::Blocked);
 }
 
 TEST_CASE(PREFIX "rolls a prepared batch back instead of handing over transactions nobody will run",

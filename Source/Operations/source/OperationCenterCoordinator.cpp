@@ -664,7 +664,10 @@ OperationCenterCoordinator::SubmitReviewedCopy(OperationJournal &_journal,
 
     const auto &accepted = _reviewed.AcceptedPlan();
     const auto &plan = accepted.Plan();
-    if( plan.Type() != OperationPlanType::Copy || plan.Sources().size() != 1 || accepted.Report().items.size() != 1 ) {
+    // A batch is one operation here as everywhere else, so the count is no longer the question. What
+    // remains is the journal's rule, asked before this path admits anything: a report that does not
+    // cover its plan's sources one item each cannot be recorded as completed, so it must not run.
+    if( plan.Type() != OperationPlanType::Copy || accepted.Report().items.size() != plan.Sources().size() ) {
         return orchestrator_failure(
             CopyOperationOrchestratorError{.code = CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan});
     }

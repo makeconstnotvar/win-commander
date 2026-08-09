@@ -40,7 +40,7 @@ struct CopyOperationRunReceiptCustodian::Slot final {
           terminal_observer{std::move(_terminal_observer)}, owner{std::move(_owner)},
           storage_identity{_storage_identity}
     {
-        singleton_terminal_evidence_storage.reserve(1);
+        pre_running_terminal_evidence_storage.reserve(plan.Sources().size());
     }
 
     const OperationPlan plan;
@@ -52,8 +52,11 @@ struct CopyOperationRunReceiptCustodian::Slot final {
     bool terminal_evidence_acquired{false};
     std::optional<CopyOperationTerminalResultError> terminal_result_error;
     std::optional<CopyOperationTerminalEvidence> terminal_evidence;
-    /** Allocated with the bounded custody Slot before Running for synthetic one-item terminalization. */
-    std::vector<OperationJournalItemResult> singleton_terminal_evidence_storage;
+    /**
+     * Allocated with the bounded custody Slot before Running, one element per source the plan names,
+     * for terminalization that happens before the operation ever runs.
+     */
+    std::vector<OperationJournalItemResult> pre_running_terminal_evidence_storage;
     std::function<void(const CopyOperationDurableTerminalOutcome &)> terminal_observer;
     bool terminal_observer_delivered{false};
     std::optional<OperationJournalError> last_journal_error;
@@ -423,16 +426,25 @@ CopyOperationRunReceiptCustodian::FinalizeBeforeEnqueue(Reservation &_reservatio
             slot->phase = Slot::Phase::ContractViolation;
             return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
         }
-        if( !slot->singleton_terminal_evidence_storage.empty() ||
-            slot->singleton_terminal_evidence_storage.capacity() < 1 ) {
+        const auto sources = slot->plan.Sources().size();
+        if( !slot->pre_running_terminal_evidence_storage.empty() ||
+            slot->pre_running_terminal_evidence_storage.capacity() < sources ) {
             slot->phase = Slot::Phase::ContractViolation;
             return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
         }
-        // Slot construction reserves this single bounded element before the Running transition.
-        slot->singleton_terminal_evidence_storage.emplace_back(std::move(_result));
+        // One statement per source, not one about the first of them. What the caller describes -
+        // cancelled, or refused before it could be enqueued - happened to the whole plan before any
+        // item ran, and recording it against source 0 alone would be a claim about that source in
+        // particular that nothing supports. Slot construction reserved exactly this many elements
+        // before the Running transition, so nothing here can allocate.
+        for( size_t index = 0; index != sources; ++index ) {
+            auto item_result = _result;
+            item_result.item_index = index;
+            slot->pre_running_terminal_evidence_storage.push_back(item_result);
+        }
         slot->terminal_evidence.emplace(CopyOperationTerminalEvidence{
             .state = _terminal_state,
-            .item_results = std::move(slot->singleton_terminal_evidence_storage),
+            .item_results = std::move(slot->pre_running_terminal_evidence_storage),
         });
         slot->terminal_evidence_acquired = true;
     }
@@ -503,16 +515,25 @@ CopyOperationRunReceiptCustodian::RejectEnqueue(Reservation &_reservation,
             slot->phase = Slot::Phase::ContractViolation;
             return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
         }
-        if( !slot->singleton_terminal_evidence_storage.empty() ||
-            slot->singleton_terminal_evidence_storage.capacity() < 1 ) {
+        const auto sources = slot->plan.Sources().size();
+        if( !slot->pre_running_terminal_evidence_storage.empty() ||
+            slot->pre_running_terminal_evidence_storage.capacity() < sources ) {
             slot->phase = Slot::Phase::ContractViolation;
             return {.status = CopyOperationRunReceiptCustodyStatus::ContractViolation, .journal_error = std::nullopt};
         }
-        // Slot construction reserves this single bounded element before the Running transition.
-        slot->singleton_terminal_evidence_storage.emplace_back(std::move(_result));
+        // One statement per source, not one about the first of them. What the caller describes -
+        // cancelled, or refused before it could be enqueued - happened to the whole plan before any
+        // item ran, and recording it against source 0 alone would be a claim about that source in
+        // particular that nothing supports. Slot construction reserved exactly this many elements
+        // before the Running transition, so nothing here can allocate.
+        for( size_t index = 0; index != sources; ++index ) {
+            auto item_result = _result;
+            item_result.item_index = index;
+            slot->pre_running_terminal_evidence_storage.push_back(item_result);
+        }
         slot->terminal_evidence.emplace(CopyOperationTerminalEvidence{
             .state = _terminal_state,
-            .item_results = std::move(slot->singleton_terminal_evidence_storage),
+            .item_results = std::move(slot->pre_running_terminal_evidence_storage),
         });
         slot->terminal_evidence_acquired = true;
         slot->phase = Slot::Phase::Armed;
@@ -966,7 +987,12 @@ CopyOperationOrchestrator::Submit(ReviewedVFSOperationPreflight _reviewed,
 
     const auto &accepted = _reviewed.AcceptedPlan();
     const OperationPlan plan = accepted.Plan();
-    if( plan.Type() != OperationPlanType::Copy || plan.Sources().size() != 1 || accepted.Report().items.size() != 1 ) {
+    // A batch is admitted like any other reviewed Copy now. What is still refused is a report that
+    // does not cover the plan's sources one item each: this boundary is the one that writes to the
+    // journal, and the journal numbers results in the source space and will not record a completed
+    // entry missing one. Refusing before admission keeps an unexecutable plan out of the record
+    // rather than leaving a failed entry behind it.
+    if( plan.Type() != OperationPlanType::Copy || accepted.Report().items.size() != plan.Sources().size() ) {
         return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan));
     }
 
@@ -1004,7 +1030,9 @@ CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewe
 
     const auto &accepted = _reviewed.AcceptedPlan();
     const OperationPlan plan = accepted.Plan();
-    if( plan.Type() != OperationPlanType::Copy || plan.Sources().size() != 1 || accepted.Report().items.size() != 1 )
+    // Same rule as the direct entry point, asked again because this one is reached with an admission
+    // already in hand: what the journal cannot record must not get as far as running.
+    if( plan.Type() != OperationPlanType::Copy || accepted.Report().items.size() != plan.Sources().size() )
         return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan));
 
     std::expected<void, OperationJournalError> validated =
@@ -1148,10 +1176,17 @@ CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewe
     if( !m_RunReceiptCustodian->Arm(*reservation, std::move(*run)) ) {
         m_RunReceiptCustodian->Release(*reservation);
         try {
+            // Every source, for the same reason the custodian gives one statement per source: the arm
+            // failed before any item ran, which is true of all of them.
+            std::vector<OperationJournalItemResult> item_results;
+            item_results.reserve(plan.Sources().size());
+            for( size_t index = 0; index != plan.Sources().size(); ++index ) {
+                auto item_result = CopyOrchestratorEnqueueFailureItemResult(PoolEnqueueResult::NotCold);
+                item_result.item_index = index;
+                item_results.push_back(item_result);
+            }
             const auto finalized =
-                m_Journal->Finalize(std::move(*run),
-                                    CopyOrchestratorEnqueueFailureItemResult(PoolEnqueueResult::NotCold),
-                                    OperationJournalState::Failed);
+                m_Journal->Finalize(std::move(*run), item_results, OperationJournalState::Failed);
             if( !finalized ) {
                 return std::unexpected(CopyOrchestratorFailure(
                     CopyOperationOrchestratorErrorCode::RunningFinalizationFailed, finalized.error()));

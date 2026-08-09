@@ -187,10 +187,8 @@ NSString *ReviewedFactoryErrorDescription(const nc::ops::ReviewedOperationFactor
             return @"The provider transaction could not be integrated with the operation lifecycle.";
         case EmptyAcceptedPlan:
             return @"The reviewed plan contains no copy item.";
-        case MultipleSourcesUnsupported:
-            return @"This reviewed path supports exactly one source.";
-        case BatchUnsupported:
-            return @"This reviewed path supports exactly one item.";
+        case IncompleteAcceptedPlan:
+            return @"The reviewed plan does not cover every source it names.";
         case UnsupportedConflictPolicy:
             return @"The reviewed conflict policy is no longer supported.";
         case UnexpectedConflictEvidence:
