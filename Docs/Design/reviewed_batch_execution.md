@@ -76,13 +76,26 @@ lift.
 
 ## Verification this will need
 
-- **The safety argument for the extraction is weaker than it looks.** Of the factory's 21 error
-  codes, **nine are raised and never asserted by any test**: `UnsupportedPlanType`,
-  `ProviderUnavailable`, `EmptyAcceptedPlan`, `BatchUnsupported`, `UnexpectedConflictEvidence`,
-  `InvalidReviewedPlan`, `MissingEvidence`, `InvalidEvidence` and `OpenFailed` — the last raised at
-  **eight** sites. `MissingEvidence` and `InvalidEvidence` are the staleness-evidence checks, which
-  is the part of this code least safe to move blind. Cover those first, or accept that the
-  extraction is unpinned exactly where it matters most.
+- **The safety argument for the extraction is weaker than it looks**, and the gaps are not all the
+  same kind. Of the factory's 21 error codes, nine were raised and asserted by nothing. Sorting them
+  by *why*:
+
+  - **`OpenFailed` — now covered.** Raised at eight sites and asserted nowhere, and precisely what a
+    per-item extraction moves. A test now drives the `SourceOpenAt` seam to fail with `EACCES` and
+    checks the factory reports a failure rather than staleness — the missing-file errnos mean the
+    world moved and are deliberately mapped to `StaleSource`, which is a different thing to tell the
+    user.
+  - **`MissingEvidence` and `InvalidEvidence` — not reachable from the test surface.** They need a
+    report whose snapshots are absent or wrong, and reports come from the real planner, which always
+    produces consistent ones. `ReviewedOperationFactoryTestAccess` injects a transaction resolver, an
+    access checker and an open — not a forged report. Covering them means adding a seam that lets a
+    test construct an `AcceptedOperationPlan`, and **that is a decision, not a chore**: a seam able
+    to forge a reviewed plan is a seam that could forge one somewhere else. Decide it deliberately
+    before the extraction moves these checks.
+  - **`UnsupportedPlanType` and the rest — defence in depth.** `Review()` already refuses a non-Copy
+    plan with the same code, so the factory's own check cannot be reached through it. Unreachable by
+    construction is a different thing from untested, and should be recorded as such rather than
+    chased.
 - The existing factory cases must pass unchanged after step A.
 - New cases for: a two-item plan preparing and executing both; a second item that is stale rolling
   back the first item's transaction; cancellation between items leaving the first committed and the

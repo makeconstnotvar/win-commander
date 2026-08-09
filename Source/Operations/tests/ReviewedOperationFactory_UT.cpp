@@ -413,6 +413,36 @@ TEST_CASE(PREFIX "rejects stale source and destination identity before capsule c
     }
 }
 
+TEST_CASE(PREFIX "reports a source that would not open as a failure, not as staleness",
+          "[reviewed-operation-factory]")
+{
+    // OpenFailed is raised at eight places in this factory and was asserted by nothing. It is also
+    // exactly what a per-item extraction would move, so leaving it unpinned would mean moving the
+    // descriptor handling blind.
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    std::ofstream(source) << "payload";
+
+    auto probes = ReviewedNativeProbes(TestEnv().vfs_native);
+    auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source.native()}},
+                                                    destination_directory.native(),
+                                                    OperationPlanDestinationKind::Directory),
+                                   probes);
+
+    // EACCES rather than ENOENT: the missing-file errnos mean the world moved and are reported as
+    // staleness, which is a different thing to tell the user than "this could not be opened".
+    const auto operation = ReviewedCreateWithStrongTestAuthority(
+        std::move(reviewed), {}, {}, [](int, const char *, int) {
+            errno = EACCES;
+            return -1;
+        });
+    REQUIRE_FALSE(operation);
+    CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::OpenFailed);
+    CHECK(operation.error().path == OperationPlanningPath{"local", source.native()});
+}
+
 TEST_CASE(PREFIX "rejects destructive policy, unsupported source shapes, and batches", "[reviewed-operation-factory]")
 {
     TempTestDir temporary;
