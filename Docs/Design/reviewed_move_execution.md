@@ -103,16 +103,54 @@ definitive two-volume refusal and the unresolvable/relative non-answers; and the
 the Copy discipline with exactly one differing clause. `VFSNative conditional Copy transaction *`
 30/30 (599 assertions); full `VFSUT` 196/196 (82,668) in Debug.
 
-**Step B — the provider transaction.** A move-only, single-use transaction with the same tri-state
-publication evidence, whose claims add one expectation Copy has no need of: the **source parent**.
-Begin anchors source parent, source and destination parent; Commit re-verifies all three, resamples
-cancellation, publishes through `renameatx_np(..., RENAME_EXCL)`, then orders
-`fsync(source parent) → fsync(destination parent)` — both, because two directories changed, and in
-that order because the source parent is the one that loses an entry.
+**Step B1 — DONE: the contract, and the design's own prior was half wrong.** The question was whether a
+Move needs a new transaction contract or a mode of the existing one. The prior written above — *the
+commit differs entirely, so a shared type would be a switch at the only place that matters* — turned
+out to be wrong about the transaction and right about something else.
 
-Whether this is a new contract or a mode of the existing one is the question step B has to answer with
-code rather than in advance. The honest prior: the *claims* differ by one expectation and the *commit*
-differs entirely, so a shared transaction type would be a switch at the only place that matters.
+**The transaction is reused whole, because its commit was already a parameter.**
+`ProviderConditionalCopyTransaction` never performs a publication: it is minted with a `CommitHandler`
+and an `AbortHandler` and owns the single-use terminal gate, the cached result and the consumed
+authority. Those obligations are identical for a Move, and the one thing that differs arrives as a
+lambda. Forking the type would have duplicated exactly the parts that are hard to get right — the same
+reason the batch operation declined to fork in its own step C.
+
+**What must not be shared is the authority, and that is a safety property rather than tidiness.**
+`ProviderConditionalMoveReviewedAuthority` is a distinct type from the Copy one. Were they
+interchangeable, an authority minted from a plan the user approved as a *copy* could be handed to a
+Move execution and the source would be gone. A shared type could only be defended by a runtime check
+on a plan-type field; two types make the substitution unspeakable, and the test asserts that with
+`static_assert` rather than with a call that returns an error code.
+
+Claims add the **source parent**, for the reason the rename window above already gave: a rename acts on
+a name inside a directory, so the directory holding the source is part of what authorises the
+operation rather than an incidental fact about it. Minting therefore also requires the source to be an
+exact child of the parent it names, and — unlike a Copy, which left the source's directory alone —
+requires *both* ends bound to the provider being asked.
+
+`ProviderConditionalMoveTransactionBeginError` is its own vocabulary because `SourceParentStale` is a
+refusal a Copy can never produce, and adding it to the shared enum would oblige every Copy consumer to
+handle an unreachable case.
+
+### Verification
+
+Two new `VFSUT` cases: the substitution proof, which is compile-time (`static_assert` over
+convertibility, constructibility, and that the authority is move-constructible but not move-assignable,
+so single use survives a move); and minting, which refuses an unsealed authority, a source outside the
+parent it claims, an unbound source end, and a move onto itself. `nc::vfs::ProviderCapabilities *`
+18/18 (573 assertions); full `VFSUT` 198/198 (82,631).
+
+One of those sections had to be rewritten after it passed: the obvious way to express *a move onto
+itself* — leave the source where it is and point the destination at it — is refused for being outside
+its own claimed parent, so it passed while proving something else. Both ends now live in the same
+directory, which leaves the self-move as the only rule left to break.
+
+**Step B2 — the Native implementation.** Begin anchors source parent, source and destination parent;
+Commit re-verifies all three, resamples cancellation, publishes through
+`renameatx_np(..., RENAME_EXCL)`, then orders `fsync(source parent) → fsync(destination parent)` —
+both, because two directories changed, and in that order because the source parent is the one that
+loses an entry. A stale source parent maps to the commit result's existing `SourceStale`: from the
+consumer's side the world around the source moved, and no new terminal vocabulary is needed for that.
 
 **Step C — review, factory, orchestrator, coordinator.** All five gates at once, since step D of the
 batch slice already demonstrated that lifting them one at a time proves nothing.

@@ -1070,6 +1070,138 @@ TEST_CASE(PREFIX "declares xattr entry operations without directory deletion")
     CHECK((host->Features() & HostFeatures::RemoveDirectory) == 0);
 }
 
+static ProviderConditionalMoveReviewedClaims ConditionalMoveClaims(const std::shared_ptr<Host> &_host)
+{
+    return ProviderConditionalMoveReviewedClaims{
+        .plan_id = "provider-conditional-move-test",
+        .source_binding = ProviderConditionalCopyBinding{.provider_id = "native", .host = _host},
+        .destination_binding = ProviderConditionalCopyBinding{.provider_id = "native", .host = _host},
+        .source =
+            ProviderConditionalCopyExistingExpectation{
+                .absolute_path = "/source/source.txt",
+                .kind = ProviderConditionalCopyExpectedKind::RegularFile,
+                .device = 1,
+                .inode = 2,
+                .birth_time = {.seconds = 3, .nanoseconds = 4},
+                .mode = 0100640,
+                .byte_size = 5,
+                .modification_time = {.seconds = 6, .nanoseconds = 7},
+                .status_change_time = {.seconds = 8, .nanoseconds = 9},
+            },
+        .source_parent =
+            ProviderConditionalCopyExistingExpectation{
+                .absolute_path = "/source",
+                .kind = ProviderConditionalCopyExpectedKind::Directory,
+                .device = 1,
+                .inode = 20,
+                .birth_time = {.seconds = 21, .nanoseconds = 22},
+                .mode = 0040750,
+                .byte_size = 23,
+                .modification_time = {.seconds = 24, .nanoseconds = 25},
+                .status_change_time = {.seconds = 26, .nanoseconds = 27},
+            },
+        .destination_parent =
+            ProviderConditionalCopyExistingExpectation{
+                .absolute_path = "/destination",
+                .kind = ProviderConditionalCopyExpectedKind::Directory,
+                .device = 1,
+                .inode = 11,
+                .birth_time = {.seconds = 12, .nanoseconds = 13},
+                .mode = 0040750,
+                .byte_size = 14,
+                .modification_time = {.seconds = 15, .nanoseconds = 16},
+                .status_change_time = {.seconds = 17, .nanoseconds = 18},
+            },
+        .destination =
+            ProviderConditionalCopyMissingExpectation{
+                .absolute_path = "/destination/source.txt",
+            },
+    };
+}
+
+TEST_CASE(PREFIX "cannot let a reviewed Copy authority be spent as a Move")
+{
+    // The safety property of this step, and it is a compile-time one rather than a check that could be
+    // forgotten: an authority the user granted for a copy must never reach an operation that removes
+    // the source. Two distinct types make the substitution unspeakable, so the assertions below are
+    // about what does *not* exist rather than about what some runtime guard returns.
+    static_assert(
+        !std::is_convertible_v<ProviderConditionalCopyReviewedAuthority, ProviderConditionalMoveReviewedAuthority>);
+    static_assert(
+        !std::is_convertible_v<ProviderConditionalMoveReviewedAuthority, ProviderConditionalCopyReviewedAuthority>);
+    static_assert(
+        !std::is_constructible_v<ProviderConditionalMoveReviewedAuthority, ProviderConditionalCopyReviewedAuthority>);
+    static_assert(
+        !std::is_constructible_v<ProviderConditionalMoveReviewedAuthority, ProviderConditionalMoveReviewedClaims>);
+    static_assert(!std::is_default_constructible_v<ProviderConditionalMoveReviewedAuthority>);
+    static_assert(!std::is_copy_constructible_v<ProviderConditionalMoveReviewedAuthority>);
+    static_assert(std::is_move_constructible_v<ProviderConditionalMoveReviewedAuthority>);
+    // Single use survives the move: an authority cannot be re-assigned into a second transaction.
+    static_assert(!std::is_move_assignable_v<ProviderConditionalMoveReviewedAuthority>);
+
+    const auto host = std::make_shared<ConditionalCopyTestHost>("move-authority");
+    CHECK(host->BeginConditionalMoveTransaction(
+                  ProviderConditionalCopyTransactionTestAccess::MakeMoveAuthority(ConditionalMoveClaims(host)))
+              .error() == ProviderConditionalMoveTransactionBeginError::Unsupported);
+}
+
+TEST_CASE(PREFIX "mints a Move transaction only from claims that describe a Move")
+{
+    const auto host = std::make_shared<ConditionalCopyTestHost>("move-mint");
+    const auto mint = [&host](ProviderConditionalMoveReviewedClaims _claims) {
+        return ProviderConditionalCopyTransactionTestAccess::MintForMove(
+            *host,
+            ProviderConditionalCopyTransactionTestAccess::MakeMoveAuthority(std::move(_claims)),
+            [](const auto &) { return ProviderConditionalCopyCommitResult{}; },
+            [] { return ProviderConditionalCopyPublicationState::NotPublished; });
+    };
+
+    CHECK(mint(ConditionalMoveClaims(host)).has_value());
+
+    SECTION("an unsealed authority is not a review")
+    {
+        CHECK(ProviderConditionalCopyTransactionTestAccess::MintForMove(
+                  *host,
+                  ProviderConditionalCopyTransactionTestAccess::MakeUnsealedMoveAuthority(ConditionalMoveClaims(host)),
+                  [](const auto &) { return ProviderConditionalCopyCommitResult{}; },
+                  [] { return ProviderConditionalCopyPublicationState::NotPublished; })
+                  .error() == ProviderConditionalMoveTransactionBeginError::InvalidRequest);
+    }
+
+    SECTION("the source must actually be a child of the parent it names")
+    {
+        // A rename names a directory and an entry within it. A parent that does not hold the source
+        // describes an operation nobody reviewed, so it is refused before anything is anchored.
+        auto claims = ConditionalMoveClaims(host);
+        claims.source_parent.absolute_path = "/elsewhere";
+        CHECK(mint(std::move(claims)).error() == ProviderConditionalMoveTransactionBeginError::InvalidRequest);
+    }
+
+    SECTION("both ends must be bound to the provider that is being asked")
+    {
+        // A Copy only ever needed the destination bound here, because it left the source's directory
+        // alone. A Move rewrites both directories, so an unbound source end is not a Move this
+        // provider can perform.
+        const auto other = std::make_shared<ConditionalCopyTestHost>("move-mint-other");
+        auto claims = ConditionalMoveClaims(host);
+        claims.source_binding.host = other;
+        CHECK(mint(std::move(claims)).error() == ProviderConditionalMoveTransactionBeginError::InvalidRequest);
+    }
+
+    SECTION("a move onto itself is not a move")
+    {
+        // Both ends deliberately live in the same directory, so every structural rule above still
+        // holds and the only thing left to refuse is the one this section is about. Written that way
+        // because the obvious version - leave the source where it was and point the destination at it
+        // - is refused for being outside its own claimed parent, and would have passed while proving
+        // something else.
+        auto claims = ConditionalMoveClaims(host);
+        claims.source.absolute_path = "/destination/source.txt";
+        claims.source_parent = claims.destination_parent;
+        CHECK(mint(std::move(claims)).error() == ProviderConditionalMoveTransactionBeginError::InvalidRequest);
+    }
+}
+
 } // namespace ProviderCapabilitiesTest
 
 #undef PREFIX

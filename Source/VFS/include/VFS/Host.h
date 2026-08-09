@@ -245,6 +245,19 @@ public:
                                     const VFSCancelChecker &_cancel_checker = {});
 
     /**
+     * Consumes reviewed Move authority and begins a provider-owned conditional publication transaction.
+     * The default implementation returns Unsupported, and no provider implements it yet.
+     *
+     * It takes a Move authority and nothing else. A Copy authority cannot be offered here, which is
+     * the point: an authority the user granted for a copy must never be spendable on an operation that
+     * removes the source.
+     */
+    virtual std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                          ProviderConditionalMoveTransactionBeginError>
+    BeginConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
+                                    const VFSCancelChecker &_cancel_checker = {});
+
+    /**
      * VFS version of stat().
      * Default implementation does nothing, subclasses MUST implement it.
      */
@@ -454,6 +467,12 @@ protected:
     [[nodiscard]] std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
                                 ProviderConditionalCopyTransactionBeginError>
     MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
+                                   ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                   ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept;
+
+    [[nodiscard]] std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                                ProviderConditionalMoveTransactionBeginError>
+    MintConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
                                    ProviderConditionalCopyTransaction::CommitHandler _commit,
                                    ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept;
 

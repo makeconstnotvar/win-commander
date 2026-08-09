@@ -671,4 +671,20 @@ Host::MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _a
         *this, std::move(_authority), std::move(_commit), std::move(_abort));
 }
 
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalMoveTransactionBeginError>
+Host::BeginConditionalMoveTransaction([[maybe_unused]] ProviderConditionalMoveReviewedAuthority _authority,
+                                      [[maybe_unused]] const VFSCancelChecker &_cancel_checker)
+{
+    return std::unexpected(ProviderConditionalMoveTransactionBeginError::Unsupported);
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalMoveTransactionBeginError>
+Host::MintConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
+                                     ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                     ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept
+{
+    return ProviderConditionalCopyTransaction::MintForMove(
+        *this, std::move(_authority), std::move(_commit), std::move(_abort));
+}
+
 } // namespace nc::vfs

@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <mutex>
 #include <optional>
+#include <variant>
 #include <string_view>
 #include <sys/stat.h>
 #include <utility>
@@ -100,6 +101,37 @@ bool ProviderConditionalCopyAuthorityIsValid(
            (claims.source_binding.host != claims.destination_binding.host ||
             (claims.source.absolute_path != claims.destination.absolute_path &&
              claims.source.absolute_path != claims.destination_parent.absolute_path));
+}
+
+bool ProviderConditionalMoveAuthorityIsValid(const Host &_provider,
+                                             const ProviderConditionalMoveReviewedAuthority &_authority) noexcept
+{
+    const auto &claims = _authority.Claims();
+    return _authority.HasReviewSeal() && !claims.plan_id.empty() &&
+           ProviderConditionalCopyBindingsAreLocallyConsistent(claims.source_binding, claims.destination_binding) &&
+           claims.destination_binding.host.get() == &_provider &&
+           // A Move rewrites both directories, so both must be bound to this same provider - a Copy
+           // only ever needed that of the destination, since it left the source's directory alone.
+           claims.source_binding.host.get() == &_provider &&
+           ProviderConditionalCopyExpectationIsValid(
+               claims.source, ProviderConditionalCopyExpectedKind::RegularFile, S_IFREG, false) &&
+           ProviderConditionalCopyExpectationIsValid(
+               claims.source_parent, ProviderConditionalCopyExpectedKind::Directory, S_IFDIR, true) &&
+           ProviderConditionalCopyExpectationIsValid(
+               claims.destination_parent, ProviderConditionalCopyExpectedKind::Directory, S_IFDIR, true) &&
+           // The source must be exactly the child of the parent it claims, for the same reason the
+           // destination must: a rename names a directory and an entry in it, so a parent that does
+           // not actually hold the source describes an operation nobody reviewed.
+           ProviderConditionalCopyDestinationIsExactChild(claims.source_parent.absolute_path,
+                                                         claims.source.absolute_path) &&
+           ProviderConditionalCopyPathIsCanonical(claims.destination.absolute_path, false) &&
+           ProviderConditionalCopyDestinationIsExactChild(claims.destination_parent.absolute_path,
+                                                         claims.destination.absolute_path) &&
+           // Moving something onto itself is not a move, and moving it onto either directory is not a
+           // shape this can express at all.
+           claims.source.absolute_path != claims.destination.absolute_path &&
+           claims.source.absolute_path != claims.destination_parent.absolute_path &&
+           claims.source.absolute_path != claims.source_parent.absolute_path;
 }
 
 bool ProviderConditionalCopyResultIsValid(const ProviderConditionalCopyCommitResult &_result) noexcept
@@ -230,7 +262,20 @@ struct ProviderConditionalCopyTransaction::Impl final {
     {
     }
 
-    ProviderConditionalCopyReviewedAuthority authority;
+    Impl(ProviderConditionalMoveReviewedAuthority _authority,
+         CommitHandler _commit,
+         AbortHandler _abort) noexcept
+        : authority{std::move(_authority)}, commit{std::move(_commit)}, abort{std::move(_abort)}
+    {
+    }
+
+    /**
+     * Held, never read. What the transaction owes the authority is that it was consumed - a move-only
+     * value surrendered at Begin cannot be spent a second time - and that obligation is the same
+     * whichever kind it is. The commit itself arrives as a handler, which is why a Move needs no
+     * second transaction type: the one place the two operations differ is already a parameter.
+     */
+    std::variant<ProviderConditionalCopyReviewedAuthority, ProviderConditionalMoveReviewedAuthority> authority;
     CommitHandler commit;
     AbortHandler abort;
     State state{State::Pending};
@@ -278,6 +323,24 @@ ProviderConditionalCopyTransaction::Mint(const Host &_provider,
             new ProviderConditionalCopyTransaction{std::move(impl)}};
     } catch( ... ) {
         return std::unexpected(ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+    }
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalMoveTransactionBeginError>
+ProviderConditionalCopyTransaction::MintForMove(const Host &_provider,
+                                                ProviderConditionalMoveReviewedAuthority _authority,
+                                                CommitHandler _commit,
+                                                AbortHandler _abort) noexcept
+{
+    if( !ProviderConditionalMoveAuthorityIsValid(_provider, _authority) || !_commit || !_abort ) {
+        return std::unexpected(ProviderConditionalMoveTransactionBeginError::InvalidRequest);
+    }
+    try {
+        auto impl = std::make_unique<Impl>(std::move(_authority), std::move(_commit), std::move(_abort));
+        return std::unique_ptr<ProviderConditionalCopyTransaction>{
+            new ProviderConditionalCopyTransaction{std::move(impl)}};
+    } catch( ... ) {
+        return std::unexpected(ProviderConditionalMoveTransactionBeginError::ProviderFailure);
     }
 }
 

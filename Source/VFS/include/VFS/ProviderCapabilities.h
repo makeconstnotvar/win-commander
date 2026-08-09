@@ -180,6 +180,80 @@ enum class ProviderConditionalCopyTransactionBeginError : uint8_t {
     ProviderFailure
 };
 
+/**
+ * Exact immutable claims derived from one reviewed create-only Move intent.
+ *
+ * It carries one expectation a Copy has no use for: the **source parent**. A Copy reads its source
+ * through a descriptor and leaves the directory holding it untouched, so that directory is not part of
+ * what authorises the publication. A Move removes an entry from it, and - more to the point - a rename
+ * has no descriptor form: it acts on a *name inside a directory*. Holding and checking that directory
+ * is what makes "the object being moved is the object that was reviewed" a claim the provider can
+ * check at all.
+ */
+struct ProviderConditionalMoveReviewedClaims final {
+    std::string plan_id;
+    ProviderConditionalCopyBinding source_binding;
+    ProviderConditionalCopyBinding destination_binding;
+    ProviderConditionalCopyExistingExpectation source;
+    ProviderConditionalCopyExistingExpectation source_parent;
+    ProviderConditionalCopyExistingExpectation destination_parent;
+    ProviderConditionalCopyMissingExpectation destination;
+
+    bool operator==(const ProviderConditionalMoveReviewedClaims &) const noexcept = default;
+};
+
+/**
+ * Move-only, non-forgeable reviewed Move authority - a distinct type from the Copy one, and that
+ * distinction is the safety property rather than tidiness.
+ *
+ * Were the two interchangeable, an authority minted from a plan the user approved as a *copy* could be
+ * handed to a Move execution, and the source would be gone. A shared type could only be defended by a
+ * runtime check on a plan-type field; a separate type makes the substitution unspeakable. The reverse
+ * direction is harmless by comparison and is refused by the same construction.
+ */
+class ProviderConditionalMoveReviewedAuthority final
+{
+public:
+    ProviderConditionalMoveReviewedAuthority() = delete;
+    ProviderConditionalMoveReviewedAuthority(const ProviderConditionalMoveReviewedAuthority &) = delete;
+    ProviderConditionalMoveReviewedAuthority &operator=(const ProviderConditionalMoveReviewedAuthority &) = delete;
+    ProviderConditionalMoveReviewedAuthority(ProviderConditionalMoveReviewedAuthority &&) noexcept = default;
+    ProviderConditionalMoveReviewedAuthority &operator=(ProviderConditionalMoveReviewedAuthority &&) = delete;
+    ~ProviderConditionalMoveReviewedAuthority() = default;
+
+    [[nodiscard]] const ProviderConditionalMoveReviewedClaims &Claims() const noexcept { return m_Claims; }
+    [[nodiscard]] bool HasReviewSeal() const noexcept { return static_cast<bool>(m_ReviewSeal); }
+
+private:
+    ProviderConditionalMoveReviewedAuthority(ProviderConditionalMoveReviewedClaims _claims,
+                                             std::shared_ptr<const void> _review_seal) noexcept
+        : m_Claims{std::move(_claims)}, m_ReviewSeal{std::move(_review_seal)}
+    {
+    }
+
+    ProviderConditionalMoveReviewedClaims m_Claims;
+    std::shared_ptr<const void> m_ReviewSeal;
+
+    friend class nc::ops::ReviewedVFSOperationPreflight;
+    friend struct ProviderConditionalCopyTransactionTestAccess;
+};
+
+/**
+ * Its own vocabulary rather than the Copy one, for the same reason the eligibility answer is its own:
+ * `SourceParentStale` is a refusal a Copy can never produce, and adding it to the shared enum would
+ * oblige every Copy consumer to handle a case it cannot reach.
+ */
+enum class ProviderConditionalMoveTransactionBeginError : uint8_t {
+    Unsupported,
+    InvalidRequest,
+    SourceStale,
+    SourceParentStale,
+    DestinationParentStale,
+    DestinationExists,
+    Cancelled,
+    ProviderFailure
+};
+
 enum class ProviderConditionalCopyPublicationState : uint8_t {
     NotPublished,
     Published,
@@ -251,6 +325,19 @@ private:
          ProviderConditionalCopyReviewedAuthority _authority,
          CommitHandler _commit,
          AbortHandler _abort) noexcept;
+    /**
+     * The same transaction from a Move authority. One type serves both because what this class owns -
+     * the single-use terminal gate, the cached result, the consumed authority - is identical for the
+     * two, while the only thing that differs, the publication itself, is already a handler. A second
+     * class would have forked exactly the parts that are hard to get right, which is the lesson the
+     * batch operation learned when it declined to fork for the same reason.
+     */
+    [[nodiscard]] static std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                                       ProviderConditionalMoveTransactionBeginError>
+    MintForMove(const Host &_provider,
+                ProviderConditionalMoveReviewedAuthority _authority,
+                CommitHandler _commit,
+                AbortHandler _abort) noexcept;
     void Reset() noexcept;
 
     std::unique_ptr<Impl> m_Impl;
