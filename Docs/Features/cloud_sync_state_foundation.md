@@ -349,6 +349,23 @@ The items hold views into the source's own strings, so copying is deleted and mo
 - The same suite under **ASAN**, which is what would catch a view outliving its string.
 - Full `WinCommanderUT --rng-seed 424242`: **886/886 cases, 12,122 assertions**.
 
+### Hosting it
+
+The Gallery is now mounted in each pane's container, **above the file view and below the state overlay**: it replaces the listing, but a blocking or empty pane state still has to be able to cover both.
+
+**The file view is hidden, not unmounted.** It keeps its selection, its scroll position and its first-responder status, so coming back from Gallery returns the user to where they were rather than to the top of the folder.
+
+Switching is an `IBAction` reached through the responder chain rather than a new menu tag — the way the cross-pane commands were added in DP-2. No shortcut table and no menu file change, so nothing here can drift out of step with either of them.
+
+Two smaller decisions in the refresh:
+
+- **The cloud probe is only asked on the native filesystem.** Everywhere else every item is simply not cloud, and asking would be a per-row filesystem call answering nothing.
+- **A listing that changed underneath leaves the previous contents alone.** Half-drawing is worse than being briefly stale: a folder assembled from two different moments is a folder that was never there.
+
+- `WinCommanderUT`, `WinCommanderIT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- `WinCommanderUT 'NCExplorerState*'`: **23/23 cases, 286 assertions**, unchanged — the mounting adds a hidden view and changes nothing about the existing pane behaviour, which is what those tests pin.
+- Full `WinCommanderUT --rng-seed 424242`: **886/886 cases, 12,122 assertions**.
+
 ### Coverage gap
 
-**The Explorer still does not host the Gallery.** Every piece it needs — contents, thumbnails, cloud state, and now a listing to build them from — is connected; what is missing is the mode switch that puts it on screen.
+**No menu item or shortcut invokes the toggle.** It is reachable from the responder chain, which is what makes it wireable without touching the shortcut tables; giving it a place in the View menu is a separate, deliberate step - and the shipped-table guard from Q2-3 is what will check it when it happens.

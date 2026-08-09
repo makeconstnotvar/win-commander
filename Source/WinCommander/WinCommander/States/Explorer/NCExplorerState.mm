@@ -5,6 +5,8 @@
 #include "NCExplorerCommandBarView.h"
 #include "NCExplorerInspectorView.h"
 #include "NCExplorerPaneStateView.h"
+#include "NCGalleryView.h"
+#include <WinCommander/Core/Cloud/GalleryListingSource.h>
 #include "NCExplorerOperationProgressView.h"
 #include "NCExplorerSearchModeView.h"
 #include "NCExplorerCommandPaletteView.h"
@@ -560,6 +562,14 @@ struct ExplorerCompareSide {
 - (void)buildContentSplitWithPaneAreaView:(NSView *)_pane_area_view inspectorView:(NCExplorerInspectorView *)_inspector;
 - (BOOL)dualPaneEnabled;
 - (IBAction)onSwitchDualSinglePaneMode:(id)_sender;
+/**
+ * Shows the active pane's folder as a Gallery, or puts the listing back.
+ *
+ * Reached through the responder chain rather than a new menu tag, the way the cross-pane commands
+ * were added: no shortcut table and no menu file change, so nothing here can drift out of step with
+ * either of them.
+ */
+- (IBAction)onToggleExplorerGalleryMode:(id)_sender;
 - (BOOL)setDualPaneEnabled:(BOOL)_enabled;
 - (void)replaceCurrentPaneAreaViewWith:(NSView *)_view;
 - (BOOL)attachExplorerTabPanel:(PanelController *)_panel
@@ -635,6 +645,19 @@ public:
             [m_TabbedHolder.bottomAnchor constraintEqualToAnchor:m_Container.bottomAnchor],
         ]];
 
+        // Above the file view and below the state overlay: Gallery replaces the listing, but a
+        // blocking or empty state still has to be able to cover both.
+        m_Gallery = [[NCGalleryView alloc] initWithFrame:NSZeroRect];
+        m_Gallery.translatesAutoresizingMaskIntoConstraints = false;
+        m_Gallery.hidden = true;
+        [m_Container addSubview:m_Gallery];
+        [NSLayoutConstraint activateConstraints:@[
+            [m_Gallery.leadingAnchor constraintEqualToAnchor:m_Container.leadingAnchor],
+            [m_Gallery.trailingAnchor constraintEqualToAnchor:m_Container.trailingAnchor],
+            [m_Gallery.topAnchor constraintEqualToAnchor:m_Container.topAnchor],
+            [m_Gallery.bottomAnchor constraintEqualToAnchor:m_Container.bottomAnchor],
+        ]];
+
         m_PaneStateView = [[NCExplorerPaneStateView alloc] initWithFrame:NSZeroRect];
         m_PaneStateView.translatesAutoresizingMaskIntoConstraints = false;
         [m_Container addSubview:m_PaneStateView];
@@ -680,6 +703,58 @@ public:
     }
 
     NSView *Container() const noexcept { return m_Container; }
+    NCGalleryView *Gallery() const noexcept { return m_Gallery; }
+    bool GalleryMode() const noexcept { return m_GalleryMode; }
+
+    /**
+     * Swaps the listing for the Gallery, or back.
+     *
+     * The file view is hidden rather than unmounted: it keeps its selection, its scroll position and
+     * its first responder status, so coming back from Gallery returns the user to where they were
+     * rather than to the top of the folder.
+     */
+    void SetGalleryMode(const bool _on)
+    {
+        if( m_GalleryMode == _on || m_Gallery == nil )
+            return;
+        m_GalleryMode = _on;
+        m_Gallery.hidden = !_on;
+        m_TabbedHolder.hidden = _on;
+        if( _on )
+            RefreshGallery();
+    }
+
+    /** Rebuilds what the Gallery shows from the active panel's current listing. */
+    void RefreshGallery()
+    {
+        if( m_Gallery == nil || !m_GalleryMode || m_Panel == nil )
+            return;
+        std::vector<nc::core::NativeListingEntry> entries;
+        std::string directory;
+        try {
+            const VFSListingPtr listing = m_Panel.data.ListingPtr();
+            if( !listing )
+                return;
+            directory = m_Panel.currentDirectoryPath;
+            if( !directory.empty() && directory.back() == '/' )
+                directory.pop_back();
+            entries.reserve(listing->Count());
+            for( unsigned i = 0; i < listing->Count(); ++i )
+                entries.push_back(nc::core::NativeListingEntry{.filename = std::string{listing->Filename(i)},
+                                                               .is_directory = listing->IsDir(i)});
+        } catch( ... ) {
+            // A listing that changed underneath is not something to half-draw: leaving the previous
+            // contents is better than showing a folder assembled from two different moments.
+            return;
+        }
+        // The cloud probe only means anything on the native filesystem; elsewhere every item is
+        // simply not cloud, and asking would be a per-row filesystem call answering nothing.
+        const bool native = m_Panel.vfs != nullptr && m_Panel.vfs->IsNativeFS();
+        auto source = nc::core::BuildGalleryListing(
+            directory, entries, native ? nc::core::ProbeNativeCloudItem : decltype(&nc::core::ProbeNativeCloudItem){});
+        [m_Gallery applyContents:nc::core::BuildGalleryContents(source.Items()) inDirectory:directory];
+    }
+
     FilePanelsTabbedHolder *TabbedHolder() const noexcept { return m_TabbedHolder; }
     NCExplorerPaneStateView *PaneStateView() const noexcept { return m_PaneStateView; }
     NCExplorerQuickSearchOverlayView *QuickSearchOverlay() const noexcept { return m_QuickSearchOverlay; }
@@ -969,6 +1044,8 @@ private:
     std::vector<ExplorerTabEntry> m_TabEntries;
     FilePanelsTabbedHolder *m_TabbedHolder = nil;
     NCExplorerPaneStateView *m_PaneStateView = nil;
+    NCGalleryView *m_Gallery = nil;
+    bool m_GalleryMode = false;
     NCExplorerQuickSearchOverlayView *m_QuickSearchOverlay = nil;
     NSView *m_Container = nil;
     nc::core::PaneStoreAdapter::ObservationTicket m_PaneStoreObservation;
@@ -1221,6 +1298,13 @@ private:
 - (BOOL)dualPaneEnabled
 {
     return m_DualPaneEnabled;
+}
+
+- (IBAction)onToggleExplorerGalleryMode:(id) [[maybe_unused]] _sender
+{
+    dispatch_assert_main_queue();
+    NCExplorerPaneContent &pane = [self focusedContent];
+    pane.SetGalleryMode(!pane.GalleryMode());
 }
 
 - (IBAction)onSwitchDualSinglePaneMode:(id) [[maybe_unused]] _sender
