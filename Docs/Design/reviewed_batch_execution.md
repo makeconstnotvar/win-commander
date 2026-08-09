@@ -394,9 +394,50 @@ disproof case above, and the existing presentation test updated to the item list
 policy *` 21/21 (174 assertions); full `WinCommanderUT` 900/900 (12,223) in Debug. No sanitizer run:
 pure policy and projection, no engine, transaction, journal or ownership change.
 
-**Step B — the wiring.** `CopyTo::Perform` asking `SelectBatch`, a preflight builder for N sources into
-a folder, an intent check about the *selection* rather than the focused item, and the submission path
-carrying a vector. That is the step a user can see.
+## Producer step B — DONE: the wiring, and the pane the files actually land in
+
+`CopyTo::Perform` now asks `SelectBatch` and takes the reviewed route when the answer is `Reviewed`;
+everything else submits the legacy `Copying` exactly as before, byte for byte.
+
+**The destination's ambiguity is resolved before a route is chosen, not inside one.** The dialog
+returns whatever was typed, and the legacy operation is free to read it as an existing folder, a name
+to create, or a path whose parent it must make. The reviewed engine means exactly one of those, so
+only an already-existing folder is offered to it and everything else stays with the operation that
+knows what to do with it — an answer that cannot be read counts as *not a folder*. The provider is
+asked whether it is Native **before** that `stat`, because this runs on the main thread from the
+dialog handler and a remote provider can take its own timeout to answer; a provider the engine could
+never accept is therefore never waited on.
+
+**The intent check is about the selection, and that is a different question, not a loop.** `Copy As`
+acts on the focused item while a selection may exist and name something else entirely; `Copy To` acts
+on the selection, which the user can change without the focus or the data generation moving at all. A
+listing item compares as listing identity plus index, so a reloaded pane invalidates the intent even
+where the same filenames come back — which is the answer this needs, since the plan was reviewed
+against the objects and not against their names.
+
+**The path to reveal afterwards is read out of the projection the boundary already checked**, rather
+than derived a second time next to the plan builder. A second derivation could disagree with the
+first, and the way it would fail is silent: a focus request for a path that was never written.
+
+**A defect the wiring introduced, found by re-reading it rather than by a test.** The presenter
+refreshed the pane that was acted on — correct for `Copy As`, which writes a sibling into its own
+pane, and wrong for `Copy To`, which writes into the *opposite* one. The copied files would not have
+appeared, which is the entire thing the user asked for. The split is now explicit: **whether** anything
+needs refreshing is a fact about the outcome and stays in the classifier; **which** panes show the
+destination is a fact about the command and belongs to the caller. `Copy To` passes both panes, as the
+legacy route always did, and names the opposite pane as the one to reveal a lone publication in.
+
+### Verification
+
+No new cases: the wiring is glue, and every rule in it that could be a pure unit already is one, tested
+in step A. `WinCommanderUT` 900/900 (12,223) in Debug, unchanged from step A, plus a clean unsigned
+`WinCommander-Unsigned` Debug application build — the gate this slice owes for touching a production
+command.
+
+**Not done, and it is the honest gap:** no manual run of `Copy To` in the built application. The
+reviewed batch itself is covered against the real Native transaction at the `OperationsUT` level (a
+two-item batch into one folder completes and both files land on disk), so what is unproven is the UI
+path specifically — the dialog, the review sheet over a set, and the two-pane refresh described above.
 
 ## What must not be given up
 

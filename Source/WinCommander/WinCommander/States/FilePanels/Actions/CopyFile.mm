@@ -89,6 +89,35 @@ bool IsReviewedCopyShape(const VFSListingItem &_item,
            _destination_host.get() == _item.Host().get() && IsReviewedCopyOptions(_options);
 }
 
+/**
+ * What the user typed, if and only if it is a folder that already exists - trailing slashes removed.
+ *
+ * `Copy To` accepts a destination the legacy operation is free to interpret: an existing folder to
+ * land in, a name to create, or a path whose parent it may have to make. The reviewed engine means
+ * exactly one of those, so the ambiguity is resolved before a route is chosen rather than inside it -
+ * anything that is not already a folder stays with the operation that knows what to do with it, and
+ * an answer that cannot be read counts as not a folder.
+ */
+std::optional<std::string> TrimmedExistingDirectory(const VFSHostPtr &_host, const std::string &_path) noexcept
+{
+    try {
+        // Asked before the `stat`, not after: this runs on the main thread from the dialog handler,
+        // and a remote provider can take as long as its own timeout to answer. The reviewed engine
+        // needs a Native host anyway, so a provider it could never accept is never waited on.
+        if( !_host || !_host->IsNativeFS() || _path.empty() || _path.front() != '/' )
+            return std::nullopt;
+        auto trimmed = _path;
+        while( trimmed.size() > 1 && trimmed.back() == '/' )
+            trimmed.pop_back();
+        const auto stat = _host->Stat(trimmed, 0);
+        if( !stat || !stat->meaning.mode || !S_ISDIR(stat->mode) )
+            return std::nullopt;
+        return trimmed;
+    } catch( ... ) {
+        return std::nullopt;
+    }
+}
+
 } // namespace
 
 Selection Select(const VFSListingItem &_item,
@@ -675,15 +704,68 @@ void ShowCopyAlert(NCMainWindowController *_window_controller,
         [alert runModal];
 }
 
+bool ReviewedCopyPaneIsCurrent(MainWindowFilePanelState *_state,
+                               PanelController *_panel,
+                               const nc::core::PaneId _pane_id,
+                               const unsigned long _data_generation)
+{
+    dispatch_assert_main_queue();
+    return _state && _panel && _state.activePanelController == _panel && _panel.paneId == _pane_id &&
+           _panel.dataGeneration == _data_generation;
+}
+
 bool ReviewedCopyIntentIsCurrent(MainWindowFilePanelState *_state,
                                  PanelController *_panel,
                                  const nc::core::PaneId _pane_id,
                                  const unsigned long _data_generation,
                                  const VFSListingItem &_item)
 {
-    dispatch_assert_main_queue();
-    return _state && _panel && _state.activePanelController == _panel && _panel.paneId == _pane_id &&
-           _panel.dataGeneration == _data_generation && _panel.view.item == _item;
+    return ReviewedCopyPaneIsCurrent(_state, _panel, _pane_id, _data_generation) && _panel.view.item == _item;
+}
+
+/**
+ * The same question asked about a selection, which is what a `Copy To` acts on.
+ *
+ * It is not the focused-item question with a loop around it, and substituting one for the other would
+ * be wrong in both directions: `Copy As` acts on the focused item while a selection may exist and name
+ * something else entirely, and `Copy To` acts on the selection, which the user can change without the
+ * focus or the data generation moving at all. A listing item compares as listing identity plus index,
+ * so a reloaded pane invalidates the intent even where the same filenames come back - which is the
+ * answer this needs, since the plan was reviewed against the objects, not against their names.
+ */
+bool ReviewedCopyIntentIsCurrent(MainWindowFilePanelState *_state,
+                                 PanelController *_panel,
+                                 const nc::core::PaneId _pane_id,
+                                 const unsigned long _data_generation,
+                                 const std::vector<VFSListingItem> &_items)
+{
+    return ReviewedCopyPaneIsCurrent(_state, _panel, _pane_id, _data_generation) &&
+           _panel.selectedEntriesOrFocusedEntry == _items;
+}
+
+/** Everything one reviewed submission needs to carry across its two asynchronous hops. */
+struct ReviewedCopyRequest final {
+    std::vector<VFSListingItem> items;
+    /** Exactly what the user named: one destination file, or the folder to land in. */
+    std::string destination;
+    nc::ops::OperationPlanDestinationKind destination_kind{nc::ops::OperationPlanDestinationKind::ExactItem};
+    nc::core::PaneId pane_id;
+    unsigned long data_generation{0};
+    /** `Copy To` acts on the selection; `Copy As` acts on the focused item. Different questions. */
+    bool intent_follows_selection{false};
+    bool deselect{false};
+};
+
+bool ReviewedCopyIntentIsCurrent(MainWindowFilePanelState *_state,
+                                 PanelController *_panel,
+                                 const ReviewedCopyRequest &_request)
+{
+    if( _request.items.empty() )
+        return false;
+    return _request.intent_follows_selection
+               ? ReviewedCopyIntentIsCurrent(_state, _panel, _request.pane_id, _request.data_generation, _request.items)
+               : ReviewedCopyIntentIsCurrent(
+                     _state, _panel, _request.pane_id, _request.data_generation, _request.items.front());
 }
 
 void SubmitLegacyCopyAs(MainWindowFilePanelState *_target,
@@ -825,10 +907,17 @@ void AppendDurableItemDetail(NSMutableString *_message,
     }
 }
 
+/**
+ * `_focus_panel` is the pane the files land in, which is not always the pane that was acted on: a
+ * `Copy To` writes into the opposite one. `_refresh_panels` is likewise the caller's to decide -
+ * whether anything needs refreshing is a fact about the outcome and belongs to the classifier, but
+ * *which* panes show the destination is a fact about the command.
+ */
 void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcome &_outcome,
-                               PanelController *_panel,
+                               PanelController *_focus_panel,
                                NCMainWindowController *_window_controller,
-                               const std::string &_destination)
+                               const std::string &_focus_destination,
+                               const std::function<void()> &_refresh_panels)
 {
     dispatch_assert_main_queue();
     // Decided over the whole set of results rather than over the one this surface used to demand. A
@@ -836,17 +925,17 @@ void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcom
     // as a copy needing reconciliation; the rules are in the classifier, tested without AppKit.
     const auto presentation = reviewed_copy_as::ClassifyDurableCopyOutcome(_outcome);
 
-    if( _panel && presentation.refresh_panel )
-        [_panel refreshPanel];
+    if( presentation.refresh_panel && _refresh_panels )
+        _refresh_panels();
 
     if( presentation.kind == reviewed_copy_as::DurableCopyOutcomeKind::Published ) {
         // Only a lone publication has one destination to reveal, and the classifier is what says so.
-        if( _panel && presentation.focus_single_publication && _panel.isUniform &&
-            reviewed_copy_as::IsSameLexicalPath(_panel.currentDirectoryPath,
-                                                std::filesystem::path{_destination}.parent_path().native()) ) {
+        if( _focus_panel && presentation.focus_single_publication && _focus_panel.isUniform &&
+            reviewed_copy_as::IsSameLexicalPath(_focus_panel.currentDirectoryPath,
+                                                std::filesystem::path{_focus_destination}.parent_path().native()) ) {
             nc::panel::DelayedFocusing request;
-            request.filename = std::filesystem::path{_destination}.filename().native();
-            [_panel scheduleDelayedFocusing:request];
+            request.filename = std::filesystem::path{_focus_destination}.filename().native();
+            [_focus_panel scheduleDelayedFocusing:request];
         }
         return;
     }
@@ -887,17 +976,32 @@ void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcom
 }
 
 std::expected<nc::ops::VFSBoundOperationPreflight, NSString *>
-BuildReviewedCopyPreflight(const VFSListingItem &_item,
+BuildReviewedCopyPreflight(const std::vector<VFSListingItem> &_items,
                            const std::string &_destination,
+                           const nc::ops::OperationPlanDestinationKind _destination_kind,
                            nc::panel::DirectoryAccessProvider &_access_provider)
 {
+    if( _items.empty() )
+        return std::unexpected(@"The copy request names no items.");
+
+    std::vector<nc::ops::OperationPlanSourceInput> sources;
+    sources.reserve(_items.size());
+    for( const auto &item : _items ) {
+        // One binding for the whole plan, which the selection policy has already made true: every item
+        // it accepts shares the destination host, and the destination host is the source host.
+        if( item.Host() != _items.front().Host() )
+            return std::unexpected(@"The copy request spans more than one storage provider.");
+        sources.emplace_back(
+            nc::ops::OperationPlanSourceInput{std::string{reviewed_copy_as::g_ReviewedCopyProviderId}, item.Path()});
+    }
+
     auto plan = nc::ops::OperationPlan::Create({
         .plan_id = NSUUID.UUID.UUIDString.UTF8String,
         .type = nc::ops::OperationPlanType::Copy,
-        .sources = {{std::string{reviewed_copy_as::g_ReviewedCopyProviderId}, _item.Path()}},
+        .sources = std::move(sources),
         .destination = nc::ops::OperationPlanDestinationInput{std::string{reviewed_copy_as::g_ReviewedCopyProviderId},
                                                               _destination,
-                                                              nc::ops::OperationPlanDestinationKind::ExactItem},
+                                                              _destination_kind},
         .conflict_policy = nc::ops::OperationPlanConflictPolicy{nc::ops::OperationPlanConflictDecision::Ask,
                                                                 nc::ops::OperationPlanConflictScope::ThisItem},
         .created_at = nc::ops::OperationPlan::Clock::now(),
@@ -906,7 +1010,7 @@ BuildReviewedCopyPreflight(const VFSListingItem &_item,
         return std::unexpected(@"The copy request is structurally invalid.");
 
     auto bindings = nc::ops::VFSOperationPlanningBindings::Create(
-        {{std::string{reviewed_copy_as::g_ReviewedCopyProviderId}, _item.Host()}});
+        {{std::string{reviewed_copy_as::g_ReviewedCopyProviderId}, _items.front().Host()}});
     if( !bindings )
         return std::unexpected(@"The source provider could not be bound to the copy request.");
 
@@ -984,15 +1088,20 @@ NSString *ReviewedCopyDetails(const reviewed_copy_as::ReviewPresentation &_prese
     return details;
 }
 
+/**
+ * `_panel` is the pane acted on - it owns the intent and the deselection. `_focus_panel` is the pane
+ * the files land in, and for a `Copy To` those are two different panes. `_refresh_panels` is what the
+ * command wants brought up to date once the outcome says something may exist on disk.
+ */
 void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                         PanelController *_panel,
-                        VFSListingItem _item,
-                        std::string _destination,
-                        const nc::core::PaneId _pane_id,
-                        const unsigned long _data_generation,
-                        const bool _deselect)
+                        PanelController *_focus_panel,
+                        std::function<void()> _refresh_panels,
+                        ReviewedCopyRequest _request)
 {
     dispatch_assert_main_queue();
+    if( _request.items.empty() )
+        return;
     NCAppDelegate *const app = NCAppDelegate.me;
     const auto journal = app.operationJournal;
     const auto custodian = app.copyOperationRunReceiptCustodian;
@@ -1009,11 +1118,12 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
     const auto pool = _target.operationsPool.shared_from_this();
     auto *const access_provider = &app.directoryAccessProvider;
     __weak PanelController *weak_panel = _panel;
+    __weak PanelController *weak_focus_panel = _focus_panel;
     __weak NCMainWindowController *weak_window_controller = _target.mainWindowController;
     __weak MainWindowFilePanelState *weak_state = _target;
 
-    dispatch_to_default([item = std::move(_item),
-                         destination = std::move(_destination),
+    dispatch_to_default([request = std::move(_request),
+                         refresh_panels = std::move(_refresh_panels),
                          journal,
                          custodian,
                          operation_center,
@@ -1021,25 +1131,22 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                          pool,
                          access_provider,
                          weak_panel,
+                         weak_focus_panel,
                          weak_window_controller,
-                         weak_state,
-                         pane_id = _pane_id,
-                         data_generation = _data_generation,
-                         deselect = _deselect]() mutable {
-        auto preflight = BuildReviewedCopyPreflight(item, destination, *access_provider);
-        dispatch_to_main_queue([item = std::move(item),
-                                destination = std::move(destination),
+                         weak_state]() mutable {
+        auto preflight =
+            BuildReviewedCopyPreflight(request.items, request.destination, request.destination_kind, *access_provider);
+        dispatch_to_main_queue([request = std::move(request),
+                                refresh_panels = std::move(refresh_panels),
                                 journal,
                                 custodian,
                                 operation_center,
                                 recovery_coordinator,
                                 pool,
                                 weak_panel,
+                                weak_focus_panel,
                                 weak_window_controller,
                                 weak_state,
-                                pane_id,
-                                data_generation,
-                                deselect,
                                 preflight = std::move(preflight)]() mutable {
             PanelController *const panel = weak_panel;
             NCMainWindowController *const window_controller = weak_window_controller;
@@ -1052,14 +1159,14 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
             }
 
             auto prepared = reviewed_copy_as::PrepareReviewedCopyApplicationBoundary(
-                std::move(*preflight), true, ReviewedCopyIntentIsCurrent(state, panel, pane_id, data_generation, item));
+                std::move(*preflight), true, ReviewedCopyIntentIsCurrent(state, panel, request));
             if( !prepared ) {
                 switch( prepared.error().code ) {
                     case reviewed_copy_as::PreparationErrorCode::StaleIntent:
                         ShowCopyAlert(
                             window_controller,
                             @"Copy request expired",
-                            @"The active pane or focused item changed while the copy request was being validated.");
+                            @"The active pane or its selection changed while the copy request was being validated.");
                         return;
                     case reviewed_copy_as::PreparationErrorCode::BlockedPreflight:
                         ShowCopyAlert(window_controller,
@@ -1070,7 +1177,7 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                     case reviewed_copy_as::PreparationErrorCode::UnsupportedScope:
                         ShowCopyAlert(window_controller,
                                       @"Copy blocked",
-                                      @"The validated copy no longer satisfies the create-only single-item scope.");
+                                      @"The validated copy no longer satisfies the create-only reviewed scope.");
                         return;
                     case reviewed_copy_as::PreparationErrorCode::UnpersistedRuntime:
                         ShowCopyAlert(window_controller,
@@ -1083,12 +1190,20 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
 
             NSString *const details = ReviewedCopyDetails(prepared->Presentation());
 
+            // Where the one file lands, taken from the projection the boundary already checked rather
+            // than derived a second time here. A second derivation could disagree with the first, and
+            // the way it would fail is silently: a focus request for a path that was never written.
+            // Empty for a set, which is the same answer the terminal classifier gives.
+            std::string focus_destination;
+            if( prepared->Presentation().items.size() == 1 )
+                focus_destination = prepared->Presentation().items.front().destination_path;
+
             Alert *const review = [[Alert alloc] init];
             review.alertStyle = NSAlertStyleInformational;
             review.messageText = @"Review Copy";
             review.informativeText = details;
-            [review addButtonWithTitle:NSLocalizedString(@"Copy", "Approve a reviewed single-item copy")];
-            [review addButtonWithTitle:NSLocalizedString(@"Cancel", "Cancel a reviewed single-item copy")];
+            [review addButtonWithTitle:NSLocalizedString(@"Copy", "Approve a reviewed copy")];
+            [review addButtonWithTitle:NSLocalizedString(@"Cancel", "Cancel a reviewed copy")];
 
             auto prepared_review = std::make_shared<reviewed_copy_as::PreparedReview>(std::move(*prepared));
             [review
@@ -1105,7 +1220,7 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
                          }
 
                          std::shared_ptr<const DeselectorViaOpNotification> deselector;
-                         if( deselect )
+                         if( request.deselect )
                              deselector = std::make_shared<const DeselectorViaOpNotification>(panel);
 
                          nc::ops::ItemStateReportCallback item_status_observer;
@@ -1117,24 +1232,30 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
 
                          const auto approval = prepared_review->Approve(
                              response == NSAlertFirstButtonReturn,
-                             [weak_state, panel, pane_id, data_generation, item] {
+                             [weak_state, panel, request] {
                                  MainWindowFilePanelState *const current_state = weak_state;
-                                 return current_state && ReviewedCopyIntentIsCurrent(
-                                                             current_state, panel, pane_id, data_generation, item);
+                                 return current_state && ReviewedCopyIntentIsCurrent(current_state, panel, request);
                              },
                              current_state.operationSubmissionGate,
                              {
                                  .dispatch_to_ui =
                                      [](std::function<void()> _task) { dispatch_to_main_queue(std::move(_task)); },
                                  .present_durable_outcome =
-                                     [weak_panel, weak_window_controller, destination](
-                                         nc::ops::CopyOperationDurableTerminalOutcome _outcome) {
+                                     [weak_focus_panel,
+                                      weak_window_controller,
+                                      focus = focus_destination,
+                                      refresh_panels](nc::ops::CopyOperationDurableTerminalOutcome _outcome) {
                                          PresentDurableCopyOutcome(
-                                             _outcome, weak_panel, weak_window_controller, destination);
+                                             _outcome, weak_focus_panel, weak_window_controller, focus, refresh_panels);
                                      },
                                  .item_status_observer = std::move(item_status_observer),
                                  .submit =
-                                     [journal, custodian, operation_center, recovery_coordinator, pool, weak_window_controller](
+                                     [journal,
+                                      custodian,
+                                      operation_center,
+                                      recovery_coordinator,
+                                      pool,
+                                      weak_window_controller](
                                          nc::ops::ReviewedVFSOperationPreflight _reviewed,
                                          std::shared_ptr<nc::core::OperationSubmissionGate::Ticket> _submission_ticket,
                                          nc::ops::CopyOperationSubmissionHooks _hooks,
@@ -1274,6 +1395,8 @@ void CopyTo::Perform(MainWindowFilePanelState *_target, id /*_sender*/) const
 
     const auto act_uniform = act_pc.isUniform;
     const auto opp_uniform = opp_pc.isUniform;
+    const auto pane_id = act_pc.paneId;
+    const auto data_generation = act_pc.dataGeneration;
 
     const auto cd = [[NCOpsCopyingDialog alloc] initWithItems:entries
                                                     sourceVFS:act_uniform ? act_pc.vfs : nullptr
@@ -1292,14 +1415,65 @@ void CopyTo::Perform(MainWindowFilePanelState *_target, id /*_sender*/) const
       if( !host || path.empty() )
           return; // ui invariant is broken
 
-      const auto op = std::make_shared<nc::ops::Copying>(entries, path, host, opts);
+      const auto submit_legacy = [&] {
+          const auto op = std::make_shared<nc::ops::Copying>(entries, path, host, opts);
 
-      const auto update_both_panels = RefreshBothCurrentControllersLambda(_target);
-      op->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, update_both_panels);
+          const auto update_both_panels = RefreshBothCurrentControllersLambda(_target);
+          op->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, update_both_panels);
 
-      AddDeselectorIfNeeded(*op, act_pc);
+          AddDeselectorIfNeeded(*op, act_pc);
 
-      [_target.mainWindowController enqueueOperation:op];
+          [_target.mainWindowController enqueueOperation:op];
+      };
+
+      // The destination the dialog returns is whatever was typed, and the legacy operation is free to
+      // read it as a folder, a new name, or a path whose parent it must create. The reviewed engine
+      // means exactly one of those, so an existing folder is the only shape it is offered.
+      const auto folder = reviewed_copy_as::TrimmedExistingDirectory(host, path);
+      if( !folder ) {
+          submit_legacy();
+          return;
+      }
+
+      switch( reviewed_copy_as::SelectBatch(entries, *folder, host, opts) ) {
+          case reviewed_copy_as::Selection::Legacy:
+              submit_legacy();
+              return;
+          case reviewed_copy_as::Selection::Reject:
+              ShowCopyAlert(
+                  _target.mainWindowController,
+                  @"Copy validation unavailable",
+                  @"The storage provider could not establish whether this copy is eligible. The copy was not started.",
+                  NSAlertStyleCritical);
+              return;
+          case reviewed_copy_as::Selection::Reviewed:
+              break;
+      }
+
+      if( !ReviewedCopyIntentIsCurrent(_target, act_pc, pane_id, data_generation, entries) ) {
+          ShowCopyAlert(_target.mainWindowController,
+                        @"Copy request expired",
+                        @"The active pane or its selection changed while the copy dialog was open.");
+          return;
+      }
+
+      // The files land in the opposite pane, so that is the one to reveal them in - and both panes
+      // are refreshed, exactly as the legacy route does, because the source pane's selection state
+      // moves too. Refreshing only the pane acted on would leave the copied files invisible, which
+      // is the whole thing the user asked for.
+      SubmitReviewedCopy(_target,
+                         act_pc,
+                         opp_pc,
+                         RefreshBothCurrentControllersLambda(_target),
+                         ReviewedCopyRequest{
+                             .items = entries,
+                             .destination = *folder,
+                             .destination_kind = nc::ops::OperationPlanDestinationKind::Directory,
+                             .pane_id = pane_id,
+                             .data_generation = data_generation,
+                             .intent_follows_selection = true,
+                             .deselect = ShouldAutomaticallyDeselect(),
+                         });
     };
 
     [_target.mainWindowController beginSheet:cd.window completionHandler:handler];
@@ -1381,7 +1555,26 @@ void CopyAs::Perform(MainWindowFilePanelState *_target, id /*_sender*/) const
           return;
       }
 
-      SubmitReviewedCopy(_target, act_pc, item, std::move(path), pane_id, data_generation, deselect);
+      // Copy As writes a sibling into the pane it was invoked from, so the pane acted on, the pane
+      // the file lands in and the only pane worth refreshing are all the same one.
+      __weak PanelController *weak_act_pc = act_pc;
+      SubmitReviewedCopy(
+          _target,
+          act_pc,
+          act_pc,
+          [weak_act_pc] {
+              if( PanelController *const panel = weak_act_pc )
+                  [panel refreshPanel];
+          },
+          ReviewedCopyRequest{
+              .items = entries,
+              .destination = path,
+              .destination_kind = nc::ops::OperationPlanDestinationKind::ExactItem,
+              .pane_id = pane_id,
+              .data_generation = data_generation,
+              .intent_follows_selection = false,
+              .deselect = deselect,
+          });
     };
 
     [_target.mainWindowController beginSheet:cd.window completionHandler:handler];
