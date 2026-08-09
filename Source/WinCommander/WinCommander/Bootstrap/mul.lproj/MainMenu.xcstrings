@@ -1981,6 +1981,24 @@
         }
       }
     },
+    "Gal-vw-itm.title" : {
+      "comment" : "Class = \"NSMenuItem\"; title = \"Gallery\"; ObjectID = \"Gal-vw-itm\";",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Gallery"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Галерея"
+          }
+        }
+      }
+    },
     "GcS-df-Z23.title" : {
       "comment" : "Class = \"NSMenuItem\"; title = \"Calculate Folders Sizes\"; ObjectID = \"GcS-df-Z23\";",
       "extractionState" : "extracted_with_value",

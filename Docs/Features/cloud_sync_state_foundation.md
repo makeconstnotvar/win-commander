@@ -366,6 +366,15 @@ Two smaller decisions in the refresh:
 - `WinCommanderUT 'NCExplorerState*'`: **23/23 cases, 286 assertions**, unchanged — the mounting adds a hidden view and changes nothing about the existing pane behaviour, which is what those tests pin.
 - Full `WinCommanderUT --rng-seed 424242`: **886/886 cases, 12,122 assertions**.
 
-### Coverage gap
+### Reaching it
 
-**No menu item or shortcut invokes the toggle.** It is reachable from the responder chain, which is what makes it wireable without touching the shortcut tables; giving it a place in the View menu is a separate, deliberate step - and the shipped-table guard from Q2-3 is what will check it when it happens.
+Gallery now has a place in the View menu, targeting the first responder so it reaches whichever pane has focus.
+
+**It ships with no shortcut, deliberately.** Gallery is a mode a user chooses, not one to land in by mistyping — and every free combination near the view keys is one keystroke away from another mode. An unbound action is also one that can never conflict, which the shipped-table guard checks either way.
+
+That guard earned its keep immediately: the first tag chosen for the action, `13'270`, was **already taken** by `menu.view.sorting_extensionless_folders`. A duplicate tag makes one of the two actions unreachable, and which one depends on which side of the lookup you come from — exactly what the guard from Q2-3 was written to catch, caught here before a build.
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**; the menu compiles, which is what validates the added item.
+- `WinCommanderUT 'nc::core::ShippedShortcutTables*'`: **5/5**, so the new action's name and tag are distinct and its default names a real action.
+- Full `WinCommanderUT --rng-seed 424242`: **890/890 cases, 12,150 assertions**.
+- The menu title is translated, and the catalog guard covers it.

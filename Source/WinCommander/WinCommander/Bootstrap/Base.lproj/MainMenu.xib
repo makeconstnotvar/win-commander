@@ -304,6 +304,12 @@ DQ
                                     <action selector="onSwitchDualSinglePaneMode:" target="-1" id="91Y-wg-brq"/>
                                 </connections>
                             </menuItem>
+                            <menuItem title="Gallery" tag="13281" id="Gal-vw-itm">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="onToggleExplorerGalleryMode:" target="-1" id="Gal-vw-act"/>
+                                </connections>
+                            </menuItem>
                             <menuItem title="Swap Panels" tag="13020" keyEquivalent="u" id="782">
                                 <connections>
                                     <action selector="OnSwapPanels:" target="-1" id="784"/>

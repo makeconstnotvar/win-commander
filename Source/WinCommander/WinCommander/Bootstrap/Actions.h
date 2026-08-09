@@ -57,6 +57,7 @@ static constexpr std::pair<const char*,int> g_ActionsTags[] = {
     {"menu.edit.invert_selection",                      12'040},
 
     {"menu.view.switch_dual_single_mode",               13'260},
+    {"menu.view.gallery",                               13'281},
     {"menu.view.swap_panels",                           13'020},
     {"menu.view.sync_panels",                           13'030},
     {"menu.view.refresh",                               13'040},
@@ -276,6 +277,9 @@ static constinit std::pair<const char*, const char*> g_DefaultActionShortcuts[] 
     // so the app-specific toggle is the one that moves. With both on it, one of the two menu
     // items simply never fired from the keyboard, and which one depended on lookup order.
     {"menu.view.switch_dual_single_mode",                   "⇧⌘\\"    }, // shift+cmd+backslash
+    // Deliberately unbound: Gallery is a mode a user chooses, not one to land in by mistyping a
+    // shortcut, and every free combination near the view keys is one keystroke from another mode.
+    {"menu.view.gallery",                                   ""        }, //
     {"menu.view.swap_panels",                               "⌘u"      }, // cmd+u
     {"menu.view.sync_panels",                               "⌥⌘u"     }, // alt+cmd+u
     {"menu.view.refresh",                                   "⌘r"      }, // cmd+r
