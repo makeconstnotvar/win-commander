@@ -86,6 +86,8 @@
 		D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004A /* GalleryEligibility.cpp */; };
 		D9FC000132A00000000001A1 /* GalleryContents.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001A3 /* GalleryContents.cpp */; };
 		D9FC000132A00000000001D1 /* GalleryThumbnails.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001D3 /* GalleryThumbnails.cpp */; };
+		D9FC000132A00000000001E1 /* NativeCloudItemFacts.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001E3 /* NativeCloudItemFacts.cpp */; };
+		D9FC000132A00000000001E2 /* NativeCloudItemFacts_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001E4 /* NativeCloudItemFacts_UT.cpp */; };
 		D9FC000132A00000000001D2 /* GalleryThumbnails_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001D4 /* GalleryThumbnails_UT.cpp */; };
 		D9FC000132A00000000001A2 /* GalleryContents_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001A4 /* GalleryContents_UT.cpp */; };
 		D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */; };
@@ -1174,6 +1176,9 @@
 		D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NetworkVolumeState_UT.cpp; path = WinCommander/Tests/NetworkVolumeState_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000049 /* GalleryEligibility.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GalleryEligibility.h; path = WinCommander/Core/Cloud/GalleryEligibility.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000004A /* GalleryEligibility.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GalleryEligibility.cpp; path = WinCommander/Core/Cloud/GalleryEligibility.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000001E3 /* NativeCloudItemFacts.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NativeCloudItemFacts.cpp; path = WinCommander/Core/Cloud/NativeCloudItemFacts.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000001E5 /* NativeCloudItemFacts.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NativeCloudItemFacts.h; path = WinCommander/Core/Cloud/NativeCloudItemFacts.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000001E4 /* NativeCloudItemFacts_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = NativeCloudItemFacts_UT.cpp; path = WinCommander/Tests/NativeCloudItemFacts_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A00000000001D3 /* GalleryThumbnails.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GalleryThumbnails.cpp; path = WinCommander/Core/Cloud/GalleryThumbnails.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000001D5 /* GalleryThumbnails.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GalleryThumbnails.h; path = WinCommander/Core/Cloud/GalleryThumbnails.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000001D4 /* GalleryThumbnails_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GalleryThumbnails_UT.cpp; path = WinCommander/Tests/GalleryThumbnails_UT.cpp; sourceTree = "<group>"; };
@@ -2372,6 +2377,7 @@
 				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
 				D9FC000132A00000000001A4 /* GalleryContents_UT.cpp */,
 				D9FC000132A00000000001D4 /* GalleryThumbnails_UT.cpp */,
+				D9FC000132A00000000001E4 /* NativeCloudItemFacts_UT.cpp */,
 				D9FC000132A00000000001C4 /* NCGalleryView_UT.mm */,
 				D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */,
 				D9FC000132A00000000000F3 /* MountTable_UT.cpp */,
@@ -2509,6 +2515,8 @@
 				D9FC000132A00000000001A3 /* GalleryContents.cpp */,
 				D9FC000132A00000000001D5 /* GalleryThumbnails.h */,
 				D9FC000132A00000000001D3 /* GalleryThumbnails.cpp */,
+				D9FC000132A00000000001E5 /* NativeCloudItemFacts.h */,
+				D9FC000132A00000000001E3 /* NativeCloudItemFacts.cpp */,
 				D9FC000132A0000000000054 /* NetworkVolumeState.h */,
 				D9FC000132A0000000000055 /* NetworkVolumeState.cpp */,
 				D9FC000132A00000000000F4 /* MountTable.h */,
@@ -3950,6 +3958,7 @@
 				D9FC000132A0000000000047 /* GalleryEligibility.cpp in Sources */,
 				D9FC000132A00000000001A1 /* GalleryContents.cpp in Sources */,
 				D9FC000132A00000000001D1 /* GalleryThumbnails.cpp in Sources */,
+				D9FC000132A00000000001E1 /* NativeCloudItemFacts.cpp in Sources */,
 				D9FC000132A0000000000052 /* NetworkVolumeState.cpp in Sources */,
 				D9FC000132A00000000000F0 /* MountTable.cpp in Sources */,
 				D9FC000132A0000000000101 /* NetworkVolumeProbe.cpp in Sources */,
@@ -4231,6 +4240,7 @@
 				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,
 				D9FC000132A00000000001A2 /* GalleryContents_UT.cpp in Sources */,
 				D9FC000132A00000000001D2 /* GalleryThumbnails_UT.cpp in Sources */,
+				D9FC000132A00000000001E2 /* NativeCloudItemFacts_UT.cpp in Sources */,
 				D9FC000132A00000000001C2 /* NCGalleryView_UT.mm in Sources */,
 				D9FC000132A0000000000053 /* NetworkVolumeState_UT.cpp in Sources */,
 				D9FC000132A00000000000F1 /* MountTable_UT.cpp in Sources */,

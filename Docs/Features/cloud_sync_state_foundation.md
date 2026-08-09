@@ -284,3 +284,33 @@ They apply to nothing here, and keeping them would spend memory on a folder nobo
 ### Coverage gap
 
 **The Explorer does not host the view.** Everything the Gallery needs to draw a folder is connected; what is missing is the mode switch that puts it on screen.
+
+---
+
+# CL-2: reading cloud facts from a real file, without touching it
+
+`ClassifyCloudSyncState` has taken facts since CL-1. Nothing produced them from an actual file — so every Gallery decision downstream was reasoning about a state nobody could supply.
+
+## Nothing here opens anything
+
+Reading the *content* of a placeholder is what triggers the download. Every answer comes from the item's name and its metadata instead. That is not a performance choice: it is the same rule GL-1 and GL-4 enforce, applied at the layer that could most easily break it by accident, because "just stat it to see" is a very natural thing to write here.
+
+## The name a placeholder wears is not the name to show
+
+A not-yet-downloaded file is stored as `.name.ext.icloud`. Presented verbatim, that is a hidden file with the wrong extension standing where the photograph should be — and **every extension-driven decision above it would then be made about `.icloud` rather than `.jpg`**, including whether Gallery may show it at all.
+
+The unmasking is deliberately narrow. The leading dot is as much a part of the convention as the suffix, so a file genuinely named `notes.icloud` is left alone: unmasking it would report a file that does not exist. `.icloud` and `..icloud` unmask to nothing rather than to an empty name.
+
+## A file outside any container has no sync state
+
+Whatever else a probe carries, an item that is not in a provider's folder is `NotCloud` — inventing a state for it would badge ordinary files, which is the failure CL-1's badge rule exists to avoid.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT`: **5/5 cases, 18 assertions** — placeholders unmasked to the name the user is looking for; five ways of not being a placeholder all refused, including the plain `notes.icloud`; a placeholder read as exactly "known to the provider, bytes not here" and classifying as `CloudOnly`; every reportable state carried through, with a conflict outranking a simultaneous download and placeholder; and an item outside a container reported as not cloud whatever else its probe says.
+- Full `WinCommanderUT --rng-seed 424242`: **878/878 cases, 12,078 assertions**.
+
+### Coverage gap
+
+**Nothing fills the probe yet.** The struct is what a native listing would populate from `NSURL` resource values and a container check; wiring that, and feeding the result into `GalleryListingItem`, is the last step before the Explorer can host a Gallery.
