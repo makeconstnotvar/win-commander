@@ -71,6 +71,8 @@
 		D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */; };
 		D9FC000132A0000000000041 /* GitStatus.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000044 /* GitStatus.cpp */; };
 		D9FC000132A0000000000191 /* GitDirectoryBadge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000193 /* GitDirectoryBadge.cpp */; };
+		D9FC000132A0000000000211 /* GitBadgePresentation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000213 /* GitBadgePresentation.cpp */; };
+		D9FC000132A0000000000212 /* GitBadgePresentation_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000214 /* GitBadgePresentation_UT.cpp */; };
 		D9FC000132A0000000000192 /* GitDirectoryBadge_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000194 /* GitDirectoryBadge_UT.cpp */; };
 		D9FC000132A00000000000D0 /* GitRepositoryDiscovery.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000D2 /* GitRepositoryDiscovery.cpp */; };
 		D9FC000132A00000000000E0 /* GitStatusReader.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000000E2 /* GitStatusReader.cpp */; };
@@ -1163,6 +1165,9 @@
 		D9FC000132A00000000000D2 /* GitRepositoryDiscovery.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitRepositoryDiscovery.cpp; path = WinCommander/Core/Git/GitRepositoryDiscovery.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000000D4 /* GitRepositoryDiscovery.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GitRepositoryDiscovery.h; path = WinCommander/Core/Git/GitRepositoryDiscovery.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A00000000000D3 /* GitRepositoryDiscovery_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitRepositoryDiscovery_UT.cpp; path = WinCommander/Tests/GitRepositoryDiscovery_UT.cpp; sourceTree = "<group>"; };
+		D9FC000132A0000000000213 /* GitBadgePresentation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitBadgePresentation.cpp; path = WinCommander/Core/Git/GitBadgePresentation.cpp; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000215 /* GitBadgePresentation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GitBadgePresentation.h; path = WinCommander/Core/Git/GitBadgePresentation.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A0000000000214 /* GitBadgePresentation_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitBadgePresentation_UT.cpp; path = WinCommander/Tests/GitBadgePresentation_UT.cpp; sourceTree = "<group>"; };
 		D9FC000132A0000000000193 /* GitDirectoryBadge.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitDirectoryBadge.cpp; path = WinCommander/Core/Git/GitDirectoryBadge.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000195 /* GitDirectoryBadge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = GitDirectoryBadge.h; path = WinCommander/Core/Git/GitDirectoryBadge.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000194 /* GitDirectoryBadge_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = GitDirectoryBadge_UT.cpp; path = WinCommander/Tests/GitDirectoryBadge_UT.cpp; sourceTree = "<group>"; };
@@ -2392,6 +2397,7 @@
 				D9FC000132A0000000000104 /* NetworkVolumeProbe_UT.cpp */,
 				D9FC000132A0000000000045 /* GitStatus_UT.cpp */,
 				D9FC000132A0000000000194 /* GitDirectoryBadge_UT.cpp */,
+				D9FC000132A0000000000214 /* GitBadgePresentation_UT.cpp */,
 				D9FC000132A00000000000D3 /* GitRepositoryDiscovery_UT.cpp */,
 				D9FC000132A00000000000E3 /* GitStatusReader_UT.cpp */,
 				D9FC000132A0000000000050 /* LocalWorkingDirectory_UT.cpp */,
@@ -2497,6 +2503,8 @@
 				D9FC000132A0000000000044 /* GitStatus.cpp */,
 				D9FC000132A0000000000195 /* GitDirectoryBadge.h */,
 				D9FC000132A0000000000193 /* GitDirectoryBadge.cpp */,
+				D9FC000132A0000000000215 /* GitBadgePresentation.h */,
+				D9FC000132A0000000000213 /* GitBadgePresentation.cpp */,
 				D9FC000132A00000000000D4 /* GitRepositoryDiscovery.h */,
 				D9FC000132A00000000000D2 /* GitRepositoryDiscovery.cpp */,
 				D9FC000132A00000000000E4 /* GitStatusReader.h */,
@@ -3977,6 +3985,7 @@
 				D9FC000132A0000000000101 /* NetworkVolumeProbe.cpp in Sources */,
 				D9FC000132A0000000000041 /* GitStatus.cpp in Sources */,
 				D9FC000132A0000000000191 /* GitDirectoryBadge.cpp in Sources */,
+				D9FC000132A0000000000211 /* GitBadgePresentation.cpp in Sources */,
 				D9FC000132A00000000000D0 /* GitRepositoryDiscovery.cpp in Sources */,
 				D9FC000132A00000000000E0 /* GitStatusReader.cpp in Sources */,
 				D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */,
@@ -4261,6 +4270,7 @@
 				D9FC000132A0000000000102 /* NetworkVolumeProbe_UT.cpp in Sources */,
 				D9FC000132A0000000000042 /* GitStatus_UT.cpp in Sources */,
 				D9FC000132A0000000000192 /* GitDirectoryBadge_UT.cpp in Sources */,
+				D9FC000132A0000000000212 /* GitBadgePresentation_UT.cpp in Sources */,
 				D9FC000132A00000000000D1 /* GitRepositoryDiscovery_UT.cpp in Sources */,
 				D9FC000132A00000000000E1 /* GitStatusReader_UT.cpp in Sources */,
 				D9FC000132A000000000004D /* LocalWorkingDirectory_UT.cpp in Sources */,

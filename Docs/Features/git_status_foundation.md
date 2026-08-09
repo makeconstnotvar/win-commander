@@ -245,3 +245,31 @@ It now goes through `ResolveLocalWorkingDirectory`. An unusable location still l
 ### Coverage gap
 
 **No panel draws them.** Feeding a listing through this, and deciding when a refresh is worth running at all, is what remains — along with porcelain v2.
+
+---
+
+# GT-5: how a badge is drawn, decided once
+
+Two view classes draw panel rows — the list and the brief views — and each would otherwise decide independently what a git state looks like. Two independent inventions of the same badge is how one view ends up showing a conflict as a warning and the other as an ordinary mark.
+
+## It refuses exactly what the badge rule refuses
+
+`PresentGitBadge` returns nothing for precisely the states `ShouldBadgeGitFileState` declines. A drawing site cannot then decide differently by accident: the two would disagree about which rows are decorated, and only one of them would be right. The test asserts that equivalence across every state rather than trusting the two lists to stay aligned.
+
+## Every badged state gets its own symbol, and its own words
+
+Two states sharing a symbol would make the badge say less than the status it came from, which is the only thing it is for. And each carries a phrase for a screen reader, distinct as well as present — a badge that is only a coloured mark conveys nothing to someone who cannot see it, which would make git status a sighted-only feature, and two states read aloud identically are two states such a user cannot tell apart.
+
+## Only one state is emphasised
+
+The conflict, because it is the only one where doing nothing loses work. If everything is emphasised, nothing is.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::PresentGitBadge*'`: **4/4 cases, 28 assertions** — presence matching the badge rule state for state; six badged states with six distinct symbols; exactly one emphasised; and six distinct, non-empty spoken phrases.
+- Full `WinCommanderUT --rng-seed 424242`: **890/890 cases, 12,150 assertions**.
+
+### Coverage gap
+
+**No row draws it yet.** The symbol, the emphasis and the spoken phrase are decided; placing the mark in the list and brief views — alongside the existing trailing tag display, whose geometry it should follow — is what remains, together with feeding a panel its repository status in the first place.
