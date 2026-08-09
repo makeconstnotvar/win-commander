@@ -182,6 +182,35 @@ Within each group the order is the listing's own, so whatever sort the user chos
 - New `WinCommanderUT 'nc::core::BuildGalleryContents*'`: **6/6 cases, 27 assertions** — folders first then media, each in listing order, with indices mapping back; non-media dropped entirely; a folder kept where nothing else survives; a cloud-only photo held as a placeholder and counted; empty told apart from nothing-to-show, including a folder holding only `..`; and `..` never counted as content.
 - Full `WinCommanderUT --rng-seed 424242`: **854/854 cases, 11,971 assertions**.
 
+### Coverage gap at GL-2
+
+**No view rendered it** — closed by GL-3 below.
+
+---
+
+# GL-3: the Gallery surface
+
+Built in code rather than in a nib, and deliberately. It has no static layout to design — every subview it owns exists because `GalleryContents` said so — and a view assembled this way can be constructed and asked questions in a test, which a nib-loaded one in this project cannot without a window.
+
+## A placeholder is not a failed thumbnail
+
+The bytes are simply elsewhere. It is drawn dimmed with a download symbol rather than a broken-image one, because "damaged" and "not here yet" call for different reactions and only one of them is true.
+
+## Each tile is one accessibility element, not three
+
+Announced as a name plus a kind — folder, photo, or photo not downloaded. Left as an image and a separate label, a screen reader would read the filename twice and the state not at all. The cloud placeholder is the case that matters: a user who cannot see the dimming has no other way to learn the file is not local.
+
+## The empty view says which kind of empty it is
+
+`FolderEmpty` and `NothingToShow` get different sentences, because they send the user to different places, and the message becomes an accessibility element when it appears — an empty view that says nothing to a screen reader is indistinguishable from one that failed to load.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'NCGalleryView*'`: **3/3 cases, 14 assertions** — one tile per row, and re-applying replacing rather than appending, so a folder change cannot leave the previous folder's photographs on screen; the two empty states producing *different* non-empty messages and both clearing once there is something to show; and the view announcing itself with an identifier and a label, since an unlabelled view is announced by its class name and tells a VoiceOver user nothing.
+- Six new strings, all translated, with the catalog guard passing 4/4.
+- Full `WinCommanderUT --rng-seed 424242`: **864/864 cases, 12,015 assertions**.
+
 ### Coverage gap
 
-**No view renders it.** The rows, their order and the empty states are decided; drawing them, and the thumbnail pipeline behind `Thumbnail` rows, are what remain of the Gallery.
+**No thumbnails.** Every tile draws a symbol; the pipeline that turns a `Thumbnail` row into an actual image, off the drawing thread and cached, is the next increment. Nothing hosts the view in the Explorer yet either.

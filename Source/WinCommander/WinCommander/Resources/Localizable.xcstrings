@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Gallery" : {
+      "comment" : "Accessibility label for the Gallery view",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Галерея"
+          }
+        }
+      }
+    },
     "Verify the identity of “%@”?" : {
       "comment" : "Title of the SFTP host key verification alert",
       "localizations" : {
@@ -4785,6 +4796,17 @@
         }
       }
     },
+    "Nothing here can be shown in Gallery." : {
+      "comment" : "Gallery no-media message",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Здесь нечего показать в галерее."
+          }
+        }
+      }
+    },
     "OK" : {
       "localizations" : {
         "ru" : {
@@ -5243,6 +5265,17 @@
       "comment" : "Inline rename unknown case-sensitivity message",
       "localizations" : {
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расположение не смогло безопасно проверить это имя." } }
+      }
+    },
+    "This folder is empty." : {
+      "comment" : "Gallery empty-folder message",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эта папка пуста."
+          }
+        }
       }
     },
     "This location can’t safely change only the letter case." : {
@@ -5760,6 +5793,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Не удалось завершить операцию."
+          }
+        }
+      }
+    },
+    "folder" : {
+      "comment" : "Gallery item kind, spoken by VoiceOver",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "папка"
+          }
+        }
+      }
+    },
+    "photo" : {
+      "comment" : "Gallery item kind, spoken by VoiceOver",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "фотография"
+          }
+        }
+      }
+    },
+    "photo not downloaded" : {
+      "comment" : "Gallery item kind, spoken by VoiceOver",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "фотография не загружена"
           }
         }
       }

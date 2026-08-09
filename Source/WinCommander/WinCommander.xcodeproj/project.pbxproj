@@ -60,6 +60,8 @@
 		BAEC000241D3000000000003 /* PaneNavigationAvailability_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000015 /* PaneNavigationAvailability_UT.cpp */; };
 		BAEC000241D3000000000004 /* PaneNavigationAvailability.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */; };
 		D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */; };
+		D9FC000132A00000000001C1 /* NCGalleryView.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001C3 /* NCGalleryView.mm */; };
+		D9FC000132A00000000001C2 /* NCGalleryView_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A00000000001C4 /* NCGalleryView_UT.mm */; };
 		D9FC000132A000000000005D /* OrphanedTemporary.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000060 /* OrphanedTemporary.cpp */; };
 		D9FC000132A000000000005E /* OrphanedTemporary_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */; };
 		D9FC000132A000000000004C /* LocalWorkingDirectory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D9FC000132A000000000004F /* LocalWorkingDirectory.cpp */; };
@@ -1133,6 +1135,9 @@
 		BAEC000241D3000000000016 /* PaneNavigationAvailability.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = PaneNavigationAvailability.cpp; path = WinCommander/Core/Pane/PaneNavigationAvailability.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCExplorerCommandPaletteView.h; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCExplorerCommandPaletteView.mm; path = WinCommander/States/Explorer/NCExplorerCommandPaletteView.mm; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000001C3 /* NCGalleryView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCGalleryView.mm; path = WinCommander/States/Explorer/NCGalleryView.mm; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000001C5 /* NCGalleryView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = NCGalleryView.h; path = WinCommander/States/Explorer/NCGalleryView.h; sourceTree = SOURCE_ROOT; };
+		D9FC000132A00000000001C4 /* NCGalleryView_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = NCGalleryView_UT.mm; path = WinCommander/Tests/NCGalleryView_UT.mm; sourceTree = "<group>"; };
 		D9FC000132A000000000005F /* OrphanedTemporary.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OrphanedTemporary.h; path = WinCommander/Core/Tools/OrphanedTemporary.h; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000060 /* OrphanedTemporary.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OrphanedTemporary.cpp; path = WinCommander/Core/Tools/OrphanedTemporary.cpp; sourceTree = SOURCE_ROOT; };
 		D9FC000132A0000000000061 /* OrphanedTemporary_UT.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = OrphanedTemporary_UT.cpp; path = WinCommander/Tests/OrphanedTemporary_UT.cpp; sourceTree = "<group>"; };
@@ -2243,6 +2248,8 @@
 				E82EE413095991A772595753 /* NCExplorerState.h */,
 				D9FC000132A000000000001A /* NCExplorerCommandPaletteView.h */,
 				D9FC000132A000000000001B /* NCExplorerCommandPaletteView.mm */,
+				D9FC000132A00000000001C5 /* NCGalleryView.h */,
+				D9FC000132A00000000001C3 /* NCGalleryView.mm */,
 				72A17403241CCD58B1CAF648 /* NCExplorerState.mm */,
 				A67CCC557B0BEA9C306817AF /* NCExplorerToolbarDelegate.h */,
 				1FB1B7A080C443ECC6E3BCA5 /* NCExplorerToolbarDelegate.mm */,
@@ -2359,6 +2366,7 @@
 				D9FC000132A000000000003F /* CloudSyncState_UT.cpp */,
 				D9FC000132A000000000004B /* GalleryEligibility_UT.cpp */,
 				D9FC000132A00000000001A4 /* GalleryContents_UT.cpp */,
+				D9FC000132A00000000001C4 /* NCGalleryView_UT.mm */,
 				D9FC000132A0000000000056 /* NetworkVolumeState_UT.cpp */,
 				D9FC000132A00000000000F3 /* MountTable_UT.cpp */,
 				D9FC000132A0000000000104 /* NetworkVolumeProbe_UT.cpp */,
@@ -3945,6 +3953,7 @@
 				D9FC000132A0000000000131 /* LocalToolLauncher.mm in Sources */,
 				D9FC000132A000000000005D /* OrphanedTemporary.cpp in Sources */,
 				D9FC000132A0000000000007 /* NCExplorerCommandPaletteView.mm in Sources */,
+				D9FC000132A00000000001C1 /* NCGalleryView.mm in Sources */,
 				A5E5000131FB000000000001 /* ExplorerViewSettingsPersistence.cpp in Sources */,
 				B6F5000131FC000000000001 /* ExplorerViewSettingsBinding.cpp in Sources */,
 				C6E6000131FD000000000001 /* ExplorerSessionPersistency.cpp in Sources */,
@@ -4212,6 +4221,7 @@
 				D9FC000132A000000000003C /* CloudSyncState_UT.cpp in Sources */,
 				D9FC000132A0000000000048 /* GalleryEligibility_UT.cpp in Sources */,
 				D9FC000132A00000000001A2 /* GalleryContents_UT.cpp in Sources */,
+				D9FC000132A00000000001C2 /* NCGalleryView_UT.mm in Sources */,
 				D9FC000132A0000000000053 /* NetworkVolumeState_UT.cpp in Sources */,
 				D9FC000132A00000000000F1 /* MountTable_UT.cpp in Sources */,
 				D9FC000132A0000000000102 /* NetworkVolumeProbe_UT.cpp in Sources */,
