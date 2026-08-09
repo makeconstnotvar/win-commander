@@ -22,7 +22,20 @@ So the missing piece is exactly one: an operation that holds N prepared transact
 
 ## The decomposition
 
-**Step A — extract per-item preparation.** The body from `report.items.front()` down to
+**Step A — DONE.** One item's work is now `prepare_item(index)`: a named unit inside the factory
+taking an item index, returning the transaction plus what the operation needs, or the same error it
+always returned. Nothing about the work changed - what changed is that it is no longer a
+three-hundred-line stretch that only ever ran for `front()`. It is called once, because the batch
+gate above still admits exactly one accepted item; lifting that gate is now a loop over this rather
+than a rewrite of it.
+
+Deliberately a lambda inside the function rather than a free function with eight parameters: every
+dependency it needs is already a local here, and threading them through a signature would have been
+a larger edit with more places to get wrong, for no gain the loop can use.
+
+The original description follows, for the steps still to come.
+
+**Step A (as planned) — extract per-item preparation.** The body from `report.items.front()` down to
 `BeginConditionalCopyTransaction` is one item's worth of work: canonical paths, structural match,
 host resolution, snapshot lookup, evidence match, descriptor opens, claims, authority, transaction.
 Lift it to a function returning a prepared item or a `ReviewedOperationFactoryError`, with the item
@@ -104,7 +117,9 @@ lift.
     plan with the same code, so the factory's own check cannot be reached through it. Unreachable by
     construction is a different thing from untested, and should be recorded as such rather than
     chased.
-- The existing factory cases must pass unchanged after step A.
+- The existing factory cases passed unchanged after step A, as did the operations integration suite
+  (98 of 100, 2 skipped, 973 assertions) and the factory suite under ASAN+UBSAN. That was the whole
+  safety argument, and it held.
 - New cases for: a two-item plan preparing and executing both; a second item that is stale rolling
   back the first item's transaction; cancellation between items leaving the first committed and the
   second `Cancelled`; and per-item results landing at the right indices.

@@ -417,306 +417,331 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                 ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnexpectedConflictEvidence));
         }
 
-        const OperationPlannedCopyItem &item = report.items.front();
-        if( item.source_kind != OperationPlanningItemKind::File ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedSourceKind, item.source));
-        }
-
-        const auto source_path = ReviewedFactoryCanonicalPlanPath(item.source.absolute_path);
-        const auto source_parts = source_path ? ReviewedFactoryParentAndName(*source_path) : std::nullopt;
-        const auto destination_path = ReviewedFactoryCanonicalPlanPath(item.destination.absolute_path);
-        const auto destination_parts =
-            destination_path ? ReviewedFactoryParentAndName(*destination_path) : std::nullopt;
-        if( !source_path || !source_parts ) {
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath, item.source));
-        }
-        if( !destination_path || !destination_parts ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath, item.destination));
-        }
-
-        const auto &destination = *plan.Destination();
-        const auto destination_root = ReviewedFactoryCanonicalPlanPath(destination.AbsolutePath());
-        if( !destination_root ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath,
-                                       OperationPlanningPath{std::string{destination.ProviderId().Value()},
-                                                             std::string{destination.AbsolutePath()}}));
-        }
-        const std::string expected_destination = destination.Kind() == OperationPlanDestinationKind::Directory
-                                                     ? ReviewedFactoryJoinPath(*destination_root, source_parts->second)
-                                                     : *destination_root;
-        const auto structural_source_path = ReviewedFactoryCanonicalPlanPath(plan.Sources().front().AbsolutePath());
-        if( !structural_source_path || item.source.provider_id != plan.Sources().front().ProviderId().Value() ||
-            *source_path != *structural_source_path ||
-            item.destination.provider_id != destination.ProviderId().Value() ||
-            *destination_path != expected_destination ) {
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
-        }
-
-        const OperationPlanningPath destination_parent{
-            .provider_id = item.destination.provider_id,
-            .absolute_path = destination_parts->first,
+        // One item's work, named and taking an index. Nothing about it changes here - what changes
+        // is that it is now a unit the batch loop can call once per accepted item instead of a
+        // three-hundred-line stretch that only ever ran for `front()`.
+        struct PreparedItem {
+            std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction> transaction;
+            std::shared_ptr<nc::vfs::Host> source_host;
+            std::string source_path;
+            std::string destination_path;
+            uint64_t exact_source_bytes = 0;
         };
+        const auto prepare_item =
+            [&](const size_t _index) -> std::expected<PreparedItem, ReviewedOperationFactoryError> {
+            const OperationPlannedCopyItem &item = report.items.at(_index);
+            if( item.source_kind != OperationPlanningItemKind::File ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedSourceKind, item.source));
+            }
 
-        const auto source_host = sealed.Bindings()->Resolve(item.source.provider_id);
-        const auto destination_host = sealed.Bindings()->Resolve(item.destination.provider_id);
-        if( !source_host ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ProviderUnavailable, item.source));
-        }
-        if( !destination_host ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ProviderUnavailable, item.destination));
-        }
-        if( !std::dynamic_pointer_cast<nc::vfs::NativeHost>(source_host) ||
-            !std::dynamic_pointer_cast<nc::vfs::NativeHost>(destination_host) ) {
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedProviderScope));
-        }
+            const auto source_path = ReviewedFactoryCanonicalPlanPath(item.source.absolute_path);
+            const auto source_parts = source_path ? ReviewedFactoryParentAndName(*source_path) : std::nullopt;
+            const auto destination_path = ReviewedFactoryCanonicalPlanPath(item.destination.absolute_path);
+            const auto destination_parts =
+                destination_path ? ReviewedFactoryParentAndName(*destination_path) : std::nullopt;
+            if( !source_path || !source_parts ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath, item.source));
+            }
+            if( !destination_path || !destination_parts ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath, item.destination));
+            }
 
-        const auto find_snapshot = [&](const OperationPlanningPath &_path) {
-            return _snapshot_lookup ? _snapshot_lookup(report, _path) : ReviewedFactoryFindSnapshot(report, _path);
-        };
-        const auto *source_snapshot = find_snapshot(item.source);
-        const auto *destination_parent_snapshot = find_snapshot(destination_parent);
-        const auto *destination_snapshot = find_snapshot(item.destination);
-        if( !source_snapshot ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, item.source));
-        }
-        if( !destination_parent_snapshot ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, destination_parent));
-        }
-        if( !destination_snapshot ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, item.destination));
-        }
-        if( source_snapshot->evidence.kind != OperationPlanningItemKind::File ||
-            !source_snapshot->evidence.native_identity || !source_snapshot->evidence.native_version ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, item.source));
-        }
-        if( destination_parent_snapshot->evidence.kind != OperationPlanningItemKind::Directory ||
-            !destination_parent_snapshot->evidence.native_identity ||
-            !destination_parent_snapshot->evidence.native_version ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, destination_parent));
-        }
-        if( destination_snapshot->evidence.kind != OperationPlanningItemKind::Missing ||
-            destination_snapshot->evidence.native_identity || destination_snapshot->evidence.native_version ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, item.destination));
-        }
+            const auto &destination = *plan.Destination();
+            const auto destination_root = ReviewedFactoryCanonicalPlanPath(destination.AbsolutePath());
+            if( !destination_root ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath,
+                                           OperationPlanningPath{std::string{destination.ProviderId().Value()},
+                                                                 std::string{destination.AbsolutePath()}}));
+            }
+            const std::string expected_destination = destination.Kind() == OperationPlanDestinationKind::Directory
+                                                         ? ReviewedFactoryJoinPath(*destination_root, source_parts->second)
+                                                         : *destination_root;
+            const auto structural_source_path = ReviewedFactoryCanonicalPlanPath(plan.Sources().front().AbsolutePath());
+            if( !structural_source_path || item.source.provider_id != plan.Sources().front().ProviderId().Value() ||
+                *source_path != *structural_source_path ||
+                item.destination.provider_id != destination.ProviderId().Value() ||
+                *destination_path != expected_destination ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
+            }
 
-        if( !ReviewedFactoryDirectAccess(*source_path, R_OK, _direct_access_checker) ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedAccessRoute, item.source));
-        }
-        if( !ReviewedFactoryDirectAccess(destination_parent.absolute_path, W_OK, _direct_access_checker) ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedAccessRoute, destination_parent));
-        }
-        if( is_cancelled() )
-            return cancelled();
+            const OperationPlanningPath destination_parent{
+                .provider_id = item.destination.provider_id,
+                .absolute_path = destination_parts->first,
+            };
 
-        errno = 0;
-        const auto resolved_source_parent = ReviewedFactoryResolveExistingPath(source_parts->first);
-        if( !resolved_source_parent ) {
-            const int error = errno != 0 ? errno : ENOENT;
-            const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
-                                  ? ReviewedOperationFactoryErrorCode::StaleSource
-                                  : ReviewedOperationFactoryErrorCode::OpenFailed;
-            return std::unexpected(ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(error)));
-        }
-        auto source_parent_fd = ReviewedFactoryOpenCanonicalDirectory(*resolved_source_parent);
-        if( !source_parent_fd ) {
-            const auto code = source_parent_fd.error() == ENOENT || source_parent_fd.error() == ENOTDIR ||
-                                      source_parent_fd.error() == ELOOP
-                                  ? ReviewedOperationFactoryErrorCode::StaleSource
-                                  : ReviewedOperationFactoryErrorCode::OpenFailed;
-            return std::unexpected(
-                ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(source_parent_fd.error())));
-        }
-        ReviewedFactoryOwnedFD held_source_parent = std::move(*source_parent_fd);
-        const auto open_source = [&](int _directory_fd, const char *_name, int _flags) {
-            return _source_open_at ? _source_open_at(_directory_fd, _name, _flags)
-                                   : openat(_directory_fd, _name, _flags);
-        };
-        if( is_cancelled() )
-            return cancelled();
-        int opened_source_fd;
-        while( true ) {
-            opened_source_fd = open_source(
-                held_source_parent.Get(), source_parts->second.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
-            if( opened_source_fd >= 0 || errno != EINTR )
-                break;
+            const auto source_host = sealed.Bindings()->Resolve(item.source.provider_id);
+            const auto destination_host = sealed.Bindings()->Resolve(item.destination.provider_id);
+            if( !source_host ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ProviderUnavailable, item.source));
+            }
+            if( !destination_host ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ProviderUnavailable, item.destination));
+            }
+            if( !std::dynamic_pointer_cast<nc::vfs::NativeHost>(source_host) ||
+                !std::dynamic_pointer_cast<nc::vfs::NativeHost>(destination_host) ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedProviderScope));
+            }
+
+            const auto find_snapshot = [&](const OperationPlanningPath &_path) {
+                return _snapshot_lookup ? _snapshot_lookup(report, _path) : ReviewedFactoryFindSnapshot(report, _path);
+            };
+            const auto *source_snapshot = find_snapshot(item.source);
+            const auto *destination_parent_snapshot = find_snapshot(destination_parent);
+            const auto *destination_snapshot = find_snapshot(item.destination);
+            if( !source_snapshot ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, item.source));
+            }
+            if( !destination_parent_snapshot ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, destination_parent));
+            }
+            if( !destination_snapshot ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, item.destination));
+            }
+            if( source_snapshot->evidence.kind != OperationPlanningItemKind::File ||
+                !source_snapshot->evidence.native_identity || !source_snapshot->evidence.native_version ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, item.source));
+            }
+            if( destination_parent_snapshot->evidence.kind != OperationPlanningItemKind::Directory ||
+                !destination_parent_snapshot->evidence.native_identity ||
+                !destination_parent_snapshot->evidence.native_version ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, destination_parent));
+            }
+            if( destination_snapshot->evidence.kind != OperationPlanningItemKind::Missing ||
+                destination_snapshot->evidence.native_identity || destination_snapshot->evidence.native_version ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, item.destination));
+            }
+
+            if( !ReviewedFactoryDirectAccess(*source_path, R_OK, _direct_access_checker) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedAccessRoute, item.source));
+            }
+            if( !ReviewedFactoryDirectAccess(destination_parent.absolute_path, W_OK, _direct_access_checker) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedAccessRoute, destination_parent));
+            }
             if( is_cancelled() )
                 return cancelled();
-        }
-        ReviewedFactoryOwnedFD source_fd{opened_source_fd};
-        if( source_fd.Get() < 0 ) {
-            const int error = errno;
-            const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
-                                  ? ReviewedOperationFactoryErrorCode::StaleSource
-                                  : ReviewedOperationFactoryErrorCode::OpenFailed;
-            return std::unexpected(ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(error)));
-        }
-        struct stat source_stat{};
-        if( ReviewedFactoryFStatRetry(source_fd.Get(), &source_stat) != 0 ) {
-            const int error = errno;
-            return std::unexpected(ReviewedFactoryFailure(
-                ReviewedOperationFactoryErrorCode::OpenFailed, item.source, ReviewedFactoryCauseFromErrno(error)));
-        }
-        if( !S_ISREG(source_stat.st_mode) || !ReviewedFactoryMatches(source_snapshot->evidence, source_stat) ) {
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, item.source));
-        }
-        if( is_cancelled() )
-            return cancelled();
 
-        errno = 0;
-        const auto resolved_destination_parent = ReviewedFactoryResolveExistingPath(destination_parent.absolute_path);
-        if( !resolved_destination_parent ) {
-            const int error = errno != 0 ? errno : ENOENT;
-            const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
-                                  ? ReviewedOperationFactoryErrorCode::StaleDestination
-                                  : ReviewedOperationFactoryErrorCode::OpenFailed;
-            return std::unexpected(
-                ReviewedFactoryFailure(code, destination_parent, ReviewedFactoryCauseFromErrno(error)));
-        }
-        auto destination_parent_fd = ReviewedFactoryOpenCanonicalDirectory(*resolved_destination_parent);
-        if( !destination_parent_fd ) {
-            const auto code = destination_parent_fd.error() == ENOENT || destination_parent_fd.error() == ENOTDIR ||
-                                      destination_parent_fd.error() == ELOOP
-                                  ? ReviewedOperationFactoryErrorCode::StaleDestination
-                                  : ReviewedOperationFactoryErrorCode::OpenFailed;
-            return std::unexpected(ReviewedFactoryFailure(
-                code, destination_parent, ReviewedFactoryCauseFromErrno(destination_parent_fd.error())));
-        }
-        ReviewedFactoryOwnedFD held_destination_parent = std::move(*destination_parent_fd);
-        struct stat destination_parent_stat{};
-        if( ReviewedFactoryFStatRetry(held_destination_parent.Get(), &destination_parent_stat) != 0 ) {
-            const int error = errno;
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::OpenFailed,
-                                                          destination_parent,
-                                                          ReviewedFactoryCauseFromErrno(error)));
-        }
-        if( !S_ISDIR(destination_parent_stat.st_mode) ||
-            !ReviewedFactoryMatches(*destination_parent_snapshot->evidence.native_identity, destination_parent_stat) ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination, destination_parent));
-        }
-
-        struct stat destination_stat{};
-        if( ReviewedFactoryFStatAtRetry(held_destination_parent.Get(),
-                                        destination_parts->second.c_str(),
-                                        &destination_stat,
-                                        AT_SYMLINK_NOFOLLOW) == 0 ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination, item.destination));
-        }
-        const int destination_error = errno;
-        if( destination_error != ENOENT ) {
-            const auto code = destination_error == ENOTDIR || destination_error == ELOOP
-                                  ? ReviewedOperationFactoryErrorCode::StaleDestination
-                                  : ReviewedOperationFactoryErrorCode::OpenFailed;
-            return std::unexpected(
-                ReviewedFactoryFailure(code, item.destination, ReviewedFactoryCauseFromErrno(destination_error)));
-        }
-        if( !ReviewedFactoryMatches(*destination_parent_snapshot->evidence.native_version, destination_parent_stat) ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination, destination_parent));
-        }
-        if( is_cancelled() )
-            return cancelled();
-
-        nc::vfs::ProviderConditionalCopyReviewedClaims reviewed_claims{
-            .plan_id = std::string{plan.Id().Value()},
-            .source_binding =
-                nc::vfs::ProviderConditionalCopyBinding{
-                    .provider_id = item.source.provider_id,
-                    .host = source_host,
-                },
-            .destination_binding =
-                nc::vfs::ProviderConditionalCopyBinding{
-                    .provider_id = item.destination.provider_id,
-                    .host = destination_host,
-                },
-            .source =
-                ReviewedFactoryConditionalCopyExpectation(item.source,
-                                                          nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile,
-                                                          *source_snapshot->evidence.native_identity,
-                                                          *source_snapshot->evidence.native_version),
-            .destination_parent =
-                ReviewedFactoryConditionalCopyExpectation(destination_parent,
-                                                          nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
-                                                          *destination_parent_snapshot->evidence.native_identity,
-                                                          *destination_parent_snapshot->evidence.native_version),
-            .destination =
-                nc::vfs::ProviderConditionalCopyMissingExpectation{
-                    .absolute_path = item.destination.absolute_path,
-                },
-        };
-        const OperationPlanningPath source_error_path = item.source;
-        const OperationPlanningPath destination_error_path = item.destination;
-        const uint64_t exact_source_bytes = source_snapshot->evidence.native_version->byte_size;
-        // Index 0 because this path still handles exactly one accepted item; the batch gate above is
-        // what keeps that true, and lifting it is what the per-item issue exists for.
-        auto reviewed_authority = sealed.IssueAuthorityForItem(0, std::move(reviewed_claims));
-        if( !reviewed_authority ) {
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
-        }
-
-        std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
-                      nc::vfs::ProviderConditionalCopyTransactionBeginError>
-            transaction = std::unexpected(nc::vfs::ProviderConditionalCopyTransactionBeginError::ProviderFailure);
-        try {
-            transaction =
-                _conditional_commit_transaction_resolver
-                    ? _conditional_commit_transaction_resolver(std::move(*reviewed_authority), is_cancelled)
-                    : destination_host->BeginConditionalCopyTransaction(std::move(*reviewed_authority), is_cancelled);
-        } catch( ... ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
-        }
-
-        if( !transaction ) {
-            switch( transaction.error() ) {
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::SourceStale:
-                    return std::unexpected(
-                        ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, source_error_path));
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::DestinationParentStale:
-                    return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination,
-                                                                  destination_parent));
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::DestinationExists:
-                    return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination,
-                                                                  destination_error_path));
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::Cancelled:
-                    return cancelled();
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::Unsupported:
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::InvalidRequest:
-                case nc::vfs::ProviderConditionalCopyTransactionBeginError::ProviderFailure:
-                default:
-                    return std::unexpected(ReviewedFactoryFailure(
-                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            errno = 0;
+            const auto resolved_source_parent = ReviewedFactoryResolveExistingPath(source_parts->first);
+            if( !resolved_source_parent ) {
+                const int error = errno != 0 ? errno : ENOENT;
+                const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleSource
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(error)));
             }
-        }
-        if( !*transaction ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
-        }
+            auto source_parent_fd = ReviewedFactoryOpenCanonicalDirectory(*resolved_source_parent);
+            if( !source_parent_fd ) {
+                const auto code = source_parent_fd.error() == ENOENT || source_parent_fd.error() == ENOTDIR ||
+                                          source_parent_fd.error() == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleSource
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(
+                    ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(source_parent_fd.error())));
+            }
+            ReviewedFactoryOwnedFD held_source_parent = std::move(*source_parent_fd);
+            const auto open_source = [&](int _directory_fd, const char *_name, int _flags) {
+                return _source_open_at ? _source_open_at(_directory_fd, _name, _flags)
+                                       : openat(_directory_fd, _name, _flags);
+            };
+            if( is_cancelled() )
+                return cancelled();
+            int opened_source_fd;
+            while( true ) {
+                opened_source_fd = open_source(
+                    held_source_parent.Get(), source_parts->second.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+                if( opened_source_fd >= 0 || errno != EINTR )
+                    break;
+                if( is_cancelled() )
+                    return cancelled();
+            }
+            ReviewedFactoryOwnedFD source_fd{opened_source_fd};
+            if( source_fd.Get() < 0 ) {
+                const int error = errno;
+                const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleSource
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(error)));
+            }
+            struct stat source_stat{};
+            if( ReviewedFactoryFStatRetry(source_fd.Get(), &source_stat) != 0 ) {
+                const int error = errno;
+                return std::unexpected(ReviewedFactoryFailure(
+                    ReviewedOperationFactoryErrorCode::OpenFailed, item.source, ReviewedFactoryCauseFromErrno(error)));
+            }
+            if( !S_ISREG(source_stat.st_mode) || !ReviewedFactoryMatches(source_snapshot->evidence, source_stat) ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, item.source));
+            }
+            if( is_cancelled() )
+                return cancelled();
+
+            errno = 0;
+            const auto resolved_destination_parent = ReviewedFactoryResolveExistingPath(destination_parent.absolute_path);
+            if( !resolved_destination_parent ) {
+                const int error = errno != 0 ? errno : ENOENT;
+                const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleDestination
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(
+                    ReviewedFactoryFailure(code, destination_parent, ReviewedFactoryCauseFromErrno(error)));
+            }
+            auto destination_parent_fd = ReviewedFactoryOpenCanonicalDirectory(*resolved_destination_parent);
+            if( !destination_parent_fd ) {
+                const auto code = destination_parent_fd.error() == ENOENT || destination_parent_fd.error() == ENOTDIR ||
+                                          destination_parent_fd.error() == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleDestination
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(ReviewedFactoryFailure(
+                    code, destination_parent, ReviewedFactoryCauseFromErrno(destination_parent_fd.error())));
+            }
+            ReviewedFactoryOwnedFD held_destination_parent = std::move(*destination_parent_fd);
+            struct stat destination_parent_stat{};
+            if( ReviewedFactoryFStatRetry(held_destination_parent.Get(), &destination_parent_stat) != 0 ) {
+                const int error = errno;
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::OpenFailed,
+                                                              destination_parent,
+                                                              ReviewedFactoryCauseFromErrno(error)));
+            }
+            if( !S_ISDIR(destination_parent_stat.st_mode) ||
+                !ReviewedFactoryMatches(*destination_parent_snapshot->evidence.native_identity, destination_parent_stat) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination, destination_parent));
+            }
+
+            struct stat destination_stat{};
+            if( ReviewedFactoryFStatAtRetry(held_destination_parent.Get(),
+                                            destination_parts->second.c_str(),
+                                            &destination_stat,
+                                            AT_SYMLINK_NOFOLLOW) == 0 ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination, item.destination));
+            }
+            const int destination_error = errno;
+            if( destination_error != ENOENT ) {
+                const auto code = destination_error == ENOTDIR || destination_error == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleDestination
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(
+                    ReviewedFactoryFailure(code, item.destination, ReviewedFactoryCauseFromErrno(destination_error)));
+            }
+            if( !ReviewedFactoryMatches(*destination_parent_snapshot->evidence.native_version, destination_parent_stat) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination, destination_parent));
+            }
+            if( is_cancelled() )
+                return cancelled();
+
+            nc::vfs::ProviderConditionalCopyReviewedClaims reviewed_claims{
+                .plan_id = std::string{plan.Id().Value()},
+                .source_binding =
+                    nc::vfs::ProviderConditionalCopyBinding{
+                        .provider_id = item.source.provider_id,
+                        .host = source_host,
+                    },
+                .destination_binding =
+                    nc::vfs::ProviderConditionalCopyBinding{
+                        .provider_id = item.destination.provider_id,
+                        .host = destination_host,
+                    },
+                .source =
+                    ReviewedFactoryConditionalCopyExpectation(item.source,
+                                                              nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile,
+                                                              *source_snapshot->evidence.native_identity,
+                                                              *source_snapshot->evidence.native_version),
+                .destination_parent =
+                    ReviewedFactoryConditionalCopyExpectation(destination_parent,
+                                                              nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
+                                                              *destination_parent_snapshot->evidence.native_identity,
+                                                              *destination_parent_snapshot->evidence.native_version),
+                .destination =
+                    nc::vfs::ProviderConditionalCopyMissingExpectation{
+                        .absolute_path = item.destination.absolute_path,
+                    },
+            };
+            const OperationPlanningPath source_error_path = item.source;
+            const OperationPlanningPath destination_error_path = item.destination;
+            const uint64_t exact_source_bytes = source_snapshot->evidence.native_version->byte_size;
+            // Index 0 because this path still handles exactly one accepted item; the batch gate above is
+            // what keeps that true, and lifting it is what the per-item issue exists for.
+            auto reviewed_authority = sealed.IssueAuthorityForItem(0, std::move(reviewed_claims));
+            if( !reviewed_authority ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
+            }
+
+            std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                          nc::vfs::ProviderConditionalCopyTransactionBeginError>
+                transaction = std::unexpected(nc::vfs::ProviderConditionalCopyTransactionBeginError::ProviderFailure);
+            try {
+                transaction =
+                    _conditional_commit_transaction_resolver
+                        ? _conditional_commit_transaction_resolver(std::move(*reviewed_authority), is_cancelled)
+                        : destination_host->BeginConditionalCopyTransaction(std::move(*reviewed_authority), is_cancelled);
+            } catch( ... ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            }
+
+            if( !transaction ) {
+                switch( transaction.error() ) {
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::SourceStale:
+                        return std::unexpected(
+                            ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, source_error_path));
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::DestinationParentStale:
+                        return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination,
+                                                                      destination_parent));
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::DestinationExists:
+                        return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleDestination,
+                                                                      destination_error_path));
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::Cancelled:
+                        return cancelled();
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::Unsupported:
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::InvalidRequest:
+                    case nc::vfs::ProviderConditionalCopyTransactionBeginError::ProviderFailure:
+                    default:
+                        return std::unexpected(ReviewedFactoryFailure(
+                            ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+                }
+            }
+            if( !*transaction ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            }
+
+            return PreparedItem{.transaction = std::move(*transaction),
+                                .source_host = source_host,
+                                .source_path = item.source.absolute_path,
+                                .destination_path = item.destination.absolute_path,
+                                .exact_source_bytes = exact_source_bytes};
+        };
+
+        // Called once: the batch gate above still admits exactly one accepted item. Lifting that
+        // gate is now a loop over this, not a rewrite of it.
+        auto prepared = prepare_item(0);
+        if( !prepared )
+            return std::unexpected(prepared.error());
 
         auto product =
-            ProviderConditionalCopyOperationFactory::Create(std::move(*transaction),
+            ProviderConditionalCopyOperationFactory::Create(std::move(prepared->transaction),
                                                             ProviderConditionalCopyJournalContext{
                                                                 .item_index = 0,
-                                                                .exact_source_bytes = exact_source_bytes,
+                                                                .exact_source_bytes = prepared->exact_source_bytes,
                                                             },
                                                             ProviderConditionalCopyOperationPresentation{
-                                                                .source_host = source_host,
-                                                                .source_path = item.source.absolute_path,
-                                                                .destination_path = item.destination.absolute_path,
+                                                                .source_host = prepared->source_host,
+                                                                .source_path = prepared->source_path,
+                                                                .destination_path = prepared->destination_path,
                                                             },
                                                             std::move(is_cancelled));
         if( !product )
