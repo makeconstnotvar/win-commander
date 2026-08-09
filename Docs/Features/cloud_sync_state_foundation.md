@@ -211,6 +211,39 @@ Announced as a name plus a kind — folder, photo, or photo not downloaded. Left
 - Six new strings, all translated, with the catalog guard passing 4/4.
 - Full `WinCommanderUT --rng-seed 424242`: **864/864 cases, 12,015 assertions**.
 
+### Coverage gap at GL-3
+
+**No thumbnails** — the pipeline arrives in GL-4 below. Nothing hosts the view in the Explorer yet either.
+
+---
+
+# GL-4: thumbnails, and what must never be generated
+
+The same shape as the network-volume probe cache, for the same reason: the expensive answer is taken off the drawing thread once and remembered, and the drawing thread only ever asks what is already known.
+
+## A cloud-only file is never generated for
+
+Generating a thumbnail is what would **fetch the bytes**. Switching to Gallery is not consent to a download — the rule GL-1 exists for, now enforced at the point where it could actually be broken. Such a row is recorded as `Withheld` rather than left unknown, so nothing keeps reconsidering it and a surface can say why the tile has no picture.
+
+## A failure is an answer
+
+A folder holding one file the generator cannot read would otherwise re-attempt it on every single redraw. `Failed` is remembered, and a generator that threw is a failure rather than a crash.
+
+## Eviction follows what is being drawn, not what arrived first
+
+The bound exists because a folder can hold fifty thousand photographs and an unbounded cache of them is a memory problem the user did not ask for. **Asking for a thumbnail marks it as the freshest thing in the cache**, because that call means "I am drawing this now".
+
+This is where a test found a real flaw: the first implementation ordered by insertion, so a long scroll back through a folder would evict exactly the thumbnails on screen — the ones certain to be wanted again immediately. The test asserted the opposite and failed, which is what a test is for.
+
+A dropped entry is generated again if it comes back into view, and a folder change clears everything, since none of it applies any more and holding it would spend memory on a folder nobody is looking at.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::GalleryThumbnailCache*'`: **7/7 cases, 37 assertions** — answered from memory with asking never generating; a cloud-only file never generated for and recorded as withheld; a failure remembered rather than retried; a throwing generator treated as a failure; the bound honoured with the least recently *drawn* entry dropped and a dropped one regenerated; a folder change forgetting everything; and a folder row never generated for.
+- The same suite under **TSan** — the cache is read from the drawing thread while a worker writes it.
+- Full `WinCommanderUT --rng-seed 424242`: **871/871 cases, 12,052 assertions**.
+
 ### Coverage gap
 
-**No thumbnails.** Every tile draws a symbol; the pipeline that turns a `Thumbnail` row into an actual image, off the drawing thread and cached, is the next increment. Nothing hosts the view in the Explorer yet either.
+**Nothing drives it, and no real generator is wired.** The cache takes a generator as a parameter; connecting one, and running it off the drawing thread as rows come into view, is what remains — along with hosting the view in the Explorer.
