@@ -466,6 +466,24 @@ TEST_CASE(PREFIX "rejects destructive policy, unsupported source shapes, and bat
         CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::UnsupportedSourceKind);
     }
 
+    SECTION("a directory source is one item, not several")
+    {
+        // Written to pin BatchUnsupported and it disproved the assumption behind it: a directory
+        // source is accepted as ONE item of kind Directory, not as several file items, so it stops
+        // at the source-kind gate and never reaches the batch one. Which means BatchUnsupported -
+        // one source, several accepted items - appears unreachable at this layer today, and the gate
+        // that actually stands between here and batching is the several-sources one below.
+        std::ofstream(source_directory / "a.txt") << "one";
+        std::ofstream(source_directory / "b.txt") << "two";
+        auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source_directory.native()}},
+                                                        destination_directory.native(),
+                                                        OperationPlanDestinationKind::Directory),
+                                       probes);
+        const auto operation = ReviewedOperationFactory::Create(std::move(reviewed));
+        REQUIRE_FALSE(operation);
+        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::UnsupportedSourceKind);
+    }
+
     SECTION("several sources")
     {
         // Distinct from a single source that expanded into several items: several sources need

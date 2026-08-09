@@ -46,9 +46,24 @@ the operation's total for progress.
 Cancellation between items is a real case: the items already committed stay committed, the rest are
 `Cancelled`. That is what the journal's per-item result exists to express.
 
-**Step D — lift the gate.** Only `BatchUnsupported` comes down. `MultipleSourcesUnsupported` stays:
-several sources need several structural bindings checked against the report, which step A does not
-cover. They were separated for exactly this reason.
+**Step D — lift the gate.** This is where the design was wrong when first written, and a test
+corrected it.
+
+A test was added to pin `BatchUnsupported` — one source accepted as several items — using a
+directory source. It failed: a directory source is accepted as **one item of kind `Directory`**, so
+it stops at the source-kind gate and never reaches the batch one. Nothing at this layer expands one
+source into several accepted items, which means **`BatchUnsupported` appears unreachable today**,
+and the gate actually standing between here and batching is `MultipleSourcesUnsupported`.
+
+So step D lifts the several-sources gate, and step A's per-item extraction has to cover what that
+gate was protecting: **each item's structural source must be matched against its own entry in
+`plan.Sources()`**, not against `Sources().front()` as the single-item path does. That check is part
+of step A, not something to bolt on afterwards.
+
+Confirm before building on this: whether any planner path produces several accepted items from one
+source. If one does, `BatchUnsupported` becomes reachable and both gates need lifting; if none does,
+it is dead and should be said so rather than left looking like a limitation someone might try to
+lift.
 
 ## What must not be given up
 
@@ -61,8 +76,14 @@ cover. They were separated for exactly this reason.
 
 ## Verification this will need
 
-- The existing factory cases must pass unchanged after step A — that is the whole safety argument for
-  the extraction.
+- **The safety argument for the extraction is weaker than it looks.** Of the factory's 21 error
+  codes, **nine are raised and never asserted by any test**: `UnsupportedPlanType`,
+  `ProviderUnavailable`, `EmptyAcceptedPlan`, `BatchUnsupported`, `UnexpectedConflictEvidence`,
+  `InvalidReviewedPlan`, `MissingEvidence`, `InvalidEvidence` and `OpenFailed` — the last raised at
+  **eight** sites. `MissingEvidence` and `InvalidEvidence` are the staleness-evidence checks, which
+  is the part of this code least safe to move blind. Cover those first, or accept that the
+  extraction is unpinned exactly where it matters most.
+- The existing factory cases must pass unchanged after step A.
 - New cases for: a two-item plan preparing and executing both; a second item that is stale rolling
   back the first item's transaction; cancellation between items leaving the first committed and the
   second `Cancelled`; and per-item results landing at the right indices.
