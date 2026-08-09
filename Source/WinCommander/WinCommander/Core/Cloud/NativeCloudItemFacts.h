@@ -43,4 +43,16 @@ struct NativeCloudProbe {
 /** Turns what the filesystem said into the facts `ClassifyCloudSyncState` reads. */
 [[nodiscard]] CloudItemFacts CloudItemFactsFromProbe(const NativeCloudProbe &_probe) noexcept;
 
+/**
+ * Asks the filesystem about one native path.
+ *
+ * Reads resource values only - metadata the system already holds. It does not open the file, which
+ * is the whole point: opening a placeholder is what fetches it.
+ *
+ * A path that cannot be read answers "not in a container" rather than guessing. Reporting an
+ * unreadable item as a cloud placeholder would badge it and, worse, would tell every surface above
+ * that its bytes are elsewhere when nobody knows that.
+ */
+[[nodiscard]] NativeCloudProbe ProbeNativeCloudItem(const std::string &_path);
+
 } // namespace nc::core

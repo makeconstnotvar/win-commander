@@ -311,6 +311,19 @@ Whatever else a probe carries, an item that is not in a provider's folder is `No
 - New `WinCommanderUT`: **5/5 cases, 18 assertions** — placeholders unmasked to the name the user is looking for; five ways of not being a placeholder all refused, including the plain `notes.icloud`; a placeholder read as exactly "known to the provider, bytes not here" and classifying as `CloudOnly`; every reportable state carried through, with a conflict outranking a simultaneous download and placeholder; and an item outside a container reported as not cloud whatever else its probe says.
 - Full `WinCommanderUT --rng-seed 424242`: **878/878 cases, 12,078 assertions**.
 
+### Filling the probe
+
+`ProbeNativeCloudItem` asks the filesystem, and asks it only for resource values — metadata the system already holds. **It never opens the file**, which is the whole point: opening a placeholder is what fetches it.
+
+Being in a container is asked first and on its own. Everything else is meaningless outside one, and an item that is not in a container must come back as plainly not cloud rather than as a half-filled answer that a surface might read as partial truth. A path that cannot be read answers the same way: reporting an unreadable item as a placeholder would badge it *and* tell everything above that its bytes are elsewhere, when in fact nobody knows.
+
+`NSURLUbiquitousItemIsExcludedFromSyncKey` arrived in macOS 11.3 against an 11.0 target, so it is asked for only where it exists. Without it an excluded item reads as an ordinary synced one — a milder wrong answer than refusing to say anything about the item at all.
+
+**What the tests can and cannot reach:** an ordinary local file is asserted to come back as not cloud with every other field false, and unreadable, empty and directory paths are asserted to answer safely. A real iCloud container is not available to a unit test, so the mapping from a live placeholder to `CloudOnly` is exercised through `CloudItemFactsFromProbe` with a constructed probe rather than against the system.
+
+- New `WinCommanderUT 'nc::core::ProbeNativeCloudItem*'`: **2/2 cases, 12 assertions**.
+- Full `WinCommanderUT --rng-seed 424242`: **880/880 cases, 12,090 assertions**.
+
 ### Coverage gap
 
-**Nothing fills the probe yet.** The struct is what a native listing would populate from `NSURL` resource values and a container check; wiring that, and feeding the result into `GalleryListingItem`, is the last step before the Explorer can host a Gallery.
+**Nothing calls the probe from a listing yet**, and the Explorer still does not host the Gallery. Those two are what remain.

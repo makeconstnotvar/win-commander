@@ -3,12 +3,17 @@
 
 #include <WinCommander/Core/Cloud/NativeCloudItemFacts.h>
 
+#include <filesystem>
+#include <fstream>
+#include <string>
+
 namespace {
 
 using nc::core::CloudItemFactsFromProbe;
 using nc::core::CloudSyncState;
 using nc::core::ClassifyCloudSyncState;
 using nc::core::NativeCloudProbe;
+using nc::core::ProbeNativeCloudItem;
 using nc::core::UnmaskedCloudPlaceholderName;
 
 } // namespace
@@ -89,6 +94,42 @@ TEST_CASE(PREFIX "reports an item outside any container as not cloud at all")
     probe.is_dataless_placeholder = true;
     probe.has_conflict = true;
     CHECK(ClassifyCloudSyncState(CloudItemFactsFromProbe(probe)) == CloudSyncState::NotCloud);
+}
+
+#undef PREFIX
+
+#define PREFIX "nc::core::ProbeNativeCloudItem "
+
+TEST_CASE(PREFIX "reports an ordinary local file as not cloud at all")
+{
+    const TempTestDir tmp_dir;
+    const std::filesystem::path file = std::filesystem::path{tmp_dir.directory} / "ordinary.txt";
+    std::ofstream(file) << "contents";
+
+    const NativeCloudProbe probe = ProbeNativeCloudItem(file.native());
+    CHECK_FALSE(probe.in_cloud_container);
+    // Everything else is meaningless outside a container, and must not come back half-filled.
+    CHECK_FALSE(probe.is_dataless_placeholder);
+    CHECK_FALSE(probe.download_in_progress);
+    CHECK_FALSE(probe.upload_in_progress);
+    CHECK_FALSE(probe.has_conflict);
+    CHECK_FALSE(probe.excluded_from_sync);
+    CHECK(ClassifyCloudSyncState(CloudItemFactsFromProbe(probe)) == CloudSyncState::NotCloud);
+}
+
+TEST_CASE(PREFIX "answers safely for a path it cannot read")
+{
+    // Reporting an unreadable item as a placeholder would badge it and tell every surface above that
+    // its bytes are elsewhere, when in fact nobody knows.
+    for( const std::string &path : {std::string{}, std::string{"/nonexistent-for-tests/x.jpg"}} ) {
+        const NativeCloudProbe probe = ProbeNativeCloudItem(path);
+        CHECK_FALSE(probe.in_cloud_container);
+        CHECK_FALSE(probe.is_dataless_placeholder);
+    }
+
+    // A directory is answered too, rather than refused.
+    const TempTestDir tmp_dir;
+    CHECK_FALSE(ProbeNativeCloudItem(tmp_dir.directory).in_cloud_container);
 }
 
 #undef PREFIX
