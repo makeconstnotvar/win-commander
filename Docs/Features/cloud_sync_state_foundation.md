@@ -149,3 +149,39 @@ A slower probe that started earlier does not overwrite a fresher answer: it is o
 ### Coverage gap
 
 **No scheduler and no caller.** Something has to notice which volumes a listing touches, refresh the stale ones off the drawing thread, and redraw when an answer changes. The cloud-facts adapter and the Gallery view also remain.
+
+---
+
+# GL-2: what a Gallery actually shows
+
+GL-1 decided what a single Gallery row may show. What was missing was the view's own question: given a folder, which rows exist at all, in what order, and what does it say when there are none.
+
+## Non-media is left out, not shown as an icon
+
+Gallery is a way to look at pictures. A folder of source files rendered as a grid of identical document icons is a *worse* view of them than the list the user came from — and it hides the photographs among them, which is the one thing the mode exists to make easy.
+
+## Folders stay, and come first
+
+Dropping them would strand the user in a leaf directory with no way out but switching view modes back. A Gallery that cannot be navigated is a dead end.
+
+`..` is not a row. It is navigation, and counting it as content would make an empty folder look like it holds something.
+
+## A cloud-only photo keeps its place
+
+Leaving it out would make the Gallery quietly disagree with the folder about what is in it. Downloading it to find out is precisely what GL-1 refuses to do behind the user's back — switching a view mode is not consent to a transfer — so it appears as a placeholder and stays counted.
+
+## Empty and "nothing to look at" are different answers
+
+A folder with nothing in it, and a folder full of source files, both show an empty Gallery — but they send the user to different places, so they are told apart rather than collapsed into one blank view.
+
+Within each group the order is the listing's own, so whatever sort the user chose still decides what comes first, and each row carries the index it came from so a selection survives the regrouping.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::BuildGalleryContents*'`: **6/6 cases, 27 assertions** — folders first then media, each in listing order, with indices mapping back; non-media dropped entirely; a folder kept where nothing else survives; a cloud-only photo held as a placeholder and counted; empty told apart from nothing-to-show, including a folder holding only `..`; and `..` never counted as content.
+- Full `WinCommanderUT --rng-seed 424242`: **854/854 cases, 11,971 assertions**.
+
+### Coverage gap
+
+**No view renders it.** The rows, their order and the empty states are decided; drawing them, and the thumbnail pipeline behind `Thumbnail` rows, are what remain of the Gallery.
