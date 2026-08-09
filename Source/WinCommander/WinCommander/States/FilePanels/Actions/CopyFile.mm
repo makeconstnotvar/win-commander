@@ -19,6 +19,7 @@
 #include <WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h>
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
 #include <WinCommander/Core/Operations/ReviewedCopyAsApplicationBoundary.h>
+#include <WinCommander/Core/Operations/ReviewedCopyTerminalPresentation.h>
 #include <WinCommander/Core/VFSOperationPlanningAccessChecker.h>
 #include <WinCommander/States/MainWindowController.h>
 #include <Base/dispatch_cpp.h>
@@ -714,83 +715,105 @@ void AppendSystemError(NSMutableString *_message, NSString *_label, const int _e
         [_message appendFormat:@"\n%@: %d", _label, _error];
 }
 
+/** Everything one result has to say, appended under whatever heading names the item it belongs to. */
+void AppendDurableItemDetail(NSMutableString *_message,
+                             const nc::ops::OperationJournalItemResult &_result,
+                             NSString **_title)
+{
+    switch( _result.destination_publication ) {
+        case nc::ops::OperationJournalPublicationState::NotPublished:
+            [_message appendString:@"The durable journal confirms that the destination was not published."];
+            break;
+        case nc::ops::OperationJournalPublicationState::Published:
+            [_message
+                appendString:@"The destination was published, but the copy did not satisfy its terminal contract."];
+            break;
+        case nc::ops::OperationJournalPublicationState::Unknown:
+            [_message appendString:@"The durable journal cannot confirm whether the destination was published."];
+            break;
+    }
+
+    if( _result.error != nc::ops::OperationJournalItemError::None )
+        [_message appendFormat:@"\nFailure: %@.", JournalItemErrorDescription(_result.error)];
+    AppendSystemError(_message, @"System error", _result.system_error);
+    if( _result.prior_error != nc::ops::OperationJournalItemError::None ) {
+        [_message appendFormat:@"\nPrior failure: %@.", JournalItemErrorDescription(_result.prior_error)];
+        AppendSystemError(_message, @"Prior system error", _result.prior_system_error);
+    }
+
+    switch( _result.filesystem_sync_status ) {
+        case nc::ops::OperationJournalFilesystemSyncStatus::NotAttempted:
+            [_message appendString:@"\nFilesystem durability: not attempted."];
+            break;
+        case nc::ops::OperationJournalFilesystemSyncStatus::Confirmed:
+            [_message appendString:@"\nFilesystem durability: confirmed."];
+            break;
+        case nc::ops::OperationJournalFilesystemSyncStatus::Failed:
+            [_message appendString:@"\nFilesystem durability: failed."];
+            AppendSystemError(_message, @"Filesystem sync error", _result.filesystem_sync_system_error);
+            break;
+    }
+    if( NSString *const recovery = JournalRecoveryDescription(_result.recovery_action) ) {
+        [_message appendFormat:@"\nRecovery: %@", recovery];
+        *_title = @"Copy requires recovery";
+    }
+}
+
 void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcome &_outcome,
                                PanelController *_panel,
                                NCMainWindowController *_window_controller,
                                const std::string &_destination)
 {
     dispatch_assert_main_queue();
-    const auto *const item_result = _outcome.SingleItemResult();
-    const bool succeeded = _outcome.state == nc::ops::OperationJournalState::Completed && item_result &&
-                           item_result->status == nc::ops::OperationJournalItemStatus::Succeeded &&
-                           item_result->destination_publication == nc::ops::OperationJournalPublicationState::Published;
+    // Decided over the whole set of results rather than over the one this surface used to demand. A
+    // batch in which every item published reached here as "no terminal item result" and was announced
+    // as a copy needing reconciliation; the rules are in the classifier, tested without AppKit.
+    const auto presentation = reviewed_copy_as::ClassifyDurableCopyOutcome(_outcome);
 
-    if( succeeded ) {
-        if( _panel ) {
-            [_panel refreshPanel];
-            if( _panel.isUniform &&
-                reviewed_copy_as::IsSameLexicalPath(_panel.currentDirectoryPath,
-                                                    std::filesystem::path{_destination}.parent_path().native()) ) {
-                nc::panel::DelayedFocusing request;
-                request.filename = std::filesystem::path{_destination}.filename().native();
-                [_panel scheduleDelayedFocusing:request];
-            }
+    if( _panel && presentation.refresh_panel )
+        [_panel refreshPanel];
+
+    if( presentation.kind == reviewed_copy_as::DurableCopyOutcomeKind::Published ) {
+        // Only a lone publication has one destination to reveal, and the classifier is what says so.
+        if( _panel && presentation.focus_single_publication && _panel.isUniform &&
+            reviewed_copy_as::IsSameLexicalPath(_panel.currentDirectoryPath,
+                                                std::filesystem::path{_destination}.parent_path().native()) ) {
+            nc::panel::DelayedFocusing request;
+            request.filename = std::filesystem::path{_destination}.filename().native();
+            [_panel scheduleDelayedFocusing:request];
         }
         return;
     }
 
-    if( _outcome.state == nc::ops::OperationJournalState::Cancelled ||
-        (item_result && item_result->status == nc::ops::OperationJournalItemStatus::Cancelled) )
+    if( presentation.kind == reviewed_copy_as::DurableCopyOutcomeKind::Silent )
         return;
-
-    if( _panel && (!item_result ||
-                   item_result->destination_publication != nc::ops::OperationJournalPublicationState::NotPublished) )
-        [_panel refreshPanel];
 
     NSMutableString *const message = [NSMutableString string];
     NSString *title = @"Copy did not complete";
-    if( !item_result ) {
+    if( presentation.without_item_results ) {
         [message appendString:@"The durable journal has no terminal item result. Inspect the destination and reconcile "
                               @"the journal before retrying."];
         title = @"Copy requires reconciliation";
     }
+    else if( presentation.total_items == 1 ) {
+        // One item still reads exactly as it always did - no count, no item heading, nothing that
+        // would make a single copy look like a batch of one.
+        AppendDurableItemDetail(message, _outcome.item_results.front(), &title);
+    }
     else {
-        switch( item_result->destination_publication ) {
-            case nc::ops::OperationJournalPublicationState::NotPublished:
-                [message appendString:@"The durable journal confirms that the destination was not published."];
-                break;
-            case nc::ops::OperationJournalPublicationState::Published:
-                [message
-                    appendString:@"The destination was published, but the copy did not satisfy its terminal contract."];
-                break;
-            case nc::ops::OperationJournalPublicationState::Unknown:
-                [message appendString:@"The durable journal cannot confirm whether the destination was published."];
-                break;
+        // A set has to say how much of it landed before it says what went wrong with the rest,
+        // because "which files exist now" is the question the user actually has.
+        [message
+            appendFormat:@"%zu of %zu items were published.", presentation.published_items, presentation.total_items];
+        for( const size_t index : presentation.attention_indices ) {
+            const auto &result = _outcome.item_results[index];
+            [message appendFormat:@"\n\nItem %zu: ", result.item_index + 1];
+            AppendDurableItemDetail(message, result, &title);
         }
-
-        if( item_result->error != nc::ops::OperationJournalItemError::None )
-            [message appendFormat:@"\nFailure: %@.", JournalItemErrorDescription(item_result->error)];
-        AppendSystemError(message, @"System error", item_result->system_error);
-        if( item_result->prior_error != nc::ops::OperationJournalItemError::None ) {
-            [message appendFormat:@"\nPrior failure: %@.", JournalItemErrorDescription(item_result->prior_error)];
-            AppendSystemError(message, @"Prior system error", item_result->prior_system_error);
-        }
-
-        switch( item_result->filesystem_sync_status ) {
-            case nc::ops::OperationJournalFilesystemSyncStatus::NotAttempted:
-                [message appendString:@"\nFilesystem durability: not attempted."];
-                break;
-            case nc::ops::OperationJournalFilesystemSyncStatus::Confirmed:
-                [message appendString:@"\nFilesystem durability: confirmed."];
-                break;
-            case nc::ops::OperationJournalFilesystemSyncStatus::Failed:
-                [message appendString:@"\nFilesystem durability: failed."];
-                AppendSystemError(message, @"Filesystem sync error", item_result->filesystem_sync_system_error);
-                break;
-        }
-        if( NSString *const recovery = JournalRecoveryDescription(item_result->recovery_action) ) {
-            [message appendFormat:@"\nRecovery: %@", recovery];
-            title = @"Copy requires recovery";
+        if( presentation.attention_indices.empty() ) {
+            [message appendString:@"\nThe durable journal reports no successful terminal state for the operation as a "
+                                  @"whole. Inspect the destination before retrying."];
+            title = @"Copy requires reconciliation";
         }
     }
 

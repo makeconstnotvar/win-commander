@@ -285,6 +285,61 @@ assertions) in Debug and the same under Release ASAN and Release UBSAN; full `VF
 full `OperationsUT` 260/260 (6,414) on three seeds; `OperationsIT` 98 passed / 2 skipped (973);
 `WinCommanderUT` full run unchanged.
 
+## Application terminal presentation — DONE: several results are not a missing one
+
+The fourth consequence step C listed, and the last one named as standing between the engine and a
+producer. `CopyOperationDurableTerminalOutcome::SingleItemResult()` is a compatibility projection: it
+answers with nothing whenever the outcome carries other than exactly one result. The copy presenter
+read that nothing as *the durable journal has no terminal item result*, which is the sentence it says
+when a run must be reconciled by hand — so **a batch in which every item published would have been
+announced to the user as a copy that failed and needs recovery.**
+
+**The decision moved off that accessor into a pure classifier over the whole set**,
+`ClassifyDurableCopyOutcome`, tested without AppKit. What it decides, and why each rule is what it is:
+
+- **Cancellation is answered first and is never an alert** — the user asked for it, and saying so
+  again is noise. What a set changes is not the silence but the *refresh*: a batch stopped part-way
+  has legitimately published everything before the stop, and those files have to appear. A lone
+  cancelled item is always `NotPublished`, so the single-item behaviour is unchanged by construction
+  rather than by a special case.
+- **Success is the state and the items agreeing.** `Completed` is what says the entry accounts for
+  every source the plan named; an entry reporting a failure may legally omit the items behind it, so
+  all-published results under any other state describe a set that is not the whole set. That
+  combination is therefore not success — it is a terminal no item explains, which is its own answer.
+- **Only a lone publication is revealed.** Delayed focusing scrolls to one destination; a batch has
+  several and picking one would be a guess presented as an answer. The refresh alone is honest, and
+  the classifier is what says so rather than the presenter deciding case by case.
+- **The reconciliation sentence is kept for the terminal that has no item results at all** — the cold
+  abort, which genuinely cannot say what is on disk. Separating that from "several results" is
+  precisely what the single-item projection could not do, and it is the only half of the old answer
+  that was ever right.
+- **A cancelled item is never reported.** It is always `NotPublished`, so omitting it withholds
+  nothing about the disk — the same rule step C applied when it decided which results a wound-down
+  batch emits at all.
+
+Rendering stays in `CopyFile.mm` and one item still reads exactly as it always did: no count, no item
+heading, nothing that makes a single copy look like a batch of one. A set says how much of it landed
+before it says what went wrong with the rest, because *which files exist now* is the question the user
+actually has.
+
+Nothing user-visible changes today: `Copy As` is still the only producer of a reviewed plan and still
+builds a single source. This is the surface being made ready for a producer, which is the next slice
+and the first one a user could notice.
+
+### Verification
+
+Six new cases in `[reviewed-copy-as-app-boundary]`, all against the classifier rather than the alert:
+a completed batch reads as published — with `SingleItemResult()` pinned as answering nothing for it,
+so the reason the decision moved is recorded rather than described; a lone publication is revealed and
+several are not; a cancellation stays silent but refreshes for what it published, while a lone
+cancelled item refreshes for nothing; only the items that did not land are reported, with the ones
+that did counted; a refusal that touched nothing does not refresh, while an unconfirmable publication
+does; and the reconciliation answer is kept for the terminal with no item to read, alongside the state
+that disagrees with its own items. `reviewed CopyAs policy *` 17/17 (136 assertions); full
+`WinCommanderUT` 896/896 (12,185) in Debug, against a 890/890 (12,150) baseline. No sanitizer run: the
+slice is presentation, and the engine, transactions, journal and ownership are untouched
+(`AGENTS.md`, verification budget).
+
 ## What must not be given up
 
 - **One review, one authority per accepted item** — already enforced; the batch path must issue by

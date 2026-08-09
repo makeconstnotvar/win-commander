@@ -11,6 +11,7 @@
 #include <VFS/VFSListingInput.h>
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
 #include <WinCommander/Core/Operations/ReviewedCopyAsApplicationBoundary.h>
+#include <WinCommander/Core/Operations/ReviewedCopyTerminalPresentation.h>
 #include <WinCommander/States/FilePanels/Actions/CopyFile.h>
 
 #include <atomic>
@@ -44,6 +45,8 @@ using nc::ops::VFSBoundOperationPreflight;
 using nc::ops::VFSOperationPlanningBindings;
 using nc::ops::VFSOperationPlanningProbes;
 using nc::panel::actions::reviewed_copy_as::ApprovalResult;
+using nc::panel::actions::reviewed_copy_as::ClassifyDurableCopyOutcome;
+using nc::panel::actions::reviewed_copy_as::DurableCopyOutcomeKind;
 using nc::panel::actions::reviewed_copy_as::PreparationErrorCode;
 using nc::panel::actions::reviewed_copy_as::PreparedReview;
 using nc::panel::actions::reviewed_copy_as::PrepareReviewedCopyApplicationBoundary;
@@ -167,6 +170,52 @@ PreparedReview::SubmissionPort CountingSubmissionPort(int &_submissions)
                                   std::shared_ptr<nc::core::OperationSubmissionGate::Ticket>,
                                   nc::ops::CopyOperationSubmissionHooks,
                                   std::shared_ptr<std::atomic_bool>) { ++_submissions; },
+    };
+}
+
+nc::ops::OperationJournalItemResult PublishedItem(const size_t _index)
+{
+    return {
+        .item_index = _index,
+        .status = nc::ops::OperationJournalItemStatus::Succeeded,
+        .error = nc::ops::OperationJournalItemError::None,
+        .destination_publication = nc::ops::OperationJournalPublicationState::Published,
+        .filesystem_sync_status = nc::ops::OperationJournalFilesystemSyncStatus::Confirmed,
+    };
+}
+
+nc::ops::OperationJournalItemResult FailedItem(const size_t _index,
+                                               const nc::ops::OperationJournalItemError _error,
+                                               const nc::ops::OperationJournalPublicationState _publication =
+                                                   nc::ops::OperationJournalPublicationState::NotPublished)
+{
+    return {
+        .item_index = _index,
+        .status = nc::ops::OperationJournalItemStatus::Failed,
+        .error = _error,
+        .system_error = ESTALE,
+        .destination_publication = _publication,
+    };
+}
+
+nc::ops::OperationJournalItemResult CancelledItem(const size_t _index)
+{
+    return {
+        .item_index = _index,
+        .status = nc::ops::OperationJournalItemStatus::Cancelled,
+        .error = nc::ops::OperationJournalItemError::Cancelled,
+        .destination_publication = nc::ops::OperationJournalPublicationState::NotPublished,
+    };
+}
+
+nc::ops::CopyOperationDurableTerminalOutcome Outcome(const nc::ops::OperationJournalState _state,
+                                                     std::vector<nc::ops::OperationJournalItemResult> _results)
+{
+    return {
+        .plan_id = "plan",
+        .state = _state,
+        .item_results = std::move(_results),
+        .confirmation = nc::ops::CopyOperationDurableTerminalConfirmation::Finalized,
     };
 }
 
@@ -501,4 +550,114 @@ TEST_CASE(PREFIX "app boundary dispatches one owning durable failure before non-
         CHECK(evidence->events ==
               std::vector<std::string>{"pool-finalizer", "ui-dispatch", "pool-removal", "durable-presentation"});
     }
+}
+
+TEST_CASE(PREFIX "reads a completed batch as published rather than as a run needing reconciliation",
+          "[reviewed-copy-as-app-boundary]")
+{
+    const auto outcome = Outcome(nc::ops::OperationJournalState::Completed, {PublishedItem(0), PublishedItem(1)});
+    // The compatibility projection this classifier replaces answers with nothing here, and the
+    // presenter read that nothing as "the journal has no terminal item result" - the sentence it says
+    // when a run has to be reconciled by hand. Pinned rather than described: it is the whole reason
+    // the decision moved off that accessor.
+    CHECK(outcome.SingleItemResult() == nullptr);
+
+    const auto presentation = ClassifyDurableCopyOutcome(outcome);
+    CHECK(presentation.kind == DurableCopyOutcomeKind::Published);
+    CHECK(presentation.refresh_panel);
+    CHECK(presentation.published_items == 2);
+    CHECK(presentation.total_items == 2);
+    CHECK(presentation.attention_indices.empty());
+    CHECK_FALSE(presentation.without_item_results);
+}
+
+TEST_CASE(PREFIX "reveals a lone publication and refuses to guess which of several to reveal",
+          "[reviewed-copy-as-app-boundary]")
+{
+    const auto single =
+        ClassifyDurableCopyOutcome(Outcome(nc::ops::OperationJournalState::Completed, {PublishedItem(0)}));
+    CHECK(single.kind == DurableCopyOutcomeKind::Published);
+    CHECK(single.focus_single_publication);
+
+    // A batch has no one destination to scroll to, and picking one of several would be a guess
+    // presented as an answer. The refresh alone is what can be said honestly.
+    const auto batch = ClassifyDurableCopyOutcome(
+        Outcome(nc::ops::OperationJournalState::Completed, {PublishedItem(0), PublishedItem(1)}));
+    CHECK(batch.kind == DurableCopyOutcomeKind::Published);
+    CHECK_FALSE(batch.focus_single_publication);
+}
+
+TEST_CASE(PREFIX "says nothing about a cancellation but shows what it published before stopping",
+          "[reviewed-copy-as-app-boundary]")
+{
+    // A cancellation is an answer the user already has, so it is never an alert. What a set changes
+    // is the refresh: a batch stopped part-way published everything before the stop, legitimately,
+    // and those files have to appear.
+    const auto partial = ClassifyDurableCopyOutcome(
+        Outcome(nc::ops::OperationJournalState::Cancelled, {PublishedItem(0), CancelledItem(1)}));
+    CHECK(partial.kind == DurableCopyOutcomeKind::Silent);
+    CHECK(partial.refresh_panel);
+    CHECK(partial.published_items == 1);
+    CHECK(partial.attention_indices.empty());
+
+    // One cancelled item is always NotPublished, so the single-item behaviour is unchanged: silent,
+    // and nothing to refresh for.
+    const auto lone =
+        ClassifyDurableCopyOutcome(Outcome(nc::ops::OperationJournalState::Cancelled, {CancelledItem(0)}));
+    CHECK(lone.kind == DurableCopyOutcomeKind::Silent);
+    CHECK_FALSE(lone.refresh_panel);
+}
+
+TEST_CASE(PREFIX "reports only the items that did not land, and counts the ones that did",
+          "[reviewed-copy-as-app-boundary]")
+{
+    const auto presentation = ClassifyDurableCopyOutcome(
+        Outcome(nc::ops::OperationJournalState::Failed,
+                {PublishedItem(0), FailedItem(1, nc::ops::OperationJournalItemError::DestinationChanged)}));
+    CHECK(presentation.kind == DurableCopyOutcomeKind::Attention);
+    CHECK(presentation.refresh_panel);
+    CHECK(presentation.published_items == 1);
+    CHECK(presentation.total_items == 2);
+    CHECK(presentation.attention_indices == std::vector<size_t>{1});
+}
+
+TEST_CASE(PREFIX "still refreshes for a failure that cannot rule the destination out",
+          "[reviewed-copy-as-app-boundary]")
+{
+    // Every item refused before touching anything: nothing can exist that the panel is not showing,
+    // so there is nothing to refresh for. An unconfirmable publication is the opposite case.
+    const auto refused = ClassifyDurableCopyOutcome(Outcome(
+        nc::ops::OperationJournalState::Failed, {FailedItem(0, nc::ops::OperationJournalItemError::SourceChanged)}));
+    CHECK(refused.kind == DurableCopyOutcomeKind::Attention);
+    CHECK_FALSE(refused.refresh_panel);
+    CHECK(refused.attention_indices == std::vector<size_t>{0});
+
+    const auto uncertain = ClassifyDurableCopyOutcome(Outcome(
+        nc::ops::OperationJournalState::Failed,
+        {FailedItem(
+            0, nc::ops::OperationJournalItemError::Commit, nc::ops::OperationJournalPublicationState::Unknown)}));
+    CHECK(uncertain.refresh_panel);
+}
+
+TEST_CASE(PREFIX "keeps the reconciliation answer for the terminal that has no item to read",
+          "[reviewed-copy-as-app-boundary]")
+{
+    // The cold abort: an outcome carrying no result at all cannot say what is on disk. This is the
+    // only case that still deserves the reconciliation sentence, and separating it from "several
+    // results" is exactly what the old single-item projection could not do.
+    const auto empty = ClassifyDurableCopyOutcome(Outcome(nc::ops::OperationJournalState::Failed, {}));
+    CHECK(empty.kind == DurableCopyOutcomeKind::Attention);
+    CHECK(empty.without_item_results);
+    CHECK(empty.refresh_panel);
+    CHECK(empty.total_items == 0);
+    CHECK(empty.attention_indices.empty());
+
+    // A state that disagrees with its own items is not success and must not be silent either: no
+    // item explains it, so the operation as a whole is what needs inspecting.
+    const auto disagreeing = ClassifyDurableCopyOutcome(
+        Outcome(nc::ops::OperationJournalState::Failed, {PublishedItem(0), PublishedItem(1)}));
+    CHECK(disagreeing.kind == DurableCopyOutcomeKind::Attention);
+    CHECK_FALSE(disagreeing.without_item_results);
+    CHECK(disagreeing.attention_indices.empty());
+    CHECK(disagreeing.published_items == 2);
 }
