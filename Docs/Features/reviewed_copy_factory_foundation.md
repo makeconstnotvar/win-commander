@@ -107,3 +107,30 @@ The existing test that pinned "batch" was pinning the multiple-sources case all 
 ### Coverage gap
 
 **The factory still does not loop.** Validating N items, building N transactions, and producing an execution product that journals N results is the remaining work, and it needs a new operation type: `ProviderConditionalCopyOperationFactory::Create` takes exactly one transaction, and there is no composition of operations in this module to build on. That is design work rather than a loop, which is why it is named here rather than attempted in passing.
+
+## Slice 2, step B: prepared as a set, committed to as a set
+
+The factory now loops `prepare_item` over every accepted item and holds the prepared transactions together. If any item refuses, the whole set is abandoned **before** the error is returned: a half-prepared batch that returns while holding open transactions leaves temporary state on disk that nothing owns.
+
+### The rollback is not what prevents a leak — it is what makes the answer readable
+
+A transaction aborts itself when it is destroyed, so dropping the vector already undoes them. What that loses is the abort *result*, and the single case worth having is exactly the one silence hides: an abort that cannot confirm `NotPublished`. So the rollback aborts explicitly, in reverse order — the transaction begun last is undone first, so the provider unwinds in the order it built the state up — and it reports the item whose undoing it could not confirm.
+
+### An unconfirmed rollback outranks the reason for it
+
+`StaleSource` tells the user the world moved and **nothing was done**. An abort that cannot say `NotPublished` does not support the second half of that, so the answer becomes `ConditionalCommitAuthorityUnavailable` carrying the destination that may or may not exist. Answering with the original reason would leave a possible file behind an error stating there is none — and this is the same rule the cold-abort path already applies at the application blocker, reached here from the other side.
+
+### Cancellation is checked after preparation, before handing over
+
+An operation built after a cancellation would carry open transactions into the Pool only to abort them, so the user would be told "cancelled" after the Pool had taken ownership of work nobody wants. That is reason enough on its own, and it has a second effect: it is the **first failure that can happen with a transaction already begun** — beginning one is the last thing preparing an item does — which is what gives the rollback a reachable path today instead of leaving it dead until the several-sources gate comes down.
+
+### Step A's outstanding debt, closed here
+
+An item's structural source is matched against whichever entry of `plan.Sources()` names it, rather than against `Sources().front()`. The lookup is deliberately **not** positional: `PlanSource` drops a source whose destination already exists under a `Skip` policy, so the report can be shorter than the plan and accepted item *i* need not come from source *i*. Pairing by index would refuse a sound report as readily as it accepted a mismatched one. With one source the two formulations are the same check, which is why every existing case pins it unchanged.
+
+### Verification
+
+- `OperationsUT` (Debug), `OperationsUT` under **Release ASAN** and **Release UBSAN**, `OperationsIT` and `WinCommanderUT` — all **BUILD SUCCEEDED**.
+- New `OperationsUT` cases: **2/2** — a confirmed rollback leaves the reason for it standing (`Cancelled`, one abort, nothing published); an unconfirmed one outranks it (`ConditionalCommitAuthorityUnavailable` naming the destination).
+- `ReviewedOperationFactory:` **12/12, 283 assertions** in Debug, and the same 12/283 under **Release ASAN** and **Release UBSAN** with no diagnostics.
+- Full `OperationsUT`: **245/245, 6,094 assertions**. Full `OperationsIT`: **98 passed, 2 skipped, 973/973 assertions** — the physical two-volume fixture remains the recorded skip. Full `WinCommanderUT`: **890/890, 12,150 assertions**, unchanged from the recorded baseline.

@@ -44,14 +44,37 @@ index passed in. No behaviour change; the existing 8 cases and 225 assertions pi
 The two `_direct_access_checker` / `_source_open_at` seams must be passed through, since the tests
 drive failure paths through them.
 
-**Step B — prepare all items, then commit to none of them.**
+**Step B — DONE: prepare all items, then commit to none of them.** The factory loops `prepare_item`
+over `report.items`, collects the prepared transactions, and abandons the whole set before returning
+any failure. Three things were decided while writing it:
+
+- **What the rollback adds is not the absence of a leak — it is a readable answer.** A transaction
+  aborts itself when destroyed, so dropping the vector would already undo them. What that discards is
+  the abort *result*, and the one case worth having is precisely the one it hides: an abort that
+  cannot confirm `NotPublished`. So the rollback aborts explicitly, in reverse order — last begun,
+  first undone — and reports the item it could not confirm.
+- **An unconfirmed rollback outranks the reason for it.** `StaleSource` tells the user the world moved
+  and nothing was done. An abort that cannot say `NotPublished` does not support the second half of
+  that, so the answer becomes `ConditionalCommitAuthorityUnavailable` carrying the destination that
+  may or may not exist. Reporting the original reason would hide a possible file behind an error
+  saying there is none. Same rule the cold-abort path already applied at the blocker.
+- **Cancellation is now checked after preparation, before handing over.** It is the first failure that
+  can occur with a transaction already begun — the note below is why there was none before — so it is
+  what makes the rollback reachable rather than dead code waiting for step D. It is also right on its
+  own terms: an operation built after a cancellation would carry open transactions into the Pool only
+  to abort them, telling the user "cancelled" after the Pool had taken ownership of unwanted work.
+
+Step A's outstanding debt was closed here as well: an item's structural source is matched against
+whichever entry of `plan.Sources()` names it, not against `front()`. See step D for why that lookup is
+deliberately not positional.
 
 > Visible only now that step A exists: `prepare_item` **cannot leak a transaction today**. Beginning
 > the transaction is its last action, so every failure path returns before one exists. The
 > all-or-nothing rollback requirement therefore belongs entirely to step B — it is introduced by the
 > loop, not inherited from step A. Worth knowing, so the next reader does not go looking for a leak
 > that is not there, and does not assume the loop is safe because step A was.
- Loop step A over `report.items`. If any
+
+The original description follows, for the steps still to come. Loop step A over `report.items`. If any
 item fails, **every already-begun transaction must be rolled back before returning**. This is the
 decision that makes the slice non-trivial: a half-prepared batch that returns an error while holding
 open transactions leaves temporary state on disk that nothing owns. Preparation must therefore be
@@ -79,6 +102,15 @@ So step D lifts the several-sources gate, and step A's per-item extraction has t
 gate was protecting: **each item's structural source must be matched against its own entry in
 `plan.Sources()`**, not against `Sources().front()` as the single-item path does. That check is part
 of step A, not something to bolt on afterwards.
+
+**Done in step B, and not the way this paragraph assumed.** "Its own entry" cannot mean "the entry at
+its own index": `OperationPlanner::PlanSource` returns without emplacing an item when a source's
+destination already exists under a `Skip` policy — which the factory accepts — so the report can be
+shorter than the plan and every later index off by one. The match is therefore a lookup: the item's
+source must be named by *some* entry of `plan.Sources()`. That is weaker than a bijection, and step D
+should decide whether it wants one — two accepted items naming the same source would each need their
+own destination, and identical destinations are what the review and `DestinationExists` already
+refuse, so the weaker check may well be enough. Worth deciding rather than inheriting.
 
 Confirm before building on this: whether any planner path produces several accepted items from one
 source. If one does, `BatchUnsupported` becomes reachable and both gates need lifting; if none does,

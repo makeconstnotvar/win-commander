@@ -786,6 +786,82 @@ TEST_CASE(PREFIX "opens a raced source leaf without blocking and checks cancella
     }
 }
 
+TEST_CASE(PREFIX "rolls a prepared batch back instead of handing over transactions nobody will run",
+          "[reviewed-operation-factory]")
+{
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    const auto destination = destination_directory / source.filename();
+    std::filesystem::create_directory(destination_directory);
+    ReviewedWriteFile(source, "reviewed payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+
+    // Cancelling once the transaction exists is the first failure the factory can meet holding a
+    // prepared item: beginning the transaction is the last thing preparing one does, so before this
+    // there was never anything a rollback could be asked to undo.
+    const auto cancel_once_the_transaction_exists = [](bool &_began,
+                                                       int *_abort_calls,
+                                                       nc::vfs::ProviderConditionalCopyPublicationState _publication) {
+        return [&_began, _abort_calls, _publication](
+                   nc::vfs::ProviderConditionalCopyReviewedAuthority _authority,
+                   const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) {
+            auto transaction = ReviewedStrongConditionalCommitTransaction(_abort_calls, _publication)(
+                std::move(_authority), _cancel_checker);
+            _began = true;
+            return transaction;
+        };
+    };
+
+    SECTION("a confirmed rollback leaves the reason for it standing")
+    {
+        auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source.native()}},
+                                                        destination_directory.native(),
+                                                        OperationPlanDestinationKind::Directory),
+                                       probes);
+        bool began = false;
+        int abort_calls = 0;
+        const auto operation = ReviewedOperationFactoryTestAccess::Create(
+            std::move(reviewed),
+            cancel_once_the_transaction_exists(
+                began, &abort_calls, nc::vfs::ProviderConditionalCopyPublicationState::NotPublished),
+            [&began] { return began; });
+
+        REQUIRE_FALSE(operation);
+        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::Cancelled);
+        CHECK_FALSE(operation.error().path);
+        CHECK(abort_calls == 1);
+        CHECK_FALSE(std::filesystem::exists(destination));
+    }
+
+    SECTION("a rollback that cannot confirm non-publication outranks the reason for it")
+    {
+        // Cancelled would tell the user the world was left as it was found. An abort that cannot say
+        // NotPublished cannot support the second half of that, so the answer becomes the one about
+        // authority - and it names the destination that may or may not exist.
+        auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source.native()}},
+                                                        destination_directory.native(),
+                                                        OperationPlanDestinationKind::Directory),
+                                       probes);
+        bool began = false;
+        int abort_calls = 0;
+        const auto operation = ReviewedOperationFactoryTestAccess::Create(
+            std::move(reviewed),
+            cancel_once_the_transaction_exists(
+                began, &abort_calls, nc::vfs::ProviderConditionalCopyPublicationState::Unknown),
+            [&began] { return began; });
+
+        REQUIRE_FALSE(operation);
+        CHECK(operation.error().code ==
+              ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+        REQUIRE(operation.error().path);
+        CHECK(*operation.error().path == OperationPlanningPath{"local", destination.native()});
+        CHECK(abort_calls == 1);
+    }
+}
+
 } // namespace nc::ops
 
 #undef PREFIX

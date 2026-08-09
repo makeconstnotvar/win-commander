@@ -423,8 +423,10 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         struct PreparedItem {
             std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction> transaction;
             std::shared_ptr<nc::vfs::Host> source_host;
-            std::string source_path;
-            std::string destination_path;
+            // The planning paths, not bare strings: a rollback has to be able to name the item whose
+            // undoing it could not confirm, and a path without its provider does not identify one.
+            OperationPlanningPath source;
+            OperationPlanningPath destination;
             uint64_t exact_source_bytes = 0;
         };
         const auto prepare_item =
@@ -459,9 +461,19 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             const std::string expected_destination = destination.Kind() == OperationPlanDestinationKind::Directory
                                                          ? ReviewedFactoryJoinPath(*destination_root, source_parts->second)
                                                          : *destination_root;
-            const auto structural_source_path = ReviewedFactoryCanonicalPlanPath(plan.Sources().front().AbsolutePath());
-            if( !structural_source_path || item.source.provider_id != plan.Sources().front().ProviderId().Value() ||
-                *source_path != *structural_source_path ||
+            // Matched against whichever plan source names this item, not against the first one. With a
+            // single source the two are the same check; with several they are not, and the difference is
+            // deliberately not positional: nothing at this layer promises that accepted item i came from
+            // source i, so pairing by index would refuse a sound report as readily as it accepted a
+            // mismatched one. What the check owes the caller is that every executed item traces back to
+            // something the plan actually named - which is what the several-sources gate protects today,
+            // and what has to keep holding once that gate comes down.
+            const auto names_this_item = [&](const OperationPlanSource &_source) {
+                const auto candidate = ReviewedFactoryCanonicalPlanPath(_source.AbsolutePath());
+                return candidate && *candidate == *source_path &&
+                       item.source.provider_id == _source.ProviderId().Value();
+            };
+            if( std::ranges::none_of(plan.Sources(), names_this_item) ||
                 item.destination.provider_id != destination.ProviderId().Value() ||
                 *destination_path != expected_destination ) {
                 return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
@@ -673,9 +685,10 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             const OperationPlanningPath source_error_path = item.source;
             const OperationPlanningPath destination_error_path = item.destination;
             const uint64_t exact_source_bytes = source_snapshot->evidence.native_version->byte_size;
-            // Index 0 because this path still handles exactly one accepted item; the batch gate above is
-            // what keeps that true, and lifting it is what the per-item issue exists for.
-            auto reviewed_authority = sealed.IssueAuthorityForItem(0, std::move(reviewed_claims));
+            // The item's own index, so that one review yields one authority per accepted item and each
+            // authority is tied to the item it was reviewed for. Counting to N would make the second
+            // guarantee arithmetic; this keeps it a matter of identity.
+            auto reviewed_authority = sealed.IssueAuthorityForItem(_index, std::move(reviewed_claims));
             if( !reviewed_authority ) {
                 return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
             }
@@ -721,31 +734,83 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
 
             return PreparedItem{.transaction = std::move(*transaction),
                                 .source_host = source_host,
-                                .source_path = item.source.absolute_path,
-                                .destination_path = item.destination.absolute_path,
+                                .source = source_error_path,
+                                .destination = destination_error_path,
                                 .exact_source_bytes = exact_source_bytes};
         };
 
-        // Called once: the batch gate above still admits exactly one accepted item. Lifting that
-        // gate is now a loop over this, not a rewrite of it.
-        auto prepared = prepare_item(0);
-        if( !prepared )
-            return std::unexpected(prepared.error());
+        std::vector<PreparedItem> prepared;
+        prepared.reserve(report.items.size());
 
+        // Rolls the batch back and reports whether it can still be said that nothing was published.
+        // Not what keeps the transactions from leaking - each one aborts itself when destroyed - but
+        // what lets the answer be *read*, which a discarded abort result is exactly what hides.
+        const auto abandon_prepared = [&prepared]() -> std::optional<OperationPlanningPath> {
+            std::optional<OperationPlanningPath> uncertain;
+            // In reverse: the transaction begun last is undone first, so the provider unwinds in the
+            // order it built the state up.
+            for( auto item = prepared.rbegin(); item != prepared.rend(); ++item ) {
+                if( !item->transaction )
+                    continue;
+                const auto result = item->transaction->Abort();
+                if( result.publication != nc::vfs::ProviderConditionalCopyPublicationState::NotPublished )
+                    uncertain = item->destination;
+            }
+            prepared.clear();
+            return uncertain;
+        };
+
+        // Abandoning answers with the reason it was abandoned for - unless the rollback itself could
+        // not confirm that nothing was published, because then the reason claims more than is known.
+        // `StaleSource` tells the user the world moved and nothing was done; an abort that cannot say
+        // NotPublished cannot support the second half of that, and reporting it anyway would leave a
+        // destination that may exist behind an error that says none does.
+        const auto abandon_with = [&](ReviewedOperationFactoryError _reason) {
+            auto uncertain = abandon_prepared();
+            if( !uncertain )
+                return _reason;
+            return ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable,
+                                          std::move(*uncertain));
+        };
+
+        // Prepared as a set, committed to as a set. Every item's evidence is checked before any item
+        // executes: checking as it goes would let the first item's copy happen and the third item's
+        // staleness be discovered afterwards, with nothing left to refuse.
+        for( size_t index = 0; index != report.items.size(); ++index ) {
+            auto item = prepare_item(index);
+            if( !item )
+                return std::unexpected(abandon_with(std::move(item.error())));
+            prepared.emplace_back(std::move(*item));
+        }
+
+        // Prepared but not yet handed over - the last moment at which cancelling still costs nothing.
+        // An operation built from here would carry open transactions into the Pool only to abort them,
+        // so the user would be told "cancelled" after the Pool had taken ownership of work nobody
+        // wants. It is also the first failure that can happen with a transaction already begun:
+        // beginning one is the last thing preparing an item does, so until this check the rollback
+        // above had nothing it could ever be asked to undo.
+        if( is_cancelled() )
+            return std::unexpected(abandon_with(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::Cancelled)));
+
+        // Still one operation from one prepared item: the several-sources gate above is what keeps the
+        // set that size, and what the operation cannot yet do is own several transactions at once.
+        PreparedItem &first = prepared.front();
         auto product =
-            ProviderConditionalCopyOperationFactory::Create(std::move(prepared->transaction),
+            ProviderConditionalCopyOperationFactory::Create(std::move(first.transaction),
                                                             ProviderConditionalCopyJournalContext{
                                                                 .item_index = 0,
-                                                                .exact_source_bytes = prepared->exact_source_bytes,
+                                                                .exact_source_bytes = first.exact_source_bytes,
                                                             },
                                                             ProviderConditionalCopyOperationPresentation{
-                                                                .source_host = prepared->source_host,
-                                                                .source_path = prepared->source_path,
-                                                                .destination_path = prepared->destination_path,
+                                                                .source_host = first.source_host,
+                                                                .source_path = first.source.absolute_path,
+                                                                .destination_path = first.destination.absolute_path,
                                                             },
                                                             std::move(is_cancelled));
-        if( !product )
-            return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed));
+        if( !product ) {
+            return std::unexpected(
+                abandon_with(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed)));
+        }
         return std::move(*product);
     } catch( ... ) {
         return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed));
