@@ -324,6 +324,31 @@ Being in a container is asked first and on its own. Everything else is meaningle
 - New `WinCommanderUT 'nc::core::ProbeNativeCloudItem*'`: **2/2 cases, 12 assertions**.
 - Full `WinCommanderUT --rng-seed 424242`: **880/880 cases, 12,090 assertions**.
 
+### Coverage gap after the probe
+
+**Nothing called it from a listing** — closed below.
+
+---
+
+# CL-3: from a native listing to Gallery items
+
+Two decisions carry the weight.
+
+**A placeholder's name is unmasked before anything reads its extension.** A not-yet-downloaded photograph is on disk as `.holiday.jpg.icloud`. Taken at face value its extension is `icloud`, Gallery decides it is not media at all, and **the one row the user most wants to see silently vanishes from the view** — the worst outcome available, because nothing is wrong on screen and nothing says anything is missing. The name shown is the unmasked one; the name probed is the one on disk, which is what actually exists there.
+
+**Directories are not probed.** A folder is a folder to Gallery whatever its sync state, so asking would spend a filesystem call per row to learn something nothing reads.
+
+Extensions are read the way the rest of the application reads them, including that a leading dot starts a hidden name rather than an extension: `.profile` has none. Treating `profile` as one would put dotfiles in front of every extension-driven rule.
+
+The items hold views into the source's own strings, so copying is deleted and moving is not: a moved vector keeps its buffer, and the views stay valid.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::BuildGalleryListing*'`: **6/6 cases, 32 assertions** — a placeholder unmasked, probed under its on-disk name, and followed **all the way through `BuildGalleryContents` to a placeholder row** rather than a missing one; directories not probed; five extension shapes including the dotfile; the parent entry marked so nothing counts it as content; views surviving a move; and an empty listing and an absent prober both answered honestly.
+- The same suite under **ASAN**, which is what would catch a view outliving its string.
+- Full `WinCommanderUT --rng-seed 424242`: **886/886 cases, 12,122 assertions**.
+
 ### Coverage gap
 
-**Nothing calls the probe from a listing yet**, and the Explorer still does not host the Gallery. Those two are what remain.
+**The Explorer still does not host the Gallery.** Every piece it needs — contents, thumbnails, cloud state, and now a listing to build them from — is connected; what is missing is the mode switch that puts it on screen.
