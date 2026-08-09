@@ -4,6 +4,10 @@
 #include <Utility/StringExtras.h>
 #include <Utility/ObjCpp.h>
 
+#include <QuickLookThumbnailing/QuickLookThumbnailing.h>
+
+#include <memory>
+#include <utility>
 #include <vector>
 
 using nc::core::GalleryContents;
@@ -14,6 +18,8 @@ using nc::core::GalleryRow;
 /** One tile: an image and its filename. */
 @interface NCGalleryItem : NSCollectionViewItem
 - (void)applyRow:(const GalleryRow &)_row;
+/** Replaces the symbol with the real picture, once there is one. */
+- (void)applyThumbnail:(NSImage *)_image;
 @end
 
 @implementation NCGalleryItem {
@@ -73,6 +79,14 @@ using nc::core::GalleryRow;
     m_Label.accessibilityElement = NO;
 }
 
+- (void)applyThumbnail:(NSImage *)_image
+{
+    if( _image == nil )
+        return;
+    m_Image.image = _image;
+    m_Image.alphaValue = 1.0;
+}
+
 @end
 
 @interface NCGalleryView () <NSCollectionViewDataSource>
@@ -83,7 +97,14 @@ using nc::core::GalleryRow;
     NSScrollView *m_Scroll;
     NSTextField *m_Empty;
     std::vector<GalleryRow> m_Rows;
+    std::string m_Directory;
+    std::unique_ptr<nc::core::GalleryThumbnailCache> m_Thumbnails;
+    nc::core::GalleryThumbnailCache::Generator m_Generator;
+    std::function<void(std::function<void()>)> m_Scheduler;
 }
+
+@synthesize thumbnailGenerator = m_Generator;
+@synthesize thumbnailScheduler = m_Scheduler;
 
 - (instancetype)initWithFrame:(NSRect)_frame
 {
@@ -122,14 +143,64 @@ using nc::core::GalleryRow;
             [m_Empty.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
         ]];
 
+        m_Generator = [](const std::string &_path) -> nc::core::GalleryThumbnailCache::Thumbnail {
+            NSURL *const url = [NSURL fileURLWithPath:[NSString stringWithUTF8StdString:_path]];
+            QLThumbnailGenerationRequest *const request =
+                [[QLThumbnailGenerationRequest alloc] initWithFileAtURL:url
+                                                                   size:NSMakeSize(256, 256)
+                                                                  scale:2.0
+                                                    representationTypes:QLThumbnailGenerationRequestRepresentationTypeThumbnail];
+            // Asked for synchronously because this already runs off the drawing thread, on a queue
+            // whose whole purpose is to wait for this. The bounded wait is what stops one unreadable
+            // file from holding that queue indefinitely.
+            __block NSImage *produced = nil;
+            dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+            [QLThumbnailGenerator.sharedGenerator
+                generateBestRepresentationForRequest:request
+                                   completionHandler:^(QLThumbnailRepresentation *_representation, NSError *) {
+                                     produced = _representation.NSImage;
+                                     dispatch_semaphore_signal(finished);
+                                   }];
+            if( dispatch_semaphore_wait(finished, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) != 0 )
+                return {};
+            if( produced == nil )
+                return {};
+            // The image is kept alive by the shared_ptr the cache holds; the deleter is what hands it
+            // back to ARC when the cache evicts it.
+            auto *const retained = (__bridge_retained void *)produced;
+            return nc::core::GalleryThumbnailCache::Thumbnail{retained, [](void *_image) {
+                                                                  if( _image != nullptr )
+                                                                      CFRelease(_image);
+                                                              }};
+        };
+
+        m_Scheduler = [](std::function<void()> _work) {
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), [_work = std::move(_work)] { _work(); });
+        };
+        m_Thumbnails = std::make_unique<nc::core::GalleryThumbnailCache>(
+            [self](const std::string &_path) -> nc::core::GalleryThumbnailCache::Thumbnail {
+                return m_Generator ? m_Generator(_path) : nc::core::GalleryThumbnailCache::Thumbnail{};
+            });
+
         self.accessibilityIdentifier = @"wincommander.explorer.gallery";
         self.accessibilityLabel = NSLocalizedString(@"Gallery", "Accessibility label for the Gallery view");
     }
     return self;
 }
 
-- (void)applyContents:(const GalleryContents &)_contents
+- (const nc::core::GalleryThumbnailCache &)thumbnailCache
 {
+    return *m_Thumbnails;
+}
+
+- (void)applyContents:(const GalleryContents &)_contents inDirectory:(const std::string &)_directory
+{
+    // A different folder's thumbnails apply to nothing here, and keeping them would spend memory on
+    // a folder nobody is looking at.
+    if( _directory != m_Directory ) {
+        m_Directory = _directory;
+        m_Thumbnails->Clear();
+    }
     m_Rows = _contents.rows;
     [m_Collection reloadData];
 
@@ -153,6 +224,47 @@ using nc::core::GalleryRow;
     // Announced rather than merely drawn: an empty view that says nothing to a screen reader is
     // indistinguishable from one that failed to load.
     m_Empty.accessibilityElement = empty;
+
+    [self generatePendingThumbnails];
+}
+
+- (void)generatePendingThumbnails
+{
+    for( const GalleryRow &row : m_Rows ) {
+        const std::string path = m_Directory.empty() ? row.filename : m_Directory + "/" + row.filename;
+        // Recorded here and not scheduled: a cloud-only row costs nothing to answer, and the answer
+        // is the point - `Withheld` is what lets a tile say why it has no picture, instead of
+        // looking like a thumbnail that has not arrived yet.
+        if( row.eligibility == GalleryEligibility::PlaceholderOnly ) {
+            m_Thumbnails->Generate(row, path);
+            continue;
+        }
+        // Asked before scheduling: a row already answered is not asked again, so a redraw costs
+        // nothing rather than re-running the whole folder.
+        if( !m_Thumbnails->NeedsGeneration(row, path) )
+            continue;
+        __weak NCGalleryView *weak_self = self;
+        m_Scheduler([weak_self, row, path] {
+            NCGalleryView *const strong_self = weak_self;
+            if( strong_self == nil )
+                return;
+            [strong_self generateThumbnailForRow:row atPath:path];
+        });
+    }
+}
+
+- (void)generateThumbnailForRow:(const GalleryRow &)_row atPath:(const std::string &)_path
+{
+    m_Thumbnails->Generate(_row, _path);
+    // Redrawn on the main thread once the answer exists. Generation ran wherever the scheduler put
+    // it, and touching a view from there is not something to leave to chance.
+    __weak NCGalleryView *weak_self = self;
+    const std::string path = _path;
+    dispatch_async(dispatch_get_main_queue(), [weak_self, path] {
+        NCGalleryView *const strong_self = weak_self;
+        if( strong_self != nil && strong_self->m_Thumbnails->Known(path) != nullptr )
+            [strong_self->m_Collection reloadData];
+    });
 }
 
 - (NSInteger)drawnItemCount
@@ -176,8 +288,13 @@ using nc::core::GalleryRow;
 {
     NSCollectionViewItem *const item = [_view makeItemWithIdentifier:@"item" forIndexPath:_path];
     const auto index = static_cast<size_t>(_path.item);
-    if( auto *const gallery_item = nc::objc_cast<NCGalleryItem>(item); gallery_item && index < m_Rows.size() )
-        [gallery_item applyRow:m_Rows[index]];
+    if( auto *const gallery_item = nc::objc_cast<NCGalleryItem>(item); gallery_item && index < m_Rows.size() ) {
+        const GalleryRow &row = m_Rows[index];
+        [gallery_item applyRow:row];
+        const std::string path = m_Directory.empty() ? row.filename : m_Directory + "/" + row.filename;
+        if( const auto thumbnail = m_Thumbnails->Known(path) )
+            [gallery_item applyThumbnail:(__bridge NSImage *)thumbnail.get()];
+    }
     return item;
 }
 

@@ -244,6 +244,43 @@ A dropped entry is generated again if it comes back into view, and a folder chan
 - The same suite under **TSan** — the cache is read from the drawing thread while a worker writes it.
 - Full `WinCommanderUT --rng-seed 424242`: **871/871 cases, 12,052 assertions**.
 
+### Coverage gap at GL-4
+
+**Nothing drove it, and no real generator was wired** — closed by GL-5 below.
+
+---
+
+# GL-5: the pipeline, connected
+
+The view now owns the cache, generates through it, and draws what comes back.
+
+## The placeholder is answered without being scheduled
+
+A cloud-only row costs nothing to answer, and the answer is the point: `Withheld` is what lets a tile say why it has no picture instead of looking like a thumbnail that has not arrived yet. It is recorded inline and no work is queued for it — which is also the enforcement point for the rule that Gallery must not trigger a download.
+
+A test caught this: the first version only called into the cache for rows that *needed generating*, so the placeholder was never recorded at all and stayed indistinguishable from a photo still loading.
+
+## Generation runs where the caller puts it; drawing runs on the main thread
+
+The scheduler is a parameter, defaulting to a utility queue. That is what makes the pipeline testable — a test passes one that runs inline, so the result is there to assert on rather than raced against — and it keeps the choice of queue out of the view. The redraw that follows is dispatched to the main thread explicitly: generation ran wherever the scheduler put it, and touching a view from there is not something to leave to chance.
+
+## The real generator waits, with a bound
+
+QuickLook answers asynchronously, and this already runs on a queue whose whole purpose is to wait for it, so it waits — with a ten-second ceiling, because one unreadable file must not hold that queue indefinitely. A timeout returns nothing, which the cache records as a failure and never retries.
+
+The produced image is handed to the cache as a `shared_ptr` whose deleter returns it to ARC, so eviction releases it rather than leaking it.
+
+## Changing folder drops the previous folder's thumbnails
+
+They apply to nothing here, and keeping them would spend memory on a folder nobody is looking at.
+
+## Verification
+
+- `WinCommanderUT`, `WinCommanderIT` and `WinCommander-Unsigned` — all **BUILD SUCCEEDED**.
+- `WinCommanderUT 'NCGalleryView*'`: **5/5 cases, 22 assertions** — including generation asked for exactly the one eligible row, the placeholder recorded as withheld and never generated for, a re-apply of the same folder costing nothing, and a folder change dropping the previous folder's thumbnails while keeping the new one's.
+- Full `WinCommanderUT --rng-seed 424242`: **873/873 cases, 12,060 assertions**.
+- `QuickLookThumbnailing` is now linked; it is macOS 10.15+ and this project targets 11.0, so a hard link is correct rather than a weak one.
+
 ### Coverage gap
 
-**Nothing drives it, and no real generator is wired.** The cache takes a generator as a parameter; connecting one, and running it off the drawing thread as rows come into view, is what remains — along with hosting the view in the Explorer.
+**The Explorer does not host the view.** Everything the Gallery needs to draw a folder is connected; what is missing is the mode switch that puts it on screen.
