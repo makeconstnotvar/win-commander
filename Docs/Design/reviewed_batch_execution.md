@@ -44,7 +44,14 @@ index passed in. No behaviour change; the existing 8 cases and 225 assertions pi
 The two `_direct_access_checker` / `_source_open_at` seams must be passed through, since the tests
 drive failure paths through them.
 
-**Step B — prepare all items, then commit to none of them.** Loop step A over `report.items`. If any
+**Step B — prepare all items, then commit to none of them.**
+
+> Visible only now that step A exists: `prepare_item` **cannot leak a transaction today**. Beginning
+> the transaction is its last action, so every failure path returns before one exists. The
+> all-or-nothing rollback requirement therefore belongs entirely to step B — it is introduced by the
+> loop, not inherited from step A. Worth knowing, so the next reader does not go looking for a leak
+> that is not there, and does not assume the loop is safe because step A was.
+ Loop step A over `report.items`. If any
 item fails, **every already-begun transaction must be rolled back before returning**. This is the
 decision that makes the slice non-trivial: a half-prepared batch that returns an error while holding
 open transactions leaves temporary state on disk that nothing owns. Preparation must therefore be
