@@ -10,20 +10,23 @@ struct ReviewedOperationFactoryTestAccess final {
     using SourceOpenAt = std::function<int(int _directory_fd, const char *_name, int _flags)>;
     using ConditionalCommitTransactionResolver =
         ReviewedOperationFactory::ConditionalCommitTransactionResolver;
+    using SnapshotLookup = ReviewedOperationFactory::SnapshotLookup;
 
     [[nodiscard]] static std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
     Create(ReviewedVFSOperationPreflight _preflight,
            ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
            ReviewedOperationFactory::CancelChecker _cancel_checker = {},
            DirectAccessChecker _direct_access_checker = {},
-           SourceOpenAt _source_open_at = {}) noexcept
+           SourceOpenAt _source_open_at = {},
+           SnapshotLookup _snapshot_lookup = {}) noexcept
     {
         return ReviewedOperationFactory::CreateWithDependencies(
             std::move(_preflight),
             std::move(_cancel_checker),
             std::move(_direct_access_checker),
             std::move(_source_open_at),
-            std::move(_conditional_commit_transaction_resolver));
+            std::move(_conditional_commit_transaction_resolver),
+            std::move(_snapshot_lookup));
     }
 
     [[nodiscard]] static std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>

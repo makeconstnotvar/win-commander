@@ -332,14 +332,16 @@ ReviewedOperationFactory::CreateWithDependencies(
     CancelChecker _cancel_checker,
     DirectAccessChecker _direct_access_checker,
     SourceOpenAt _source_open_at,
-    ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver) noexcept
+    ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
+    SnapshotLookup _snapshot_lookup) noexcept
 {
     return BlockExecutionProduct(
         CreateExecutionProductWithDependencies(std::move(_preflight),
                                                std::move(_cancel_checker),
                                                std::move(_direct_access_checker),
                                                std::move(_source_open_at),
-                                               std::move(_conditional_commit_transaction_resolver)));
+                                               std::move(_conditional_commit_transaction_resolver),
+                                               std::move(_snapshot_lookup)));
 }
 
 std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
@@ -355,7 +357,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
     CancelChecker _cancel_checker,
     DirectAccessChecker _direct_access_checker,
     SourceOpenAt _source_open_at,
-    ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver) noexcept
+    ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
+    SnapshotLookup _snapshot_lookup) noexcept
 {
     try {
         CancelChecker is_cancelled = [cancel_checker = std::move(_cancel_checker)]() noexcept {
@@ -472,9 +475,12 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedProviderScope));
         }
 
-        const auto *source_snapshot = ReviewedFactoryFindSnapshot(report, item.source);
-        const auto *destination_parent_snapshot = ReviewedFactoryFindSnapshot(report, destination_parent);
-        const auto *destination_snapshot = ReviewedFactoryFindSnapshot(report, item.destination);
+        const auto find_snapshot = [&](const OperationPlanningPath &_path) {
+            return _snapshot_lookup ? _snapshot_lookup(report, _path) : ReviewedFactoryFindSnapshot(report, _path);
+        };
+        const auto *source_snapshot = find_snapshot(item.source);
+        const auto *destination_parent_snapshot = find_snapshot(destination_parent);
+        const auto *destination_snapshot = find_snapshot(item.destination);
         if( !source_snapshot ) {
             return std::unexpected(
                 ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, item.source));

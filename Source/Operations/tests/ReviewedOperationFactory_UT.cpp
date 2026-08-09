@@ -413,6 +413,61 @@ TEST_CASE(PREFIX "rejects stale source and destination identity before capsule c
     }
 }
 
+TEST_CASE(PREFIX "refuses when the evidence for a path is missing or is the wrong shape",
+          "[reviewed-operation-factory]")
+{
+    // These two guard the staleness evidence, and a real planner never produces them - so they are
+    // reached through an injected snapshot lookup. That seam, rather than a way to construct an
+    // accepted plan, is the deliberate choice: it can only change how already-reviewed evidence is
+    // looked up, where a forge-a-plan seam could manufacture a review that never happened.
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    std::ofstream(source) << "payload";
+
+    const auto make_reviewed = [&] {
+        auto probes = ReviewedNativeProbes(TestEnv().vfs_native);
+        return ReviewedReview(ReviewedCopyPlan({{"local", source.native()}},
+                                               destination_directory.native(),
+                                               OperationPlanDestinationKind::Directory),
+                              probes);
+    };
+
+    SECTION("missing")
+    {
+        const auto operation = ReviewedOperationFactoryTestAccess::Create(
+            make_reviewed(), ReviewedStrongConditionalCommitTransaction(), {}, {}, {},
+            [](const OperationPreflightReport &, const OperationPlanningPath &) { return nullptr; });
+        REQUIRE_FALSE(operation);
+        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::MissingEvidence);
+    }
+
+    SECTION("wrong shape")
+    {
+        // Present, but claiming the source is a directory. Accepting it would let the copy proceed
+        // against evidence that describes something else entirely.
+        OperationPlanningItemSnapshot forged;
+        const auto operation = ReviewedOperationFactoryTestAccess::Create(
+            make_reviewed(), ReviewedStrongConditionalCommitTransaction(), {}, {}, {},
+            [&forged](const OperationPreflightReport &_report, const OperationPlanningPath &_path)
+                -> const OperationPlanningItemSnapshot * {
+                const OperationPlanningItemSnapshot *real = nullptr;
+                for( const auto &snapshot : _report.item_evidence )
+                    if( snapshot.path.provider_id == _path.provider_id )
+                        if( snapshot.evidence.kind == OperationPlanningItemKind::File )
+                            real = &snapshot;
+                if( real == nullptr )
+                    return real;
+                forged = *real;
+                forged.evidence.kind = OperationPlanningItemKind::Directory;
+                return &forged;
+            });
+        REQUIRE_FALSE(operation);
+        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::InvalidEvidence);
+    }
+}
+
 TEST_CASE(PREFIX "reports a source that would not open as a failure, not as staleness",
           "[reviewed-operation-factory]")
 {

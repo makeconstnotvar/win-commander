@@ -76,6 +76,16 @@ public:
 private:
     using DirectAccessChecker = std::function<bool(std::string_view _path, int _mode)>;
     using SourceOpenAt = std::function<int(int _directory_fd, const char *_name, int _flags)>;
+    /**
+     * Finds the evidence recorded for a path.
+     *
+     * Injectable so a test can withhold or corrupt one snapshot - the two failures a real planner
+     * never produces, and the ones guarding staleness. Deliberately *this* rather than a way to
+     * construct an accepted plan: a seam able to forge a review is a seam that could forge one
+     * somewhere it matters, while this can only change how already-reviewed evidence is looked up.
+     */
+    using SnapshotLookup = std::function<const OperationPlanningItemSnapshot *(const OperationPreflightReport &,
+                                                                              const OperationPlanningPath &)>;
     using ConditionalCommitTransactionResolver = std::function<
         std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
                       nc::vfs::ProviderConditionalCopyTransactionBeginError>(
@@ -87,7 +97,8 @@ private:
                            CancelChecker _cancel_checker,
                            DirectAccessChecker _direct_access_checker,
                            SourceOpenAt _source_open_at,
-                           ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver) noexcept;
+                           ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
+                           SnapshotLookup _snapshot_lookup = {}) noexcept;
 
     [[nodiscard]] static std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
     CreateExecutionProduct(ReviewedVFSOperationPreflight _preflight,
@@ -98,7 +109,8 @@ private:
         CancelChecker _cancel_checker,
         DirectAccessChecker _direct_access_checker,
         SourceOpenAt _source_open_at,
-        ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver) noexcept;
+        ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
+        SnapshotLookup _snapshot_lookup = {}) noexcept;
     [[nodiscard]] static std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
     BlockExecutionProduct(
         std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError> _product) noexcept;

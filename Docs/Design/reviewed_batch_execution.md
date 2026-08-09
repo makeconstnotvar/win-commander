@@ -85,14 +85,18 @@ lift.
     checks the factory reports a failure rather than staleness — the missing-file errnos mean the
     world moved and are deliberately mapped to `StaleSource`, which is a different thing to tell the
     user.
-  - **`MissingEvidence` and `InvalidEvidence` — not reachable from the test surface.** They need a
-    report whose snapshots are absent or wrong, and reports come from the real planner, which always
-    produces consistent ones. `ReviewedOperationFactoryTestAccess` injects a transaction resolver, an
-    access checker and an open — not a forged report. Covering them means adding a seam that lets a
-    test construct an `AcceptedOperationPlan`, and **that is a decision, not a chore**: a seam able
-    to forge a reviewed plan is a seam that could forge one somewhere else. Decide it deliberately
-    before the extraction moves these checks.
-  - **`UnsupportedPlanType` and the rest — defence in depth.** `Review()` already refuses a non-Copy
+  - **`MissingEvidence` and `InvalidEvidence` — now covered, through the seam that was the decision
+    rather than the obvious one.** They need a report whose snapshots are absent or wrong, which a
+    real planner never produces. The obvious answer — let a test construct an
+    `AcceptedOperationPlan` — was rejected: **a seam able to forge a reviewed plan is a seam that
+    could manufacture a review that never happened.** What is injectable instead is the *snapshot
+    lookup*, which can only change how already-reviewed evidence is found. One test withholds a
+    snapshot, the other returns one claiming the source is a directory; both refuse, and neither
+    needed a way to fake a review.
+  - **Six remain**: `UnsupportedPlanType`, `ProviderUnavailable`, `EmptyAcceptedPlan`,
+    `BatchUnsupported`, `UnexpectedConflictEvidence`, `InvalidReviewedPlan`. `BatchUnsupported` is
+    the one shown above to be probably unreachable; the others are defence in depth.
+  - **Defence in depth.** `Review()` already refuses a non-Copy
     plan with the same code, so the factory's own check cannot be reached through it. Unreachable by
     construction is a different thing from untested, and should be recorded as such rather than
     chased.
