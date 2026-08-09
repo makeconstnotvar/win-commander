@@ -51,7 +51,9 @@ using nc::panel::actions::reviewed_copy_as::PreparationErrorCode;
 using nc::panel::actions::reviewed_copy_as::PreparedReview;
 using nc::panel::actions::reviewed_copy_as::PrepareReviewedCopyApplicationBoundary;
 using nc::panel::actions::reviewed_copy_as::Select;
+using nc::panel::actions::reviewed_copy_as::SelectBatch;
 using nc::panel::actions::reviewed_copy_as::Selection;
+using nc::panel::actions::reviewed_copy_as::SelectIntoDirectory;
 using nc::vfs::ListingItem;
 
 class ReviewedCopyAsTestHost final : public nc::vfs::Host
@@ -84,13 +86,14 @@ public:
     }
     std::expected<VFSStat, nc::Error> Stat(std::string_view _path, unsigned long, const VFSCancelChecker &) override
     {
-        if( _path == "/source" ) {
+        if( _path == "/source" || _path == "/destination" || _path == "/other" ) {
             VFSStat stat;
             stat.mode = S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR;
             stat.meaning.mode = 1;
             return stat;
         }
-        if( m_SourceExists && _path == "/source/source.txt" ) {
+        if( m_SourceExists && (_path == "/source/source.txt" || _path == "/source/first.txt" ||
+                               _path == "/source/second.txt" || _path == "/other/second.txt") ) {
             VFSStat stat;
             stat.mode = S_IFREG | S_IRUSR | S_IWUSR;
             stat.size = 42;
@@ -133,6 +136,21 @@ ListingItem Item(const std::shared_ptr<ReviewedCopyAsTestHost> &_host,
     return VFSListing::Build(std::move(input))->Item(0);
 }
 
+ListingItem NamedItem(const std::shared_ptr<ReviewedCopyAsTestHost> &_host,
+                      const std::string &_directory,
+                      const std::string &_filename)
+{
+    nc::vfs::ListingInput input;
+    input.directories.reset(nc::base::variable_container<>::type::common);
+    input.directories[0] = _directory;
+    input.hosts.reset(nc::base::variable_container<>::type::common);
+    input.hosts[0] = _host;
+    input.filenames.emplace_back(_filename);
+    input.unix_modes.emplace_back(S_IFREG | S_IRUSR | S_IWUSR);
+    input.unix_types.emplace_back(DT_REG);
+    return VFSListing::Build(std::move(input))->Item(0);
+}
+
 VFSBoundOperationPreflight BoundaryPreflight(const bool _source_exists = true)
 {
     const auto host = std::make_shared<ReviewedCopyAsTestHost>(true);
@@ -153,6 +171,39 @@ VFSBoundOperationPreflight BoundaryPreflight(const bool _source_exists = true)
         .sources = {{"native", "/source/source.txt"}},
         .destination =
             OperationPlanDestinationInput{"native", "/source/copy.txt", OperationPlanDestinationKind::ExactItem},
+        .conflict_policy =
+            OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    });
+    REQUIRE(plan);
+    return probes->Preflight(std::move(*plan));
+}
+
+/** The `Copy To` shape: several sources landing in one destination folder under their own names. */
+VFSBoundOperationPreflight FolderBoundaryPreflight(const std::vector<std::string> &_sources,
+                                                   const std::string &_destination_directory = "/destination")
+{
+    const auto host = std::make_shared<ReviewedCopyAsTestHost>(true);
+    auto bindings = VFSOperationPlanningBindings::Create({{"native", host}});
+    REQUIRE(bindings);
+    auto probes = VFSOperationPlanningProbes::Create(
+        *bindings,
+        [](const nc::ops::OperationPlanningPath &,
+           const OperationPlanningRequiredAccess,
+           nc::vfs::Host &) -> nc::ops::OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+            return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+        });
+    REQUIRE(probes);
+    std::vector<nc::ops::OperationPlanSourceInput> sources;
+    sources.reserve(_sources.size());
+    for( const auto &source : _sources )
+        sources.emplace_back(nc::ops::OperationPlanSourceInput{"native", source});
+    auto plan = OperationPlan::Create({
+        .plan_id = "reviewed-copy-to-boundary",
+        .type = OperationPlanType::Copy,
+        .sources = std::move(sources),
+        .destination =
+            OperationPlanDestinationInput{"native", _destination_directory, OperationPlanDestinationKind::Directory},
         .conflict_policy =
             OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
         .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
@@ -409,8 +460,11 @@ TEST_CASE(PREFIX "app boundary presents the exact accepted plan before approval"
 
     const auto &presentation = prepared->Presentation();
     CHECK(presentation.plan_id == "reviewed-copy-as-boundary");
-    CHECK(presentation.source_path == "/source/source.txt");
-    CHECK(presentation.destination_path == "/source/copy.txt");
+    REQUIRE(presentation.items.size() == 1);
+    CHECK(presentation.items.front().source_path == "/source/source.txt");
+    CHECK(presentation.items.front().destination_path == "/source/copy.txt");
+    CHECK(presentation.destination_root == "/source/copy.txt");
+    CHECK(presentation.destination_kind == OperationPlanDestinationKind::ExactItem);
     CHECK(presentation.conflict_decision == OperationPlanConflictDecision::Ask);
     CHECK(presentation.conflict_scope == OperationPlanConflictScope::ThisItem);
     CHECK(presentation.estimated_files == 1);
@@ -660,4 +714,107 @@ TEST_CASE(PREFIX "keeps the reconciliation answer for the terminal that has no i
     CHECK_FALSE(disagreeing.without_item_results);
     CHECK(disagreeing.attention_indices.empty());
     CHECK(disagreeing.published_items == 2);
+}
+
+TEST_CASE(PREFIX "selects a folder destination outside the item's own directory", "[reviewed-copy-to-policy]")
+{
+    const auto host = std::make_shared<ReviewedCopyAsTestHost>(true);
+    const auto item = Item(host);
+    CopyingOptions options;
+
+    // The restriction this lifts was never the provider's. `ConditionalCopyPathSupport` answers about
+    // a source and a destination parent on one volume, the Native transaction anchors the two
+    // independently, and the provider's own tests have always used separate source and destination
+    // directories. `Copy As` declined to claim more than the shape it needed; `Copy To` needs the
+    // other one, and the exact-destination policy is deliberately left exactly as it was.
+    CHECK(SelectIntoDirectory(item, "/destination", host, options) == Selection::Reviewed);
+    CHECK(Select(item, "/destination/source.txt", host, options) == Selection::Legacy);
+
+    // Into its own directory the derived destination is the source itself - a plan that cannot exist.
+    CHECK(SelectIntoDirectory(item, "/source", host, options) == Selection::Legacy);
+    CHECK(SelectIntoDirectory(item, "/source/", host, options) == Selection::Legacy);
+
+    CHECK(SelectIntoDirectory(item, "destination", host, options) == Selection::Legacy);
+    CHECK(SelectIntoDirectory(item, "", host, options) == Selection::Legacy);
+    CHECK(SelectIntoDirectory(item, "/destination", {}, options) == Selection::Legacy);
+    options.verification = CopyingOptions::ChecksumVerification::Always;
+    CHECK(SelectIntoDirectory(item, "/destination", host, options) == Selection::Legacy);
+}
+
+TEST_CASE(PREFIX "answers for a whole selection at once, and lets no refusal be downgraded",
+          "[reviewed-copy-to-policy]")
+{
+    const auto host = std::make_shared<ReviewedCopyAsTestHost>(true);
+    const auto unavailable_host = std::make_shared<ReviewedCopyAsTestHost>(
+        true, nc::vfs::ProviderConditionalCopyPathSupport::Unavailable);
+    const CopyingOptions options;
+
+    const std::vector<ListingItem> two{NamedItem(host, "/source/", "first.txt"),
+                                       NamedItem(host, "/source/", "second.txt")};
+    CHECK(SelectBatch(two, "/destination", host, options) == Selection::Reviewed);
+
+    // One item the reviewed engine cannot take sends the whole set to the legacy operation: splitting
+    // it would show two operations for one action, and give half the files a journal and half none.
+    const std::vector<ListingItem> mixed{NamedItem(host, "/source/", "first.txt"),
+                                         Item(host, S_IFDIR | S_IRUSR | S_IWUSR, DT_DIR)};
+    CHECK(SelectBatch(mixed, "/destination", host, options) == Selection::Legacy);
+
+    // A provider that cannot answer the eligibility question outranks a legacy sibling, and is found
+    // even when it comes after one: stopping at the first legacy answer would turn a refusal into a
+    // silent old-route copy, which is the outcome the single-item rule exists to prevent.
+    const std::vector<ListingItem> legacy_then_reject{
+        Item(host, S_IFDIR | S_IRUSR | S_IWUSR, DT_DIR),
+        NamedItem(unavailable_host, "/source/", "second.txt")};
+    CHECK(SelectBatch(legacy_then_reject, "/destination", unavailable_host, options) == Selection::Reject);
+
+    CHECK(SelectBatch({}, "/destination", host, options) == Selection::Legacy);
+}
+
+TEST_CASE(PREFIX "app boundary accepts a folder destination and names every item it accepted",
+          "[reviewed-copy-as-app-boundary]")
+{
+    auto prepared =
+        PrepareReviewedCopyApplicationBoundary(FolderBoundaryPreflight({"/source/first.txt", "/source/second.txt"}),
+                                               true,
+                                               true);
+    REQUIRE(prepared);
+
+    const auto &presentation = prepared->Presentation();
+    CHECK(presentation.destination_kind == OperationPlanDestinationKind::Directory);
+    CHECK(presentation.destination_root == "/destination");
+    REQUIRE(presentation.items.size() == 2);
+    // Each item lands in the folder the user named, under its own name - re-derived here rather than
+    // taken from the report, so a planner that computed anything else would be refused, not accepted.
+    CHECK(presentation.items[0].source_path == "/source/first.txt");
+    CHECK(presentation.items[0].destination_path == "/destination/first.txt");
+    CHECK(presentation.items[1].source_path == "/source/second.txt");
+    CHECK(presentation.items[1].destination_path == "/destination/second.txt");
+}
+
+TEST_CASE(PREFIX "refuses the two ways a folder batch goes wrong before the boundary can be reached",
+          "[reviewed-copy-as-app-boundary]")
+{
+    // Written to drive the boundary's own count and collision checks, and it disproved that they can
+    // be driven at all - recorded here rather than deleted, so the next person counting untested
+    // branches does not learn it a second time.
+    //
+    // A source that cannot be planned does not leave a short report: it records a blocker, and a
+    // blocked preflight is never accepted. So `report.items.size() == sources.size()` cannot be seen
+    // to fail from here; it is defence in depth against a planner that stopped emplacing without
+    // saying so, which is exactly the shape the journal could not record a completed entry for.
+    auto short_report = PrepareReviewedCopyApplicationBoundary(
+        FolderBoundaryPreflight({"/source/first.txt", "/source/absent.txt"}), true, true);
+    REQUIRE_FALSE(short_report);
+    CHECK(short_report.error().code == PreparationErrorCode::BlockedPreflight);
+    CHECK(short_report.error().blocker == OperationPlanningBlockerCode::SourceMissing);
+
+    // Two sources whose names collide would derive one destination between them - whichever ran
+    // second would find it occupied by the first, and the review the user approved named two files.
+    // The planner already refuses this whenever there is more than one source, so the boundary's own
+    // pairwise check is likewise unreachable from a real plan and kept for the same reason.
+    auto colliding = PrepareReviewedCopyApplicationBoundary(
+        FolderBoundaryPreflight({"/source/second.txt", "/other/second.txt"}), true, true);
+    REQUIRE_FALSE(colliding);
+    CHECK(colliding.error().code == PreparationErrorCode::BlockedPreflight);
+    CHECK(colliding.error().blocker == OperationPlanningBlockerCode::DuplicateDestination);
 }

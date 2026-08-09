@@ -340,6 +340,64 @@ that disagrees with its own items. `reviewed CopyAs policy *` 17/17 (136 asserti
 slice is presentation, and the engine, transactions, journal and ownership are untouched
 (`AGENTS.md`, verification budget).
 
+## Producer step A — DONE: the contract a `Copy To` can be held to
+
+The producer is `Copy To`, not `Copy As`: `Copy As` names its destination exactly, which is one file by
+definition, while `Copy To` names a *folder* and hands it a selection. So the shape the application
+boundary has to admit is **N sources and a `Directory` destination**, and this step is that contract,
+with the wiring left to step B.
+
+**The same-directory restriction was never the provider's, and lifting it is the load-bearing
+decision.** `reviewed_copy_as::Select` required the destination parent to be the item's own directory,
+which is why the reviewed engine has only ever run same-directory copies. But
+`ConditionalCopyPathSupport` answers about a source and a destination parent *on the same volume*, the
+Native transaction anchors the two independently, and the provider's own fixture has always placed the
+source and the destination in **different** directories. The restriction was `Copy As` declining to
+claim more than the shape it needed. `SelectIntoDirectory` is the other shape, and `Select` is left
+byte-identical so `Copy As` widens nothing by accident.
+
+Two rules it adds on its own:
+
+- **Into its own directory is legacy, not reviewed.** The derived destination would be the source
+  itself, which the planner refuses as `SamePath` — answered here so the engine is never handed a plan
+  that cannot exist, instead of the user reading a blocked preflight for something that was never
+  going to work.
+- **One answer for the whole selection.** `SelectBatch` takes the set legacy if any single item is
+  legacy: splitting would show two operations where the user asked for one, and give half the files a
+  journal and half none. `Reject` outranks that and is found *even after* a legacy answer — every item
+  is asked, because stopping early would turn an eligibility question the provider could not answer
+  into a silent old-route copy, which is the exact outcome the single-item rule exists to refuse.
+
+**The boundary now admits a set, and what it checks is where every file lands.** `Directory`
+destinations admit N sources, including one — a lone item into a folder is the same request as
+several, not a special case to be reasoned about twice — while `ExactItem` still admits exactly one.
+For each accepted item the boundary **re-derives** the destination the planner should have computed,
+`folder / source basename`, rather than reading it back from the report: a disagreement then refuses
+the plan instead of accepting a destination nobody computed, which is the direction a mismatch has to
+fail in. Pairing is positional and provably so — a source leaves the report only by `Skip` on an
+occupied destination, a report carrying a conflict is refused above, and sources are planned in order,
+so with equal counts accepted item *i* comes from source *i*.
+
+**Two of its checks turned out to be unreachable, and a test says so rather than pretending
+otherwise.** A test written to drive the count check found that an unplannable source does not produce
+a short report — it records a blocker, and a blocked preflight is never accepted. A test written to
+drive the pairwise-destination check found that the planner already refuses colliding destinations
+whenever there is more than one source. Both now pin the *reason*, in the same way step D pinned
+`BatchUnsupported`, so the next person counting untested branches does not learn it again.
+
+### Verification
+
+Three new cases: the folder-destination selection policy including the same-directory refusal and the
+non-absolute/foreign-host/verification refusals; the whole-selection answer with `Reject` found behind
+a legacy sibling; and a two-source folder plan accepted with both derived destinations named. Plus the
+disproof case above, and the existing presentation test updated to the item list. `reviewed CopyAs
+policy *` 21/21 (174 assertions); full `WinCommanderUT` 900/900 (12,223) in Debug. No sanitizer run:
+pure policy and projection, no engine, transaction, journal or ownership change.
+
+**Step B — the wiring.** `CopyTo::Perform` asking `SelectBatch`, a preflight builder for N sources into
+a folder, an intent check about the *selection* rather than the focused item, and the submission path
+carrying a vector. That is the step a user can see.
+
 ## What must not be given up
 
 - **One review, one authority per accepted item** — already enforced; the batch path must issue by

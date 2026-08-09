@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace nc {
 
@@ -36,6 +37,37 @@ enum class Selection : unsigned char {
                                const std::string &_destination,
                                const std::shared_ptr<nc::vfs::Host> &_destination_host,
                                const nc::ops::CopyingOptions &_options) noexcept;
+
+/**
+ * The same policy for one item landing in a destination *directory* under its own name - the shape a
+ * `Copy To` produces, as opposed to `Copy As`, which names its destination exactly.
+ *
+ * The one deliberate difference is that this does not require the destination to be the item's own
+ * directory. That restriction was never the provider's: `ConditionalCopyPathSupport` answers about a
+ * source and a destination parent on the same volume, the Native transaction anchors the two
+ * independently, and its own tests have always run with the source and the destination in different
+ * directories. It was `CopyAs` declining to claim more than the shape it needed, and a `Copy To`
+ * needs the other one.
+ */
+[[nodiscard]] Selection SelectIntoDirectory(const nc::vfs::ListingItem &_item,
+                                            const std::string &_destination_directory,
+                                            const std::shared_ptr<nc::vfs::Host> &_destination_host,
+                                            const nc::ops::CopyingOptions &_options) noexcept;
+
+/**
+ * One answer for a whole selection, because one user action has to become one operation.
+ *
+ * A set of items cannot be split between the reviewed engine and the legacy one: that would show two
+ * operations where the user asked for one, and give half the files a journal and the other half none.
+ * So a single `Legacy` answer takes the whole set legacy. `Reject` outranks it and is returned even
+ * when some other item is already legacy - an eligibility question the provider could not answer must
+ * never be quietly downgraded into "copy it the old way", which is exactly the silent fallback the
+ * single-item rule exists to prevent. An empty selection is nothing to review.
+ */
+[[nodiscard]] Selection SelectBatch(const std::vector<nc::vfs::ListingItem> &_items,
+                                    const std::string &_destination_directory,
+                                    const std::shared_ptr<nc::vfs::Host> &_destination_host,
+                                    const nc::ops::CopyingOptions &_options) noexcept;
 
 } // namespace reviewed_copy_as
 

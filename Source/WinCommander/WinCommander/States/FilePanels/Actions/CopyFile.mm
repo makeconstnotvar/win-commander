@@ -80,6 +80,15 @@ bool IsSameLexicalPath(const std::string &_lhs, const std::string &_rhs)
     return normalize(_lhs) == normalize(_rhs);
 }
 
+/** Everything both selection shapes agree on, before either asks its own remaining question. */
+bool IsReviewedCopyShape(const VFSListingItem &_item,
+                         const VFSHostPtr &_destination_host,
+                         const nc::ops::CopyingOptions &_options)
+{
+    return _item && _item.IsReg() && _item.Host() && _item.Host()->IsNativeFS() && _destination_host &&
+           _destination_host.get() == _item.Host().get() && IsReviewedCopyOptions(_options);
+}
+
 } // namespace
 
 Selection Select(const VFSListingItem &_item,
@@ -88,9 +97,8 @@ Selection Select(const VFSListingItem &_item,
                  const nc::ops::CopyingOptions &_options) noexcept
 {
     try {
-        if( !_item || !_item.IsReg() || !_item.Host() || !_item.Host()->IsNativeFS() || !_destination_host ||
-            _destination_host.get() != _item.Host().get() || _destination.empty() || _destination.front() != '/' ||
-            !IsReviewedCopyOptions(_options) )
+        if( !IsReviewedCopyShape(_item, _destination_host, _options) || _destination.empty() ||
+            _destination.front() != '/' )
             return Selection::Legacy;
 
         const auto destination_parent = std::filesystem::path{_destination}.parent_path().native();
@@ -108,6 +116,64 @@ Selection Select(const VFSListingItem &_item,
         return Selection::Reject;
     }
     return Selection::Reject;
+}
+
+Selection SelectIntoDirectory(const VFSListingItem &_item,
+                              const std::string &_destination_directory,
+                              const VFSHostPtr &_destination_host,
+                              const nc::ops::CopyingOptions &_options) noexcept
+{
+    try {
+        if( !IsReviewedCopyShape(_item, _destination_host, _options) || _destination_directory.empty() ||
+            _destination_directory.front() != '/' )
+            return Selection::Legacy;
+
+        // Copying an item into the directory it already occupies cannot create anything - the derived
+        // destination is the source itself, which the planner refuses as `SamePath`. Answered legacy
+        // here so the reviewed engine is never handed a plan that cannot exist, rather than left to
+        // be refused later as a blocked preflight the user would have to read.
+        if( IsSameLexicalPath(_destination_directory, _item.Directory()) )
+            return Selection::Legacy;
+
+        switch( _destination_host->ConditionalCopyPathSupport(_item.Path(), _destination_directory) ) {
+            case nc::vfs::ProviderConditionalCopyPathSupport::SameVolumeClone:
+            case nc::vfs::ProviderConditionalCopyPathSupport::CrossVolumeStaged:
+                return Selection::Reviewed;
+            case nc::vfs::ProviderConditionalCopyPathSupport::Unsupported:
+                return Selection::Legacy;
+            case nc::vfs::ProviderConditionalCopyPathSupport::Unavailable:
+                return Selection::Reject;
+        }
+    } catch( ... ) {
+        return Selection::Reject;
+    }
+    return Selection::Reject;
+}
+
+Selection SelectBatch(const std::vector<VFSListingItem> &_items,
+                      const std::string &_destination_directory,
+                      const VFSHostPtr &_destination_host,
+                      const nc::ops::CopyingOptions &_options) noexcept
+{
+    if( _items.empty() )
+        return Selection::Legacy;
+
+    // Every item is asked, even once one has already answered legacy: a `Reject` further down the
+    // selection is an eligibility question the provider could not answer, and stopping early would
+    // turn it into a silent legacy copy - the one outcome the single-item rule exists to refuse.
+    bool any_legacy = false;
+    for( const auto &item : _items ) {
+        switch( SelectIntoDirectory(item, _destination_directory, _destination_host, _options) ) {
+            case Selection::Reject:
+                return Selection::Reject;
+            case Selection::Legacy:
+                any_legacy = true;
+                break;
+            case Selection::Reviewed:
+                break;
+        }
+    }
+    return any_legacy ? Selection::Legacy : Selection::Reviewed;
 }
 
 } // namespace reviewed_copy_as
@@ -870,13 +936,24 @@ NSString *ReviewedCopyWarningDescription(const nc::ops::OperationPlanningWarning
 
 NSString *ReviewedCopyDetails(const reviewed_copy_as::ReviewPresentation &_presentation)
 {
-    NSString *const source = [NSString stringWithUTF8StdString:_presentation.source_path];
-    NSString *const destination = [NSString stringWithUTF8StdString:_presentation.destination_path];
-    NSMutableString *const details = [NSMutableString
-        stringWithFormat:
-            @"Source: %@\nDestination: %@\n\nScope: one item, create only\nConflict policy: ask for this item",
-            source,
-            destination];
+    NSMutableString *const details = [NSMutableString string];
+    if( _presentation.items.size() == 1 ) {
+        // One item still names both its ends outright: for a single copy that is the whole review,
+        // and a list of one under a folder heading would say less about the same thing.
+        [details appendFormat:@"Source: %@\nDestination: %@\n\nScope: one item, create only",
+                              [NSString stringWithUTF8StdString:_presentation.items.front().source_path],
+                              [NSString stringWithUTF8StdString:_presentation.items.front().destination_path]];
+    }
+    else {
+        // A set names the folder once and then the files, because the folder is the part the user
+        // chose and the destinations are all derived from it.
+        [details appendFormat:@"Destination folder: %@\n\nSources:",
+                              [NSString stringWithUTF8StdString:_presentation.destination_root]];
+        for( const auto &item : _presentation.items )
+            [details appendFormat:@"\n• %@", [NSString stringWithUTF8StdString:item.source_path]];
+        [details appendFormat:@"\n\nScope: %zu items, create only", _presentation.items.size()];
+    }
+    [details appendString:@"\nConflict policy: ask for this item"];
 
     if( _presentation.estimated_files )
         [details
