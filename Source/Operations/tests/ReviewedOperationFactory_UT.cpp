@@ -413,6 +413,34 @@ TEST_CASE(PREFIX "rejects stale source and destination identity before capsule c
     }
 }
 
+TEST_CASE(PREFIX "never sees conflict evidence, because the review refuses it first",
+          "[reviewed-operation-factory]")
+{
+    // Written to reach UnexpectedConflictEvidence and it showed that path is unreachable too: a plan
+    // whose destination is already occupied is refused at review, so the factory's own check is
+    // defence in depth rather than a case anyone can drive. Worth pinning as the reason - otherwise
+    // the next person counting untested paths tries the same thing and learns it again.
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    std::ofstream(source) << "payload";
+    std::ofstream(destination_directory / "source.txt") << "occupied";
+
+    auto probes = ReviewedNativeProbes(TestEnv().vfs_native);
+    const auto reviewed = ReviewedVFSOperationPreflight::Review(
+        probes.Preflight(ReviewedCopyPlan({{"local", source.native()}},
+                                          destination_directory.native(),
+                                          OperationPlanDestinationKind::Directory)),
+        VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE_FALSE(reviewed);
+
+    // And the occupant is untouched - nothing got as far as opening anything.
+    std::ifstream kept(destination_directory / "source.txt");
+    const std::string contents{std::istreambuf_iterator<char>{kept}, std::istreambuf_iterator<char>{}};
+    CHECK(contents == "occupied");
+}
+
 TEST_CASE(PREFIX "refuses when the evidence for a path is missing or is the wrong shape",
           "[reviewed-operation-factory]")
 {

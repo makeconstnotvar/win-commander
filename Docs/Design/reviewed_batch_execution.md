@@ -93,9 +93,13 @@ lift.
     lookup*, which can only change how already-reviewed evidence is found. One test withholds a
     snapshot, the other returns one claiming the source is a directory; both refuse, and neither
     needed a way to fake a review.
-  - **Six remain**: `UnsupportedPlanType`, `ProviderUnavailable`, `EmptyAcceptedPlan`,
-    `BatchUnsupported`, `UnexpectedConflictEvidence`, `InvalidReviewedPlan`. `BatchUnsupported` is
-    the one shown above to be probably unreachable; the others are defence in depth.
+  - **Six remain, and two of them are now known to be unreachable rather than merely unchecked.**
+    `BatchUnsupported`, as shown above. And `UnexpectedConflictEvidence`: a test written to reach it
+    found that a plan whose destination is already occupied is **refused at review**, so the
+    factory's own conflict check is defence in depth and nobody can drive it. That test now pins the
+    *reason* — otherwise the next person counting untested paths tries the same thing and learns it
+    again. The remaining four are the same shape and should be confirmed the same way rather than
+    chased with contrived seams.
   - **Defence in depth.** `Review()` already refuses a non-Copy
     plan with the same code, so the factory's own check cannot be reached through it. Unreachable by
     construction is a different thing from untested, and should be recorded as such rather than
