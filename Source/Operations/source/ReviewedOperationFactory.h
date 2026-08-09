@@ -27,6 +27,14 @@ enum class ReviewedOperationFactoryErrorCode : uint8_t {
     ConditionalCommitAuthorityUnavailable,
     ConditionalCommitIntegrationUnavailable,
     EmptyAcceptedPlan,
+    /**
+     * The plan names more than one source. A different limitation from a single source that expanded
+     * into several accepted items, and told apart because lifting them is different work: several
+     * sources need several structural bindings checked, while an expanded source needs only the
+     * per-item loop. Reporting both as one hid which wall a caller had hit.
+     */
+    MultipleSourcesUnsupported,
+    /** One source, but the report accepted more than one item from it. */
     BatchUnsupported,
     UnsupportedConflictPolicy,
     UnexpectedConflictEvidence,

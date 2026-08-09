@@ -386,7 +386,15 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedPlanType));
         if( report.items.empty() )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::EmptyAcceptedPlan));
-        if( plan.Sources().size() != 1 || report.items.size() != 1 )
+        // Asked apart, because they are different limitations and lifting them is different work:
+        // several sources need several structural bindings checked against the report, while one
+        // source that expanded into several items needs only the per-item loop. Reported as one
+        // error, a caller could not tell which wall it had hit - nor could this code, later.
+        if( plan.Sources().size() != 1 ) {
+            return std::unexpected(
+                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MultipleSourcesUnsupported));
+        }
+        if( report.items.size() != 1 )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::BatchUnsupported));
         switch( plan.ConflictPolicy()->Decision() ) {
             case OperationPlanConflictDecision::Ask:

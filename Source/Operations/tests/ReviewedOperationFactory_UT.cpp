@@ -466,15 +466,18 @@ TEST_CASE(PREFIX "rejects destructive policy, unsupported source shapes, and bat
         CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::UnsupportedSourceKind);
     }
 
-    SECTION("batch")
+    SECTION("several sources")
     {
+        // Distinct from a single source that expanded into several items: several sources need
+        // several structural bindings checked, an expanded source needs only the per-item loop, and
+        // reporting both the same way hid which of the two a caller had run into.
         auto reviewed = ReviewedReview(ReviewedCopyPlan({{"local", source.native()}, {"local", second_source.native()}},
                                                         destination_directory.native(),
                                                         OperationPlanDestinationKind::Directory),
                                        probes);
         const auto operation = ReviewedOperationFactory::Create(std::move(reviewed));
         REQUIRE_FALSE(operation);
-        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::BatchUnsupported);
+        CHECK(operation.error().code == ReviewedOperationFactoryErrorCode::MultipleSourcesUnsupported);
     }
 }
 

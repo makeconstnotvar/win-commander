@@ -98,6 +98,12 @@ The factory still handles exactly one accepted item; the batch gate above it is 
 - New `OperationsUT` cases: **3/3, 23 assertions** — one authority per accepted item with a second refused twice over; an out-of-range index refused without spending the one that exists; and the seal outliving the object that issued it.
 - Full `OperationsUT`: **233/233, 6,001 assertions**. Full `OperationsIT`: **98 passed, 2 skipped, 973/973 assertions**. Full `WinCommanderUT`: **821/821, 11,816**.
 
+## Slice 2, first step: the gate was two gates
+
+`plan.Sources().size() != 1 || report.items.size() != 1` reported one error for two different limitations. They are not the same wall, and lifting them is not the same work: **several sources** need several structural bindings checked against the report, while **one source that expanded into several accepted items** needs only the per-item loop. Told apart, a caller can say which it ran into — and so can this code, when the loop arrives and only one of the two comes down.
+
+The existing test that pinned "batch" was pinning the multiple-sources case all along; it now says so.
+
 ### Coverage gap
 
-**The factory does not loop yet.** Validating N items, building N transactions, and producing an execution product that journals N results is the next slice — and it is the one that finally lets the `BatchUnsupported` gate come down.
+**The factory still does not loop.** Validating N items, building N transactions, and producing an execution product that journals N results is the remaining work, and it needs a new operation type: `ProviderConditionalCopyOperationFactory::Create` takes exactly one transaction, and there is no composition of operations in this module to build on. That is design work rather than a loop, which is why it is named here rather than attempted in passing.
