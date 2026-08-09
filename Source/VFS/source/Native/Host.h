@@ -43,6 +43,10 @@ public:
     BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                     const VFSCancelChecker &_cancel_checker = {}) override;
 
+    std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalMoveTransactionBeginError>
+    BeginConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
+                                    const VFSCancelChecker &_cancel_checker = {}) override;
+
     std::expected<VFSStatFS, Error> StatFS(std::string_view _path,
                                            const VFSCancelChecker &_cancel_checker = {}) override;
 

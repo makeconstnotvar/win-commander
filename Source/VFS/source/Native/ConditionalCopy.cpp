@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <limits>
 #include <memory>
+#include <stdio.h>
 #include <sys/acl.h>
 #include <sys/clonefile.h>
 #include <sys/xattr.h>
@@ -229,6 +230,14 @@ int ConditionalCopyIO::FStatAt(int _directory_fd, const char *_name, struct stat
 int ConditionalCopyIO::Clone(int _source_fd, int _destination_parent_fd, const char *_name, uint32_t _flags) noexcept
 {
     return fclonefileat(_source_fd, _destination_parent_fd, _name, _flags);
+}
+
+int ConditionalCopyIO::RenameExclusive(int _source_parent_fd,
+                                       const char *_source_name,
+                                       int _destination_parent_fd,
+                                       const char *_destination_name) noexcept
+{
+    return renameatx_np(_source_parent_fd, _source_name, _destination_parent_fd, _destination_name, RENAME_EXCL);
 }
 
 int ConditionalCopyIO::FSync(int _fd) noexcept

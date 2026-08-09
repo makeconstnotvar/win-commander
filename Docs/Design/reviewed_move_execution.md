@@ -145,12 +145,57 @@ itself* — leave the source where it is and point the destination at it — is 
 its own claimed parent, so it passed while proving something else. Both ends now live in the same
 directory, which leaves the self-move as the only rule left to break.
 
-**Step B2 — the Native implementation.** Begin anchors source parent, source and destination parent;
-Commit re-verifies all three, resamples cancellation, publishes through
-`renameatx_np(..., RENAME_EXCL)`, then orders `fsync(source parent) → fsync(destination parent)` —
-both, because two directories changed, and in that order because the source parent is the one that
-loses an entry. A stale source parent maps to the commit result's existing `SourceStale`: from the
-consumer's side the world around the source moved, and no new terminal vocabulary is needed for that.
+**Step B2 — DONE: the Native implementation.** Begin anchors three descriptors, and the middle one is
+opened in the way that matters: **the source is opened through the anchored source parent**, not by
+absolute path. That is what binds the descriptor to the same directory entry the rename will act on,
+so the identity checked at Begin and the name published at Commit concern one object rather than two
+paths that merely read alike.
+
+Commit re-verifies all three seals, then makes the check a Copy has no use for: **the source's name,
+resolved through its anchored parent, must still lead to the object the descriptor holds.** Holding
+the source open proves the reviewed object still exists; only this says the name still points at it.
+Then cancellation is resampled, `renameatx_np(..., RENAME_EXCL)` publishes, and both namespaces are
+made durable — `fsync` then `F_FULLFSYNC` on each parent, because two directories changed and a rename
+that survives in one direction only is a lost file rather than a moved one. Nothing syncs the object
+itself: no content was written, so there is nothing new on it to persist.
+
+An uncertain rename is resolved more strictly than an uncertain clone. Absence of the destination is
+necessary but not sufficient — the source must *also* still be where it was, under the name it had —
+because a rename that succeeded and was then undone by someone else looks exactly like one that never
+happened if only the destination is probed.
+
+**Two tests corrected the design's expectations, and both corrections are more precise than what they
+replaced.** The case for *the source is gone* was written expecting `SourceStale`; the run answered
+`SourceParentStale`. The answer is right: removing the source **is** a change to the directory holding
+it, and that directory is checked first precisely because the source is opened through it. So a
+vanished source is reported as its directory having moved — the more specific fact, since the entry
+the rename was going to name is no longer the entry that was reviewed. What actually reaches
+`SourceStale` on Begin is the file moving on while its directory does not, which writing into it does
+and unlinking it cannot.
+
+The same shape appeared at the other end: a destination created *after* review answers
+`DestinationParentStale`, not `DestinationExists`, because creating an entry is a change to the sealed
+directory. `DestinationExists` is for the case where the directory is exactly as reviewed and the name
+inside it was already taken — a plan that was never publishable rather than one the world overtook.
+Both are now cases, because the pair is the point: **the sealed directory is what notices first, and
+what it notices is strictly more informative than the collision.**
+
+### Verification
+
+Six new `VFSUT` cases against the real filesystem: a Move publishes and the source ceases to exist in
+the same operation; a destination that appeared after review is never replaced and the source stays
+put; **a source name re-pointed at another object between Begin and Commit fails closed** — the case
+the whole anchoring exists for; either directory changing since review fails closed, the source parent
+as source staleness and the destination parent as its own; cancellation at the last point touches
+neither directory; and Begin refuses an occupied destination, a changed source, a changed source
+parent, a vanished source, and a claimed parent that does not hold the source.
+`VFSNative conditional Copy transaction *` 36/36 (757 assertions) and `nc::vfs::ProviderCapabilities *`
+18/18 (573) in Debug and under both Release ASAN and Release UBSAN; full `VFSUT` 204/204 (82,809).
+
+One note for whoever runs these next, because it cost a diagnosis here: the sanitizer filters were
+first run as two concurrent processes and each reported one unrelated failure. `VFSUT` shares a global
+`TestDir` across processes, so independent runs must be sequential — a fact already recorded elsewhere
+in this repository's evidence. Run sequentially, all four are clean.
 
 **Step C — review, factory, orchestrator, coordinator.** All five gates at once, since step D of the
 batch slice already demonstrated that lifting them one at a time proves nothing.

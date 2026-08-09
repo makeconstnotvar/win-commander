@@ -121,6 +121,15 @@ public:
     virtual int FStat(int _fd, struct stat *_stat) noexcept;
     virtual int FStatAt(int _directory_fd, const char *_name, struct stat *_stat, int _flags) noexcept;
     virtual int Clone(int _source_fd, int _destination_parent_fd, const char *_name, uint32_t _flags) noexcept;
+    /**
+     * The Move publication: atomic, and exclusive so it can never replace an existing destination.
+     * Unlike Clone it names its source by directory and entry rather than by descriptor - which is the
+     * whole reason a Move must anchor the source's parent and re-verify the name against it.
+     */
+    virtual int RenameExclusive(int _source_parent_fd,
+                                const char *_source_name,
+                                int _destination_parent_fd,
+                                const char *_destination_name) noexcept;
     virtual int FSync(int _fd) noexcept;
     virtual int FullFSync(int _fd) noexcept;
     virtual int Close(int _fd) noexcept;

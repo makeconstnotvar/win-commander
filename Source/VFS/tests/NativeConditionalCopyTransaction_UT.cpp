@@ -82,6 +82,32 @@ Claims(const std::shared_ptr<NativeHost> &_host,
     };
 }
 
+static ProviderConditionalMoveReviewedClaims MoveClaims(const std::shared_ptr<NativeHost> &_host,
+                                                        const std::string &_source_parent,
+                                                        const std::string &_source,
+                                                        const std::string &_destination_parent,
+                                                        const std::string &_destination)
+{
+    const ProviderConditionalCopyBinding binding{
+        .provider_id = "native",
+        .host = _host,
+    };
+    return ProviderConditionalMoveReviewedClaims{
+        .plan_id = "native-conditional-move-test",
+        .source_binding = binding,
+        .destination_binding = binding,
+        .source = Expectation(_source, ProviderConditionalCopyExpectedKind::RegularFile),
+        .source_parent = Expectation(_source_parent, ProviderConditionalCopyExpectedKind::Directory),
+        .destination_parent = Expectation(_destination_parent, ProviderConditionalCopyExpectedKind::Directory),
+        .destination = ProviderConditionalCopyMissingExpectation{.absolute_path = _destination},
+    };
+}
+
+static ProviderConditionalMoveReviewedAuthority MoveAuthority(ProviderConditionalMoveReviewedClaims _claims)
+{
+    return ProviderConditionalCopyTransactionTestAccess::MakeMoveAuthority(std::move(_claims));
+}
+
 static ProviderConditionalCopyReviewedAuthority Authority(ProviderConditionalCopyReviewedClaims _claims)
 {
     return ProviderConditionalCopyTransactionTestAccess::MakeAuthority(std::move(_claims));
@@ -941,6 +967,189 @@ TEST_CASE(PREFIX "probes path-specific conditional Copy support conservatively")
     CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) == expected);
     CHECK(host->ConditionalCopyPathSupport("relative-source", paths.destination_parent) ==
           ProviderConditionalCopyPathSupport::Unavailable);
+}
+
+TEST_CASE(PREFIX "publishes a Move through an atomic exclusive rename")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(MoveClaims(
+        TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    CHECK((*transaction)->Commit() == PublishedSuccess());
+    // One indivisible operation: the destination exists and the source does not, and there is no
+    // state in between for a journal result to have to describe.
+    CHECK(Read(paths.destination) == "payload");
+    CHECK_FALSE(std::filesystem::exists(paths.source));
+}
+
+TEST_CASE(PREFIX "refuses a Move onto a destination that appeared after review")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(MoveClaims(
+        TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    Write(paths.destination, "someone else got there first");
+
+    // Create-only is the contract rather than an optimisation, and RENAME_EXCL is how it is kept: the
+    // destination is never replaced, and the source stays where it is.
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::DestinationExists,
+                                               EEXIST}));
+    CHECK(Read(paths.destination) == "someone else got there first");
+    CHECK(Read(paths.source) == "payload");
+}
+
+TEST_CASE(PREFIX "fails closed when the source name is re-pointed at another object")
+{
+    // The check a Copy has no need of, and the reason a Move anchors the source's directory. Holding
+    // the source open proves the reviewed object still exists; it says nothing about what its *name*
+    // leads to now, and the rename would act on the name. Without the name-to-identity check at
+    // commit, this would move the substituted file - which is the failure the anchoring exists for.
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(MoveClaims(
+        TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    REQUIRE(std::filesystem::remove(paths.source));
+    Write(paths.source, "a different file wearing the same name");
+
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::SourceStale,
+                                               ESTALE}));
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+    CHECK(Read(paths.source) == "a different file wearing the same name");
+}
+
+TEST_CASE(PREFIX "fails closed when either directory changed since the Move was reviewed")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto expected_failure = ProviderConditionalCopyCommitFailure::SourceStale;
+    std::string changed;
+    SECTION("the source parent")
+    {
+        // Reported as source staleness rather than through a word of its own: the consumer's question
+        // is whether the world around the source moved, and a separate term would not change what it
+        // has to do about the answer.
+        changed = paths.source_parent;
+    }
+    SECTION("the destination parent")
+    {
+        changed = paths.destination_parent;
+        expected_failure = ProviderConditionalCopyCommitFailure::DestinationParentStale;
+    }
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(MoveClaims(
+        TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    REQUIRE(chmod(changed.c_str(), 0700) == 0);
+
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{
+               ProviderConditionalCopyPublicationState::NotPublished, expected_failure, ESTALE}));
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+    CHECK(Read(paths.source) == "payload");
+}
+
+TEST_CASE(PREFIX "abandons a Move at its last cancellation point without touching either directory")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(MoveClaims(
+        TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    CHECK(((*transaction)->Commit([] { return true; }) ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::Cancelled,
+                                               0}));
+    CHECK_FALSE(std::filesystem::exists(paths.destination));
+    CHECK(Read(paths.source) == "payload");
+}
+
+TEST_CASE(PREFIX "refuses to begin a Move whose claims no longer describe the disk")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    RequireCloneCapable(paths.destination_parent);
+    const auto claims = MoveClaims(
+        TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination);
+
+    SECTION("the destination appeared after review, which the directory notices first")
+    {
+        // The same shape as the vanished source below, and correct for the same reason: creating an
+        // entry *is* a change to the directory, and the directory is sealed by the review. Reported as
+        // the more specific fact rather than as a bare collision.
+        Write(paths.destination, "occupied");
+        CHECK(TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(claims)).error() ==
+              ProviderConditionalMoveTransactionBeginError::DestinationParentStale);
+    }
+    SECTION("the destination was already occupied when the Move was reviewed")
+    {
+        // What `DestinationExists` is actually for: the directory is exactly as reviewed, and the name
+        // inside it is taken. Nothing moved - the plan was never publishable.
+        Write(paths.destination, "occupied");
+        const auto occupied_claims = MoveClaims(
+            TestEnv().vfs_native, paths.source_parent, paths.source, paths.destination_parent, paths.destination);
+        CHECK(TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(occupied_claims)).error() ==
+              ProviderConditionalMoveTransactionBeginError::DestinationExists);
+    }
+    SECTION("the source is gone, which the directory notices first")
+    {
+        // Written expecting `SourceStale`, and the run said `SourceParentStale`. It is right and the
+        // expectation was wrong: removing the source *is* a change to the directory holding it, and
+        // that directory is checked first because the source is opened through it. So a vanished
+        // source is reported as its directory having moved, which is true and is the more specific
+        // fact - the entry the rename was going to name is no longer the entry that was reviewed.
+        REQUIRE(std::filesystem::remove(paths.source));
+        CHECK(TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(claims)).error() ==
+              ProviderConditionalMoveTransactionBeginError::SourceParentStale);
+    }
+    SECTION("the source changed since review")
+    {
+        // What reaches `SourceStale` on Begin: the file itself moved on while its directory did not,
+        // which writing into it does and unlinking it cannot.
+        Write(paths.source, "different payload entirely");
+        CHECK(TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(claims)).error() ==
+              ProviderConditionalMoveTransactionBeginError::SourceStale);
+    }
+    SECTION("the source parent changed since review")
+    {
+        REQUIRE(chmod(paths.source_parent.c_str(), 0700) == 0);
+        CHECK(TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(claims)).error() ==
+              ProviderConditionalMoveTransactionBeginError::SourceParentStale);
+    }
+    SECTION("the claimed source parent does not hold the source")
+    {
+        auto elsewhere = claims;
+        elsewhere.source_parent = Expectation(paths.destination_parent, ProviderConditionalCopyExpectedKind::Directory);
+        CHECK(TestEnv().vfs_native->BeginConditionalMoveTransaction(MoveAuthority(std::move(elsewhere))).error() ==
+              ProviderConditionalMoveTransactionBeginError::InvalidRequest);
+    }
+    // No shared closing assertion here: each section leaves the disk in a different state, and one of
+    // them puts a file at the destination itself. Every section already asserts the only thing that
+    // matters - that Begin refused, so no transaction exists to publish anything.
 }
 
 TEST_CASE(PREFIX "answers conditional Move eligibility without inferring it from Copy")
