@@ -108,6 +108,8 @@ The existing test that pinned "batch" was pinning the multiple-sources case all 
 
 **The factory still does not loop.** Validating N items, building N transactions, and producing an execution product that journals N results is the remaining work, and it needs a new operation type: `ProviderConditionalCopyOperationFactory::Create` takes exactly one transaction, and there is no composition of operations in this module to build on. That is design work rather than a loop, which is why it is named here rather than attempted in passing.
 
+**Closed by steps B and C.** The loop and its all-or-nothing rollback are below; the execution product now carries the whole set, through the same operation type generalised rather than a second one — see [`provider_conditional_copy_execution_product.md`](provider_conditional_copy_execution_product.md). What remains is step D, the gate itself.
+
 ## Slice 2, step B: prepared as a set, committed to as a set
 
 The factory now loops `prepare_item` over every accepted item and holds the prepared transactions together. If any item refuses, the whole set is abandoned **before** the error is returned: a half-prepared batch that returns while holding open transactions leaves temporary state on disk that nothing owns.
@@ -134,3 +136,11 @@ An item's structural source is matched against whichever entry of `plan.Sources(
 - New `OperationsUT` cases: **2/2** — a confirmed rollback leaves the reason for it standing (`Cancelled`, one abort, nothing published); an unconfirmed one outranks it (`ConditionalCommitAuthorityUnavailable` naming the destination).
 - `ReviewedOperationFactory:` **12/12, 283 assertions** in Debug, and the same 12/283 under **Release ASAN** and **Release UBSAN** with no diagnostics.
 - Full `OperationsUT`: **245/245, 6,094 assertions**. Full `OperationsIT`: **98 passed, 2 skipped, 973/973 assertions** — the physical two-volume fixture remains the recorded skip. Full `WinCommanderUT`: **890/890, 12,150 assertions**, unchanged from the recorded baseline.
+
+## Slice 2, step C: the factory hands over a set
+
+The prepared items now become one `ProviderConditionalCopyOperationItem` each and are handed to the batch operation together, so a reviewed batch is one operation with one journal entry rather than N operations the user never asked for. The operation's own decisions are recorded in [`provider_conditional_copy_execution_product.md`](provider_conditional_copy_execution_product.md); two things belong to the factory.
+
+**Two index spaces meet here, and they are not the same map.** An authority is issued for the item's place in the reviewed report, because that is what the review covered. A journal result is numbered by the item's place in `plan.Sources()`, because that is the space the journal validates against — it refuses a result whose index is not a source of the plan, and requires one result per source before an entry may be `Completed`. They coincide for every plan this factory can accept, and provably rather than by assumption: a source leaves the report only through `Skip` on an occupied destination, and the planner records the conflict before that decision, so the report carries a conflict the review refuses. The lookup added in step B is what keeps the derivation honest if that ever stops being true.
+
+**The compatibility surface now reads the evidence rather than its single-item projection.** That projection reports any set other than exactly one item as inconsistent, so once a product may carry several it would have been answering the batch's size instead of what happened to it. For one item the two are the same answer, which is why every existing case pins it unchanged.

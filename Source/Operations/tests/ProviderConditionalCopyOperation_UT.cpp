@@ -9,16 +9,21 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <array>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <type_traits>
+#include <vector>
 
 #define PREFIX "ProviderConditionalCopyOperation: "
 
@@ -268,6 +273,94 @@ void ProviderConditionalCopyOperationUTCheckTerminalEvidence(
     const auto second = _accessor();
     REQUIRE(second);
     CHECK(*second == *first);
+}
+
+ProviderConditionalCopyOperationPresentation ProviderConditionalCopyOperationUTPresentationAt(size_t _index)
+{
+    const auto name = "source-" + std::to_string(_index) + ".txt";
+    return {
+        .source_host = ProviderConditionalCopyOperationUTSourceHost(),
+        .source_path = "/" + name,
+        .destination_path = "/destination/" + name,
+    };
+}
+
+/**
+ * `_index` is the item's place in the batch, `_journal_index` its place in the journal's numbering.
+ * They are separate on purpose: the operation must publish by the former and record by the latter,
+ * and a fixture that made them equal everywhere would hide the difference.
+ */
+ProviderConditionalCopyOperationItem
+ProviderConditionalCopyOperationUTItem(size_t _index,
+                                       size_t _journal_index,
+                                       uint64_t _bytes,
+                                       vfs::ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                       vfs::ProviderConditionalCopyTransaction::AbortHandler _abort)
+{
+    auto presentation = ProviderConditionalCopyOperationUTPresentationAt(_index);
+    auto transaction = ProviderConditionalCopyOperationUTTransactionForPresentation(
+        presentation, std::move(_commit), std::move(_abort));
+    return ProviderConditionalCopyOperationItem{
+        .transaction = std::move(transaction),
+        .journal_context = {.item_index = _journal_index, .exact_source_bytes = _bytes},
+        .presentation = std::move(presentation),
+    };
+}
+
+ProviderConditionalCopyOperationItem
+ProviderConditionalCopyOperationUTItem(size_t _index,
+                                       uint64_t _bytes,
+                                       vfs::ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                       vfs::ProviderConditionalCopyTransaction::AbortHandler _abort)
+{
+    return ProviderConditionalCopyOperationUTItem(_index, _index, _bytes, std::move(_commit), std::move(_abort));
+}
+
+/** Counts what each item's own transaction was asked to do, so a tail can be told from a run. */
+struct ProviderConditionalCopyOperationUTItemProbe final {
+    std::atomic_int commit_calls{0};
+    std::atomic_int abort_calls{0};
+};
+
+OperationJournalItemResult ProviderConditionalCopyOperationUTSuccessItemAt(size_t _index, uint64_t _bytes)
+{
+    auto result = ProviderConditionalCopyOperationUTSuccessItem();
+    result.item_index = _index;
+    result.bytes = _bytes;
+    return result;
+}
+
+OperationJournalItemResult ProviderConditionalCopyOperationUTCancelledItemAt(size_t _index)
+{
+    auto result = ProviderConditionalCopyOperationUTCancelledItem();
+    result.item_index = _index;
+    return result;
+}
+
+OperationJournalItemResult ProviderConditionalCopyOperationUTFailureItemAt(size_t _index)
+{
+    auto result = ProviderConditionalCopyOperationUTFailureItem();
+    result.item_index = _index;
+    return result;
+}
+
+OperationJournalItemResult ProviderConditionalCopyOperationUTUnknownItemAt(size_t _index)
+{
+    auto result = ProviderConditionalCopyOperationUTUnknownItem();
+    result.item_index = _index;
+    return result;
+}
+
+/** Reads the evidence twice: reconciliation confirms a durable write by exact equality. */
+CopyOperationTerminalEvidence
+ProviderConditionalCopyOperationUTEvidence(const CopyOperationExecutionProduct::TerminalEvidenceAccessor &_accessor)
+{
+    const auto first = _accessor();
+    REQUIRE(first);
+    const auto second = _accessor();
+    REQUIRE(second);
+    CHECK(*second == *first);
+    return *first;
 }
 
 bool ProviderConditionalCopyOperationUTWaitUntil(const auto &_predicate)
@@ -785,6 +878,545 @@ TEST_CASE(PREFIX "maps a pre-consumed aborted transaction as submitted-path inco
     CHECK(ProviderConditionalCopyOperationUTOperation(product)->State() == OperationState::Completed);
     CHECK(probe->commit_calls == 0);
     CHECK(probe->abort_calls == 1);
+}
+
+TEST_CASE(PREFIX "runs a batch in order and reports one result per item",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    constexpr uint64_t bytes[] = {10, 200, 3000};
+    // Sparse, and deliberately not the batch positions: an operation that published results by
+    // journal number instead of by item would still pass if the two ever agreed everywhere.
+    constexpr size_t journal_indices[] = {0, 2, 5};
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 3> probes;
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    // Written only by the worker thread and read only after Wait, so no assertion runs off the main
+    // thread - Catch2 does not survive that.
+    std::vector<std::string> commit_order;
+    auto read_evidence_mid_run = std::make_shared<std::function<void()>>();
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+        items.push_back(ProviderConditionalCopyOperationUTItem(
+            index,
+            journal_indices[index],
+            bytes[index],
+            [probe = probes[index], index, &commit_order, read_evidence_mid_run](const auto &) {
+                ++probe->commit_calls;
+                commit_order.push_back("/source-" + std::to_string(index) + ".txt");
+                // Asked while the first item is already terminal and the rest are not.
+                if( index == 1 && *read_evidence_mid_run )
+                    (*read_evidence_mid_run)();
+                return ProviderConditionalCopyOperationUTSuccess();
+            },
+            [probe = probes[index]] {
+                ++probe->abort_calls;
+                return ProviderPublication::NotPublished;
+            }));
+    }
+
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+    CHECK(operation->Title() == "Copying 3 items");
+    CHECK(operation->Statistics().PreferredSource() == Statistics::SourceType::Items);
+    CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Items) == 3);
+    CHECK(operation->Statistics().VolumeTotal(Statistics::SourceType::Bytes) == 3210);
+    ProviderConditionalCopyOperationUTCheckPending(ProviderConditionalCopyOperationUTTerminalEvidence(product));
+
+    std::vector<std::string> reported_paths;
+    std::vector<ItemStatus> reported_statuses;
+    std::vector<std::optional<std::string>> current_paths;
+    operation->SetItemStatusCallback([&](ItemStateReport _report) {
+        reported_paths.emplace_back(_report.path);
+        reported_statuses.push_back(_report.status);
+        current_paths.push_back(operation->CurrentItemPath());
+    });
+
+    std::optional<CopyOperationTerminalResultError> mid_run_error;
+    bool mid_run_had_evidence = false;
+    *read_evidence_mid_run = [&, accessor = ProviderConditionalCopyOperationUTTerminalEvidence(product)] {
+        const auto observed = accessor();
+        mid_run_had_evidence = observed.has_value();
+        if( !observed )
+            mid_run_error = observed.error();
+    };
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+    CHECK(operation->State() == OperationState::Completed);
+    CHECK(reported_statuses ==
+          std::vector<ItemStatus>{ItemStatus::Processed, ItemStatus::Processed, ItemStatus::Processed});
+
+    // Half a batch is not an answer: one item was already terminal when this was read, and a partial
+    // snapshot would have been latched and recorded as if the run had ended there.
+    CHECK_FALSE(mid_run_had_evidence);
+    CHECK(mid_run_error == CopyOperationTerminalResultError::Pending);
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    CHECK(evidence.state == OperationJournalState::Completed);
+    REQUIRE(evidence.item_results.size() == 3);
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        CHECK(evidence.item_results[index] ==
+              ProviderConditionalCopyOperationUTSuccessItemAt(journal_indices[index], bytes[index]));
+        CHECK(probes[index]->commit_calls == 1);
+        CHECK(probes[index]->abort_calls == 0);
+    }
+    CHECK(commit_order == std::vector<std::string>{"/source-0.txt", "/source-1.txt", "/source-2.txt"});
+    CHECK(reported_paths == commit_order);
+    // The file being copied travels on the current-item channel, which is what a progress line reads.
+    CHECK(current_paths == std::vector<std::optional<std::string>>{
+                               std::optional<std::string>{"/source-0.txt"},
+                               std::optional<std::string>{"/source-1.txt"},
+                               std::optional<std::string>{"/source-2.txt"}});
+    CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 3);
+    CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Bytes) == 3210);
+}
+
+TEST_CASE(PREFIX "ends a batch at the first failure and leaves the untouched items unrecorded",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 3> probes;
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+        items.push_back(ProviderConditionalCopyOperationUTItem(
+            index,
+            100,
+            [probe = probes[index], index](const auto &) {
+                ++probe->commit_calls;
+                return index == 1 ? ProviderConditionalCopyOperationUTFailure()
+                                  : ProviderConditionalCopyOperationUTSuccess();
+            },
+            [probe = probes[index]] {
+                ++probe->abort_calls;
+                return ProviderPublication::NotPublished;
+            }));
+    }
+
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+    int reports = 0;
+    operation->SetItemStatusCallback([&reports](ItemStateReport) { ++reports; });
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    CHECK(evidence.state == OperationJournalState::Failed);
+    // Two results, not three: the third item was never attempted, and a journal entry that reports
+    // a failure may say nothing at all about the items behind it. Calling them cancelled instead
+    // would be a status this entry cannot legally carry.
+    REQUIRE(evidence.item_results.size() == 2);
+    CHECK(evidence.item_results[0] == ProviderConditionalCopyOperationUTSuccessItemAt(0, 100));
+    CHECK(evidence.item_results[1] == ProviderConditionalCopyOperationUTFailureItemAt(1));
+    CHECK(probes[2]->commit_calls == 0);
+    CHECK(probes[2]->abort_calls == 1);
+    CHECK(reports == 3);
+    CHECK(operation->Statistics().VolumeProcessed(Statistics::SourceType::Items) == 1);
+}
+
+TEST_CASE(PREFIX "cancels the items behind a cancelled one",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 3> probes;
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+        items.push_back(ProviderConditionalCopyOperationUTItem(
+            index,
+            100,
+            [probe = probes[index], index](const auto &) -> CommitResult {
+                ++probe->commit_calls;
+                if( index != 1 )
+                    return ProviderConditionalCopyOperationUTSuccess();
+                return {.publication = ProviderPublication::NotPublished,
+                        .failure = CommitFailure::Cancelled,
+                        .system_error = 0,
+                        .filesystem_sync_status = ProviderSync::NotAttempted,
+                        .filesystem_sync_system_error = 0};
+            },
+            [probe = probes[index]] {
+                ++probe->abort_calls;
+                return ProviderPublication::NotPublished;
+            }));
+    }
+
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+    CHECK(operation->State() == OperationState::Stopped);
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    CHECK(evidence.state == OperationJournalState::Cancelled);
+    REQUIRE(evidence.item_results.size() == 3);
+    CHECK(evidence.item_results[0] == ProviderConditionalCopyOperationUTSuccessItemAt(0, 100));
+    CHECK(evidence.item_results[1] == ProviderConditionalCopyOperationUTCancelledItemAt(1));
+    // The committed item stays committed and the rest say so themselves - a cancelled item is what
+    // the per-item result exists to express, and it is why the tail is cancelled rather than aborted.
+    CHECK(evidence.item_results[2] == ProviderConditionalCopyOperationUTCancelledItemAt(2));
+    CHECK(probes[2]->commit_calls == 0);
+    CHECK(probes[2]->abort_calls == 1);
+}
+
+TEST_CASE(PREFIX "lets a failure outrank the cancellation that uncovered it",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    items.push_back(ProviderConditionalCopyOperationUTItem(
+        0, 100, [](const auto &) { return ProviderConditionalCopyOperationUTSuccess(); },
+        [] { return ProviderPublication::NotPublished; }));
+    items.push_back(ProviderConditionalCopyOperationUTItem(
+        1,
+        100,
+        [](const auto &) -> CommitResult {
+            return {.publication = ProviderPublication::NotPublished,
+                    .failure = CommitFailure::Cancelled,
+                    .system_error = 0,
+                    .filesystem_sync_status = ProviderSync::NotAttempted,
+                    .filesystem_sync_system_error = 0};
+        },
+        [] { return ProviderPublication::NotPublished; }));
+    // The tail item winds down, and its rollback cannot say whether anything was published.
+    items.push_back(ProviderConditionalCopyOperationUTItem(
+        2, 100, [](const auto &) { return ProviderConditionalCopyOperationUTSuccess(); },
+        [] { return ProviderPublication::Unknown; }));
+
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    // One entry cannot hold a failure and a cancellation, and of the two only the failure has a
+    // consequence: a cancelled item published nothing, so leaving it out withholds nothing about
+    // what is on disk, while dropping the failure would hide a destination that may exist.
+    CHECK(evidence.state == OperationJournalState::Failed);
+    REQUIRE(evidence.item_results.size() == 2);
+    CHECK(evidence.item_results[0] == ProviderConditionalCopyOperationUTSuccessItemAt(0, 100));
+    CHECK(evidence.item_results[1] == ProviderConditionalCopyOperationUTUnknownItemAt(2));
+}
+
+TEST_CASE(PREFIX "refuses a batch it could not record",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    const auto succeed = [](const auto &) { return ProviderConditionalCopyOperationUTSuccess(); };
+    const auto abort = [] { return ProviderPublication::NotPublished; };
+
+    SECTION("nothing to do")
+    {
+        const auto created = ProviderConditionalCopyOperationTesting::CreateBatch({});
+        REQUIRE_FALSE(created);
+        CHECK(created.error() == ProviderConditionalCopyOperationConstructionError::EmptyBatch);
+    }
+
+    SECTION("two items claiming one journal index")
+    {
+        std::vector<ProviderConditionalCopyOperationItem> items;
+        items.push_back(ProviderConditionalCopyOperationUTItem(1, 100, succeed, abort));
+        items.push_back(ProviderConditionalCopyOperationUTItem(1, 100, succeed, abort));
+        const auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+        REQUIRE_FALSE(created);
+        CHECK(created.error() == ProviderConditionalCopyOperationConstructionError::InvalidJournalIndices);
+    }
+
+    SECTION("indices that do not increase")
+    {
+        std::vector<ProviderConditionalCopyOperationItem> items;
+        items.push_back(ProviderConditionalCopyOperationUTItem(1, 100, succeed, abort));
+        items.push_back(ProviderConditionalCopyOperationUTItem(0, 100, succeed, abort));
+        const auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+        REQUIRE_FALSE(created);
+        CHECK(created.error() == ProviderConditionalCopyOperationConstructionError::InvalidJournalIndices);
+    }
+
+    SECTION("an item with no transaction")
+    {
+        std::vector<ProviderConditionalCopyOperationItem> items;
+        items.push_back(ProviderConditionalCopyOperationUTItem(0, 100, succeed, abort));
+        items.push_back(ProviderConditionalCopyOperationItem{
+            .transaction = nullptr,
+            .journal_context = {.item_index = 1, .exact_source_bytes = 100},
+            .presentation = ProviderConditionalCopyOperationUTPresentationAt(1),
+        });
+        const auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+        REQUIRE_FALSE(created);
+        CHECK(created.error() == ProviderConditionalCopyOperationConstructionError::MissingTransaction);
+    }
+
+    SECTION("an item that cannot be shown")
+    {
+        std::vector<ProviderConditionalCopyOperationItem> items;
+        items.push_back(ProviderConditionalCopyOperationUTItem(0, 100, succeed, abort));
+        auto second = ProviderConditionalCopyOperationUTItem(1, 100, succeed, abort);
+        second.presentation.destination_path.clear();
+        items.push_back(std::move(second));
+        const auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+        REQUIRE_FALSE(created);
+        CHECK(created.error() == ProviderConditionalCopyOperationConstructionError::InvalidPresentation);
+    }
+}
+
+TEST_CASE(PREFIX "terminates every item of a batch that never runs",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 3> probes;
+    const auto build = [&probes] {
+        std::vector<ProviderConditionalCopyOperationItem> items;
+        for( size_t index = 0; index != probes.size(); ++index ) {
+            probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+            items.push_back(ProviderConditionalCopyOperationUTItem(
+                index,
+                100,
+                [probe = probes[index]](const auto &) {
+                    ++probe->commit_calls;
+                    return ProviderConditionalCopyOperationUTSuccess();
+                },
+                [probe = probes[index]] {
+                    ++probe->abort_calls;
+                    return ProviderPublication::NotPublished;
+                }));
+        }
+        return items;
+    };
+
+    SECTION("a cold stop cancels all of them")
+    {
+        auto created = ProviderConditionalCopyOperationTesting::CreateBatch(build());
+        REQUIRE(created);
+        auto product = std::move(*created);
+        auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+
+        CHECK(operation->Stop());
+        const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+            ProviderConditionalCopyOperationUTTerminalEvidence(product));
+        CHECK(evidence.state == OperationJournalState::Cancelled);
+        REQUIRE(evidence.item_results.size() == 3);
+        for( size_t index = 0; index != probes.size(); ++index ) {
+            CHECK(evidence.item_results[index] == ProviderConditionalCopyOperationUTCancelledItemAt(index));
+            CHECK(probes[index]->commit_calls == 0);
+            CHECK(probes[index]->abort_calls == 1);
+        }
+    }
+
+    SECTION("dropping it aborts all of them and reports no run at all")
+    {
+        auto created = ProviderConditionalCopyOperationTesting::CreateBatch(build());
+        REQUIRE(created);
+        auto product = std::move(*created);
+        auto accessor = ProviderConditionalCopyOperationUTTerminalEvidence(product);
+        ProviderConditionalCopyOperationUTOperation(product).reset();
+
+        const auto evidence = accessor();
+        REQUIRE_FALSE(evidence);
+        // No item ever executed, so there is no terminal outcome to report - which is what the
+        // application boundary reads as its integration blocker rather than as a finished run.
+        CHECK(evidence.error() == CopyOperationTerminalResultError::Inconsistent);
+        for( const auto &probe : probes ) {
+            CHECK(probe->commit_calls == 0);
+            CHECK(probe->abort_calls == 1);
+        }
+    }
+}
+
+TEST_CASE(PREFIX "accepts a stop while items remain unstarted and cancels exactly those",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    auto stopper = std::make_shared<std::function<void()>>();
+    auto stop_accepted = std::make_shared<std::atomic_bool>(false);
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 3> probes;
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+        items.push_back(ProviderConditionalCopyOperationUTItem(
+            index,
+            100,
+            [probe = probes[index], index, stopper](const auto &) {
+                ++probe->commit_calls;
+                // The stop arrives while the first item is irreversibly committing.
+                if( index == 0 && *stopper )
+                    (*stopper)();
+                return ProviderConditionalCopyOperationUTSuccess();
+            },
+            [probe = probes[index]] {
+                ++probe->abort_calls;
+                return ProviderPublication::NotPublished;
+            }));
+    }
+
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+    *stopper = [&operation, stop_accepted] { stop_accepted->store(operation->Stop()); };
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+    // Accepted, not refused: the sequence still had items nobody had touched.
+    CHECK(stop_accepted->load());
+    CHECK(operation->State() == OperationState::Stopped);
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    CHECK(evidence.state == OperationJournalState::Cancelled);
+    REQUIRE(evidence.item_results.size() == 3);
+    // The commit in flight is irreversible and keeps its outcome; the two behind it were never
+    // begun, which is exactly what the stop was accepted on the strength of.
+    CHECK(evidence.item_results[0] == ProviderConditionalCopyOperationUTSuccessItemAt(0, 100));
+    CHECK(evidence.item_results[1] == ProviderConditionalCopyOperationUTCancelledItemAt(1));
+    CHECK(evidence.item_results[2] == ProviderConditionalCopyOperationUTCancelledItemAt(2));
+    CHECK(probes[0]->commit_calls == 1);
+    CHECK(probes[1]->commit_calls == 0);
+    CHECK(probes[2]->commit_calls == 0);
+}
+
+TEST_CASE(PREFIX "will not call a batch completed while an item has no result to give",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    items.push_back(ProviderConditionalCopyOperationUTItem(
+        0, 100, [](const auto &) { return ProviderConditionalCopyOperationUTSuccess(); },
+        [] { return ProviderPublication::NotPublished; }));
+    // A terminal that precedes execution - what a commit on an already-aborted transaction replays.
+    // It maps to no journal result at all, so this item cannot appear in the entry.
+    items.push_back(ProviderConditionalCopyOperationUTItem(
+        1,
+        100,
+        [](const auto &) -> CommitResult {
+            return {.publication = ProviderPublication::NotPublished,
+                    .failure = CommitFailure::Aborted,
+                    .system_error = 0,
+                    .filesystem_sync_status = ProviderSync::NotAttempted,
+                    .filesystem_sync_system_error = 0};
+        },
+        [] { return ProviderPublication::NotPublished; }));
+
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+
+    const auto evidence = ProviderConditionalCopyOperationUTTerminalEvidence(product)();
+    REQUIRE_FALSE(evidence);
+    // A failed or cancelled entry may omit the items behind it; a completed one may not, and an entry
+    // the journal refuses is not a visible error but a slot latched into contract violation. The
+    // single-item path has always answered this same event the same way.
+    CHECK(evidence.error() == CopyOperationTerminalResultError::Inconsistent);
+}
+
+TEST_CASE(PREFIX "cancels an item the stop was accepted ahead of, rather than committing it",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    // The stop lands in the one window where the worker has decided nothing yet: it is accepted on
+    // the strength of "this item has not started", so this item must not then be committed.
+    auto stopper = std::make_shared<std::function<void()>>();
+    auto stop_accepted = std::make_shared<std::atomic_bool>(false);
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 2> probes;
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+        items.push_back(ProviderConditionalCopyOperationUTItem(
+            index,
+            100,
+            [probe = probes[index]](const auto &) {
+                ++probe->commit_calls;
+                return ProviderConditionalCopyOperationUTSuccess();
+            },
+            [probe = probes[index]] {
+                ++probe->abort_calls;
+                return ProviderPublication::NotPublished;
+            }));
+    }
+
+    ProviderConditionalCopyOperationTestHooks hooks;
+    hooks.before_item_start = [stopper](size_t _index) {
+        if( _index == 0 && *stopper )
+            (*stopper)();
+    };
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items), {}, std::move(hooks));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+    *stopper = [&operation, stop_accepted] { stop_accepted->store(operation->Stop()); };
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+    CHECK(stop_accepted->load());
+    CHECK(operation->State() == OperationState::Stopped);
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    CHECK(evidence.state == OperationJournalState::Cancelled);
+    REQUIRE(evidence.item_results.size() == 2);
+    CHECK(evidence.item_results[0] == ProviderConditionalCopyOperationUTCancelledItemAt(0));
+    CHECK(evidence.item_results[1] == ProviderConditionalCopyOperationUTCancelledItemAt(1));
+    for( const auto &probe : probes ) {
+        CHECK(probe->commit_calls == 0);
+        CHECK(probe->abort_calls == 1);
+    }
+}
+
+TEST_CASE(PREFIX "settles every item when the run is thrown out of, instead of stranding the evidence",
+          "[provider-conditional-copy][provider-conditional-copy-operation]")
+{
+    std::array<std::shared_ptr<ProviderConditionalCopyOperationUTItemProbe>, 3> probes;
+    std::vector<ProviderConditionalCopyOperationItem> items;
+    for( size_t index = 0; index != probes.size(); ++index ) {
+        probes[index] = std::make_shared<ProviderConditionalCopyOperationUTItemProbe>();
+        items.push_back(ProviderConditionalCopyOperationUTItem(
+            index,
+            100,
+            [probe = probes[index]](const auto &) {
+                ++probe->commit_calls;
+                return ProviderConditionalCopyOperationUTSuccess();
+            },
+            [probe = probes[index]] {
+                ++probe->abort_calls;
+                return ProviderPublication::NotPublished;
+            }));
+    }
+
+    ProviderConditionalCopyOperationTestHooks hooks;
+    hooks.before_item_start = [](size_t _index) {
+        if( _index == 1 )
+            throw std::runtime_error{"between items"};
+    };
+    auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items), {}, std::move(hooks));
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ProviderConditionalCopyOperationUTOperation(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(5s));
+
+    const auto evidence = ProviderConditionalCopyOperationUTEvidence(
+        ProviderConditionalCopyOperationUTTerminalEvidence(product));
+    // Not `Pending`: an unresolved item is evidence that never arrives, and nothing after the worker
+    // can resolve it - a stop finds the sequence claimed and the destructor only acts on an untouched
+    // job, so the Pool would hold the operation forever waiting.
+    CHECK(evidence.state == OperationJournalState::Cancelled);
+    REQUIRE(evidence.item_results.size() == 3);
+    CHECK(evidence.item_results[0] == ProviderConditionalCopyOperationUTSuccessItemAt(0, 100));
+    CHECK(evidence.item_results[1] == ProviderConditionalCopyOperationUTCancelledItemAt(1));
+    CHECK(evidence.item_results[2] == ProviderConditionalCopyOperationUTCancelledItemAt(2));
+    CHECK(probes[0]->commit_calls == 1);
+    CHECK(probes[1]->commit_calls == 0);
+    CHECK(probes[2]->commit_calls == 0);
 }
 
 TEST_CASE(PREFIX "keeps destruction behind the completion callback lifetime",

@@ -306,13 +306,18 @@ ReviewedOperationFactory::BlockExecutionProduct(
     if( !_product )
         return std::unexpected(std::move(_product.error()));
 
-    auto terminal_item_result = std::move(_product->m_TerminalItemResult);
+    // The evidence, not the single-item projection of it: that projection reports any set other than
+    // exactly one item as inconsistent, so once a product may carry several it would answer the
+    // batch's size rather than what happened to it.
+    auto terminal_evidence = std::move(_product->m_TerminalEvidence);
     _product->m_Operation.reset();
     try {
-        const auto terminal = terminal_item_result();
-        if( !terminal && terminal.error() == CopyOperationTerminalResultError::Inconsistent ) {
-            return std::unexpected(
-                ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitIntegrationUnavailable));
+        if( terminal_evidence ) {
+            const auto terminal = terminal_evidence();
+            if( !terminal && terminal.error() == CopyOperationTerminalResultError::Inconsistent ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitIntegrationUnavailable));
+            }
         }
     } catch( ... ) {
     }
@@ -428,6 +433,7 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             OperationPlanningPath source;
             OperationPlanningPath destination;
             uint64_t exact_source_bytes = 0;
+            size_t journal_item_index = 0;
         };
         const auto prepare_item =
             [&](const size_t _index) -> std::expected<PreparedItem, ReviewedOperationFactoryError> {
@@ -473,11 +479,19 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                 return candidate && *candidate == *source_path &&
                        item.source.provider_id == _source.ProviderId().Value();
             };
-            if( std::ranges::none_of(plan.Sources(), names_this_item) ||
+            const auto structural_source = std::ranges::find_if(plan.Sources(), names_this_item);
+            if( structural_source == plan.Sources().end() ||
                 item.destination.provider_id != destination.ProviderId().Value() ||
                 *destination_path != expected_destination ) {
                 return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
             }
+            // Two index spaces meet here and they are not the same map. An **authority** is issued
+            // for the item's place in the reviewed report, because that is what the review covered.
+            // A **journal** result is numbered by the item's place in `plan.Sources()`, because that
+            // is the space the journal validates against - it refuses a result whose index is not a
+            // source of the plan. They coincide only while one source yields one item.
+            const auto journal_item_index =
+                static_cast<size_t>(std::distance(plan.Sources().begin(), structural_source));
 
             const OperationPlanningPath destination_parent{
                 .provider_id = item.destination.provider_id,
@@ -736,7 +750,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                                 .source_host = source_host,
                                 .source = source_error_path,
                                 .destination = destination_error_path,
-                                .exact_source_bytes = exact_source_bytes};
+                                .exact_source_bytes = exact_source_bytes,
+                                .journal_item_index = journal_item_index};
         };
 
         std::vector<PreparedItem> prepared;
@@ -792,22 +807,35 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         if( is_cancelled() )
             return std::unexpected(abandon_with(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::Cancelled)));
 
-        // Still one operation from one prepared item: the several-sources gate above is what keeps the
-        // set that size, and what the operation cannot yet do is own several transactions at once.
-        PreparedItem &first = prepared.front();
+        // One operation over the whole set, not one operation per item: each of those would carry its
+        // own journal entry and its own terminal state, and the Operation Center would show N
+        // operations where the user asked for one.
+        std::vector<ProviderConditionalCopyOperationItem> operation_items;
+        operation_items.reserve(prepared.size());
+        for( auto &item : prepared ) {
+            operation_items.push_back(ProviderConditionalCopyOperationItem{
+                .transaction = std::move(item.transaction),
+                .journal_context =
+                    ProviderConditionalCopyJournalContext{
+                        .item_index = item.journal_item_index,
+                        .exact_source_bytes = item.exact_source_bytes,
+                    },
+                .presentation =
+                    ProviderConditionalCopyOperationPresentation{
+                        .source_host = item.source_host,
+                        .source_path = item.source.absolute_path,
+                        .destination_path = item.destination.absolute_path,
+                    },
+            });
+        }
+
         auto product =
-            ProviderConditionalCopyOperationFactory::Create(std::move(first.transaction),
-                                                            ProviderConditionalCopyJournalContext{
-                                                                .item_index = 0,
-                                                                .exact_source_bytes = first.exact_source_bytes,
-                                                            },
-                                                            ProviderConditionalCopyOperationPresentation{
-                                                                .source_host = first.source_host,
-                                                                .source_path = first.source.absolute_path,
-                                                                .destination_path = first.destination.absolute_path,
-                                                            },
-                                                            std::move(is_cancelled));
+            ProviderConditionalCopyOperationFactory::CreateBatch(std::move(operation_items), std::move(is_cancelled));
         if( !product ) {
+            // The transactions moved into the batch and were destroyed with it, which aborts them but
+            // discards the abort results - the one place where the rollback above cannot answer. It
+            // costs nothing today: every other construction refusal is checked before this point, so
+            // only an allocation failure reaches it.
             return std::unexpected(
                 abandon_with(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConstructionFailed)));
         }

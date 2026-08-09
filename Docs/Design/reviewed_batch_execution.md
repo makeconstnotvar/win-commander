@@ -80,14 +80,66 @@ decision that makes the slice non-trivial: a half-prepared batch that returns an
 open transactions leaves temporary state on disk that nothing owns. Preparation must therefore be
 all-or-nothing, which means the loop cannot simply propagate the first error with `return`.
 
-**Step C — the batch operation.** A new `nc::ops::Operation` owning a `std::vector` of prepared
-items, running them in order, writing one journal item result per item at its own index, and
-producing terminal evidence whose `state` is derived from the whole set: any failure fails the
-operation, any cancellation cancels it, otherwise completed. Per-item `exact_source_bytes` sums into
-the operation's total for progress.
+**Step C — DONE: the batch operation.** Not a new class. `ProviderConditionalCopyOperation` and its
+Job now own a `std::vector` of prepared items and one item is a batch of one, because the parts that
+are hard to get right — the termination gate with its four entry points, the cancel-checker
+sanitiser, the construction pipeline — are exactly the parts a second class would fork. The existing
+suite became the N=1 regression pin at no cost.
 
-Cancellation between items is a real case: the items already committed stay committed, the rest are
-`Cancelled`. That is what the journal's per-item result exists to express.
+What the design said about deriving the state from the whole set turned out to be under-specified,
+and the journal decided the rest:
+
+- **`OperationJournalValidEntryLifecycle` cannot express a Failed item and a Cancelled item in one
+  entry** (`Completed` forbids both, `Failed` requires no Cancelled, `Cancelled` requires no Failed).
+  So "any failure fails it, any cancellation cancels it" is not a fold over statuses — it is also a
+  decision about which results are emitted at all.
+- **The run therefore stops at the first item that does not succeed.** Continuing would let a later
+  cancellation meet an earlier failure and produce a set with no legal state at all. It is also the
+  honest reading of the evidence: every item's evidence was checked before execution began, and an
+  item that has just proved the world moved is a reason to stop spending it.
+- **How the untouched tail ends depends on why the run ended.** A cancellation cancels it — a forced
+  commit with an always-true checker, which is what yields a `Cancelled` result and what the design
+  meant by "the rest are `Cancelled`". A failure *aborts* it instead, and an aborted transaction has
+  no journal result at all; a `Failed` entry may legally omit the items behind the failure, and that
+  is exactly what "never attempted" should look like.
+- **A failure can still surface during a cancellation wind-down**, when a forced commit's abort
+  cannot confirm `NotPublished` and maps to `Failed`. Then the state is `Failed` and the `Cancelled`
+  results are dropped: a cancelled item is always `NotPublished`, so leaving it out withholds nothing
+  about what is on disk, while dropping the failure would hide a destination that may exist behind an
+  outcome saying none does.
+- **A completed batch must account for every item.** An entry may omit the items behind a failure or
+  a cancellation; a completed one may not, and an item whose provider answers with a terminal that
+  precedes execution has no result to give. Such a run is `Inconsistent` — the answer the single-item
+  path has always given the same event, where the missing item was the only one. Found by review,
+  after the first implementation would have emitted a `Completed` entry the journal refuses.
+- **Whoever claims the sequence owes every item a terminal.** A stop finds the sequence already
+  claimed and the destructor only acts on an untouched job, so an exception between items must not
+  escape: it winds the batch down as cancelled instead. Unresolved slots are evidence that never
+  arrives, and the Pool would hold the operation forever waiting for it. Also found by review — the
+  two calls that can throw there (the pause wait, the current-path publication) are both new in this
+  step, and the region held only `noexcept` calls before it.
+- **The stop handshake is one decision under one lock.** A stop is accepted on the strength of "this
+  item has not started"; reading that answer anywhere other than where the start is published lets a
+  stop be accepted for an item committed a moment later. Third finding from review, and the one whose
+  race cannot be driven from outside once fixed — the rule is pinned, the window is argued.
+- **Evidence is `Pending` until every item is resolved and `Inconsistent` when no item produced a
+  result at all.** The Pool reads the accessor once and latches the first non-`Pending` answer, so a
+  partial snapshot would be recorded durably and a permanently-`Pending` one would retain the
+  operation forever. The zero-results case is the cold abort, which the application boundary already
+  reads as its integration blocker.
+- **The journal's numbering is checked at construction, not at the terminal.** A set whose indices do
+  not strictly increase is refused before anything is copied, rather than after — a `Finalize` the
+  journal rejects is not a visible error but a slot latched into contract violation.
+- **Statistics estimate both timelines; the preferred source stays Items.** A conditional copy
+  publishes atomically, so an item's bytes go from none to all at its commit and a byte fraction
+  would sit still and then jump. The byte total is still what says how much the batch weighs.
+- **Only the worker terminates transactions while it owns the sequence.** A stop arriving mid-run is
+  accepted exactly while items remain unstarted — those the worker cancels when it sees the stop —
+  and refused once the last item is committing, which is the single-item rule unchanged. Having the
+  stop path terminate them inline would run N provider commits on the UI thread under Job's state
+  mutex, and could touch a transaction the worker is already inside.
+- **Pausing between items is now real.** It is the only safe pause point (a commit cannot be
+  interrupted), and until now `Pause` flipped a flag while nothing ever waited.
 
 **Step D — lift the gate.** This is where the design was wrong when first written, and a test
 corrected it.
@@ -116,6 +168,32 @@ Confirm before building on this: whether any planner path produces several accep
 source. If one does, `BatchUnsupported` becomes reachable and both gates need lifting; if none does,
 it is dead and should be said so rather than left looking like a limitation someone might try to
 lift.
+
+### What step C found that step D has to answer
+
+The journal numbers item results in the **plan's source space**, not the report's:
+`OperationJournalValidItemResult` refuses `item_index >= plan.Sources().size()`, and `Completed`
+additionally requires `item_results.size() == plan.Sources().size()`. Three consequences:
+
+1. **The two spaces coincide for every plan this factory can accept, and that is provable rather than
+   assumed.** A source is dropped from the report only by `Skip` on an occupied destination, and the
+   planner emplaces a conflict *before* that switch — a report carrying a conflict is refused at
+   review. Sources are planned in order, so accepted item *i* comes from source *i*. The lookup
+   introduced in step B is what keeps this true instead of trusting it.
+2. **One hole remains: a cancelled preflight can still be accepted.** The Copy finisher breaks out of
+   the source loop on cancellation and returns an accepted plan if no blocker accumulated, so the
+   report can be a strict prefix of the sources. Indices stay sound, but `Completed` becomes
+   unreachable for that plan — a fully successful batch could not be journalled. Unreachable at one
+   source (an empty report blocks with `NothingToDo`); step D must either refuse such a plan or the
+   completeness rule has to change.
+3. **The derivation is a lookup, so it is many-to-one by construction.** If step D ever makes one
+   source expand into several accepted items, they all derive that source's index and the operation
+   refuses the set at construction — fail-closed, but the wrong answer to give a user. Step D has to
+   decide what such items are actually numbered as before it lifts `BatchUnsupported`.
+4. **The application's terminal presenter is single-item.** `CopyOperationDurableTerminalOutcome::
+   SingleItemResult()` returns nullptr for N != 1 and the copy presenter turns that into a
+   "requires reconciliation" alert, so lifting the gate without teaching that surface about a set
+   would report a successful batch as a failure needing recovery.
 
 ## What must not be given up
 
