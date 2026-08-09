@@ -310,3 +310,37 @@ Not a composed one. A second identity scheme is how one connection ends up filed
 ### Coverage gap
 
 **Nothing reads the states yet, and nothing drives the retries.** The registry is exposed on the manager for a surface that does not exist, and `RemoteReconnectDriver` still has no timer arming it — a reconnect also needs an owner for the host it produces, since a panel holds its own. That, the manager UI, and system SMB/NFS mounts are what remain of Q2-5.
+
+---
+
+# RC-12: what a manager row lets you do
+
+RC-5 projected a connection for display. A Connection Manager also has to decide what its buttons do, and — more usefully — when they are greyed out.
+
+## A host whose key changed cannot simply be connected to
+
+`Connect` is refused while the trust verdict is `Mismatch`. What stands in the way is not something connecting again resolves; it needs the deliberate `ReplaceHostKey`, which RC-3 keeps as a separate act precisely so a routine button can never quietly perform it. Leaving `Connect` enabled would give the user a button to press repeatedly against a wall it cannot move — and, worse, one that looks like it should work.
+
+## A rejected credential does *not* block connecting
+
+Connecting prompts, and prompting is how the user supplies a new one. Refusing here would leave them no way in from this row at all. The two blocked states look alike on the surface and want opposite treatment, which is why they are asked separately.
+
+## `ReplaceHostKey` is offered only for a mismatch
+
+On a host that never changed there is nothing to accept. An always-available "trust this key" button is an invitation to click through the one warning that must never become routine — the same reasoning that made `MayPromptToTrust` refuse `Mismatch` in RC-2, applied from the other side.
+
+## `Forget` always asks, and takes the pin with it
+
+It discards a stored credential and a pin the user cannot get back by pressing the button again. Leaving the pin behind would keep a host silently trusted after they believed they had removed it — and a pin outliving the connection it belonged to is exactly the state nobody would think to check.
+
+Confirmation is reserved for that and for accepting a changed key. Asking on every action is how a confirmation stops being read.
+
+## Verification
+
+- `WinCommanderUT` and `WinCommander-Unsigned` — **BUILD SUCCEEDED**.
+- New `WinCommanderUT 'nc::core::EvaluateRemoteConnectionAction*'`: **7/7 cases, 30 assertions** — a mismatched host refusing `Connect` while offering the deliberate act; a rejected credential still connectable; connect and disconnect as exact opposites across every status; no offer to replace a credential that is not there, and one that works still replaceable; `ReplaceHostKey` refused for all three non-mismatch verdicts; `Forget` offered and confirmed in every status; and confirmation asked for nothing else.
+- Full `WinCommanderUT --rng-seed 424242`: **861/861 cases, 12,001 assertions**.
+
+### Coverage gap
+
+**No window presents it.** The rows, their state and now their actions are decided; the manager surface itself, and system SMB/NFS mounts, are what remain of Q2-5.
