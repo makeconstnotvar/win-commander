@@ -35,6 +35,9 @@ public:
     [[nodiscard]] ProviderConditionalCopyPathSupport
     ConditionalCopyPathSupport(std::string_view _source_path,
                                std::string_view _destination_parent_path) const noexcept override;
+    [[nodiscard]] ProviderConditionalMovePathSupport
+    ConditionalMovePathSupport(std::string_view _source_path,
+                               std::string_view _destination_parent_path) const noexcept override;
 
     std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
     BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,

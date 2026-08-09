@@ -224,6 +224,17 @@ public:
     ConditionalCopyPathSupport(std::string_view _source_path, std::string_view _destination_parent_path) const noexcept;
 
     /**
+     * The same read-only preliminary check for a conditional Move. Same meanings for Unsupported and
+     * Unavailable, and the same promise that exact reviewed claims are revalidated at execution.
+     *
+     * A Move demands a different volume interface than a Copy - atomic exclusive rename rather than
+     * cloning - so a volume can be eligible for one and not the other, and neither answer may be
+     * inferred from the other.
+     */
+    [[nodiscard]] virtual ProviderConditionalMovePathSupport
+    ConditionalMovePathSupport(std::string_view _source_path, std::string_view _destination_parent_path) const noexcept;
+
+    /**
      * Consumes reviewed Copy authority and begins a provider-owned conditional publication transaction.
      * The default implementation returns Unsupported. Native supports one create-only regular file on the
      * exact same clone-capable volume and retains anchored source/destination-parent descriptors until terminal use.

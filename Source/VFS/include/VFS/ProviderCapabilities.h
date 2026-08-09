@@ -83,6 +83,22 @@ enum class ProviderConditionalCopyPathSupport : uint8_t {
     Unavailable
 };
 
+/**
+ * The same preliminary question asked of a Move, and it has one fewer answer than Copy on purpose.
+ *
+ * There is no cross-volume case here, and its absence is a decision rather than an omission. A
+ * same-volume Move is one indivisible operation: the destination appears and the source ceases to
+ * exist together, so a result saying the destination was published says everything there is to say. A
+ * cross-volume Move is copy-then-unlink - two separate events - and the journal's item result has no
+ * field that could record "published, and the source is still there". That shape is therefore not
+ * merely unimplemented but unrepresentable, and answering `Unsupported` for it is the truth.
+ */
+enum class ProviderConditionalMovePathSupport : uint8_t {
+    SameVolumeRename,
+    Unsupported,
+    Unavailable
+};
+
 struct ProviderConditionalCopyBinding final {
     std::string provider_id;
     std::shared_ptr<Host> host;

@@ -655,6 +655,13 @@ Host::ConditionalCopyPathSupport([[maybe_unused]] std::string_view _source_path,
     return ProviderConditionalCopyPathSupport::Unsupported;
 }
 
+ProviderConditionalMovePathSupport
+Host::ConditionalMovePathSupport([[maybe_unused]] std::string_view _source_path,
+                                 [[maybe_unused]] std::string_view _destination_parent_path) const noexcept
+{
+    return ProviderConditionalMovePathSupport::Unsupported;
+}
+
 std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
 Host::MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                      ProviderConditionalCopyTransaction::CommitHandler _commit,

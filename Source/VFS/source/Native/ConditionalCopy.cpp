@@ -116,8 +116,17 @@ ConditionalCopyReadExtendedAttributes(int _fd) noexcept
 
 } // namespace
 
+/** Which publication interface the caller is going to need from this volume, if any. */
+enum class ConditionalPublicationInterface : uint8_t {
+    /** The cross-volume staging helper writes bytes itself and publishes elsewhere. */
+    None,
+    Clone,
+    AtomicExclusiveRename
+};
+
 static ConditionalCopyVolumeDecision
-EvaluateConditionalCopyVolumeImpl(const nc::utility::NativeFileSystemInfo &_volume, const bool _requires_clone) noexcept
+EvaluateConditionalCopyVolumeImpl(const nc::utility::NativeFileSystemInfo &_volume,
+                                  const ConditionalPublicationInterface _interface) noexcept
 {
     const auto media =
         _volume.mount_flags.internal ? ConditionalCopyVolumeMedia::Internal : ConditionalCopyVolumeMedia::External;
@@ -133,8 +142,10 @@ EvaluateConditionalCopyVolumeImpl(const nc::utility::NativeFileSystemInfo &_volu
         return {.disposition = ConditionalCopyVolumeDisposition::ReadOnly, .media = media};
     if( _volume.mount_flags.unknown_permissions || _volume.format.no_permissions )
         return {.disposition = ConditionalCopyVolumeDisposition::UnknownPermissions, .media = media};
-    if( _requires_clone && !_volume.interfaces.clone )
+    if( _interface == ConditionalPublicationInterface::Clone && !_volume.interfaces.clone )
         return {.disposition = ConditionalCopyVolumeDisposition::CloneUnavailable, .media = media};
+    if( _interface == ConditionalPublicationInterface::AtomicExclusiveRename && !_volume.interfaces.rename_excl )
+        return {.disposition = ConditionalCopyVolumeDisposition::AtomicRenameUnavailable, .media = media};
     if( !_volume.interfaces.attr_list || !_volume.interfaces.extended_attr || !_volume.interfaces.extended_security ) {
         return {.disposition = ConditionalCopyVolumeDisposition::MetadataUnavailable, .media = media};
     }
@@ -143,13 +154,18 @@ EvaluateConditionalCopyVolumeImpl(const nc::utility::NativeFileSystemInfo &_volu
 
 ConditionalCopyVolumeDecision EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
 {
-    return EvaluateConditionalCopyVolumeImpl(_volume, true);
+    return EvaluateConditionalCopyVolumeImpl(_volume, ConditionalPublicationInterface::Clone);
 }
 
 ConditionalCopyVolumeDecision
 EvaluateConditionalCopyStagingVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
 {
-    return EvaluateConditionalCopyVolumeImpl(_volume, false);
+    return EvaluateConditionalCopyVolumeImpl(_volume, ConditionalPublicationInterface::None);
+}
+
+ConditionalCopyVolumeDecision EvaluateConditionalMoveVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
+{
+    return EvaluateConditionalCopyVolumeImpl(_volume, ConditionalPublicationInterface::AtomicExclusiveRename);
 }
 
 bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,

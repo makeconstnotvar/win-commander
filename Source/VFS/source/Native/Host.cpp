@@ -1556,6 +1556,32 @@ NativeHost::ConditionalCopyPathSupport(const std::string_view _source_path,
     return ProviderConditionalCopyPathSupport::CrossVolumeStaged;
 }
 
+ProviderConditionalMovePathSupport
+NativeHost::ConditionalMovePathSupport(const std::string_view _source_path,
+                                       const std::string_view _destination_parent_path) const noexcept
+{
+    if( _source_path.empty() || _source_path.front() != '/' || _destination_parent_path.empty() ||
+        _destination_parent_path.front() != '/' )
+        return ProviderConditionalMovePathSupport::Unavailable;
+
+    const auto source_volume = m_NativeFSManager.VolumeFromPath(_source_path);
+    const auto destination_volume = m_NativeFSManager.VolumeFromPath(_destination_parent_path);
+    if( !source_volume || !destination_volume )
+        return ProviderConditionalMovePathSupport::Unavailable;
+    // Two volumes is a definitive refusal rather than a future scope: a cross-volume Move is
+    // copy-then-unlink, which is two events, and a journal item result cannot express "published, and
+    // the source is still there". There is nothing to stage towards here.
+    if( !native::ConditionalCopyVolumesMatch(*source_volume, *destination_volume) )
+        return ProviderConditionalMovePathSupport::Unsupported;
+    // Asked of both, though they are one volume: the two evaluations read the same record, and
+    // spelling it out keeps this identical in shape to the Copy answer above rather than relying on
+    // the match check having already made them interchangeable.
+    if( !native::EvaluateConditionalMoveVolume(*source_volume).IsSupported() ||
+        !native::EvaluateConditionalMoveVolume(*destination_volume).IsSupported() )
+        return ProviderConditionalMovePathSupport::Unsupported;
+    return ProviderConditionalMovePathSupport::SameVolumeRename;
+}
+
 std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
 NativeHost::BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                             const VFSCancelChecker &_cancel_checker)

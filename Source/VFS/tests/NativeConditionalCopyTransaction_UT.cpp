@@ -163,6 +163,7 @@ class GateNativeFSManager final : public nc::utility::NativeFSManager
 public:
     enum class Mode {
         CloneDisabled,
+        RenameExclDisabled,
         DifferentVolumes,
         Supported,
         MissingPathVolume
@@ -177,6 +178,7 @@ public:
         first->mount_flags.local = true;
         first->mount_flags.internal = true;
         first->interfaces.clone = _mode != Mode::CloneDisabled;
+        first->interfaces.rename_excl = _mode != Mode::RenameExclDisabled;
         first->interfaces.attr_list = true;
         first->interfaces.extended_attr = true;
         first->interfaces.extended_security = true;
@@ -189,6 +191,7 @@ public:
         second->mount_flags.local = true;
         second->mount_flags.internal = true;
         second->interfaces.clone = true;
+        second->interfaces.rename_excl = _mode != Mode::RenameExclDisabled;
         second->interfaces.attr_list = true;
         second->interfaces.extended_attr = true;
         second->interfaces.extended_security = true;
@@ -940,6 +943,71 @@ TEST_CASE(PREFIX "probes path-specific conditional Copy support conservatively")
           ProviderConditionalCopyPathSupport::Unavailable);
 }
 
+TEST_CASE(PREFIX "answers conditional Move eligibility without inferring it from Copy")
+{
+    // The point of the case: neither answer may be derived from the other. A Move publishes through
+    // atomic exclusive rename and a Copy through cloning, and a volume can offer one interface and not
+    // the other - so the two sections below deliberately disagree in opposite directions on the same
+    // volume, which is the only way to show the question is really being asked twice.
+    const ConditionalCopyPaths paths;
+
+    SECTION("a supported volume answers both")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::Supported};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalMovePathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalMovePathSupport::SameVolumeRename);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::SameVolumeClone);
+    }
+
+    SECTION("no atomic exclusive rename refuses the Move and leaves the Copy eligible")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::RenameExclDisabled};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalMovePathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalMovePathSupport::Unsupported);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::SameVolumeClone);
+    }
+
+    SECTION("no clone refuses the Copy and leaves the Move eligible")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::CloneDisabled};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalMovePathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalMovePathSupport::SameVolumeRename);
+        CHECK(host->ConditionalCopyPathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalCopyPathSupport::Unsupported);
+    }
+
+    SECTION("two volumes are a definitive refusal, not a staged scope")
+    {
+        // A cross-volume Move is copy-then-unlink, and a journal item result has no way to say
+        // "published, and the source is still there". There is nothing to stage towards, so this is
+        // `Unsupported` rather than the `CrossVolumeStaged` answer the Copy question can give.
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::DifferentVolumes};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalMovePathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalMovePathSupport::Unsupported);
+    }
+
+    SECTION("an unresolvable volume or a relative path is not an answer at all")
+    {
+        GateNativeFSManager missing{GateNativeFSManager::Mode::MissingPathVolume};
+        const auto missing_host = std::make_shared<NativeHost>(missing, *TestEnv().fsevents_file_update);
+        CHECK(missing_host->ConditionalMovePathSupport(paths.source, paths.destination_parent) ==
+              ProviderConditionalMovePathSupport::Unavailable);
+
+        GateNativeFSManager supported{GateNativeFSManager::Mode::Supported};
+        const auto host = std::make_shared<NativeHost>(supported, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalMovePathSupport("relative-source", paths.destination_parent) ==
+              ProviderConditionalMovePathSupport::Unavailable);
+        CHECK(host->ConditionalMovePathSupport(paths.source, "relative-parent") ==
+              ProviderConditionalMovePathSupport::Unavailable);
+    }
+}
+
 TEST_CASE(PREFIX "keeps staged cross-volume eligibility behind its distinct helper authority")
 {
     const ConditionalCopyPaths paths;
@@ -1331,6 +1399,67 @@ TEST_CASE(PREFIX "classifies the internal APFS durability policy explicitly")
     const auto decision = native::EvaluateConditionalCopyVolume(*volume);
     CHECK(decision.disposition == expected);
     CHECK(decision.media == expected_media);
+}
+
+TEST_CASE(PREFIX "holds a Move to the same volume policy as a Copy, differing only in the interface it needs")
+{
+    // Everything the Copy policy demands - APFS, local, internal non-removable media, writable, known
+    // permissions, a complete metadata API - is demanded of a Move for the same reasons, since the
+    // durability contract and the evidence it rests on are unchanged by publishing through a rename.
+    // Exactly one clause differs, and this pins that it is exactly one.
+    auto volume = std::make_shared<nc::utility::NativeFileSystemInfo>();
+    volume->fs_type_name = "apfs";
+    volume->mount_flags.local = true;
+    volume->mount_flags.internal = true;
+    volume->interfaces.rename_excl = true;
+    volume->interfaces.attr_list = true;
+    volume->interfaces.extended_attr = true;
+    volume->interfaces.extended_security = true;
+
+    auto expected = native::ConditionalCopyVolumeDisposition::Supported;
+    SECTION("supported internal APFS, with no clone interface anywhere in sight")
+    {
+        // Deliberately left false: a Move never asks for it, and a policy that quietly required it
+        // would refuse volumes that can perform the operation perfectly well.
+        CHECK_FALSE(volume->interfaces.clone);
+    }
+    SECTION("different filesystem")
+    {
+        volume->fs_type_name = "hfs";
+        expected = native::ConditionalCopyVolumeDisposition::UnsupportedFilesystem;
+    }
+    SECTION("non-local")
+    {
+        volume->mount_flags.local = false;
+        expected = native::ConditionalCopyVolumeDisposition::NonLocal;
+    }
+    SECTION("external media")
+    {
+        volume->mount_flags.internal = false;
+        expected = native::ConditionalCopyVolumeDisposition::UnsupportedExternalMedia;
+    }
+    SECTION("read-only")
+    {
+        volume->mount_flags.read_only = true;
+        expected = native::ConditionalCopyVolumeDisposition::ReadOnly;
+    }
+    SECTION("permissions are ignored")
+    {
+        volume->format.no_permissions = true;
+        expected = native::ConditionalCopyVolumeDisposition::UnknownPermissions;
+    }
+    SECTION("atomic exclusive rename is unavailable")
+    {
+        volume->interfaces.rename_excl = false;
+        expected = native::ConditionalCopyVolumeDisposition::AtomicRenameUnavailable;
+    }
+    SECTION("metadata API is incomplete")
+    {
+        volume->interfaces.extended_security = false;
+        expected = native::ConditionalCopyVolumeDisposition::MetadataUnavailable;
+    }
+
+    CHECK(native::EvaluateConditionalMoveVolume(*volume).disposition == expected);
 }
 
 TEST_CASE(PREFIX "fails closed for clonefile metadata transformations outside the supported policy")

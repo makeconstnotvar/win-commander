@@ -21,7 +21,9 @@ enum class ConditionalCopyVolumeDisposition : uint8_t {
     ReadOnly,
     UnknownPermissions,
     CloneUnavailable,
-    MetadataUnavailable
+    MetadataUnavailable,
+    /** Atomic exclusive rename is missing - a Move-only refusal, since a Copy never asks for it. */
+    AtomicRenameUnavailable
 };
 
 enum class ConditionalCopyVolumeMedia : uint8_t {
@@ -47,6 +49,14 @@ EvaluateConditionalCopyVolume(const nc::utility::NativeFileSystemInfo &_volume) 
 /** The cross-volume helper keeps the same durability/metadata restrictions but does not require clone support. */
 [[nodiscard]] ConditionalCopyVolumeDecision
 EvaluateConditionalCopyStagingVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
+
+/**
+ * A conditional Move needs every durability and metadata restriction a Copy needs, and one different
+ * interface: atomic exclusive rename instead of cloning. Neither eligibility implies the other, so a
+ * volume can be usable for exactly one of them and this must be asked separately.
+ */
+[[nodiscard]] ConditionalCopyVolumeDecision
+EvaluateConditionalMoveVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
 
 [[nodiscard]] bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
                                                const nc::utility::NativeFileSystemInfo &_destination) noexcept;
