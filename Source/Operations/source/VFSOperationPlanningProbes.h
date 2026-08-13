@@ -122,6 +122,10 @@ private:
     [[nodiscard]] static nc::vfs::ProviderConditionalCopyReviewedAuthority
     MakeAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
                   nc::vfs::ProviderConditionalCopyReviewedClaims _claims);
+    /** The Move counterpart. A distinct authority type, built the same way from the same seal. */
+    [[nodiscard]] static nc::vfs::ProviderConditionalMoveReviewedAuthority
+    MakeMoveAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
+                      nc::vfs::ProviderConditionalMoveReviewedClaims _claims);
 
     VFSBoundOperationPreflight m_Preflight;
 
@@ -167,6 +171,13 @@ public:
 
     [[nodiscard]] std::optional<nc::vfs::ProviderConditionalCopyReviewedAuthority>
     IssueAuthorityForItem(size_t _item_index, nc::vfs::ProviderConditionalCopyReviewedClaims _claims);
+    /**
+     * The Move counterpart of `IssueAuthorityForItem`, same one-shot-per-index rule. A sealed review
+     * covers a plan of one type, never both, so the two issuers share `m_Issued` without risk of one
+     * authorising what the other already did.
+     */
+    [[nodiscard]] std::optional<nc::vfs::ProviderConditionalMoveReviewedAuthority>
+    IssueMoveAuthorityForItem(size_t _item_index, nc::vfs::ProviderConditionalMoveReviewedClaims _claims);
 
 private:
     SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOperationPreflight> _review, size_t _item_count);

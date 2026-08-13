@@ -220,7 +220,7 @@ ReviewedVFSOperationPreflight::Review(VFSBoundOperationPreflight _preflight,
     const auto *accepted = std::get_if<AcceptedOperationPlan>(&_preflight.Result());
     if( !accepted )
         return std::unexpected(VFSOperationPreflightReviewError::Blocked);
-    if( accepted->Plan().Type() != OperationPlanType::Copy )
+    if( accepted->Plan().Type() != OperationPlanType::Copy && accepted->Plan().Type() != OperationPlanType::Move )
         return std::unexpected(VFSOperationPreflightReviewError::UnsupportedPlanType);
     const bool destructive_authority_required =
         accepted->Report().requires_confirmation ||
@@ -241,6 +241,13 @@ ReviewedVFSOperationPreflight::MakeAuthority(std::shared_ptr<ReviewedVFSOperatio
                                             nc::vfs::ProviderConditionalCopyReviewedClaims _claims)
 {
     return nc::vfs::ProviderConditionalCopyReviewedAuthority{std::move(_claims), std::move(_seal)};
+}
+
+nc::vfs::ProviderConditionalMoveReviewedAuthority
+ReviewedVFSOperationPreflight::MakeMoveAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
+                                                 nc::vfs::ProviderConditionalMoveReviewedClaims _claims)
+{
+    return nc::vfs::ProviderConditionalMoveReviewedAuthority{std::move(_claims), std::move(_seal)};
 }
 
 SealedReviewedPreflight::SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOperationPreflight> _review,
@@ -286,6 +293,18 @@ SealedReviewedPreflight::IssueAuthorityForItem(const size_t _item_index,
         return std::nullopt;
     m_Issued[_item_index] = true;
     return ReviewedVFSOperationPreflight::MakeAuthority(m_Review, std::move(_claims));
+}
+
+std::optional<nc::vfs::ProviderConditionalMoveReviewedAuthority>
+SealedReviewedPreflight::IssueMoveAuthorityForItem(const size_t _item_index,
+                                                   nc::vfs::ProviderConditionalMoveReviewedClaims _claims)
+{
+    if( _item_index >= m_Issued.size() )
+        return std::nullopt;
+    if( m_Issued[_item_index] )
+        return std::nullopt;
+    m_Issued[_item_index] = true;
+    return ReviewedVFSOperationPreflight::MakeMoveAuthority(m_Review, std::move(_claims));
 }
 
 VFSOperationPlanningProbes::VFSOperationPlanningProbes(VFSOperationPlanningBindings::Ptr _bindings,

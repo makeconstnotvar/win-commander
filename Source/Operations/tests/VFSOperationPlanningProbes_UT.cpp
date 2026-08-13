@@ -532,7 +532,60 @@ std::pair<std::shared_ptr<PlanningHost>, ReviewedVFSOperationPreflight> SealTest
     return {local, std::move(*reviewed)};
 }
 
+/** Minimal Move claims, mirroring `SealTestClaims` - who may hold the authority, not what it asserts. */
+nc::vfs::ProviderConditionalMoveReviewedClaims SealTestMoveClaims(const std::shared_ptr<nc::vfs::Host> &_host)
+{
+    return nc::vfs::ProviderConditionalMoveReviewedClaims{
+        .plan_id = "move-file",
+        .source_binding = {.provider_id = "local", .host = _host},
+        .destination_binding = {.provider_id = "local", .host = _host},
+        .source = {.absolute_path = "/src/a.txt", .kind = nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile},
+        .source_parent = {.absolute_path = "/src", .kind = nc::vfs::ProviderConditionalCopyExpectedKind::Directory},
+        .destination_parent = {.absolute_path = "/dst",
+                               .kind = nc::vfs::ProviderConditionalCopyExpectedKind::Directory},
+        .destination = {.absolute_path = "/dst/moved.txt"},
+    };
+}
+
+/** An accepted single-item Move, reviewed. */
+std::pair<std::shared_ptr<PlanningHost>, ReviewedVFSOperationPreflight> SealTestMoveReview()
+{
+    const auto local = WriteHost(true, true);
+    local->stats.emplace("/src", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/dst", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/src/a.txt", Stat(S_IFREG | 0644, 10));
+    auto probes = MakeProbes({{"local", local}},
+                             [](const OperationPlanningPath &,
+                                OperationPlanningRequiredAccess,
+                                nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+                                 return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+                             });
+    auto reviewed = ReviewedVFSOperationPreflight::Review(probes.Preflight(MoveFilePlan()),
+                                                          VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE(reviewed);
+    return {local, std::move(*reviewed)};
+}
+
 } // namespace
+
+TEST_CASE(PREFIX "issues one Move authority per accepted item and refuses a second for the same one",
+          "[vfs-operation-planning-probes]")
+{
+    auto [local, reviewed] = SealTestMoveReview();
+    SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(reviewed));
+    REQUIRE(sealed.AcceptedItemCount() == 1);
+
+    auto authority = sealed.IssueMoveAuthorityForItem(0, SealTestMoveClaims(local));
+    REQUIRE(authority);
+    CHECK(authority->Claims().plan_id == "move-file");
+    CHECK(authority->Claims().source_parent.absolute_path == "/src");
+    // Same one-shot rule as the Copy issuer, over the same `m_Issued` bookkeeping - a sealed review
+    // covers a plan of one type, so there is never a Copy and a Move authority to confuse for the
+    // same index.
+    CHECK_FALSE(sealed.IssueMoveAuthorityForItem(0, SealTestMoveClaims(local)).has_value());
+    // Nor may the Copy issuer be used to spend the index the Move issuer already consumed.
+    CHECK_FALSE(sealed.IssueAuthorityForItem(0, SealTestClaims(local)).has_value());
+}
 
 TEST_CASE(PREFIX "issues one authority per accepted item and refuses a second for the same one",
           "[vfs-operation-planning-probes]")
@@ -581,8 +634,12 @@ TEST_CASE(PREFIX "keeps the review alive for every authority it issued", "[vfs-o
     CHECK(authority->Claims().plan_id == "copy-file");
 }
 
-TEST_CASE(PREFIX "does not issue a generic review token for an accepted Move", "[vfs-operation-planning-probes]")
+TEST_CASE(PREFIX "issues a review token for an accepted Move", "[vfs-operation-planning-probes]")
 {
+    // Q2-8 Move step C lifted this gate: a Move plan carries the same reviewable shape a Copy plan
+    // does (an accepted report, a conflict policy, destructive-effect evidence), so the review that
+    // certifies "a person looked at this plan" applies to it identically. What stays refused is
+    // anything that is not one of the two plan types the engine can execute at all.
     const auto local = WriteHost(true, true);
     local->stats.emplace("/src", Stat(S_IFDIR | 0755));
     local->stats.emplace("/dst", Stat(S_IFDIR | 0755));
@@ -596,8 +653,8 @@ TEST_CASE(PREFIX "does not issue a generic review token for an accepted Move", "
 
     const auto reviewed = ReviewedVFSOperationPreflight::Review(probes.Preflight(MoveFilePlan()),
                                                                 VFSOperationPreflightReviewDecision::Approved);
-    REQUIRE_FALSE(reviewed);
-    CHECK(reviewed.error() == VFSOperationPreflightReviewError::UnsupportedPlanType);
+    REQUIRE(reviewed);
+    CHECK(reviewed->AcceptedPlan().Plan().Type() == OperationPlanType::Move);
 }
 
 TEST_CASE(PREFIX "emits complete native object identity and version evidence", "[vfs-operation-planning-probes]")

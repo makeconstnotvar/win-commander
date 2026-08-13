@@ -10,6 +10,8 @@ struct ReviewedOperationFactoryTestAccess final {
     using SourceOpenAt = std::function<int(int _directory_fd, const char *_name, int _flags)>;
     using ConditionalCommitTransactionResolver =
         ReviewedOperationFactory::ConditionalCommitTransactionResolver;
+    using ConditionalMoveCommitTransactionResolver =
+        ReviewedOperationFactory::ConditionalMoveCommitTransactionResolver;
     using SnapshotLookup = ReviewedOperationFactory::SnapshotLookup;
 
     [[nodiscard]] static std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
@@ -18,7 +20,8 @@ struct ReviewedOperationFactoryTestAccess final {
            ReviewedOperationFactory::CancelChecker _cancel_checker = {},
            DirectAccessChecker _direct_access_checker = {},
            SourceOpenAt _source_open_at = {},
-           SnapshotLookup _snapshot_lookup = {}) noexcept
+           SnapshotLookup _snapshot_lookup = {},
+           ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver = {}) noexcept
     {
         return ReviewedOperationFactory::CreateWithDependencies(
             std::move(_preflight),
@@ -26,7 +29,8 @@ struct ReviewedOperationFactoryTestAccess final {
             std::move(_direct_access_checker),
             std::move(_source_open_at),
             std::move(_conditional_commit_transaction_resolver),
-            std::move(_snapshot_lookup));
+            std::move(_snapshot_lookup),
+            std::move(_conditional_move_commit_transaction_resolver));
     }
 
     [[nodiscard]] static std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
@@ -35,14 +39,17 @@ struct ReviewedOperationFactoryTestAccess final {
         ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
         ReviewedOperationFactory::CancelChecker _cancel_checker = {},
         DirectAccessChecker _direct_access_checker = {},
-        SourceOpenAt _source_open_at = {}) noexcept
+        SourceOpenAt _source_open_at = {},
+        ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver = {}) noexcept
     {
         return ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             std::move(_preflight),
             std::move(_cancel_checker),
             std::move(_direct_access_checker),
             std::move(_source_open_at),
-            std::move(_conditional_commit_transaction_resolver));
+            std::move(_conditional_commit_transaction_resolver),
+            {},
+            std::move(_conditional_move_commit_transaction_resolver));
     }
 
     [[nodiscard]] static std::shared_ptr<Operation> &

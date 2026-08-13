@@ -106,6 +106,44 @@ CopyOrchestratorReview(std::string _id,
     return std::move(*reviewed);
 }
 
+ReviewedVFSOperationPreflight CopyOrchestratorMoveReview(std::string _id, TempTestDir &_temporary)
+{
+    const auto source = _temporary.directory / "move-source.txt";
+    const auto destination = _temporary.directory / "move-destination.txt";
+    {
+        std::ofstream stream{source};
+        REQUIRE(stream);
+        stream << "move payload";
+        REQUIRE(stream);
+    }
+
+    auto plan = OperationPlan::Create({
+        .plan_id = std::move(_id),
+        .type = OperationPlanType::Move,
+        .sources = {OperationPlanSourceInput{"local", source.string()}},
+        .destination =
+            OperationPlanDestinationInput{"local", destination.string(), OperationPlanDestinationKind::ExactItem},
+        .conflict_policy =
+            OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{1'700'000'000s},
+    });
+    REQUIRE(plan);
+    auto bindings = VFSOperationPlanningBindings::Create({{"local", TestEnv().vfs_native}});
+    REQUIRE(bindings);
+    auto probes = VFSOperationPlanningProbes::Create(
+        *bindings,
+        [](const OperationPlanningPath &,
+           OperationPlanningRequiredAccess,
+           nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+            return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+        });
+    REQUIRE(probes);
+    auto reviewed = ReviewedVFSOperationPreflight::Review(probes->Preflight(std::move(*plan)),
+                                                          VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE(reviewed);
+    return std::move(*reviewed);
+}
+
 ReviewedVFSOperationPreflight CopyOrchestratorBatchReview(std::string _id, TempTestDir &_temporary)
 {
     const auto first_source = _temporary.directory / "first-source.txt";
@@ -860,6 +898,72 @@ TEST_CASE(PREFIX "carries a whole reviewed batch through one operation and one j
         CHECK(result.destination_publication == OperationJournalPublicationState::Published);
         CHECK(result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed);
     }
+}
+
+TEST_CASE(PREFIX "submits a reviewed Move through the real provider, and the source stops existing",
+          "[copy-operation-orchestrator][copy-operation-orchestrator-production]")
+{
+    // Q2-8 Move step C: the gate lift only matters if it reaches the real provider, so this uses the
+    // plain production orchestrator with no resolver override - the same path a live submission takes -
+    // rather than the test mint the other production tests use to isolate the orchestrator from the
+    // provider.
+    CopyOrchestratorDirectory directory;
+    TempTestDir temporary;
+    auto journal = CopyOrchestratorJournal(directory);
+    auto pool = Pool::Make();
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    CopyOperationOrchestrator orchestrator{journal, pool, custodian};
+
+    auto reviewed = CopyOrchestratorMoveReview("real-move", temporary);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Type() == OperationPlanType::Move);
+    auto submitted = orchestrator.Submit(std::move(reviewed));
+
+    REQUIRE(submitted);
+    REQUIRE((*submitted)->Wait(5s));
+    REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->Empty(); }));
+
+    CHECK(custodian->PendingCount() == 0);
+    const auto source = temporary.directory / "move-source.txt";
+    const auto destination = temporary.directory / "move-destination.txt";
+    CHECK_FALSE(std::filesystem::exists(source));
+    CHECK(CopyOrchestratorReadFile(destination) == "move payload");
+
+    const auto snapshot = journal->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Completed);
+    REQUIRE(snapshot[0].item_results.size() == 1);
+    CHECK(snapshot[0].item_results[0].item_index == 0);
+    CHECK(snapshot[0].item_results[0].status == OperationJournalItemStatus::Succeeded);
+    CHECK(snapshot[0].item_results[0].destination_publication == OperationJournalPublicationState::Published);
+    CHECK(snapshot[0].item_results[0].filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed);
+}
+
+TEST_CASE(PREFIX "coordinator admits a reviewed Move through the real provider and models it once",
+          "[copy-operation-orchestrator][operation-center-coordinator]")
+{
+    CopyOrchestratorDirectory directory;
+    TempTestDir temporary;
+    auto journal = CopyOrchestratorJournal(directory);
+    auto pool = Pool::Make();
+    auto coordinator = OperationCenterCoordinator::Create(*journal);
+    REQUIRE(coordinator);
+    auto custodian = std::make_shared<CopyOperationRunReceiptCustodian>();
+    CopyOperationOrchestrator orchestrator{journal, pool, custodian};
+
+    auto reviewed = CopyOrchestratorMoveReview("coordinator-move", temporary);
+    auto submitted = (*coordinator)->SubmitReviewedCopy(*journal, orchestrator, std::move(reviewed), {}, {});
+
+    REQUIRE(submitted);
+    REQUIRE(*submitted);
+    REQUIRE((*submitted)->Wait(5s));
+    REQUIRE(CopyOrchestratorCheckUntil([&] { return pool->Empty(); }));
+
+    const auto source = temporary.directory / "move-source.txt";
+    CHECK_FALSE(std::filesystem::exists(source));
+    const auto snapshot = journal->Snapshot();
+    REQUIRE(snapshot.size() == 1);
+    CHECK(snapshot[0].state == OperationJournalState::Completed);
+    CHECK((*coordinator)->Model().Snapshot().size() == 1);
 }
 
 TEST_CASE(PREFIX "coordinator admits a batch review as one operation in its model",

@@ -303,6 +303,8 @@ NSString *ReviewedFactoryErrorDescription(const nc::ops::ReviewedOperationFactor
             return @"The reviewed direct-access route is unavailable.";
         case StaleSource:
             return @"The source changed after review.";
+        case StaleSourceParent:
+            return @"The folder containing the source changed after review.";
         case StaleDestination:
             return @"The destination or its parent changed after review.";
         case Cancelled:

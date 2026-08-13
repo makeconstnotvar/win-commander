@@ -247,7 +247,10 @@ PrepareReviewedCopyApplicationBoundary(nc::ops::VFSBoundOperationPreflight _pref
         destination &&
         ((destination->Kind() == nc::ops::OperationPlanDestinationKind::ExactItem && sources.size() == 1) ||
          destination->Kind() == nc::ops::OperationPlanDestinationKind::Directory);
-    bool exact_scope = destination_shape && plan.Type() == nc::ops::OperationPlanType::Copy && !sources.empty() &&
+    bool exact_scope = destination_shape &&
+                       (plan.Type() == nc::ops::OperationPlanType::Copy ||
+                        plan.Type() == nc::ops::OperationPlanType::Move) &&
+                       !sources.empty() &&
                        conflict_policy && conflict_policy->Decision() == nc::ops::OperationPlanConflictDecision::Ask &&
                        conflict_policy->Scope() == nc::ops::OperationPlanConflictScope::ThisItem &&
                        // Every source accounted for, one item each. Below that count the journal could

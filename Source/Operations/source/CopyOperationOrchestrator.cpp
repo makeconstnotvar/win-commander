@@ -987,12 +987,14 @@ CopyOperationOrchestrator::Submit(ReviewedVFSOperationPreflight _reviewed,
 
     const auto &accepted = _reviewed.AcceptedPlan();
     const OperationPlan plan = accepted.Plan();
-    // A batch is admitted like any other reviewed Copy now. What is still refused is a report that
-    // does not cover the plan's sources one item each: this boundary is the one that writes to the
-    // journal, and the journal numbers results in the source space and will not record a completed
-    // entry missing one. Refusing before admission keeps an unexecutable plan out of the record
-    // rather than leaving a failed entry behind it.
-    if( plan.Type() != OperationPlanType::Copy || accepted.Report().items.size() != plan.Sources().size() ) {
+    // A batch is admitted like any other reviewed Copy now, and a Move is admitted the same way a
+    // Copy is: both publish their destination and both are what the journal already knows how to
+    // record. What is still refused is a report that does not cover the plan's sources one item
+    // each: this boundary is the one that writes to the journal, and the journal numbers results in
+    // the source space and will not record a completed entry missing one. Refusing before admission
+    // keeps an unexecutable plan out of the record rather than leaving a failed entry behind it.
+    if( (plan.Type() != OperationPlanType::Copy && plan.Type() != OperationPlanType::Move) ||
+        accepted.Report().items.size() != plan.Sources().size() ) {
         return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan));
     }
 
@@ -1032,7 +1034,8 @@ CopyOperationOrchestrator::SubmitAdmitted(ReviewedVFSOperationPreflight _reviewe
     const OperationPlan plan = accepted.Plan();
     // Same rule as the direct entry point, asked again because this one is reached with an admission
     // already in hand: what the journal cannot record must not get as far as running.
-    if( plan.Type() != OperationPlanType::Copy || accepted.Report().items.size() != plan.Sources().size() )
+    if( (plan.Type() != OperationPlanType::Copy && plan.Type() != OperationPlanType::Move) ||
+        accepted.Report().items.size() != plan.Sources().size() )
         return std::unexpected(CopyOrchestratorFailure(CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan));
 
     std::expected<void, OperationJournalError> validated =

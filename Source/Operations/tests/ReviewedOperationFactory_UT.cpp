@@ -105,6 +105,52 @@ VFSOperationPlanningProbes ReviewedNativeProbes(const std::shared_ptr<VFSHost> &
     });
 }
 
+OperationPlan ReviewedMovePlan(std::string _source, std::string _destination)
+{
+    OperationPlanInput input{
+        .plan_id = "reviewed-move",
+        .type = OperationPlanType::Move,
+        .sources = {{"local", std::move(_source)}},
+        .destination = OperationPlanDestinationInput{"local", std::move(_destination), OperationPlanDestinationKind::ExactItem},
+        .conflict_policy =
+            OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    };
+    auto plan = OperationPlan::Create(std::move(input));
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+ReviewedOperationFactoryTestAccess::ConditionalMoveCommitTransactionResolver
+ReviewedStrongConditionalMoveCommitTransaction(
+    int *_abort_calls = nullptr,
+    nc::vfs::ProviderConditionalCopyPublicationState _abort_publication =
+        nc::vfs::ProviderConditionalCopyPublicationState::NotPublished)
+{
+    return [_abort_calls, _abort_publication](
+               nc::vfs::ProviderConditionalMoveReviewedAuthority _authority,
+               const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &) {
+        REQUIRE(_authority.HasReviewSeal());
+        auto destination = _authority.Claims().destination_binding.host;
+        return nc::vfs::ProviderConditionalCopyTransactionTestAccess::MintForMove(
+            *destination,
+            std::move(_authority),
+            [](const auto &) {
+                return nc::vfs::ProviderConditionalCopyCommitResult{
+                    .publication = nc::vfs::ProviderConditionalCopyPublicationState::Published,
+                    .failure = nc::vfs::ProviderConditionalCopyCommitFailure::None,
+                    .filesystem_sync_status =
+                        nc::vfs::ProviderConditionalCopyFilesystemSyncStatus::Confirmed,
+                };
+            },
+            [_abort_calls, _abort_publication] {
+                if( _abort_calls != nullptr )
+                    ++*_abort_calls;
+                return _abort_publication;
+            });
+    };
+}
+
 ReviewedVFSOperationPreflight
 ReviewedReview(OperationPlan _plan,
                VFSOperationPlanningProbes &_probes,
@@ -916,6 +962,174 @@ TEST_CASE(PREFIX "still fails closed on a real provider when the shared destinat
     CHECK(created.error().code == ReviewedOperationFactoryErrorCode::StaleDestination);
     CHECK_FALSE(std::filesystem::exists(destination_directory / "first.txt"));
     CHECK_FALSE(std::filesystem::exists(destination_directory / "second.txt"));
+}
+
+TEST_CASE(PREFIX "carries a reviewed Move through one operation, and the source stops existing",
+          "[reviewed-operation-factory]")
+{
+    // Against the real Native transaction, not the test mint - this is the one property that matters
+    // for a Move and the test mint cannot exercise it: `renameatx_np` publishes the destination and
+    // removes the source in the same indivisible call, so "completed" has to mean the source is gone,
+    // not merely that the destination now exists.
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination = temporary.directory / "moved.txt";
+    ReviewedWriteFile(source, "move payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedMovePlan(source.native(), destination.native()), probes);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Type() == OperationPlanType::Move);
+    REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 1);
+
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    auto &terminal_evidence = ReviewedOperationFactoryTestAccess::TerminalEvidence(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+
+    const auto evidence = terminal_evidence();
+    REQUIRE(evidence);
+    CHECK(evidence->state == OperationJournalState::Completed);
+    REQUIRE(evidence->item_results.size() == 1);
+    CHECK(evidence->item_results[0].item_index == 0);
+    CHECK(evidence->item_results[0].status == OperationJournalItemStatus::Succeeded);
+    CHECK(evidence->item_results[0].destination_publication == OperationJournalPublicationState::Published);
+    CHECK(ReviewedReadFile(destination) == "move payload");
+    CHECK_FALSE(std::filesystem::exists(source));
+}
+
+TEST_CASE(PREFIX "mints a Move authority carrying the source's own folder as a claim",
+          "[reviewed-operation-factory]")
+{
+    // Through the injected resolver rather than the real provider, so the claims the factory built can
+    // be inspected directly instead of only inferred from the outcome on disk.
+    TempTestDir temporary;
+    const auto source_directory = temporary.directory / "source";
+    std::filesystem::create_directory(source_directory);
+    const auto source = source_directory / "source.txt";
+    const auto destination = temporary.directory / "moved.txt";
+    ReviewedWriteFile(source, "move payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedMovePlan(source.native(), destination.native()), probes);
+
+    std::optional<nc::vfs::ProviderConditionalMoveReviewedClaims> observed_claims;
+    const auto observing_resolver =
+        [&](nc::vfs::ProviderConditionalMoveReviewedAuthority _authority,
+           const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker)
+        -> std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                         nc::vfs::ProviderConditionalMoveTransactionBeginError> {
+        observed_claims = _authority.Claims();
+        return ReviewedStrongConditionalMoveCommitTransaction()(std::move(_authority), _cancel_checker);
+    };
+
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+        std::move(reviewed), {}, {}, {}, {}, observing_resolver);
+    REQUIRE(created);
+    REQUIRE(observed_claims);
+    CHECK(observed_claims->plan_id == "reviewed-move");
+    CHECK(observed_claims->source.absolute_path == source.native());
+    CHECK(observed_claims->source_parent.absolute_path == source_directory.native());
+    CHECK(observed_claims->destination.absolute_path == destination.native());
+
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+}
+
+TEST_CASE(PREFIX "fails closed on a real provider when the source's own folder was touched after review ran",
+          "[reviewed-operation-factory]")
+{
+    // The Move-only counterpart of the destination-parent staleness case above: the folder holding the
+    // source is part of what a Move claim names (a rename acts on a name inside a directory), so it
+    // gets the same fail-closed treatment the destination parent already has, and its own distinct
+    // error code - `StaleSourceParent`, not `StaleSource` - because the more specific fact is that the
+    // directory moved, not the file believed to be inside it.
+    TempTestDir temporary;
+    const auto source_directory = temporary.directory / "source";
+    std::filesystem::create_directory(source_directory);
+    const auto source = source_directory / "source.txt";
+    const auto destination = temporary.directory / "moved.txt";
+    ReviewedWriteFile(source, "move payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedMovePlan(source.native(), destination.native()), probes);
+    // Written into the source's own folder after the review snapshot was taken: this is what the
+    // review never saw, so the folder no longer matches what it was reviewed as.
+    ReviewedWriteFile(source_directory / "unrelated.txt", "not part of this review");
+
+    const auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE_FALSE(created);
+    CHECK(created.error().code == ReviewedOperationFactoryErrorCode::StaleSourceParent);
+    CHECK(std::filesystem::exists(source));
+    CHECK_FALSE(std::filesystem::exists(destination));
+}
+
+TEST_CASE(PREFIX "maps every Move transaction begin failure to its own factory error",
+          "[reviewed-operation-factory]")
+{
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination = temporary.directory / "moved.txt";
+    ReviewedWriteFile(source, "move payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+
+    const auto begin_error_maps_to = [&](nc::vfs::ProviderConditionalMoveTransactionBeginError _begin_error,
+                                         ReviewedOperationFactoryErrorCode _expected) {
+        auto reviewed = ReviewedReview(ReviewedMovePlan(source.native(), destination.native()), probes);
+        const auto forced_resolver =
+            [_begin_error](nc::vfs::ProviderConditionalMoveReviewedAuthority,
+                          const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)
+            -> std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                             nc::vfs::ProviderConditionalMoveTransactionBeginError> {
+            return std::unexpected(_begin_error);
+        };
+        const auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+            std::move(reviewed), {}, {}, {}, {}, forced_resolver);
+        REQUIRE_FALSE(created);
+        CHECK(created.error().code == _expected);
+    };
+
+    // Every value the provider's own Begin can answer, mapped independently of the factory's own
+    // pre-check - a race between that pre-check and the provider's Begin is exactly what this switch
+    // exists for, and the real-filesystem tests above already prove the pre-check catches the same
+    // conditions when there is no race to force.
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::SourceStale,
+                        ReviewedOperationFactoryErrorCode::StaleSource);
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::SourceParentStale,
+                        ReviewedOperationFactoryErrorCode::StaleSourceParent);
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::DestinationParentStale,
+                        ReviewedOperationFactoryErrorCode::StaleDestination);
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::DestinationExists,
+                        ReviewedOperationFactoryErrorCode::StaleDestination);
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::Unsupported,
+                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::InvalidRequest,
+                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+    begin_error_maps_to(nc::vfs::ProviderConditionalMoveTransactionBeginError::ProviderFailure,
+                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+
+    auto cancelled_reviewed = ReviewedReview(ReviewedMovePlan(source.native(), destination.native()), probes);
+    const auto cancelling_resolver =
+        [](nc::vfs::ProviderConditionalMoveReviewedAuthority,
+          const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)
+        -> std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                         nc::vfs::ProviderConditionalMoveTransactionBeginError> {
+        return std::unexpected(nc::vfs::ProviderConditionalMoveTransactionBeginError::Cancelled);
+    };
+    const auto cancelled_created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+        std::move(cancelled_reviewed), {}, {}, {}, {}, cancelling_resolver);
+    REQUIRE_FALSE(cancelled_created);
+    CHECK(cancelled_created.error().code == ReviewedOperationFactoryErrorCode::Cancelled);
 }
 
 TEST_CASE(PREFIX "cannot be handed a plan whose review stopped part-way", "[reviewed-operation-factory]")

@@ -43,6 +43,14 @@ enum class ReviewedOperationFactoryErrorCode : uint8_t {
     InvalidPath,
     UnsupportedAccessRoute,
     StaleSource,
+    /**
+     * Move-only. The directory holding the source changed since review - a strictly more informative
+     * fact than the source itself having changed, since a rename acts on a name inside that directory
+     * and the entry the operation was going to name is no longer the entry that was reviewed. Kept
+     * distinct from `StaleSource` rather than collapsed into it, for the same reason the provider
+     * layer keeps `SourceParentStale` distinct from `SourceStale`.
+     */
+    StaleSourceParent,
     StaleDestination,
     Cancelled,
     OpenFailed,
@@ -89,6 +97,12 @@ private:
                       nc::vfs::ProviderConditionalCopyTransactionBeginError>(
             nc::vfs::ProviderConditionalCopyReviewedAuthority,
             const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)>;
+    /** The Move counterpart, injectable for the same reason: a test can force a Begin failure. */
+    using ConditionalMoveCommitTransactionResolver = std::function<
+        std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                      nc::vfs::ProviderConditionalMoveTransactionBeginError>(
+            nc::vfs::ProviderConditionalMoveReviewedAuthority,
+            const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)>;
 
     [[nodiscard]] static std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
     CreateWithDependencies(ReviewedVFSOperationPreflight _preflight,
@@ -96,7 +110,9 @@ private:
                            DirectAccessChecker _direct_access_checker,
                            SourceOpenAt _source_open_at,
                            ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
-                           SnapshotLookup _snapshot_lookup = {}) noexcept;
+                           SnapshotLookup _snapshot_lookup = {},
+                           ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver =
+                               {}) noexcept;
 
     [[nodiscard]] static std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
     CreateExecutionProduct(ReviewedVFSOperationPreflight _preflight,
@@ -108,7 +124,8 @@ private:
         DirectAccessChecker _direct_access_checker,
         SourceOpenAt _source_open_at,
         ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
-        SnapshotLookup _snapshot_lookup = {}) noexcept;
+        SnapshotLookup _snapshot_lookup = {},
+        ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver = {}) noexcept;
     [[nodiscard]] static std::expected<std::shared_ptr<Operation>, ReviewedOperationFactoryError>
     BlockExecutionProduct(
         std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError> _product) noexcept;
