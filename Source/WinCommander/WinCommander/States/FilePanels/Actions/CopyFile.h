@@ -71,6 +71,23 @@ enum class Selection : unsigned char {
 
 } // namespace reviewed_copy_as
 
+namespace reviewed_move {
+
+using Selection = reviewed_copy_as::Selection;
+
+/**
+ * The Move counterpart of `reviewed_copy_as::Select`, for the single-item exact-destination shape
+ * `Move As` has. There is no `SelectIntoDirectory`/`SelectBatch` counterpart yet: those exist for
+ * `Copy To`, and a `Move To` equivalent needs `OperationPlanner::RunMove` to accept several sources and
+ * a directory destination, which it does not today.
+ */
+[[nodiscard]] Selection Select(const nc::vfs::ListingItem &_item,
+                               const std::string &_destination,
+                               const std::shared_ptr<nc::vfs::Host> &_destination_host,
+                               const nc::ops::CopyingOptions &_options) noexcept;
+
+} // namespace reviewed_move
+
 class CopyBase
 {
 public:
@@ -100,16 +117,31 @@ public:
     void Perform(MainWindowFilePanelState *_target, id _sender) const override;
 };
 
-class MoveTo final : public StateAction
+class MoveBase
 {
 public:
+    MoveBase(nc::config::Config &_config);
+
+protected:
+    void AddDeselectorIfNeeded(nc::ops::Operation &_with_operation, PanelController *_to_target) const;
+    [[nodiscard]] bool ShouldAutomaticallyDeselect() const;
+
+private:
+    nc::config::Config &m_Config;
+};
+
+class MoveTo final : public StateAction, MoveBase
+{
+public:
+    MoveTo(nc::config::Config &_config);
     [[nodiscard]] bool Predicate(MainWindowFilePanelState *_target) const override;
     void Perform(MainWindowFilePanelState *_target, id _sender) const override;
 };
 
-class MoveAs final : public StateAction
+class MoveAs final : public StateAction, MoveBase
 {
 public:
+    MoveAs(nc::config::Config &_config);
     [[nodiscard]] bool Predicate(MainWindowFilePanelState *_target) const override;
     void Perform(MainWindowFilePanelState *_target, id _sender) const override;
 };

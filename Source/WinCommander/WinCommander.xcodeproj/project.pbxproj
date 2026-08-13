@@ -41,6 +41,7 @@
 		F17E000131F1000000000001 /* FileMutationCommands.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F17E000131F1000000000012 /* FileMutationCommands.cpp */; };
 		F17E000131F1000000000002 /* FileMutationCommands_UT.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F17E000131F1000000000013 /* FileMutationCommands_UT.cpp */; };
 		C0A5200131E2000000000001 /* ReviewedCopyAsPolicy_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */; };
+		909712CB74FBE2A7122A188F /* ReviewedMoveAsPolicy_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = 3998FBCFAB147DD0305E0020 /* ReviewedMoveAsPolicy_UT.mm */; };
 		D7C1000131E3000000000001 /* CopyOperationRecoveryCoordinator.mm in Sources */ = {isa = PBXBuildFile; fileRef = D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */; };
 		D7C1000231E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm in Sources */ = {isa = PBXBuildFile; fileRef = D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */; };
 		C17C000131B8000000000001 /* FileCutCommand.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C17C000131B8000000000012 /* FileCutCommand.cpp */; };
@@ -1112,6 +1113,7 @@
 		A7D700013204000000000012 /* DragDropPolicy.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = DragDropPolicy.mm; path = WinCommander/States/FilePanels/DragDropPolicy.mm; sourceTree = SOURCE_ROOT; };
 		A7D700013204000000000013 /* DragDropPolicy_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = DragDropPolicy_UT.mm; path = WinCommander/Tests/DragDropPolicy_UT.mm; sourceTree = "<group>"; };
 		C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ReviewedCopyAsPolicy_UT.mm; path = WinCommander/Tests/ReviewedCopyAsPolicy_UT.mm; sourceTree = "<group>"; };
+		3998FBCFAB147DD0305E0020 /* ReviewedMoveAsPolicy_UT.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = ReviewedMoveAsPolicy_UT.mm; path = WinCommander/Tests/ReviewedMoveAsPolicy_UT.mm; sourceTree = "<group>"; };
 		D7C1001131E3000000000001 /* CopyOperationRecoveryCoordinator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyOperationRecoveryCoordinator.h; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.h; sourceTree = SOURCE_ROOT; };
 		D7C1001231E3000000000001 /* CopyOperationRecoveryCoordinator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = CopyOperationRecoveryCoordinator.mm; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinator.mm; sourceTree = SOURCE_ROOT; };
 		D7C1001331E3000000000001 /* CopyOperationRecoveryCoordinatorTesting.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = CopyOperationRecoveryCoordinatorTesting.h; path = WinCommander/Core/Operations/CopyOperationRecoveryCoordinatorTesting.h; sourceTree = SOURCE_ROOT; };
@@ -2417,6 +2419,7 @@
 				E5A4000131F8000000000013 /* TogglePreviewPaneCommand_UT.cpp */,
 				F17E000131F1000000000013 /* FileMutationCommands_UT.cpp */,
 				C0A5200131E2000000000012 /* ReviewedCopyAsPolicy_UT.mm */,
+				3998FBCFAB147DD0305E0020 /* ReviewedMoveAsPolicy_UT.mm */,
 				D7C1001431E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm */,
 				C17C000131B8000000000013 /* FileCutCommand_UT.cpp */,
 				A7E9000131B9000000000013 /* FileRenameCommand_UT.cpp */,
@@ -4292,6 +4295,7 @@
 				E5A4000131F8000000000002 /* TogglePreviewPaneCommand_UT.cpp in Sources */,
 				F17E000131F1000000000002 /* FileMutationCommands_UT.cpp in Sources */,
 				C0A5200131E2000000000001 /* ReviewedCopyAsPolicy_UT.mm in Sources */,
+				909712CB74FBE2A7122A188F /* ReviewedMoveAsPolicy_UT.mm in Sources */,
 				D7C1000231E3000000000001 /* CopyOperationRecoveryCoordinator_UT.mm in Sources */,
 				C17C000131B8000000000002 /* FileCutCommand_UT.cpp in Sources */,
 				A7E9000131B9000000000002 /* FileRenameCommand_UT.cpp in Sources */,

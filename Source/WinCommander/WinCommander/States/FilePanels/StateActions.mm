@@ -42,8 +42,8 @@ StateActionsMap BuildStateActionsMap(nc::config::Config &_global_config,
     add(@selector(OnSwapPanels:), new SwapPanels);
     add(@selector(OnFileCopyCommand:), new CopyTo{_global_config});
     add(@selector(OnFileCopyAsCommand:), new CopyAs{_global_config});
-    add(@selector(OnFileRenameMoveCommand:), new MoveTo);
-    add(@selector(OnFileRenameMoveAsCommand:), new MoveAs);
+    add(@selector(OnFileRenameMoveCommand:), new MoveTo{_global_config});
+    add(@selector(OnFileRenameMoveAsCommand:), new MoveAs{_global_config});
     add(@selector(OnFileOpenInOppositePanel:), new RevealInOppositePanel);
     add(@selector(OnFileOpenInNewOppositePanelTab:), new RevealInOppositePanelTab);
     add(@selector(onExecuteExternalTool:), new ExecuteExternalTool{_temp_file_storage});
