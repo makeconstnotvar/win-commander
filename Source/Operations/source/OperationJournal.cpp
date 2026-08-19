@@ -227,6 +227,8 @@ OperationJournalRecoveryActionToken(OperationJournalRecoveryAction _action) noex
             return "remove_temporary_item";
         case OperationJournalRecoveryAction::RestoreSource:
             return "restore_source";
+        case OperationJournalRecoveryAction::InspectSource:
+            return "inspect_source";
     }
     return std::nullopt;
 }
@@ -254,6 +256,19 @@ OperationJournalPublicationStateToken(OperationJournalPublicationState _state) n
         case OperationJournalPublicationState::Published:
             return "published";
         case OperationJournalPublicationState::Unknown:
+            return "unknown";
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string_view> OperationJournalRemovalStateToken(OperationJournalRemovalState _state) noexcept
+{
+    switch( _state ) {
+        case OperationJournalRemovalState::NotRemoved:
+            return "not_removed";
+        case OperationJournalRemovalState::Removed:
+            return "removed";
+        case OperationJournalRemovalState::Unknown:
             return "unknown";
     }
     return std::nullopt;
@@ -329,6 +344,7 @@ OperationJournalParseRecoveryAction(const OperationJournalJSONValue &_value)
         std::pair{std::string_view{"remove_temporary_item"},
                   OperationJournalRecoveryAction::RemoveTemporaryItem},
         std::pair{std::string_view{"restore_source"}, OperationJournalRecoveryAction::RestoreSource},
+        std::pair{std::string_view{"inspect_source"}, OperationJournalRecoveryAction::InspectSource},
     };
     return OperationJournalParseToken(_value, tokens);
 }
@@ -355,38 +371,100 @@ OperationJournalParsePublicationState(const OperationJournalJSONValue &_value)
     return OperationJournalParseToken(_value, tokens);
 }
 
+std::expected<OperationJournalRemovalState, OperationJournalError>
+OperationJournalParseRemovalState(const OperationJournalJSONValue &_value)
+{
+    static constexpr std::array tokens{
+        std::pair{std::string_view{"not_removed"}, OperationJournalRemovalState::NotRemoved},
+        std::pair{std::string_view{"removed"}, OperationJournalRemovalState::Removed},
+        std::pair{std::string_view{"unknown"}, OperationJournalRemovalState::Unknown},
+    };
+    return OperationJournalParseToken(_value, tokens);
+}
+
+/**
+ * Every `OperationPlanType` value falls into exactly one of these two sets today, and this function
+ * leans on that: nothing both publishes a destination and removes a source, and nothing does neither.
+ * `Rename` is grouped with Copy/Move because its own journal representation is destination-shaped, the
+ * same as theirs - it is not a Delete-family type just because it does not create new bytes.
+ */
+bool OperationJournalPublishesDestination(OperationPlanType _type) noexcept
+{
+    return _type == OperationPlanType::Copy || _type == OperationPlanType::Move ||
+           _type == OperationPlanType::Rename;
+}
+
+bool OperationJournalRemovesSource(OperationPlanType _type) noexcept
+{
+    return _type == OperationPlanType::Trash || _type == OperationPlanType::PermanentDelete;
+}
+
 bool OperationJournalValidItemResult(const OperationPlan &_plan, const OperationJournalItemResult &_result)
 {
     if( _result.item_index >= _plan.Sources().size() || _result.system_error < 0 ||
         _result.prior_system_error < 0 || _result.filesystem_sync_system_error < 0 )
         return false;
 
+    const bool publishes_destination = OperationJournalPublishesDestination(_plan.Type());
+    const bool removes_source = OperationJournalRemovesSource(_plan.Type());
+
+    // The axis a plan type does not use stays at its one inert value, always - a result asserting
+    // something on an axis its own plan type never touches would be recording a fact that cannot be
+    // true of it. This also makes each axis's `Unknown` unreachable on the plan type that does not
+    // use it, which is what lets the Failed-status handling below treat "this axis is Unknown" as
+    // meaning "this plan type's own axis is Unknown" without checking the type again.
+    if( !publishes_destination && _result.destination_publication != OperationJournalPublicationState::NotPublished )
+        return false;
+    if( !removes_source && _result.source_removal != OperationJournalRemovalState::NotRemoved )
+        return false;
+
     switch( _result.destination_publication ) {
         case OperationJournalPublicationState::NotPublished:
-        case OperationJournalPublicationState::Unknown:
-            if( _result.filesystem_sync_status != OperationJournalFilesystemSyncStatus::NotAttempted ||
-                _result.filesystem_sync_system_error != 0 )
-                return false;
-            break;
         case OperationJournalPublicationState::Published:
-            if( _result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed ) {
-                if( _result.filesystem_sync_system_error != 0 )
-                    return false;
-            }
-            else if( _result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Failed ) {
-                if( _result.filesystem_sync_system_error == 0 )
-                    return false;
-            }
-            else {
-                return false;
-            }
+        case OperationJournalPublicationState::Unknown:
+            break;
+        default:
+            return false;
+    }
+    switch( _result.source_removal ) {
+        case OperationJournalRemovalState::NotRemoved:
+        case OperationJournalRemovalState::Removed:
+        case OperationJournalRemovalState::Unknown:
             break;
         default:
             return false;
     }
 
+    const bool destination_settled = _result.destination_publication != OperationJournalPublicationState::Unknown;
+    const bool source_settled = _result.source_removal != OperationJournalRemovalState::Unknown;
+    const bool active_axis_positive =
+        (publishes_destination && _result.destination_publication == OperationJournalPublicationState::Published) ||
+        (removes_source && _result.source_removal == OperationJournalRemovalState::Removed);
+
+    // Filesystem-sync durability is tracked once, for whichever axis this plan type actually uses -
+    // there is exactly one - and only once that axis has positively happened; an axis that never
+    // happened, or that this plan type does not use, or that is still ambiguous, has nothing to have
+    // synced yet.
+    if( !active_axis_positive ) {
+        if( _result.filesystem_sync_status != OperationJournalFilesystemSyncStatus::NotAttempted ||
+            _result.filesystem_sync_system_error != 0 )
+            return false;
+    }
+    else if( _result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed ) {
+        if( _result.filesystem_sync_system_error != 0 )
+            return false;
+    }
+    else if( _result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Failed ) {
+        if( _result.filesystem_sync_system_error == 0 )
+            return false;
+    }
+    else {
+        return false;
+    }
+
     if( _result.error == OperationJournalItemError::Cleanup ) {
-        if( _result.destination_publication != OperationJournalPublicationState::NotPublished )
+        if( _result.destination_publication != OperationJournalPublicationState::NotPublished ||
+            _result.source_removal != OperationJournalRemovalState::NotRemoved )
             return false;
         if( _result.prior_error == OperationJournalItemError::None ||
             _result.prior_error == OperationJournalItemError::Cleanup )
@@ -405,15 +483,15 @@ bool OperationJournalValidItemResult(const OperationPlan &_plan, const Operation
 
     switch( _result.status ) {
         case OperationJournalItemStatus::Succeeded: {
-            const bool publishes_destination = _plan.Type() == OperationPlanType::Copy ||
-                                               _plan.Type() == OperationPlanType::Move ||
-                                               _plan.Type() == OperationPlanType::Rename;
             const auto expected_publication = publishes_destination
                                                   ? OperationJournalPublicationState::Published
                                                   : OperationJournalPublicationState::NotPublished;
+            const auto expected_removal =
+                removes_source ? OperationJournalRemovalState::Removed : OperationJournalRemovalState::NotRemoved;
             return _result.error == OperationJournalItemError::None && _result.system_error == 0 &&
                    _result.destination_publication == expected_publication &&
-                   (!publishes_destination ||
+                   _result.source_removal == expected_removal &&
+                   ((!publishes_destination && !removes_source) ||
                     _result.filesystem_sync_status == OperationJournalFilesystemSyncStatus::Confirmed) &&
                    _result.recovery_action == OperationJournalRecoveryAction::None;
         }
@@ -421,10 +499,12 @@ bool OperationJournalValidItemResult(const OperationPlan &_plan, const Operation
             return _result.error == OperationJournalItemError::None && _result.system_error == 0 &&
                    _result.bytes == 0 &&
                    _result.destination_publication == OperationJournalPublicationState::NotPublished &&
+                   _result.source_removal == OperationJournalRemovalState::NotRemoved &&
                    _result.recovery_action == OperationJournalRecoveryAction::None;
         case OperationJournalItemStatus::Cancelled:
             return _result.error == OperationJournalItemError::Cancelled && _result.system_error == 0 &&
                    _result.destination_publication == OperationJournalPublicationState::NotPublished &&
+                   _result.source_removal == OperationJournalRemovalState::NotRemoved &&
                    _result.recovery_action == OperationJournalRecoveryAction::None;
         case OperationJournalItemStatus::Failed: {
             if( _result.error == OperationJournalItemError::None ||
@@ -432,19 +512,27 @@ bool OperationJournalValidItemResult(const OperationPlan &_plan, const Operation
                 return false;
             if( _result.error != OperationJournalItemError::Cleanup && _result.system_error == 0 )
                 return false;
-            if( _result.destination_publication == OperationJournalPublicationState::Unknown ) {
+            if( !destination_settled ) {
                 if( _result.error != OperationJournalItemError::Commit ||
                     _result.recovery_action != OperationJournalRecoveryAction::InspectDestination )
                     return false;
             }
+            if( !source_settled ) {
+                if( _result.error != OperationJournalItemError::Commit ||
+                    _result.recovery_action != OperationJournalRecoveryAction::InspectSource )
+                    return false;
+            }
             switch( _result.recovery_action ) {
                 case OperationJournalRecoveryAction::None:
-                    return _result.destination_publication != OperationJournalPublicationState::Unknown;
+                    return destination_settled && source_settled;
                 case OperationJournalRecoveryAction::Retry:
                 case OperationJournalRecoveryAction::RemoveTemporaryItem:
-                    return _result.destination_publication == OperationJournalPublicationState::NotPublished;
+                    return _result.destination_publication == OperationJournalPublicationState::NotPublished &&
+                           _result.source_removal == OperationJournalRemovalState::NotRemoved;
                 case OperationJournalRecoveryAction::InspectDestination:
                     return _result.destination_publication != OperationJournalPublicationState::NotPublished;
+                case OperationJournalRecoveryAction::InspectSource:
+                    return _result.source_removal != OperationJournalRemovalState::NotRemoved;
                 case OperationJournalRecoveryAction::RestoreSource:
                     return _result.destination_publication == OperationJournalPublicationState::Published;
             }
@@ -590,10 +678,11 @@ OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries, const
             const auto prior_error = OperationJournalItemErrorToken(item.prior_error);
             const auto destination_publication =
                 OperationJournalPublicationStateToken(item.destination_publication);
+            const auto source_removal = OperationJournalRemovalStateToken(item.source_removal);
             const auto filesystem_sync_status =
                 OperationJournalFilesystemSyncStatusToken(item.filesystem_sync_status);
             const auto recovery = OperationJournalRecoveryActionToken(item.recovery_action);
-            if( !status || !error || !prior_error || !destination_publication ||
+            if( !status || !error || !prior_error || !destination_publication || !source_removal ||
                 !filesystem_sync_status || !recovery ||
                 !OperationJournalValidItemResult(entry.plan, item) )
                 return OperationJournalFailure(OperationJournalErrorCode::InvalidItemResult);
@@ -614,6 +703,8 @@ OperationJournalEncode(const std::vector<OperationJournalEntry> &_entries, const
             writer.Uint64(item.bytes);
             writer.Key("destination_publication");
             OperationJournalWriteToken(writer, *destination_publication);
+            writer.Key("source_removal");
+            OperationJournalWriteToken(writer, *source_removal);
             writer.Key("filesystem_sync_status");
             OperationJournalWriteToken(writer, *filesystem_sync_status);
             writer.Key("filesystem_sync_system_error");
@@ -651,7 +742,7 @@ OperationJournalDecode(std::string_view _json)
     if( version_member == document.MemberEnd() || !version_member->value.IsUint() )
         return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
     const auto version = version_member->value.GetUint();
-    if( version != 1 && version != 2 && version != OperationJournal::SchemaVersion )
+    if( version != 1 && version != 2 && version != 3 && version != OperationJournal::SchemaVersion )
         return OperationJournalFailure(OperationJournalErrorCode::UnsupportedSchemaVersion);
     const OperationJournalJSONValue *entries_value = nullptr;
     uint64_t next_operation_sequence = 1;
@@ -747,45 +838,110 @@ OperationJournalDecode(std::string_view _json)
         std::vector<OperationJournalItemResult> item_results;
         item_results.reserve(item_results_value->Size());
         for( const auto &item_value : item_results_value->GetArray() ) {
-            const auto item_members = OperationJournalMembers(
-                item_value,
-                std::array<std::string_view, 11>{"item_index",
-                                                 "status",
-                                                 "error",
-                                                 "system_error",
-                                                 "prior_error",
-                                                 "prior_system_error",
-                                                 "bytes",
-                                                 "destination_publication",
-                                                 "filesystem_sync_status",
-                                                 "filesystem_sync_system_error",
-                                                 "recovery_action"});
-            if( !item_members || !(*item_members)[0]->IsUint64() || !(*item_members)[3]->IsInt() ||
-                !(*item_members)[5]->IsInt() || !(*item_members)[6]->IsUint64() ||
-                !(*item_members)[9]->IsInt() ||
-                (*item_members)[0]->GetUint64() > std::numeric_limits<size_t>::max() )
+            // `source_removal` is schema-v4-only: every persisted entry older than that was written
+            // before a reviewed Delete plan could exist at all, so there is nothing that field could
+            // ever have meant for it, and defaulting it to `NotRemoved` on migration loses no fact -
+            // `OperationJournalValidItemResult` already requires exactly that value for any plan type
+            // that does not remove a source, which every migrated entry's plan type is.
+            OperationJournalRemovalState source_removal = OperationJournalRemovalState::NotRemoved;
+            const OperationJournalJSONValue *item_index_value = nullptr;
+            const OperationJournalJSONValue *status_value = nullptr;
+            const OperationJournalJSONValue *error_value = nullptr;
+            const OperationJournalJSONValue *system_error_value = nullptr;
+            const OperationJournalJSONValue *prior_error_value = nullptr;
+            const OperationJournalJSONValue *prior_system_error_value = nullptr;
+            const OperationJournalJSONValue *bytes_value = nullptr;
+            const OperationJournalJSONValue *destination_publication_value = nullptr;
+            const OperationJournalJSONValue *filesystem_sync_status_value = nullptr;
+            const OperationJournalJSONValue *filesystem_sync_system_error_value = nullptr;
+            const OperationJournalJSONValue *recovery_action_value = nullptr;
+            if( version == OperationJournal::SchemaVersion ) {
+                const auto item_members = OperationJournalMembers(
+                    item_value,
+                    std::array<std::string_view, 12>{"item_index",
+                                                     "status",
+                                                     "error",
+                                                     "system_error",
+                                                     "prior_error",
+                                                     "prior_system_error",
+                                                     "bytes",
+                                                     "destination_publication",
+                                                     "source_removal",
+                                                     "filesystem_sync_status",
+                                                     "filesystem_sync_system_error",
+                                                     "recovery_action"});
+                if( !item_members )
+                    return std::unexpected(item_members.error());
+                item_index_value = (*item_members)[0];
+                status_value = (*item_members)[1];
+                error_value = (*item_members)[2];
+                system_error_value = (*item_members)[3];
+                prior_error_value = (*item_members)[4];
+                prior_system_error_value = (*item_members)[5];
+                bytes_value = (*item_members)[6];
+                destination_publication_value = (*item_members)[7];
+                const auto parsed_removal = OperationJournalParseRemovalState(*(*item_members)[8]);
+                if( !parsed_removal )
+                    return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
+                source_removal = *parsed_removal;
+                filesystem_sync_status_value = (*item_members)[9];
+                filesystem_sync_system_error_value = (*item_members)[10];
+                recovery_action_value = (*item_members)[11];
+            }
+            else {
+                const auto item_members = OperationJournalMembers(
+                    item_value,
+                    std::array<std::string_view, 11>{"item_index",
+                                                     "status",
+                                                     "error",
+                                                     "system_error",
+                                                     "prior_error",
+                                                     "prior_system_error",
+                                                     "bytes",
+                                                     "destination_publication",
+                                                     "filesystem_sync_status",
+                                                     "filesystem_sync_system_error",
+                                                     "recovery_action"});
+                if( !item_members )
+                    return std::unexpected(item_members.error());
+                item_index_value = (*item_members)[0];
+                status_value = (*item_members)[1];
+                error_value = (*item_members)[2];
+                system_error_value = (*item_members)[3];
+                prior_error_value = (*item_members)[4];
+                prior_system_error_value = (*item_members)[5];
+                bytes_value = (*item_members)[6];
+                destination_publication_value = (*item_members)[7];
+                filesystem_sync_status_value = (*item_members)[8];
+                filesystem_sync_system_error_value = (*item_members)[9];
+                recovery_action_value = (*item_members)[10];
+            }
+            if( !item_index_value->IsUint64() || !system_error_value->IsInt() ||
+                !prior_system_error_value->IsInt() || !bytes_value->IsUint64() ||
+                !filesystem_sync_system_error_value->IsInt() ||
+                item_index_value->GetUint64() > std::numeric_limits<size_t>::max() )
                 return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
-            const auto status = OperationJournalParseItemStatus(*(*item_members)[1]);
-            const auto error = OperationJournalParseItemError(*(*item_members)[2]);
-            const auto prior_error = OperationJournalParseItemError(*(*item_members)[4]);
-            const auto destination_publication =
-                OperationJournalParsePublicationState(*(*item_members)[7]);
+            const auto status = OperationJournalParseItemStatus(*status_value);
+            const auto error = OperationJournalParseItemError(*error_value);
+            const auto prior_error = OperationJournalParseItemError(*prior_error_value);
+            const auto destination_publication = OperationJournalParsePublicationState(*destination_publication_value);
             const auto filesystem_sync_status =
-                OperationJournalParseFilesystemSyncStatus(*(*item_members)[8]);
-            const auto recovery = OperationJournalParseRecoveryAction(*(*item_members)[10]);
+                OperationJournalParseFilesystemSyncStatus(*filesystem_sync_status_value);
+            const auto recovery = OperationJournalParseRecoveryAction(*recovery_action_value);
             if( !status || !error || !prior_error || !destination_publication ||
                 !filesystem_sync_status || !recovery )
                 return OperationJournalFailure(OperationJournalErrorCode::CorruptJournal);
-            OperationJournalItemResult result{.item_index = static_cast<size_t>((*item_members)[0]->GetUint64()),
+            OperationJournalItemResult result{.item_index = static_cast<size_t>(item_index_value->GetUint64()),
                                               .status = *status,
                                               .error = *error,
-                                              .system_error = (*item_members)[3]->GetInt(),
+                                              .system_error = system_error_value->GetInt(),
                                               .prior_error = *prior_error,
-                                              .prior_system_error = (*item_members)[5]->GetInt(),
-                                              .bytes = (*item_members)[6]->GetUint64(),
+                                              .prior_system_error = prior_system_error_value->GetInt(),
+                                              .bytes = bytes_value->GetUint64(),
                                               .destination_publication = *destination_publication,
+                                              .source_removal = source_removal,
                                               .filesystem_sync_status = *filesystem_sync_status,
-                                              .filesystem_sync_system_error = (*item_members)[9]->GetInt(),
+                                              .filesystem_sync_system_error = filesystem_sync_system_error_value->GetInt(),
                                               .recovery_action = *recovery};
             if( !OperationJournalValidItemResult(*plan, result) ||
                 (!item_results.empty() && item_results.back().item_index >= result.item_index) )

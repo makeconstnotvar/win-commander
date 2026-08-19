@@ -17,6 +17,7 @@ bool IsValid(const ops::OperationPlanningRequiredAccess _required) noexcept
         case ops::OperationPlanningRequiredAccess::Rename:
         case ops::OperationPlanningRequiredAccess::ReplaceFile:
         case ops::OperationPlanningRequiredAccess::ReplaceDirectory:
+        case ops::OperationPlanningRequiredAccess::Delete:
             return true;
     }
     return false;

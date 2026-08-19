@@ -119,7 +119,10 @@ ConditionalCopyReadExtendedAttributes(int _fd) noexcept
 
 /** Which publication interface the caller is going to need from this volume, if any. */
 enum class ConditionalPublicationInterface : uint8_t {
-    /** The cross-volume staging helper writes bytes itself and publishes elsewhere. */
+    /**
+     * Nothing to publish through: the cross-volume staging helper writes bytes itself and publishes
+     * elsewhere, and a Delete's `unlinkat` removes an entry rather than writing or renaming one.
+     */
     None,
     Clone,
     AtomicExclusiveRename
@@ -167,6 +170,11 @@ EvaluateConditionalCopyStagingVolume(const nc::utility::NativeFileSystemInfo &_v
 ConditionalCopyVolumeDecision EvaluateConditionalMoveVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
 {
     return EvaluateConditionalCopyVolumeImpl(_volume, ConditionalPublicationInterface::AtomicExclusiveRename);
+}
+
+ConditionalCopyVolumeDecision EvaluateConditionalDeleteVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept
+{
+    return EvaluateConditionalCopyVolumeImpl(_volume, ConditionalPublicationInterface::None);
 }
 
 bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
@@ -238,6 +246,11 @@ int ConditionalCopyIO::RenameExclusive(int _source_parent_fd,
                                        const char *_destination_name) noexcept
 {
     return renameatx_np(_source_parent_fd, _source_name, _destination_parent_fd, _destination_name, RENAME_EXCL);
+}
+
+int ConditionalCopyIO::UnlinkAt(int _directory_fd, const char *_name, int _flags) noexcept
+{
+    return unlinkat(_directory_fd, _name, _flags);
 }
 
 int ConditionalCopyIO::FSync(int _fd) noexcept

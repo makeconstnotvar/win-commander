@@ -49,6 +49,8 @@ struct OperationPlanningProviderEvidence final {
     bool can_copy_symlink_to = false;
     /** Provider-level rename capability. Namespace access remains separately probed on each parent directory. */
     bool can_rename = false;
+    /** Provider-level permanent-delete capability. Namespace access is separately probed on the parent. */
+    bool can_delete_permanently = false;
 
     bool operator==(const OperationPlanningProviderEvidence &) const = default;
 };
@@ -117,7 +119,9 @@ enum class OperationPlanningRequiredAccess : uint8_t {
     ReplaceFile,
     ReplaceDirectory,
     /** Rename mutates the supplied parent namespace; it is distinct from creation access. */
-    Rename
+    Rename,
+    /** Delete removes an entry from the supplied parent namespace; kept apart from Rename for the same reason. */
+    Delete
 };
 
 enum class OperationPlanningAccessState : uint8_t {
@@ -267,8 +271,24 @@ struct OperationPlannedCopyItem final {
     bool operator==(const OperationPlannedCopyItem &) const = default;
 };
 
+/**
+ * A planned Delete item has no destination at all - `OperationPlan::Create` refuses one for
+ * `Trash`/`PermanentDelete` - so it is its own type rather than `OperationPlannedCopyItem` with an
+ * unused field. Kept in the report separately from `items` for the same reason: a Delete plan and a
+ * Copy/Move plan are never the same report, and giving them a shared vector would mean one of the two
+ * always carries a field that means nothing for it.
+ */
+struct OperationPlannedDeleteItem final {
+    OperationPlanningPath source;
+    OperationPlanningItemKind source_kind;
+    std::optional<OperationPlanningEstimateEvidence> estimate;
+
+    bool operator==(const OperationPlannedDeleteItem &) const = default;
+};
+
 struct OperationPreflightReport final {
     std::vector<OperationPlannedCopyItem> items;
+    std::vector<OperationPlannedDeleteItem> deleted_items;
     std::vector<OperationPlanningProviderSnapshot> provider_evidence;
     std::vector<OperationPlanningItemSnapshot> item_evidence;
     std::vector<OperationPlanningNameSnapshot> name_evidence;

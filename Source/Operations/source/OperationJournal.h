@@ -57,7 +57,9 @@ enum class OperationJournalRecoveryAction : uint8_t {
     Retry,
     InspectDestination,
     RemoveTemporaryItem,
-    RestoreSource
+    RestoreSource,
+    /** The source-removal mirror of `InspectDestination`, for a Delete whose outcome is `Unknown`. */
+    InspectSource
 };
 
 enum class OperationJournalFilesystemSyncStatus : uint8_t {
@@ -72,6 +74,19 @@ enum class OperationJournalPublicationState : uint8_t {
     Unknown
 };
 
+/**
+ * What happened to a Delete plan's source - the mirror of `OperationJournalPublicationState` for the
+ * axis a Delete uses instead of a destination. A Copy or Move publishes a new or renamed object and
+ * this axis stays `NotRemoved` for them always; a Trash or PermanentDelete removes an existing one and
+ * `destination_publication` stays `NotPublished` for them always. The two axes are never both active
+ * for the same plan, because no plan type both publishes a destination and removes a source.
+ */
+enum class OperationJournalRemovalState : uint8_t {
+    NotRemoved,
+    Removed,
+    Unknown
+};
+
 struct OperationJournalItemResult final {
     size_t item_index{0};
     OperationJournalItemStatus status{OperationJournalItemStatus::Failed};
@@ -82,6 +97,7 @@ struct OperationJournalItemResult final {
     uint64_t bytes{0};
     OperationJournalPublicationState destination_publication{
         OperationJournalPublicationState::NotPublished};
+    OperationJournalRemovalState source_removal{OperationJournalRemovalState::NotRemoved};
     OperationJournalFilesystemSyncStatus filesystem_sync_status{
         OperationJournalFilesystemSyncStatus::NotAttempted};
     int filesystem_sync_system_error{0};
@@ -255,7 +271,7 @@ public:
         friend class OperationJournalTesting;
     };
 
-    static constexpr uint32_t SchemaVersion = 3;
+    static constexpr uint32_t SchemaVersion = 4;
     static constexpr std::string_view Filename = "operation-journal-v1.json";
     static constexpr size_t MaxEntries = 10'000;
     static constexpr size_t MaxItemResults = 100'000;

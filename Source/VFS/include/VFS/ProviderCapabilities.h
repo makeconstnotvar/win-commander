@@ -60,19 +60,23 @@ enum class ProviderConditionalCopyExpectedKind : uint8_t {
  * How strictly a Commit must find the expected object unchanged.
  *
  * `Exact` is the only mode a single reviewed item ever needs: nothing but this transaction should be
- * touching what it names between review and publication. `MonotonicGrowth` exists for one case only -
- * a destination-parent directory that an authorized batch is itself publishing into. Its own earlier
+ * touching what it names between review and publication. `MonotonicGrowth` exists for one case - a
+ * destination-parent directory that an authorized batch is itself publishing into. Its own earlier
  * items legitimately advance the parent's size and timestamps; that is not staleness, it is the batch
- * proving its own prior work. Identity (device, inode, birth time) and the whole ownership/permission
- * surface (mode, uid, gid, BSD flags, ACL, extended attributes) still fail closed on any change under
- * either mode. Exactly four fields may advance instead of matching: byte size, the two content-derived
- * timestamps, and link_count - the last because APFS advances a directory's link_count for a
- * regular-file child too, not only for a subdirectory, which is a fact about the filesystem confirmed
- * by running it rather than derived from POSIX convention.
+ * proving its own prior work. `MonotonicShrink` is the mirror case for a Move batch's source-parent
+ * directory: a rename indivisibly removes the entry it publishes, so a directory several of a batch's
+ * own items are moving *out of* legitimately loses size and link_count as the batch's own earlier items
+ * complete - confirmed empirically on APFS, the same way the growth direction was, rather than assumed
+ * symmetric. Identity (device, inode, birth time) and the whole ownership/permission surface (mode,
+ * uid, gid, BSD flags, ACL, extended attributes) still fail closed on any change under every mode.
+ * Exactly four fields may move instead of matching exactly: byte size and link_count, which advance
+ * under `MonotonicGrowth` and recede under `MonotonicShrink`, and the two content-derived timestamps,
+ * which only ever advance - a clock does not run backward for either direction of content change.
  */
 enum class ProviderConditionalCopyExpectationTolerance : uint8_t {
     Exact,
-    MonotonicGrowth
+    MonotonicGrowth,
+    MonotonicShrink
 };
 
 /** Preliminary, read-only provider eligibility for an exact source and destination parent. */
@@ -95,6 +99,19 @@ enum class ProviderConditionalCopyPathSupport : uint8_t {
  */
 enum class ProviderConditionalMovePathSupport : uint8_t {
     SameVolumeRename,
+    Unsupported,
+    Unavailable
+};
+
+/**
+ * The same preliminary question asked of a permanent Delete: one path, no destination side at all -
+ * a delete has nothing to publish anywhere, only a source whose continued existence is what a review
+ * would attest to. `SameVolumeUnlink` names the interface rather than staying generic, the way
+ * `SameVolumeRename` does, because it is a claim about which primitive a reviewed transaction would
+ * anchor through - `unlinkat` through an anchored parent, not an anonymous "yes".
+ */
+enum class ProviderConditionalDeletePathSupport : uint8_t {
+    SameVolumeUnlink,
     Unsupported,
     Unavailable
 };
@@ -254,6 +271,70 @@ enum class ProviderConditionalMoveTransactionBeginError : uint8_t {
     ProviderFailure
 };
 
+/**
+ * Exact immutable claims derived from one reviewed permanent-Delete intent.
+ *
+ * There is no destination side at all - not merely an empty one, an absent one - because a delete
+ * publishes nothing anywhere. What authorises `unlinkat` is exactly the same pair a Move's own removal
+ * half needs: the source, and the directory holding it, since a delete acts on a *name inside a
+ * directory* and has no descriptor form either, for the identical reason a rename does not.
+ */
+struct ProviderConditionalDeleteReviewedClaims final {
+    std::string plan_id;
+    ProviderConditionalCopyBinding source_binding;
+    ProviderConditionalCopyExistingExpectation source;
+    ProviderConditionalCopyExistingExpectation source_parent;
+
+    bool operator==(const ProviderConditionalDeleteReviewedClaims &) const noexcept = default;
+};
+
+/**
+ * Delete-only, non-forgeable reviewed authority - its own type for the same non-negotiable reason the
+ * Move one is: an authority minted from a plan approved as a copy or a move must be structurally unable
+ * to authorise a delete, and a shared type could only be defended by a runtime check on a field a
+ * mistake could skip.
+ */
+class ProviderConditionalDeleteReviewedAuthority final
+{
+public:
+    ProviderConditionalDeleteReviewedAuthority() = delete;
+    ProviderConditionalDeleteReviewedAuthority(const ProviderConditionalDeleteReviewedAuthority &) = delete;
+    ProviderConditionalDeleteReviewedAuthority &
+    operator=(const ProviderConditionalDeleteReviewedAuthority &) = delete;
+    ProviderConditionalDeleteReviewedAuthority(ProviderConditionalDeleteReviewedAuthority &&) noexcept = default;
+    ProviderConditionalDeleteReviewedAuthority &operator=(ProviderConditionalDeleteReviewedAuthority &&) = delete;
+    ~ProviderConditionalDeleteReviewedAuthority() = default;
+
+    [[nodiscard]] const ProviderConditionalDeleteReviewedClaims &Claims() const noexcept { return m_Claims; }
+    [[nodiscard]] bool HasReviewSeal() const noexcept { return static_cast<bool>(m_ReviewSeal); }
+
+private:
+    ProviderConditionalDeleteReviewedAuthority(ProviderConditionalDeleteReviewedClaims _claims,
+                                               std::shared_ptr<const void> _review_seal) noexcept
+        : m_Claims{std::move(_claims)}, m_ReviewSeal{std::move(_review_seal)}
+    {
+    }
+
+    ProviderConditionalDeleteReviewedClaims m_Claims;
+    std::shared_ptr<const void> m_ReviewSeal;
+
+    friend class nc::ops::ReviewedVFSOperationPreflight;
+    friend struct ProviderConditionalCopyTransactionTestAccess;
+};
+
+/**
+ * Its own vocabulary for the same reason Move's is: no `DestinationParentStale`/`DestinationExists`
+ * exist here at all, because there is no destination for either refusal to be about.
+ */
+enum class ProviderConditionalDeleteTransactionBeginError : uint8_t {
+    Unsupported,
+    InvalidRequest,
+    SourceStale,
+    SourceParentStale,
+    Cancelled,
+    ProviderFailure
+};
+
 enum class ProviderConditionalCopyPublicationState : uint8_t {
     NotPublished,
     Published,
@@ -338,6 +419,22 @@ private:
                 ProviderConditionalMoveReviewedAuthority _authority,
                 CommitHandler _commit,
                 AbortHandler _abort) noexcept;
+    /**
+     * The same transaction from a Delete authority, for the reason `MintForMove` already gives - what
+     * this class owns is identical regardless of which of the three this is, and the one place they
+     * differ is already a parameter. `ProviderConditionalCopyCommitResult` is reused as-is rather than
+     * given a Delete-shaped sibling: `publication` here means "did this transaction's one durable
+     * outcome happen", which for a Delete is removal rather than creation - the raw provider type
+     * stays generic, and the rename to `source_removal` happens where a Delete's result is mapped into
+     * journal evidence, the same boundary where Move's own `destination_publication` reading already
+     * gets its meaning from context rather than from the field's name alone.
+     */
+    [[nodiscard]] static std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                                       ProviderConditionalDeleteTransactionBeginError>
+    MintForDelete(const Host &_provider,
+                  ProviderConditionalDeleteReviewedAuthority _authority,
+                  CommitHandler _commit,
+                  AbortHandler _abort) noexcept;
     void Reset() noexcept;
 
     std::unique_ptr<Impl> m_Impl;

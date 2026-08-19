@@ -442,6 +442,13 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         // own publication predictably advances may move. Keyed on the canonical path alone: a plan
         // this factory accepts has exactly one destination provider.
         std::set<std::string> destination_parents_targeted;
+        // Move-only mirror of the set above, in the opposite direction. A rename indivisibly removes
+        // the entry it publishes, so a source-parent directory several of a batch's own items are
+        // moving *out of* legitimately shrinks - in size and link_count, confirmed empirically on APFS -
+        // as the batch's own earlier items complete. The common `MoveTo` shape is exactly this: several
+        // siblings out of one folder, so without this the whole shape would fail closed from its second
+        // item onward.
+        std::set<std::string> source_parents_targeted;
 
         // One item's work, named and taking an index. Nothing about it changes here - what changes
         // is that it is now a unit the batch loop can call once per accepted item instead of a
@@ -532,6 +539,11 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                 destination_parents_targeted.insert(destination_parent.absolute_path).second
                    ? nc::vfs::ProviderConditionalCopyExpectationTolerance::Exact
                    : nc::vfs::ProviderConditionalCopyExpectationTolerance::MonotonicGrowth;
+            // Move-only, and the shrink-side twin of the insertion above.
+            const auto source_parent_tolerance =
+                is_move && !source_parents_targeted.insert(source_parent.absolute_path).second
+                   ? nc::vfs::ProviderConditionalCopyExpectationTolerance::MonotonicShrink
+                   : nc::vfs::ProviderConditionalCopyExpectationTolerance::Exact;
 
             const auto source_host = sealed.Bindings()->Resolve(item.source.provider_id);
             const auto destination_host = sealed.Bindings()->Resolve(item.destination.provider_id);
@@ -774,7 +786,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                         ReviewedFactoryConditionalCopyExpectation(source_parent,
                                                                   nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
                                                                   *source_parent_snapshot->evidence.native_identity,
-                                                                  *source_parent_snapshot->evidence.native_version),
+                                                                  *source_parent_snapshot->evidence.native_version,
+                                                                  source_parent_tolerance),
                     .destination_parent =
                         ReviewedFactoryConditionalCopyExpectation(destination_parent,
                                                                   nc::vfs::ProviderConditionalCopyExpectedKind::Directory,

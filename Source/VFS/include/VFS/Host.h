@@ -235,6 +235,14 @@ public:
     ConditionalMovePathSupport(std::string_view _source_path, std::string_view _destination_parent_path) const noexcept;
 
     /**
+     * The same read-only preliminary check for a conditional permanent Delete. Same meanings for
+     * Unsupported and Unavailable. Takes one path, not a source/destination pair - a delete has no
+     * destination side to ask about.
+     */
+    [[nodiscard]] virtual ProviderConditionalDeletePathSupport ConditionalDeletePathSupport(
+        std::string_view _path) const noexcept;
+
+    /**
      * Consumes reviewed Copy authority and begins a provider-owned conditional publication transaction.
      * The default implementation returns Unsupported. Native supports one create-only regular file on the
      * exact same clone-capable volume and retains anchored source/destination-parent descriptors until terminal use.
@@ -256,6 +264,18 @@ public:
                           ProviderConditionalMoveTransactionBeginError>
     BeginConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
                                     const VFSCancelChecker &_cancel_checker = {});
+
+    /**
+     * Consumes reviewed Delete authority and begins a provider-owned conditional removal transaction.
+     * The default implementation returns Unsupported.
+     *
+     * It takes a Delete authority and nothing else, for the same non-substitutability reason Move's own
+     * authority is not accepted here either.
+     */
+    virtual std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                          ProviderConditionalDeleteTransactionBeginError>
+    BeginConditionalDeleteTransaction(ProviderConditionalDeleteReviewedAuthority _authority,
+                                      const VFSCancelChecker &_cancel_checker = {});
 
     /**
      * VFS version of stat().
@@ -475,6 +495,12 @@ protected:
     MintConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
                                    ProviderConditionalCopyTransaction::CommitHandler _commit,
                                    ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept;
+
+    [[nodiscard]] std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                                ProviderConditionalDeleteTransactionBeginError>
+    MintConditionalDeleteTransaction(ProviderConditionalDeleteReviewedAuthority _authority,
+                                     ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                     ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept;
 
     virtual void StopDirChangeObserving(unsigned long _ticket);
 

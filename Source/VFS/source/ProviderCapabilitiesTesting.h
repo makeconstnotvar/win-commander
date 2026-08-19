@@ -53,6 +53,29 @@ struct ProviderConditionalCopyTransactionTestAccess final {
         return ProviderConditionalCopyTransaction::MintForMove(
             _provider, std::move(_authority), std::move(_commit), std::move(_abort));
     }
+
+    [[nodiscard]] static ProviderConditionalDeleteReviewedAuthority
+    MakeDeleteAuthority(ProviderConditionalDeleteReviewedClaims _claims)
+    {
+        return ProviderConditionalDeleteReviewedAuthority{std::move(_claims), std::make_shared<const int>(1)};
+    }
+
+    [[nodiscard]] static ProviderConditionalDeleteReviewedAuthority
+    MakeUnsealedDeleteAuthority(ProviderConditionalDeleteReviewedClaims _claims) noexcept
+    {
+        return ProviderConditionalDeleteReviewedAuthority{std::move(_claims), {}};
+    }
+
+    [[nodiscard]] static std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>,
+                                       ProviderConditionalDeleteTransactionBeginError>
+    MintForDelete(const Host &_provider,
+                  ProviderConditionalDeleteReviewedAuthority _authority,
+                  ProviderConditionalCopyTransaction::CommitHandler _commit,
+                  ProviderConditionalCopyTransaction::AbortHandler _abort) noexcept
+    {
+        return ProviderConditionalCopyTransaction::MintForDelete(
+            _provider, std::move(_authority), std::move(_commit), std::move(_abort));
+    }
 };
 
 } // namespace nc::vfs

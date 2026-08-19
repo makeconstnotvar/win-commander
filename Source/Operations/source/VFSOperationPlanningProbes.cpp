@@ -364,6 +364,7 @@ VFSOperationPlanningProbes::ProbeProviderImpl(const OperationPlanningPath &_path
         .can_replace_directory = capabilities.can_delete_permanently,
         .can_copy_symlink_to = capabilities.can_create_symlink,
         .can_rename = capabilities.can_rename,
+        .can_delete_permanently = capabilities.can_delete_permanently,
     };
 }
 
@@ -473,6 +474,7 @@ VFSOperationPlanningProbes::ProbeAccessImpl(const OperationPlanningPath &_path,
             break;
         case OperationPlanningRequiredAccess::ReplaceFile:
         case OperationPlanningRequiredAccess::ReplaceDirectory:
+        case OperationPlanningRequiredAccess::Delete:
             provider_grants_access = capabilities.can_delete_permanently;
             break;
         default:

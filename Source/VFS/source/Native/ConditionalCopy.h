@@ -58,6 +58,15 @@ EvaluateConditionalCopyStagingVolume(const nc::utility::NativeFileSystemInfo &_v
 [[nodiscard]] ConditionalCopyVolumeDecision
 EvaluateConditionalMoveVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
 
+/**
+ * A conditional Delete needs the same durability and metadata restrictions as everything else here,
+ * and no publication interface at all: `unlinkat` removes an entry, it does not write or rename one,
+ * so neither `clone` nor `rename_excl` is asked about - the same "no interface" shape the cross-volume
+ * staging helper's own volume already uses.
+ */
+[[nodiscard]] ConditionalCopyVolumeDecision
+EvaluateConditionalDeleteVolume(const nc::utility::NativeFileSystemInfo &_volume) noexcept;
+
 [[nodiscard]] bool ConditionalCopyVolumesMatch(const nc::utility::NativeFileSystemInfo &_source,
                                                const nc::utility::NativeFileSystemInfo &_destination) noexcept;
 
@@ -130,6 +139,12 @@ public:
                                 const char *_source_name,
                                 int _destination_parent_fd,
                                 const char *_destination_name) noexcept;
+    /**
+     * The Delete publication: removes a directory entry given its anchored parent and its name, the
+     * same anchoring shape `RenameExclusive` already established as necessary - a delete acts on a
+     * name inside a directory, not on a descriptor, for the identical reason a rename does.
+     */
+    virtual int UnlinkAt(int _directory_fd, const char *_name, int _flags) noexcept;
     virtual int FSync(int _fd) noexcept;
     virtual int FullFSync(int _fd) noexcept;
     virtual int Close(int _fd) noexcept;

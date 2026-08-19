@@ -38,6 +38,8 @@ public:
     [[nodiscard]] ProviderConditionalMovePathSupport
     ConditionalMovePathSupport(std::string_view _source_path,
                                std::string_view _destination_parent_path) const noexcept override;
+    [[nodiscard]] ProviderConditionalDeletePathSupport
+    ConditionalDeletePathSupport(std::string_view _path) const noexcept override;
 
     std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
     BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
@@ -46,6 +48,10 @@ public:
     std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalMoveTransactionBeginError>
     BeginConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _authority,
                                     const VFSCancelChecker &_cancel_checker = {}) override;
+
+    std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalDeleteTransactionBeginError>
+    BeginConditionalDeleteTransaction(ProviderConditionalDeleteReviewedAuthority _authority,
+                                      const VFSCancelChecker &_cancel_checker = {}) override;
 
     std::expected<VFSStatFS, Error> StatFS(std::string_view _path,
                                            const VFSCancelChecker &_cancel_checker = {}) override;

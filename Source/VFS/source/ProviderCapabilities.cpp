@@ -134,6 +134,24 @@ bool ProviderConditionalMoveAuthorityIsValid(const Host &_provider,
            claims.source.absolute_path != claims.source_parent.absolute_path;
 }
 
+bool ProviderConditionalDeleteAuthorityIsValid(
+    const Host &_provider,
+    const ProviderConditionalDeleteReviewedAuthority &_authority) noexcept
+{
+    const auto &claims = _authority.Claims();
+    return _authority.HasReviewSeal() && !claims.plan_id.empty() && !claims.source_binding.provider_id.empty() &&
+           claims.source_binding.host.get() == &_provider &&
+           ProviderConditionalCopyExpectationIsValid(
+               claims.source, ProviderConditionalCopyExpectedKind::RegularFile, S_IFREG, false) &&
+           ProviderConditionalCopyExpectationIsValid(
+               claims.source_parent, ProviderConditionalCopyExpectedKind::Directory, S_IFDIR, true) &&
+           // The source must be exactly the child of the parent it claims, for the same reason a
+           // Move's own source claim must: a delete names a directory and an entry inside it, and a
+           // parent that does not actually hold the source describes a removal nobody reviewed.
+           ProviderConditionalCopyDestinationIsExactChild(claims.source_parent.absolute_path,
+                                                          claims.source.absolute_path);
+}
+
 bool ProviderConditionalCopyResultIsValid(const ProviderConditionalCopyCommitResult &_result) noexcept
 {
     if( _result.system_error < 0 || _result.filesystem_sync_system_error < 0 )
@@ -269,13 +287,24 @@ struct ProviderConditionalCopyTransaction::Impl final {
     {
     }
 
+    Impl(ProviderConditionalDeleteReviewedAuthority _authority,
+         CommitHandler _commit,
+         AbortHandler _abort) noexcept
+        : authority{std::move(_authority)}, commit{std::move(_commit)}, abort{std::move(_abort)}
+    {
+    }
+
     /**
      * Held, never read. What the transaction owes the authority is that it was consumed - a move-only
      * value surrendered at Begin cannot be spent a second time - and that obligation is the same
-     * whichever kind it is. The commit itself arrives as a handler, which is why a Move needs no
-     * second transaction type: the one place the two operations differ is already a parameter.
+     * whichever kind it is. The commit itself arrives as a handler, which is why neither Move nor
+     * Delete needs its own transaction type: the one place any of the three differs is already a
+     * parameter.
      */
-    std::variant<ProviderConditionalCopyReviewedAuthority, ProviderConditionalMoveReviewedAuthority> authority;
+    std::variant<ProviderConditionalCopyReviewedAuthority,
+                ProviderConditionalMoveReviewedAuthority,
+                ProviderConditionalDeleteReviewedAuthority>
+        authority;
     CommitHandler commit;
     AbortHandler abort;
     State state{State::Pending};
@@ -341,6 +370,24 @@ ProviderConditionalCopyTransaction::MintForMove(const Host &_provider,
             new ProviderConditionalCopyTransaction{std::move(impl)}};
     } catch( ... ) {
         return std::unexpected(ProviderConditionalMoveTransactionBeginError::ProviderFailure);
+    }
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalDeleteTransactionBeginError>
+ProviderConditionalCopyTransaction::MintForDelete(const Host &_provider,
+                                                  ProviderConditionalDeleteReviewedAuthority _authority,
+                                                  CommitHandler _commit,
+                                                  AbortHandler _abort) noexcept
+{
+    if( !ProviderConditionalDeleteAuthorityIsValid(_provider, _authority) || !_commit || !_abort ) {
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::InvalidRequest);
+    }
+    try {
+        auto impl = std::make_unique<Impl>(std::move(_authority), std::move(_commit), std::move(_abort));
+        return std::unique_ptr<ProviderConditionalCopyTransaction>{
+            new ProviderConditionalCopyTransaction{std::move(impl)}};
+    } catch( ... ) {
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
     }
 }
 

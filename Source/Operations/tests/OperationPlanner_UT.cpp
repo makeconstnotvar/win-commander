@@ -80,6 +80,8 @@ struct FakeProbes final : OperationPlanningProbes {
                     return "access-replace-file";
                 case OperationPlanningRequiredAccess::ReplaceDirectory:
                     return "access-replace-directory";
+                case OperationPlanningRequiredAccess::Delete:
+                    return "access-delete";
             }
             return "access-invalid";
         }();
@@ -190,16 +192,30 @@ OperationPlan MakeRename()
     return std::move(*plan);
 }
 
-OperationPlan MakePermanentDelete()
+OperationPlan
+MakePermanentDelete(std::vector<OperationPlanSourceInput> _sources = {{"source", "/src/a.txt"}})
 {
     auto plan = OperationPlan::Create({.plan_id = "permanent-delete-plan",
                                        .type = OperationPlanType::PermanentDelete,
-                                       .sources = {{"source", "/src/a.txt"}},
+                                       .sources = std::move(_sources),
                                        .destination = std::nullopt,
                                        .conflict_policy = std::nullopt,
                                        .created_at = OperationPlan::TimePoint{1'700'000'000s}});
     REQUIRE(plan);
     return std::move(*plan);
+}
+
+void ScriptFileDelete(FakeProbes &_probes,
+                      std::string _provider = "local",
+                      std::string _path = "/src/a.txt",
+                      uint64_t _bytes = 10)
+{
+    _probes.default_provider.can_delete_permanently = true;
+    const auto parent = std::filesystem::path{_path}.parent_path().native();
+    _probes.items.emplace(Key(Path(_provider, parent)),
+                          OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+    _probes.items.emplace(Key(Path(_provider, _path)),
+                          OperationPlanningItemEvidence{OperationPlanningItemKind::File, _bytes});
 }
 
 void ScriptFileCopy(FakeProbes &_probes,
@@ -330,10 +346,6 @@ TEST_CASE(PREFIX "blocks non-copy plans before probing", "[operation-planner]")
     {
         check(MakeRename());
     }
-    SECTION("PermanentDelete")
-    {
-        check(MakePermanentDelete());
-    }
 }
 
 TEST_CASE(PREFIX "Move accepts the exact one-file same-provider intent", "[operation-planner][move-preflight]")
@@ -414,26 +426,6 @@ TEST_CASE(PREFIX "Move fails closed outside its narrow intent", "[operation-plan
             OperationPlanningItemEvidence{OperationPlanningItemKind::Symlink, 4};
         const auto result = OperationPlanner::Preflight(MakeMove(), probes);
         CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
-    }
-
-    SECTION("a batch plan is unsupported before probing")
-    {
-        FakeProbes probes;
-        const auto result =
-            OperationPlanner::Preflight(MakeMove({{"local", "/src/a.txt"}, {"local", "/src/b.txt"}},
-                                                 {"local", "/dst", OperationPlanDestinationKind::Directory}),
-                                        probes);
-        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::UnsupportedPlanType));
-        CHECK(probes.calls.empty());
-    }
-
-    SECTION("a directory destination is unsupported before probing")
-    {
-        FakeProbes probes;
-        const auto result = OperationPlanner::Preflight(
-            MakeMove({{"local", "/src/a.txt"}}, {"local", "/dst", OperationPlanDestinationKind::Directory}), probes);
-        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::UnsupportedPlanType));
-        CHECK(probes.calls.empty());
     }
 
     SECTION("a non-Ask policy is rejected before probing")
@@ -521,6 +513,168 @@ TEST_CASE(PREFIX "Move retains exact conflict and path guards", "[operation-plan
                      {"local", "/src/dir/../a.txt", OperationPlanDestinationKind::ExactItem}),
             probes);
         CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::SamePath));
+    }
+}
+
+TEST_CASE(PREFIX "Move accepts a directory destination naming several sources",
+         "[operation-planner][move-preflight]")
+{
+    SECTION("a single source lands under its own name in the destination directory")
+    {
+        FakeProbes probes;
+        probes.default_provider.can_rename = true;
+        probes.items.emplace(Key(Path("local", "/dst")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/src")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/src/a.txt")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::File, 10});
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"local", "/src/a.txt"}}, {"local", "/dst", OperationPlanDestinationKind::Directory}), probes);
+        const auto &accepted = Accepted(result);
+        REQUIRE(accepted.Report().items.size() == 1);
+        CHECK(accepted.Report().items.front().source == Path("local", "/src/a.txt"));
+        CHECK(accepted.Report().items.front().destination == Path("local", "/dst/a.txt"));
+    }
+
+    SECTION("several sources sharing one source directory each land under their own name")
+    {
+        // The common `MoveTo` shape: every selected item is a sibling in the same source folder,
+        // landing in one destination folder. Each rename removes an entry from `/src`, so this is
+        // also what proves a batch's own prior removals do not stale out its own later items.
+        FakeProbes probes;
+        probes.default_provider.can_rename = true;
+        probes.items.emplace(Key(Path("local", "/dst")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/src")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/src/a.txt")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::File, 10});
+        probes.items.emplace(Key(Path("local", "/src/b.txt")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::File, 20});
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"local", "/src/a.txt"}, {"local", "/src/b.txt"}},
+                     {"local", "/dst", OperationPlanDestinationKind::Directory},
+                     {OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem}),
+            probes);
+        const auto &accepted = Accepted(result);
+        REQUIRE(accepted.Report().items.size() == 2);
+        CHECK(accepted.Report().items[0].destination == Path("local", "/dst/a.txt"));
+        CHECK(accepted.Report().items[1].destination == Path("local", "/dst/b.txt"));
+        CHECK(accepted.Report().estimated_files == 2);
+        CHECK(accepted.Report().estimated_bytes == 30);
+        // Each source's own parent access is granted once, not once per item that shares it.
+        CHECK(std::ranges::count(probes.calls, "access-rename:local\n/src") == 1);
+    }
+
+    SECTION("two sources cannot rename to the same effective destination")
+    {
+        FakeProbes probes;
+        probes.default_provider.can_rename = true;
+        probes.items.emplace(Key(Path("local", "/dst")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/one")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/two")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt});
+        probes.items.emplace(Key(Path("local", "/one/a.txt")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::File, 1});
+        probes.items.emplace(Key(Path("local", "/two/a.txt")),
+                             OperationPlanningItemEvidence{OperationPlanningItemKind::File, 1});
+        const auto result = OperationPlanner::Preflight(
+            MakeMove({{"local", "/one/a.txt"}, {"local", "/two/a.txt"}},
+                     {"local", "/dst", OperationPlanDestinationKind::Directory},
+                     {OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem}),
+            probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::DuplicateDestination));
+    }
+}
+
+TEST_CASE(PREFIX "PermanentDelete accepts a File source with no destination at all",
+         "[operation-planner][delete-preflight]")
+{
+    FakeProbes probes;
+    ScriptFileDelete(probes);
+
+    const auto result = OperationPlanner::Preflight(MakePermanentDelete({{"local", "/src/a.txt"}}), probes);
+    const auto &accepted = Accepted(result);
+    CHECK(accepted.Plan().Type() == OperationPlanType::PermanentDelete);
+    REQUIRE(accepted.Report().deleted_items.size() == 1);
+    CHECK(accepted.Report().items.empty());
+    const auto &item = accepted.Report().deleted_items.front();
+    CHECK(item.source == Path("local", "/src/a.txt"));
+    CHECK(item.source_kind == OperationPlanningItemKind::File);
+    CHECK(item.estimate == OperationPlanningEstimateEvidence{.files = 1, .bytes = 10});
+    CHECK(accepted.Report().estimated_files == 1);
+    CHECK(accepted.Report().estimated_bytes == 10);
+    CHECK(HasWarning(accepted.Report(), OperationPlanningWarningCode::RuntimeRevalidationRequired));
+    REQUIRE(accepted.Report().access_evidence.size() == 1);
+    CHECK(accepted.Report().access_evidence.front().required == OperationPlanningRequiredAccess::Delete);
+    CHECK(std::ranges::none_of(
+        probes.calls, [](const std::string &_call) { return _call.starts_with("space:"); }));
+}
+
+TEST_CASE(PREFIX "PermanentDelete accepts several sources across different providers",
+         "[operation-planner][delete-preflight]")
+{
+    // Unlike Move, a Delete has no destination to share a provider with - each source stands on its
+    // own, so a plan naming sources on different providers is not a structural refusal.
+    FakeProbes probes;
+    ScriptFileDelete(probes, "local", "/src/a.txt");
+    ScriptFileDelete(probes, "remote", "/other/b.txt", 20);
+
+    const auto result = OperationPlanner::Preflight(
+        MakePermanentDelete({{"local", "/src/a.txt"}, {"remote", "/other/b.txt"}}), probes);
+    const auto &accepted = Accepted(result);
+    REQUIRE(accepted.Report().deleted_items.size() == 2);
+    CHECK(accepted.Report().deleted_items[0].source == Path("local", "/src/a.txt"));
+    CHECK(accepted.Report().deleted_items[1].source == Path("remote", "/other/b.txt"));
+    CHECK(accepted.Report().estimated_files == 2);
+    CHECK(accepted.Report().estimated_bytes == 30);
+}
+
+TEST_CASE(PREFIX "PermanentDelete fails closed outside its narrow intent", "[operation-planner][delete-preflight]")
+{
+    SECTION("provider capability unsupported")
+    {
+        FakeProbes probes;
+        ScriptFileDelete(probes);
+        probes.providers.emplace(
+            Key(Path("local", "/src")),
+            OperationPlanningProviderEvidence{
+                true, true, OperationPlanningPathIdentitySemantics::ExactBytes, true, true, true, false, false});
+        const auto result = OperationPlanner::Preflight(MakePermanentDelete({{"local", "/src/a.txt"}}), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
+    }
+
+    SECTION("a missing source")
+    {
+        FakeProbes probes;
+        ScriptFileDelete(probes);
+        probes.items[Key(Path("local", "/src/a.txt"))] =
+            OperationPlanningItemEvidence{OperationPlanningItemKind::Missing, std::nullopt};
+        const auto result = OperationPlanner::Preflight(MakePermanentDelete({{"local", "/src/a.txt"}}), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::SourceMissing));
+    }
+
+    SECTION("a directory source is out of scope for this slice")
+    {
+        FakeProbes probes;
+        ScriptFileDelete(probes);
+        probes.items[Key(Path("local", "/src/a.txt"))] =
+            OperationPlanningItemEvidence{OperationPlanningItemKind::Directory, std::nullopt};
+        const auto result = OperationPlanner::Preflight(MakePermanentDelete({{"local", "/src/a.txt"}}), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::ProviderCapabilityUnsupported));
+    }
+
+    SECTION("parent namespace access denied")
+    {
+        FakeProbes probes;
+        ScriptFileDelete(probes);
+        probes.access.emplace(Key(Path("local", "/src")),
+                              OperationPlanningAccessEvidence{OperationPlanningAccessState::Denied});
+        const auto result = OperationPlanner::Preflight(MakePermanentDelete({{"local", "/src/a.txt"}}), probes);
+        CHECK(HasBlocker(Blocked(result), OperationPlanningBlockerCode::PermissionDenied));
     }
 }
 

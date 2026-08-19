@@ -229,8 +229,30 @@ OperationId OperationJournalUTId(const uint64_t _sequence)
     return *operation_id;
 }
 
-std::string OperationJournalUTAsV1(std::string _v3)
+std::string OperationJournalUTAsV3(std::string _v4)
 {
+    const auto version = _v4.find("\"version\":4");
+    if( version == std::string::npos )
+        throw std::logic_error{"missing v4 version"};
+    _v4.replace(version, std::string_view{"\"version\":4"}.size(), "\"version\":3");
+    // `source_removal` is v4-only; every v3 (and earlier) fixture must not carry it, the same way a
+    // real journal written before this field existed never could.
+    while( true ) {
+        const auto field = _v4.find(",\"source_removal\":\"");
+        if( field == std::string::npos )
+            break;
+        const auto value_start = field + std::string_view{",\"source_removal\":\""}.size();
+        const auto value_end = _v4.find('"', value_start);
+        if( value_end == std::string::npos )
+            throw std::logic_error{"malformed v4 source_removal"};
+        _v4.erase(field, value_end + 1 - field);
+    }
+    return _v4;
+}
+
+std::string OperationJournalUTAsV1(std::string _v4)
+{
+    std::string _v3 = OperationJournalUTAsV3(std::move(_v4));
     const auto version = _v3.find("\"version\":3");
     if( version == std::string::npos )
         throw std::logic_error{"missing v3 version"};
@@ -254,8 +276,9 @@ std::string OperationJournalUTAsV1(std::string _v3)
     return _v3;
 }
 
-std::string OperationJournalUTAsV2(std::string _v3)
+std::string OperationJournalUTAsV2(std::string _v4)
 {
+    std::string _v3 = OperationJournalUTAsV3(std::move(_v4));
     const auto version = _v3.find("\"version\":3");
     if( version == std::string::npos )
         throw std::logic_error{"missing v3 version"};
@@ -292,7 +315,7 @@ concept OperationJournalUTRawIdAdmission = requires(T &_journal, const Operation
 
 TEST_CASE("OperationJournal: durable admission receipt carries no execution authority", "[operation-journal]")
 {
-    STATIC_REQUIRE(OperationJournal::SchemaVersion == 3);
+    STATIC_REQUIRE(OperationJournal::SchemaVersion == 4);
     STATIC_REQUIRE_FALSE(OperationJournalUTExecutionAuthority<OperationJournalAdmissionReceipt>);
     STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<OperationJournalAdmissionReceipt>);
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<OperationJournalAdmissionReceipt>);
@@ -355,7 +378,7 @@ TEST_CASE("OperationJournal: reservations allocate exact durable IDs without raw
     REQUIRE(next);
     CHECK(next->Id().ToString() == "op-4");
     const auto json = OperationJournalUTReadFile(directory);
-    CHECK(json.find("\"version\":3") != std::string::npos);
+    CHECK(json.find("\"version\":4") != std::string::npos);
     CHECK(json.find("\"next_operation_sequence\":4") != std::string::npos);
 }
 
@@ -379,7 +402,7 @@ TEST_CASE("OperationJournal: schema-v2 migration derives and persists the operat
         const auto admission = migrated->Admit(std::move(*reservation), OperationJournalUTPlan("v3-next"));
         REQUIRE(admission);
         CHECK(admission->OperationId().ToString() == "op-42");
-        CHECK(OperationJournalUTReadFile(directory).find("\"version\":3") != std::string::npos);
+        CHECK(OperationJournalUTReadFile(directory).find("\"version\":4") != std::string::npos);
         CHECK(OperationJournalUTReadFile(directory).find("\"next_operation_sequence\":43") != std::string::npos);
     }
 
@@ -408,7 +431,7 @@ TEST_CASE("OperationJournal: explicit execution IDs survive durable admission an
         CHECK(duplicate.error().code == OperationJournalErrorCode::DuplicateOperationId);
     }
     const auto json = OperationJournalUTReadFile(directory);
-    CHECK(json.find("\"version\":3") != std::string::npos);
+    CHECK(json.find("\"version\":4") != std::string::npos);
     CHECK(json.find("\"operation_id\":\"op-41\"") != std::string::npos);
 
     auto reopened = OperationJournal::Open(directory.path);
@@ -448,7 +471,7 @@ TEST_CASE("OperationJournal: migrates schema-v1 IDs atomically before exposing a
         CHECK(snapshot[0].state == OperationJournalState::Completed);
         CHECK(snapshot[1].operation_id == OperationJournalUTId(2));
         CHECK(snapshot[1].state == OperationJournalState::Interrupted);
-        CHECK(OperationJournalUTReadFile(directory).find("\"version\":3") != std::string::npos);
+        CHECK(OperationJournalUTReadFile(directory).find("\"version\":4") != std::string::npos);
     }
     auto reopened = OperationJournal::Open(directory.path);
     REQUIRE(reopened);
@@ -491,7 +514,7 @@ TEST_CASE("OperationJournal: schema-v1 migration fails closed after post-rename 
     REQUIRE(reopened);
     REQUIRE(reopened->Snapshot().size() == 1);
     CHECK(reopened->Snapshot()[0].operation_id == OperationJournalUTId(1));
-    CHECK(OperationJournalUTReadFile(directory).find("\"version\":3") != std::string::npos);
+    CHECK(OperationJournalUTReadFile(directory).find("\"version\":4") != std::string::npos);
 }
 
 TEST_CASE("OperationJournal: rejects malformed and duplicated schema-v3 operation IDs", "[operation-journal]")
@@ -1139,6 +1162,7 @@ TEST_CASE("OperationJournal: round-trips strict ordered item evidence without dr
         std::string_view{"\"prior_system_error\":"},
         std::string_view{"\"bytes\":"},
         std::string_view{"\"destination_publication\":"},
+        std::string_view{"\"source_removal\":"},
         std::string_view{"\"filesystem_sync_status\":"},
         std::string_view{"\"filesystem_sync_system_error\":"},
         std::string_view{"\"recovery_action\":"},
@@ -1511,11 +1535,48 @@ TEST_CASE("OperationJournal: enforces item result and terminal lifecycle matrice
         OperationJournalTesting::RecordItemResult(*journal, "delete", OperationJournalUTSuccess());
     REQUIRE_FALSE(wrongly_published);
     CHECK(wrongly_published.error().code == OperationJournalErrorCode::InvalidItemResult);
+    {
+        // Right about the destination, silent about the source: the axis this plan type actually
+        // uses still has to say `Removed`, not merely stay at its unasserted default.
+        auto not_actually_removed = OperationJournalUTSuccess();
+        not_actually_removed.destination_publication = OperationJournalPublicationState::NotPublished;
+        const auto recorded =
+            OperationJournalTesting::RecordItemResult(*journal, "delete", not_actually_removed);
+        REQUIRE_FALSE(recorded);
+        CHECK(recorded.error().code == OperationJournalErrorCode::InvalidItemResult);
+    }
+    {
+        // `Unknown` without `InspectSource` is the source-removal mirror of the existing
+        // destination-publication `Unknown`-without-`InspectDestination` refusal.
+        auto ambiguous_without_inspection = OperationJournalUTSuccess();
+        ambiguous_without_inspection.status = OperationJournalItemStatus::Failed;
+        ambiguous_without_inspection.error = OperationJournalItemError::Commit;
+        ambiguous_without_inspection.destination_publication = OperationJournalPublicationState::NotPublished;
+        ambiguous_without_inspection.source_removal = OperationJournalRemovalState::Unknown;
+        ambiguous_without_inspection.filesystem_sync_status = OperationJournalFilesystemSyncStatus::NotAttempted;
+        ambiguous_without_inspection.recovery_action = OperationJournalRecoveryAction::Retry;
+        const auto recorded =
+            OperationJournalTesting::RecordItemResult(*journal, "delete", ambiguous_without_inspection);
+        REQUIRE_FALSE(recorded);
+        CHECK(recorded.error().code == OperationJournalErrorCode::InvalidItemResult);
+    }
+    auto ambiguous_removal = OperationJournalUTSuccess();
+    ambiguous_removal.status = OperationJournalItemStatus::Failed;
+    ambiguous_removal.error = OperationJournalItemError::Commit;
+    ambiguous_removal.system_error = EIO;
+    ambiguous_removal.destination_publication = OperationJournalPublicationState::NotPublished;
+    ambiguous_removal.source_removal = OperationJournalRemovalState::Unknown;
+    ambiguous_removal.filesystem_sync_status = OperationJournalFilesystemSyncStatus::NotAttempted;
+    ambiguous_removal.recovery_action = OperationJournalRecoveryAction::InspectSource;
+    REQUIRE(OperationJournalTesting::RecordItemResult(*journal, "delete", ambiguous_removal));
+    REQUIRE(OperationJournalTesting::Transition(*journal, "delete", OperationJournalState::Failed));
+
+    start(OperationJournalUTPermanentDeletePlan("delete-completed"));
     auto deleted = OperationJournalUTSuccess();
     deleted.destination_publication = OperationJournalPublicationState::NotPublished;
-    deleted.filesystem_sync_status = OperationJournalFilesystemSyncStatus::NotAttempted;
-    REQUIRE(OperationJournalTesting::RecordItemResult(*journal, "delete", deleted));
-    REQUIRE(OperationJournalTesting::Transition(*journal, "delete", OperationJournalState::Completed));
+    deleted.source_removal = OperationJournalRemovalState::Removed;
+    REQUIRE(OperationJournalTesting::RecordItemResult(*journal, "delete-completed", deleted));
+    REQUIRE(OperationJournalTesting::Transition(*journal, "delete-completed", OperationJournalState::Completed));
 
     auto queued_cancel = journal->Admit(OperationJournalUTPlan("queued-cancel"));
     REQUIRE(queued_cancel);
@@ -1607,9 +1668,9 @@ TEST_CASE("OperationJournal: fails closed on corruption version mismatch and dup
         OperationJournalUTDirectory directory;
         REQUIRE(OperationJournal::Open(directory.path));
         auto contents = OperationJournalUTReadFile(directory);
-        const auto position = contents.find("\"version\":3");
+        const auto position = contents.find("\"version\":4");
         REQUIRE(position != std::string::npos);
-        contents.replace(position, std::string_view{"\"version\":3"}.size(), "\"version\":4");
+        contents.replace(position, std::string_view{"\"version\":4"}.size(), "\"version\":5");
         OperationJournalUTWriteFile(directory, contents);
         const auto result = OperationJournal::Open(directory.path);
         REQUIRE_FALSE(result);
@@ -1663,7 +1724,7 @@ TEST_CASE("OperationJournal: fails closed on corruption version mismatch and dup
     {
         OperationJournalUTDirectory directory;
         REQUIRE(OperationJournal::Open(directory.path));
-        std::string contents = "{\"version\":3,\"next_operation_sequence\":1,\"entries\":[";
+        std::string contents = "{\"version\":4,\"next_operation_sequence\":1,\"entries\":[";
         for( size_t index = 0; index <= OperationJournal::MaxEntries; ++index ) {
             if( index != 0 )
                 contents.push_back(',');

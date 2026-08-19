@@ -108,6 +108,31 @@ static ProviderConditionalMoveReviewedAuthority MoveAuthority(ProviderConditiona
     return ProviderConditionalCopyTransactionTestAccess::MakeMoveAuthority(std::move(_claims));
 }
 
+static ProviderConditionalDeleteReviewedClaims
+DeleteClaims(const std::shared_ptr<NativeHost> &_host,
+            const std::string &_source_parent,
+            const std::string &_source,
+            ProviderConditionalCopyExpectationTolerance _source_parent_tolerance =
+                ProviderConditionalCopyExpectationTolerance::Exact)
+{
+    return ProviderConditionalDeleteReviewedClaims{
+        .plan_id = "native-conditional-delete-test",
+        .source_binding =
+            ProviderConditionalCopyBinding{
+                .provider_id = "native",
+                .host = _host,
+            },
+        .source = Expectation(_source, ProviderConditionalCopyExpectedKind::RegularFile),
+        .source_parent =
+            Expectation(_source_parent, ProviderConditionalCopyExpectedKind::Directory, _source_parent_tolerance),
+    };
+}
+
+static ProviderConditionalDeleteReviewedAuthority DeleteAuthority(ProviderConditionalDeleteReviewedClaims _claims)
+{
+    return ProviderConditionalCopyTransactionTestAccess::MakeDeleteAuthority(std::move(_claims));
+}
+
 static ProviderConditionalCopyReviewedAuthority Authority(ProviderConditionalCopyReviewedClaims _claims)
 {
     return ProviderConditionalCopyTransactionTestAccess::MakeAuthority(std::move(_claims));
@@ -1152,6 +1177,144 @@ TEST_CASE(PREFIX "refuses to begin a Move whose claims no longer describe the di
     // matters - that Begin refused, so no transaction exists to publish anything.
 }
 
+TEST_CASE(PREFIX "publishes a Delete through an anchored unlinkat")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalDeleteTransaction(
+        DeleteAuthority(DeleteClaims(TestEnv().vfs_native, paths.source_parent, paths.source)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    // Reused as-is: `Published` here means the transaction's one durable outcome happened, which for
+    // a Delete is removal rather than creation - the same generic result type Copy and Move use.
+    CHECK((*transaction)->Commit() == PublishedSuccess());
+    CHECK_FALSE(std::filesystem::exists(paths.source));
+}
+
+TEST_CASE(PREFIX "fails closed when the source name is re-pointed at another object before a Delete commits")
+{
+    // The mirror of the identical Move case: holding the source open proves the reviewed object still
+    // exists, not that its *name* still leads to it, and unlinkat acts on the name.
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalDeleteTransaction(
+        DeleteAuthority(DeleteClaims(TestEnv().vfs_native, paths.source_parent, paths.source)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    REQUIRE(std::filesystem::remove(paths.source));
+    Write(paths.source, "a different file wearing the same name");
+
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::SourceStale,
+                                               ESTALE}));
+    CHECK(Read(paths.source) == "a different file wearing the same name");
+}
+
+TEST_CASE(PREFIX "fails closed when the source parent changed since the Delete was reviewed")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalDeleteTransaction(
+        DeleteAuthority(DeleteClaims(TestEnv().vfs_native, paths.source_parent, paths.source)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+    REQUIRE(chmod(paths.source_parent.c_str(), 0700) == 0);
+
+    CHECK(((*transaction)->Commit() ==
+           ProviderConditionalCopyCommitResult{ProviderConditionalCopyPublicationState::NotPublished,
+                                               ProviderConditionalCopyCommitFailure::SourceStale,
+                                               ESTALE}));
+    CHECK(Read(paths.source) == "payload");
+}
+
+TEST_CASE(PREFIX "abandons a Delete at its last cancellation point without touching the source")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+
+    auto transaction = TestEnv().vfs_native->BeginConditionalDeleteTransaction(
+        DeleteAuthority(DeleteClaims(TestEnv().vfs_native, paths.source_parent, paths.source)));
+    REQUIRE(transaction);
+    REQUIRE(*transaction);
+
+    CHECK(((*transaction)->Commit([] { return true; }) ==
+           ProviderConditionalCopyCommitResult{
+               ProviderConditionalCopyPublicationState::NotPublished, ProviderConditionalCopyCommitFailure::Cancelled, 0}));
+    CHECK(Read(paths.source) == "payload");
+}
+
+TEST_CASE(PREFIX "refuses to begin a Delete whose claims no longer describe the disk")
+{
+    const ConditionalCopyPaths paths;
+    Write(paths.source, "payload");
+    const auto claims = DeleteClaims(TestEnv().vfs_native, paths.source_parent, paths.source);
+
+    SECTION("the source is gone, which the directory notices first")
+    {
+        // The same shape Move's own Begin already established: removing the source is a change to the
+        // directory holding it, and that directory is checked first because the source is opened
+        // through it.
+        REQUIRE(std::filesystem::remove(paths.source));
+        CHECK(TestEnv().vfs_native->BeginConditionalDeleteTransaction(DeleteAuthority(claims)).error() ==
+              ProviderConditionalDeleteTransactionBeginError::SourceParentStale);
+    }
+    SECTION("the source changed since review")
+    {
+        Write(paths.source, "different payload entirely");
+        CHECK(TestEnv().vfs_native->BeginConditionalDeleteTransaction(DeleteAuthority(claims)).error() ==
+              ProviderConditionalDeleteTransactionBeginError::SourceStale);
+    }
+    SECTION("the source parent changed since review")
+    {
+        REQUIRE(chmod(paths.source_parent.c_str(), 0700) == 0);
+        CHECK(TestEnv().vfs_native->BeginConditionalDeleteTransaction(DeleteAuthority(claims)).error() ==
+              ProviderConditionalDeleteTransactionBeginError::SourceParentStale);
+    }
+    SECTION("the claimed source parent does not hold the source")
+    {
+        auto elsewhere = claims;
+        elsewhere.source_parent = Expectation(paths.destination_parent, ProviderConditionalCopyExpectedKind::Directory);
+        CHECK(TestEnv().vfs_native->BeginConditionalDeleteTransaction(DeleteAuthority(std::move(elsewhere))).error() ==
+              ProviderConditionalDeleteTransactionBeginError::InvalidRequest);
+    }
+}
+
+TEST_CASE(PREFIX "tolerates its own batch removing several entries from the shared source parent")
+{
+    // The Delete-only mirror of the Copy/Move batch's shared destination-parent growth tolerance: a
+    // batch removing several files from one folder legitimately shrinks it as its own earlier items
+    // complete, and `MonotonicShrink` is what tells that apart from someone else having touched it.
+    const ConditionalCopyPaths paths;
+    const auto second_source = paths.source_parent + "/second.txt";
+    Write(paths.source, "first payload");
+    Write(second_source, "second payload");
+
+    auto first_transaction = TestEnv().vfs_native->BeginConditionalDeleteTransaction(
+        DeleteAuthority(DeleteClaims(TestEnv().vfs_native, paths.source_parent, paths.source)));
+    REQUIRE(first_transaction);
+    REQUIRE(*first_transaction);
+    auto second_transaction = TestEnv().vfs_native->BeginConditionalDeleteTransaction(DeleteAuthority(DeleteClaims(
+        TestEnv().vfs_native,
+        paths.source_parent,
+        second_source,
+        ProviderConditionalCopyExpectationTolerance::MonotonicShrink)));
+    REQUIRE(second_transaction);
+    REQUIRE(*second_transaction);
+
+    CHECK((*first_transaction)->Commit() == PublishedSuccess());
+    CHECK_FALSE(std::filesystem::exists(paths.source));
+    // The second item's own review sealed the parent before the first item's removal shrank it - an
+    // `Exact` expectation here would now read that shrink as someone else having touched the folder.
+    CHECK((*second_transaction)->Commit() == PublishedSuccess());
+    CHECK_FALSE(std::filesystem::exists(second_source));
+}
+
 TEST_CASE(PREFIX "answers conditional Move eligibility without inferring it from Copy")
 {
     // The point of the case: neither answer may be derived from the other. A Move publishes through
@@ -1214,6 +1377,52 @@ TEST_CASE(PREFIX "answers conditional Move eligibility without inferring it from
               ProviderConditionalMovePathSupport::Unavailable);
         CHECK(host->ConditionalMovePathSupport(paths.source, "relative-parent") ==
               ProviderConditionalMovePathSupport::Unavailable);
+    }
+}
+
+TEST_CASE(PREFIX "answers conditional Delete eligibility independently of Copy's and Move's own interfaces")
+{
+    // A Delete asks for neither `clone` nor `rename_excl` - `unlinkat` removes an entry, it does not
+    // write or rename one - so a volume missing either interface must still answer Delete-eligible,
+    // which is the only way to show the question is not silently inheriting Copy's or Move's answer.
+    const ConditionalCopyPaths paths;
+
+    SECTION("a supported volume answers eligible")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::Supported};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalDeletePathSupport(paths.source) ==
+              ProviderConditionalDeletePathSupport::SameVolumeUnlink);
+    }
+
+    SECTION("no atomic exclusive rename still leaves Delete eligible")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::RenameExclDisabled};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalDeletePathSupport(paths.source) ==
+              ProviderConditionalDeletePathSupport::SameVolumeUnlink);
+    }
+
+    SECTION("no clone still leaves Delete eligible")
+    {
+        GateNativeFSManager native_fs_manager{GateNativeFSManager::Mode::CloneDisabled};
+        const auto host = std::make_shared<NativeHost>(native_fs_manager, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalDeletePathSupport(paths.source) ==
+              ProviderConditionalDeletePathSupport::SameVolumeUnlink);
+    }
+
+    SECTION("an unresolvable volume or a relative path is not an answer at all")
+    {
+        GateNativeFSManager missing{GateNativeFSManager::Mode::MissingPathVolume};
+        const auto missing_host = std::make_shared<NativeHost>(missing, *TestEnv().fsevents_file_update);
+        CHECK(missing_host->ConditionalDeletePathSupport(paths.source) ==
+              ProviderConditionalDeletePathSupport::Unavailable);
+
+        GateNativeFSManager supported{GateNativeFSManager::Mode::Supported};
+        const auto host = std::make_shared<NativeHost>(supported, *TestEnv().fsevents_file_update);
+        CHECK(host->ConditionalDeletePathSupport("relative-path") ==
+              ProviderConditionalDeletePathSupport::Unavailable);
+        CHECK(host->ConditionalDeletePathSupport("") == ProviderConditionalDeletePathSupport::Unavailable);
     }
 }
 

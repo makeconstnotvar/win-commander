@@ -33,6 +33,8 @@ using nc::ops::VFSOperationPlanningBindings;
 using nc::ops::VFSOperationPlanningProbes;
 using nc::panel::actions::reviewed_copy_as::PrepareReviewedCopyApplicationBoundary;
 using nc::panel::actions::reviewed_move::Select;
+using nc::panel::actions::reviewed_move::SelectBatch;
+using nc::panel::actions::reviewed_move::SelectIntoDirectory;
 using nc::panel::actions::reviewed_move::Selection;
 using nc::vfs::ListingItem;
 
@@ -98,19 +100,28 @@ private:
     nc::vfs::ProviderConditionalMovePathSupport m_PathSupport;
 };
 
+ListingItem NamedItem(const std::shared_ptr<ReviewedMoveAsTestHost> &_host,
+                      const std::string &_directory,
+                      const std::string &_filename,
+                      const mode_t _mode = S_IFREG | S_IRUSR | S_IWUSR,
+                      const uint8_t _type = DT_REG)
+{
+    nc::vfs::ListingInput input;
+    input.directories.reset(nc::base::variable_container<>::type::common);
+    input.directories[0] = _directory;
+    input.hosts.reset(nc::base::variable_container<>::type::common);
+    input.hosts[0] = _host;
+    input.filenames.emplace_back(_filename);
+    input.unix_modes.emplace_back(_mode);
+    input.unix_types.emplace_back(_type);
+    return VFSListing::Build(std::move(input))->Item(0);
+}
+
 ListingItem Item(const std::shared_ptr<ReviewedMoveAsTestHost> &_host,
                  const mode_t _mode = S_IFREG | S_IRUSR | S_IWUSR,
                  const uint8_t _type = DT_REG)
 {
-    nc::vfs::ListingInput input;
-    input.directories.reset(nc::base::variable_container<>::type::common);
-    input.directories[0] = "/source/";
-    input.hosts.reset(nc::base::variable_container<>::type::common);
-    input.hosts[0] = _host;
-    input.filenames.emplace_back("source.txt");
-    input.unix_modes.emplace_back(_mode);
-    input.unix_types.emplace_back(_type);
-    return VFSListing::Build(std::move(input))->Item(0);
+    return NamedItem(_host, "/source/", "source.txt", _mode, _type);
 }
 
 CopyingOptions MoveOptions()
@@ -227,4 +238,52 @@ TEST_CASE(PREFIX "app boundary accepts an accepted Move plan the same way it acc
     CHECK(prepared->Presentation().items.size() == 1);
     CHECK(prepared->Presentation().items.front().source_path == "/source/source.txt");
     CHECK(prepared->Presentation().items.front().destination_path == "/source/moved.txt");
+}
+
+TEST_CASE(PREFIX "selects a folder destination outside the item's own directory - the Move To shape",
+          "[reviewed-move-to-policy]")
+{
+    const auto host = std::make_shared<ReviewedMoveAsTestHost>(true);
+    const auto item = Item(host);
+    const auto options = MoveOptions();
+
+    // `OperationPlanner::RunMove` now accepts several sources and a directory destination, so `Move To`
+    // gets the same folder-shaped counterpart `Copy To` already has.
+    CHECK(SelectIntoDirectory(item, "/destination", host, options) == Selection::Reviewed);
+
+    // Into its own directory the derived destination is the source itself - a plan that cannot exist.
+    CHECK(SelectIntoDirectory(item, "/source", host, options) == Selection::Legacy);
+    CHECK(SelectIntoDirectory(item, "/source/", host, options) == Selection::Legacy);
+
+    CHECK(SelectIntoDirectory(item, "destination", host, options) == Selection::Legacy);
+    CHECK(SelectIntoDirectory(item, "", host, options) == Selection::Legacy);
+    CHECK(SelectIntoDirectory(item, "/destination", {}, options) == Selection::Legacy);
+}
+
+TEST_CASE(PREFIX "answers for a whole selection at once, and lets no refusal be downgraded",
+          "[reviewed-move-to-policy]")
+{
+    const auto host = std::make_shared<ReviewedMoveAsTestHost>(true);
+    const auto unavailable_host =
+        std::make_shared<ReviewedMoveAsTestHost>(true, nc::vfs::ProviderConditionalMovePathSupport::Unavailable);
+    const auto options = MoveOptions();
+
+    // The common `Move To` shape: several siblings out of the same source folder into one destination.
+    const std::vector<ListingItem> two{NamedItem(host, "/source/", "first.txt"),
+                                       NamedItem(host, "/source/", "second.txt")};
+    CHECK(SelectBatch(two, "/destination", host, options) == Selection::Reviewed);
+
+    // One item the reviewed engine cannot take sends the whole set to the legacy operation.
+    const std::vector<ListingItem> mixed{NamedItem(host, "/source/", "first.txt"),
+                                         Item(host, S_IFDIR | S_IRUSR | S_IWUSR, DT_DIR)};
+    CHECK(SelectBatch(mixed, "/destination", host, options) == Selection::Legacy);
+
+    // A provider that cannot answer the eligibility question outranks a legacy sibling, and is found
+    // even when it comes after one.
+    const std::vector<ListingItem> legacy_then_reject{
+        Item(host, S_IFDIR | S_IRUSR | S_IWUSR, DT_DIR),
+        NamedItem(unavailable_host, "/source/", "second.txt")};
+    CHECK(SelectBatch(legacy_then_reject, "/destination", unavailable_host, options) == Selection::Reject);
+
+    CHECK(SelectBatch({}, "/destination", host, options) == Selection::Legacy);
 }

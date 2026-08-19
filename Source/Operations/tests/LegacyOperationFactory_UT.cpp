@@ -303,6 +303,29 @@ TEST_CASE(PREFIX "requires reviewed exact bindings and preserves Copy intent", "
         CHECK(operation.State() == OperationState::Completed);
         CHECK(ReadFile(destination_directory / source_symlink.filename()) == "followed");
     }
+}
+
+// Split from the SECTIONs above into its own TEST_CASE: as one function this test's frame grew past
+// the project's 32 KiB limit once `OperationPreflightReport` gained a second item vector for reviewed
+// Delete (`Docs/Design/reviewed_delete_execution.md`) - not because any SECTION here changed, but
+// because Catch2 SECTIONs share one function frame in an unoptimized build, and every local in every
+// SECTION of a single TEST_CASE competes for space in it regardless of which one runs. A second
+// TEST_CASE is a second frame, which is the same fix already used in Theme_UT.mm and
+// PanelPresentationGeometry_UT.mm for the identical limit. No assertion moved or changed.
+TEST_CASE(PREFIX "requires reviewed exact bindings and preserves Copy intent, continued",
+          "[legacy-operation-factory]")
+{
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    {
+        std::ofstream stream{source};
+        stream << "first";
+    }
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = NativeProbes(host);
 
     SECTION("source directory trailing slash materializes through canonical item form")
     {

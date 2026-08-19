@@ -264,6 +264,62 @@ Selection Select(const VFSListingItem &_item,
     return Selection::Reject;
 }
 
+Selection SelectIntoDirectory(const VFSListingItem &_item,
+                              const std::string &_destination_directory,
+                              const VFSHostPtr &_destination_host,
+                              const nc::ops::CopyingOptions &_options) noexcept
+{
+    try {
+        if( !IsReviewedMoveShape(_item, _destination_host, _options) || _destination_directory.empty() ||
+            _destination_directory.front() != '/' )
+            return Selection::Legacy;
+
+        // Moving an item into the directory it already occupies cannot go anywhere - the derived
+        // destination is the source itself, which the planner refuses as `SamePath`. Answered legacy
+        // here for the same reason `reviewed_copy_as::SelectIntoDirectory` is: never hand the reviewed
+        // engine a plan that cannot exist.
+        if( reviewed_copy_as::IsSameLexicalPath(_destination_directory, _item.Directory()) )
+            return Selection::Legacy;
+
+        switch( _destination_host->ConditionalMovePathSupport(_item.Path(), _destination_directory) ) {
+            case nc::vfs::ProviderConditionalMovePathSupport::SameVolumeRename:
+                return Selection::Reviewed;
+            case nc::vfs::ProviderConditionalMovePathSupport::Unsupported:
+                return Selection::Legacy;
+            case nc::vfs::ProviderConditionalMovePathSupport::Unavailable:
+                return Selection::Reject;
+        }
+    } catch( ... ) {
+        return Selection::Reject;
+    }
+    return Selection::Reject;
+}
+
+Selection SelectBatch(const std::vector<VFSListingItem> &_items,
+                      const std::string &_destination_directory,
+                      const VFSHostPtr &_destination_host,
+                      const nc::ops::CopyingOptions &_options) noexcept
+{
+    if( _items.empty() )
+        return Selection::Legacy;
+
+    // Same rule as `reviewed_copy_as::SelectBatch`: every item is asked, even after one has already
+    // answered legacy, so a `Reject` further down is never silently downgraded into a legacy move.
+    bool any_legacy = false;
+    for( const auto &item : _items ) {
+        switch( SelectIntoDirectory(item, _destination_directory, _destination_host, _options) ) {
+            case Selection::Reject:
+                return Selection::Reject;
+            case Selection::Legacy:
+                any_legacy = true;
+                break;
+            case Selection::Reviewed:
+                break;
+        }
+    }
+    return any_legacy ? Selection::Legacy : Selection::Reviewed;
+}
+
 } // namespace reviewed_move
 
 namespace {
@@ -952,6 +1008,8 @@ NSString *JournalRecoveryDescription(const nc::ops::OperationJournalRecoveryActi
             return @"Remove the temporary item before retrying.";
         case RestoreSource:
             return @"Restore the source before continuing.";
+        case InspectSource:
+            return @"Inspect the source before retrying.";
     }
     return @"Inspect the journal state before continuing.";
 }
@@ -1772,6 +1830,9 @@ void MoveTo::Perform(MainWindowFilePanelState *_target, id /*_sender*/) const
     if( entries.empty() )
         return;
 
+    const auto pane_id = act_pc.paneId;
+    const auto data_generation = act_pc.dataGeneration;
+
     const auto cd = [[NCOpsCopyingDialog alloc] initWithItems:entries
                                                     sourceVFS:act_uniform ? act_pc.vfs : nullptr
                                               sourceDirectory:act_uniform ? act_pc.currentDirectoryPath : ""
@@ -1789,13 +1850,62 @@ void MoveTo::Perform(MainWindowFilePanelState *_target, id /*_sender*/) const
       if( !host || path.empty() )
           return; // ui invariant is broken
 
-      const auto op = std::make_shared<nc::ops::Copying>(entries, path, host, opts);
+      const auto submit_legacy = [&] {
+          const auto op = std::make_shared<nc::ops::Copying>(entries, path, host, opts);
 
-      const auto update_both_panels = RefreshBothCurrentControllersLambda(_target);
-      op->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, update_both_panels);
-      AddDeselectorIfNeeded(*op, act_pc);
+          const auto update_both_panels = RefreshBothCurrentControllersLambda(_target);
+          op->ObserveUnticketed(nc::ops::Operation::NotifyAboutFinish, update_both_panels);
+          AddDeselectorIfNeeded(*op, act_pc);
 
-      [_target.mainWindowController enqueueOperation:op];
+          [_target.mainWindowController enqueueOperation:op];
+      };
+
+      // Same reasoning as `Copy To`: the reviewed engine means exactly one destination shape, so an
+      // existing folder is the only one it is offered.
+      const auto folder = reviewed_copy_as::TrimmedExistingDirectory(host, path);
+      if( !folder ) {
+          submit_legacy();
+          return;
+      }
+
+      switch( reviewed_move::SelectBatch(entries, *folder, host, opts) ) {
+          case reviewed_move::Selection::Legacy:
+              submit_legacy();
+              return;
+          case reviewed_move::Selection::Reject:
+              ShowCopyAlert(
+                  _target.mainWindowController,
+                  @"Move validation unavailable",
+                  @"The storage provider could not establish whether this move is eligible. The move was not started.",
+                  NSAlertStyleCritical);
+              return;
+          case reviewed_move::Selection::Reviewed:
+              break;
+      }
+
+      if( !ReviewedCopyIntentIsCurrent(_target, act_pc, pane_id, data_generation, entries) ) {
+          ShowCopyAlert(_target.mainWindowController,
+                        @"Move request expired",
+                        @"The active pane or its selection changed while the move dialog was open.");
+          return;
+      }
+
+      // The files land in the opposite pane, exactly as `Copy To` does - both panes are refreshed
+      // because the source pane's selection state moves too.
+      SubmitReviewedCopy(_target,
+                         act_pc,
+                         opp_pc,
+                         RefreshBothCurrentControllersLambda(_target),
+                         ReviewedCopyRequest{
+                             .items = entries,
+                             .destination = *folder,
+                             .destination_kind = nc::ops::OperationPlanDestinationKind::Directory,
+                             .plan_type = nc::ops::OperationPlanType::Move,
+                             .pane_id = pane_id,
+                             .data_generation = data_generation,
+                             .intent_follows_selection = true,
+                             .deselect = ShouldAutomaticallyDeselect(),
+                         });
     };
 
     [_target.mainWindowController beginSheet:cd.window completionHandler:handler];

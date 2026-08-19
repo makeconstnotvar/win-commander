@@ -121,6 +121,23 @@ OperationPlan ReviewedMovePlan(std::string _source, std::string _destination)
     return std::move(*plan);
 }
 
+OperationPlan ReviewedMoveBatchPlan(std::vector<OperationPlanSourceInput> _sources, std::string _destination_directory)
+{
+    OperationPlanInput input{
+        .plan_id = "reviewed-move-batch",
+        .type = OperationPlanType::Move,
+        .sources = std::move(_sources),
+        .destination = OperationPlanDestinationInput{
+            "local", std::move(_destination_directory), OperationPlanDestinationKind::Directory},
+        .conflict_policy =
+            OperationPlanConflictPolicy{OperationPlanConflictDecision::Ask, OperationPlanConflictScope::ThisItem},
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    };
+    auto plan = OperationPlan::Create(std::move(input));
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
 ReviewedOperationFactoryTestAccess::ConditionalMoveCommitTransactionResolver
 ReviewedStrongConditionalMoveCommitTransaction(
     int *_abort_calls = nullptr,
@@ -1000,6 +1017,59 @@ TEST_CASE(PREFIX "carries a reviewed Move through one operation, and the source 
     CHECK(evidence->item_results[0].destination_publication == OperationJournalPublicationState::Published);
     CHECK(ReviewedReadFile(destination) == "move payload");
     CHECK_FALSE(std::filesystem::exists(source));
+}
+
+TEST_CASE(PREFIX "completes a real provider Move batch though its own first item shrinks the shared source folder",
+          "[reviewed-operation-factory]")
+{
+    // The Move-only mirror of the batch Copy test above, and the question it answers is the opposite
+    // one: that test asks whether a shared *destination* directory growing from the batch's own
+    // publications still passes review on later items. This one asks the same thing about a shared
+    // *source* directory - `MoveTo` is most often several siblings moved out of one folder, and each
+    // rename indivisibly removes an entry from that folder, which is a real, `source_parent`-visible
+    // change under the same `renameatx_np` that publishes the destination. If the second item's own
+    // `source_parent` expectation is not told about the batch's own first removal, the whole shape a
+    // `MoveTo` batch mostly is - siblings out of one folder - would fail closed on every item after the
+    // first, which only a real filesystem run below the test mint could ever have shown.
+    TempTestDir temporary;
+    const auto source_directory = temporary.directory / "source";
+    std::filesystem::create_directory(source_directory);
+    const auto first = source_directory / "first.txt";
+    const auto second = source_directory / "second.txt";
+    const auto destination_directory = temporary.directory / "destination";
+    std::filesystem::create_directory(destination_directory);
+    ReviewedWriteFile(first, "first payload");
+    ReviewedWriteFile(second, "second payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(
+        ReviewedMoveBatchPlan({{"local", first.native()}, {"local", second.native()}}, destination_directory.native()),
+        probes);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Type() == OperationPlanType::Move);
+    REQUIRE(reviewed.AcceptedPlan().Report().items.size() == 2);
+
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    auto &terminal_evidence = ReviewedOperationFactoryTestAccess::TerminalEvidence(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+
+    const auto evidence = terminal_evidence();
+    REQUIRE(evidence);
+    CHECK(evidence->state == OperationJournalState::Completed);
+    REQUIRE(evidence->item_results.size() == 2);
+    for( const auto &result : evidence->item_results ) {
+        CHECK(result.status == OperationJournalItemStatus::Succeeded);
+        CHECK(result.destination_publication == OperationJournalPublicationState::Published);
+    }
+    CHECK(ReviewedReadFile(destination_directory / "first.txt") == "first payload");
+    CHECK(ReviewedReadFile(destination_directory / "second.txt") == "second payload");
+    CHECK_FALSE(std::filesystem::exists(first));
+    CHECK_FALSE(std::filesystem::exists(second));
 }
 
 TEST_CASE(PREFIX "mints a Move authority carrying the source's own folder as a claim",

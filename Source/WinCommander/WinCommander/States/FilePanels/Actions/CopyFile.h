@@ -77,14 +77,27 @@ using Selection = reviewed_copy_as::Selection;
 
 /**
  * The Move counterpart of `reviewed_copy_as::Select`, for the single-item exact-destination shape
- * `Move As` has. There is no `SelectIntoDirectory`/`SelectBatch` counterpart yet: those exist for
- * `Copy To`, and a `Move To` equivalent needs `OperationPlanner::RunMove` to accept several sources and
- * a directory destination, which it does not today.
+ * `Move As` has.
  */
 [[nodiscard]] Selection Select(const nc::vfs::ListingItem &_item,
                                const std::string &_destination,
                                const std::shared_ptr<nc::vfs::Host> &_destination_host,
                                const nc::ops::CopyingOptions &_options) noexcept;
+
+/**
+ * The Move counterpart of `reviewed_copy_as::SelectIntoDirectory`, for one item landing in a
+ * destination directory under its own name - the shape `Move To` produces.
+ */
+[[nodiscard]] Selection SelectIntoDirectory(const nc::vfs::ListingItem &_item,
+                                            const std::string &_destination_directory,
+                                            const std::shared_ptr<nc::vfs::Host> &_destination_host,
+                                            const nc::ops::CopyingOptions &_options) noexcept;
+
+/** The Move counterpart of `reviewed_copy_as::SelectBatch`. */
+[[nodiscard]] Selection SelectBatch(const std::vector<nc::vfs::ListingItem> &_items,
+                                    const std::string &_destination_directory,
+                                    const std::shared_ptr<nc::vfs::Host> &_destination_host,
+                                    const nc::ops::CopyingOptions &_options) noexcept;
 
 } // namespace reviewed_move
 

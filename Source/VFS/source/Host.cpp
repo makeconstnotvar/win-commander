@@ -662,6 +662,12 @@ Host::ConditionalMovePathSupport([[maybe_unused]] std::string_view _source_path,
     return ProviderConditionalMovePathSupport::Unsupported;
 }
 
+ProviderConditionalDeletePathSupport
+Host::ConditionalDeletePathSupport([[maybe_unused]] std::string_view _path) const noexcept
+{
+    return ProviderConditionalDeletePathSupport::Unsupported;
+}
+
 std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
 Host::MintConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                      ProviderConditionalCopyTransaction::CommitHandler _commit,
@@ -684,6 +690,22 @@ Host::MintConditionalMoveTransaction(ProviderConditionalMoveReviewedAuthority _a
                                      ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept
 {
     return ProviderConditionalCopyTransaction::MintForMove(
+        *this, std::move(_authority), std::move(_commit), std::move(_abort));
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalDeleteTransactionBeginError>
+Host::BeginConditionalDeleteTransaction([[maybe_unused]] ProviderConditionalDeleteReviewedAuthority _authority,
+                                        [[maybe_unused]] const VFSCancelChecker &_cancel_checker)
+{
+    return std::unexpected(ProviderConditionalDeleteTransactionBeginError::Unsupported);
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalDeleteTransactionBeginError>
+Host::MintConditionalDeleteTransaction(ProviderConditionalDeleteReviewedAuthority _authority,
+                                       ProviderConditionalCopyTransaction::CommitHandler _commit,
+                                       ProviderConditionalCopyTransaction::AbortHandler _abort) const noexcept
+{
+    return ProviderConditionalCopyTransaction::MintForDelete(
         *this, std::move(_authority), std::move(_commit), std::move(_abort));
 }
 

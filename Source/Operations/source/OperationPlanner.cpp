@@ -228,6 +228,8 @@ public:
     {
         if( m_Plan.Type() == OperationPlanType::Move )
             return RunMove();
+        if( m_Plan.Type() == OperationPlanType::PermanentDelete )
+            return RunPermanentDelete();
         if( m_Plan.Type() != OperationPlanType::Copy ) {
             AddBlocker(OperationPlanningBlockerCode::UnsupportedPlanType, std::nullopt);
             return Block();
@@ -302,16 +304,21 @@ private:
     using SpaceResult = OperationPlanningProbeResult<OperationPlanningSpaceEvidence>;
 
     /**
-     * The first Move preflight is intentionally an intent-only, one-file rename shape. It binds the
-     * exact source and destination paths plus their parent-namespace capability/access evidence, but
-     * it creates no execution authority and does not promise cross-provider or replacement behavior.
+     * The Move preflight binds an intent-only rename shape: exact source paths and either an exact
+     * destination or a shared destination directory, plus parent-namespace capability/access evidence.
+     * It creates no execution authority and does not promise cross-provider or replacement behavior -
+     * a Move never crosses providers, because there is no cross-volume Move to promise it for.
      */
     OperationPreflightResult RunMove()
     {
         const auto &sources = m_Plan.Sources();
         const auto &destination = *m_Plan.Destination();
         const auto &conflict_policy = *m_Plan.ConflictPolicy();
-        if( sources.size() != 1 || destination.Kind() != OperationPlanDestinationKind::ExactItem ) {
+        // `OperationPlan::Create` already refuses an `ExactItem` destination with more than one source
+        // for every type that uses it - Copy included - so that combination cannot reach this preflight
+        // at all and is not re-checked here.
+        if( destination.Kind() != OperationPlanDestinationKind::ExactItem &&
+            destination.Kind() != OperationPlanDestinationKind::Directory ) {
             AddBlocker(OperationPlanningBlockerCode::UnsupportedPlanType, std::nullopt);
             return Block();
         }
@@ -321,113 +328,174 @@ private:
             return Block();
         }
 
-        const OperationPlanningPath source_path{
-            .provider_id = std::string{sources.front().ProviderId().Value()},
-            .absolute_path = std::string{sources.front().AbsolutePath()},
-        };
+        // Checked structurally, before anything is probed: a mismatched provider can never become a
+        // same-volume rename no matter what the world answers, and refusing it here is what keeps a
+        // hopeless plan from spending a single probe call - true for one source exactly as for many.
         const OperationPlanningPath destination_path{
             .provider_id = std::string{destination.ProviderId().Value()},
             .absolute_path = std::string{destination.AbsolutePath()},
         };
-        if( source_path.provider_id != destination_path.provider_id ) {
+        const bool any_cross_provider = std::ranges::any_of(sources, [&](const OperationPlanSource &_source) {
+            return _source.ProviderId().Value() != destination.ProviderId().Value();
+        });
+        if( any_cross_provider ) {
             AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, destination_path);
-            return FinishMove();
+            return Block();
         }
 
-        const auto source_name = BaseName(source_path.absolute_path);
-        if( source_name.empty() ) {
-            AddBlocker(OperationPlanningBlockerCode::InvalidSourceName, source_path);
-            return FinishMove();
+        const OperationPlanningPath destination_directory{
+            .provider_id = destination_path.provider_id,
+            .absolute_path = destination.Kind() == OperationPlanDestinationKind::Directory
+                                 ? TrimTrailingSlashes(destination.AbsolutePath())
+                                 : ParentPath(destination.AbsolutePath()),
+        };
+
+        const auto *destination_provider = Provider(destination_directory);
+        const bool destination_capable = destination_provider && destination_provider->can_rename;
+        if( destination_provider && !destination_provider->can_rename )
+            AddBlocker(OperationPlanningBlockerCode::DestinationNotWritable, destination_directory);
+
+        bool destination_ready = false;
+        if( destination_capable ) {
+            const auto *destination_directory_item = Item(destination_directory);
+            if( destination_directory_item ) {
+                if( destination_directory_item->kind == OperationPlanningItemKind::Missing )
+                    AddBlocker(OperationPlanningBlockerCode::DestinationMissing, destination_directory);
+                else if( destination_directory_item->kind != OperationPlanningItemKind::Directory )
+                    AddBlocker(OperationPlanningBlockerCode::DestinationNotDirectory, destination_directory);
+                else if( const auto *access =
+                             Access(destination_directory, OperationPlanningRequiredAccess::Rename);
+                         access && access->state == OperationPlanningAccessState::Granted )
+                    destination_ready = true;
+            }
         }
+
+        for( const auto &source : sources ) {
+            if( m_Cancelled )
+                break;
+            PlanMoveSource(source, destination, destination_provider, destination_ready);
+        }
+
+        return FinishMove();
+    }
+
+    void PlanMoveSource(const OperationPlanSource &_source,
+                        const OperationPlanDestination &_destination,
+                        const OperationPlanningProviderEvidence *_destination_provider,
+                        bool _destination_ready)
+    {
+        const OperationPlanningPath source_path{
+            .provider_id = std::string{_source.ProviderId().Value()},
+            .absolute_path = std::string{_source.AbsolutePath()},
+        };
+        const auto name = BaseName(source_path.absolute_path);
+        if( name.empty() ) {
+            AddBlocker(OperationPlanningBlockerCode::InvalidSourceName, source_path);
+            return;
+        }
+
+        const OperationPlanningPath effective_destination{
+            .provider_id = std::string{_destination.ProviderId().Value()},
+            .absolute_path = _destination.Kind() == OperationPlanDestinationKind::Directory
+                                 ? JoinPath(_destination.AbsolutePath(), name)
+                                 : std::string{_destination.AbsolutePath()},
+        };
         const OperationPlanningPath source_parent{
             .provider_id = source_path.provider_id,
             .absolute_path = ParentPath(source_path.absolute_path),
         };
-        const OperationPlanningPath destination_parent{
-            .provider_id = destination_path.provider_id,
-            .absolute_path = ParentPath(destination_path.absolute_path),
-        };
 
         const auto *source_provider = Provider(source_parent);
-        const auto *destination_provider = Provider(destination_parent);
-        if( !source_provider || !destination_provider )
-            return FinishMove();
+        if( !source_provider )
+            return;
         if( !source_provider->can_rename ) {
             AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, source_parent);
-            return FinishMove();
-        }
-        if( !destination_provider->can_rename ) {
-            AddBlocker(OperationPlanningBlockerCode::DestinationNotWritable, destination_parent);
-            return FinishMove();
+            return;
         }
 
         const auto *source_parent_item = Item(source_parent);
         if( !source_parent_item )
-            return FinishMove();
+            return;
         if( source_parent_item->kind != OperationPlanningItemKind::Directory ) {
             AddBlocker(OperationPlanningBlockerCode::SourceMissing, source_parent);
-            return FinishMove();
-        }
-        const auto *destination_parent_item = Item(destination_parent);
-        if( !destination_parent_item )
-            return FinishMove();
-        if( destination_parent_item->kind == OperationPlanningItemKind::Missing ) {
-            AddBlocker(OperationPlanningBlockerCode::DestinationMissing, destination_parent);
-            return FinishMove();
-        }
-        if( destination_parent_item->kind != OperationPlanningItemKind::Directory ) {
-            AddBlocker(OperationPlanningBlockerCode::DestinationNotDirectory, destination_parent);
-            return FinishMove();
+            return;
         }
 
         const auto *source_item = Item(source_path);
         if( !source_item )
-            return FinishMove();
+            return;
         if( source_item->kind == OperationPlanningItemKind::Missing ) {
             AddBlocker(OperationPlanningBlockerCode::SourceMissing, source_path);
-            return FinishMove();
+            return;
         }
         if( source_item->kind != OperationPlanningItemKind::File ) {
             AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, source_path);
-            return FinishMove();
+            return;
         }
 
-        const auto *destination_name = Name(destination_path);
-        if( !destination_name )
-            return FinishMove();
-        if( !destination_name->valid ) {
-            AddBlocker(OperationPlanningBlockerCode::InvalidDestinationName, destination_path);
-            return FinishMove();
+        const bool destination_name_is_derived_from_same_provider =
+            _destination.Kind() == OperationPlanDestinationKind::Directory;
+        if( !destination_name_is_derived_from_same_provider ) {
+            const auto *destination_name = Name(effective_destination);
+            if( !destination_name )
+                return;
+            if( !destination_name->valid ) {
+                AddBlocker(OperationPlanningBlockerCode::InvalidDestinationName, effective_destination);
+                return;
+            }
         }
 
         const auto *source_access = Access(source_parent, OperationPlanningRequiredAccess::Rename);
         if( !source_access || source_access->state != OperationPlanningAccessState::Granted )
-            return FinishMove();
-        const auto *destination_access = Access(destination_parent, OperationPlanningRequiredAccess::Rename);
-        if( !destination_access || destination_access->state != OperationPlanningAccessState::Granted )
-            return FinishMove();
+            return;
         if( m_Cancelled )
-            return FinishMove();
+            return;
 
-        const auto comparison_identity = Combine(source_provider->path_identity, destination_provider->path_identity);
-        if( !SupportsComparison(comparison_identity, source_path.absolute_path, destination_path.absolute_path) ) {
-            AddBlocker(OperationPlanningBlockerCode::PathIdentityUnavailable, destination_path);
-            return FinishMove();
+        const auto destination_identity = _destination_provider
+                                              ? _destination_provider->path_identity
+                                              : OperationPlanningPathIdentitySemantics::Unavailable;
+        const auto comparison_identity = Combine(source_provider->path_identity, destination_identity);
+        if( !SupportsComparison(
+                comparison_identity, source_path.absolute_path, effective_destination.absolute_path) ) {
+            AddBlocker(OperationPlanningBlockerCode::PathIdentityUnavailable, effective_destination);
+            return;
         }
         const bool case_sensitive = comparison_identity != OperationPlanningPathIdentitySemantics::ASCIICaseInsensitive;
-        if( SamePath(source_path, destination_path, case_sensitive) ) {
-            AddBlocker(OperationPlanningBlockerCode::SamePath, destination_path);
-            return FinishMove();
+        if( SamePath(source_path, effective_destination, case_sensitive) ) {
+            AddBlocker(OperationPlanningBlockerCode::SamePath, effective_destination);
+            return;
         }
 
-        const auto *destination_item = Item(destination_path);
+        if( !_destination_ready )
+            return;
+
+        const auto *destination_item = Item(effective_destination);
         if( !destination_item )
-            return FinishMove();
+            return;
         if( destination_item->kind != OperationPlanningItemKind::Missing ) {
-            m_Report.conflicts.emplace_back(
-                OperationPlanningConflict{source_path, destination_path, conflict_policy.Decision()});
-            AddBlocker(OperationPlanningBlockerCode::ConflictDecisionRequired, destination_path);
-            return FinishMove();
+            const auto decision = m_Plan.ConflictPolicy()->Decision();
+            m_Report.conflicts.emplace_back(OperationPlanningConflict{source_path, effective_destination, decision});
+            AddBlocker(OperationPlanningBlockerCode::ConflictDecisionRequired, effective_destination);
+            return;
+        }
+
+        if( m_Plan.Sources().size() > 1 ) {
+            if( !SupportsComparison(destination_identity,
+                                    effective_destination.absolute_path,
+                                    effective_destination.absolute_path) ) {
+                AddBlocker(OperationPlanningBlockerCode::PathIdentityUnavailable, effective_destination);
+                return;
+            }
+            auto identity_key = effective_destination.provider_id;
+            identity_key.push_back('\0');
+            auto comparable_path = NormalizeAbsolutePath(effective_destination.absolute_path);
+            if( destination_identity == OperationPlanningPathIdentitySemantics::ASCIICaseInsensitive )
+                comparable_path = FoldASCII(std::move(comparable_path));
+            identity_key += comparable_path;
+            if( !m_EffectiveDestinations.emplace(std::move(identity_key)).second ) {
+                AddBlocker(OperationPlanningBlockerCode::DuplicateDestination, effective_destination);
+                return;
+            }
         }
 
         std::optional<OperationPlanningEstimateEvidence> estimate;
@@ -435,11 +503,10 @@ private:
             estimate = OperationPlanningEstimateEvidence{.files = 1, .bytes = *source_item->byte_size};
         m_Report.items.emplace_back(OperationPlannedCopyItem{
             .source = source_path,
-            .destination = destination_path,
+            .destination = effective_destination,
             .source_kind = source_item->kind,
             .estimate = estimate,
         });
-        return FinishMove();
     }
 
     OperationPreflightResult FinishMove()
@@ -447,6 +514,83 @@ private:
         CalculateTotals();
         AddWarning(OperationPlanningWarningCode::RuntimeRevalidationRequired, std::nullopt);
         if( !m_Cancelled && m_Report.items.empty() && m_Blockers.empty() )
+            AddBlocker(OperationPlanningBlockerCode::NothingToDo, std::nullopt);
+        if( m_Blockers.empty() )
+            return AcceptedOperationPlan{std::move(m_Plan), std::move(m_Report)};
+        return Block();
+    }
+
+    /**
+     * The permanent-Delete preflight is intentionally an intent-only, File-only shape - no directory
+     * source, no `Trash` counterpart. It binds each source's own identity and parent-namespace
+     * capability/access evidence, but creates no execution authority: there is no provider contract
+     * yet that could consume one (see `Docs/Design/reviewed_delete_execution.md`).
+     */
+    OperationPreflightResult RunPermanentDelete()
+    {
+        for( const auto &source : m_Plan.Sources() ) {
+            if( m_Cancelled )
+                break;
+            PlanDeleteSource(source);
+        }
+        return FinishDelete();
+    }
+
+    void PlanDeleteSource(const OperationPlanSource &_source)
+    {
+        const OperationPlanningPath source_path{
+            .provider_id = std::string{_source.ProviderId().Value()},
+            .absolute_path = std::string{_source.AbsolutePath()},
+        };
+        const OperationPlanningPath source_parent{
+            .provider_id = source_path.provider_id,
+            .absolute_path = ParentPath(source_path.absolute_path),
+        };
+
+        const auto *provider = Provider(source_parent);
+        if( !provider )
+            return;
+        if( !provider->can_delete_permanently ) {
+            AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, source_parent);
+            return;
+        }
+
+        const auto *source_item = Item(source_path);
+        if( !source_item )
+            return;
+        if( source_item->kind == OperationPlanningItemKind::Missing ) {
+            AddBlocker(OperationPlanningBlockerCode::SourceMissing, source_path);
+            return;
+        }
+        // Directory sources are out of scope for this slice: `RemoveDirectory` only ever succeeds on
+        // an empty directory, so a non-empty one needs an unbounded recursive walk no single reviewed
+        // transaction can seal as one atomic unit - a real wall, not a placeholder restriction.
+        if( source_item->kind != OperationPlanningItemKind::File ) {
+            AddBlocker(OperationPlanningBlockerCode::ProviderCapabilityUnsupported, source_path);
+            return;
+        }
+
+        const auto *access = Access(source_parent, OperationPlanningRequiredAccess::Delete);
+        if( !access || access->state != OperationPlanningAccessState::Granted )
+            return;
+        if( m_Cancelled )
+            return;
+
+        std::optional<OperationPlanningEstimateEvidence> estimate;
+        if( source_item->byte_size )
+            estimate = OperationPlanningEstimateEvidence{.files = 1, .bytes = *source_item->byte_size};
+        m_Report.deleted_items.emplace_back(OperationPlannedDeleteItem{
+            .source = source_path,
+            .source_kind = source_item->kind,
+            .estimate = estimate,
+        });
+    }
+
+    OperationPreflightResult FinishDelete()
+    {
+        CalculateTotals();
+        AddWarning(OperationPlanningWarningCode::RuntimeRevalidationRequired, std::nullopt);
+        if( !m_Cancelled && m_Report.deleted_items.empty() && m_Blockers.empty() )
             AddBlocker(OperationPlanningBlockerCode::NothingToDo, std::nullopt);
         if( m_Blockers.empty() )
             return AcceptedOperationPlan{std::move(m_Plan), std::move(m_Report)};
@@ -837,20 +981,26 @@ private:
         uint64_t files = 0;
         uint64_t bytes = 0;
         bool complete = true;
-        for( const auto &item : m_Report.items ) {
-            if( !item.estimate ) {
+        // A plan carries exactly one of the two vectors populated - Copy/Move items or Delete items,
+        // never both - so accumulating across both costs nothing on the vector that stays empty.
+        const auto accumulate = [&](const auto &_item) {
+            if( !_item.estimate ) {
                 complete = false;
-                continue;
+                return;
             }
-            if( item.estimate->files > std::numeric_limits<uint64_t>::max() - files ||
-                item.estimate->bytes > std::numeric_limits<uint64_t>::max() - bytes ) {
-                AddBlocker(OperationPlanningBlockerCode::EstimateOverflow, item.source);
+            if( _item.estimate->files > std::numeric_limits<uint64_t>::max() - files ||
+                _item.estimate->bytes > std::numeric_limits<uint64_t>::max() - bytes ) {
+                AddBlocker(OperationPlanningBlockerCode::EstimateOverflow, _item.source);
                 complete = false;
-                continue;
+                return;
             }
-            files += item.estimate->files;
-            bytes += item.estimate->bytes;
-        }
+            files += _item.estimate->files;
+            bytes += _item.estimate->bytes;
+        };
+        for( const auto &item : m_Report.items )
+            accumulate(item);
+        for( const auto &item : m_Report.deleted_items )
+            accumulate(item);
         if( complete ) {
             m_Report.estimated_files = files;
             m_Report.estimated_bytes = bytes;

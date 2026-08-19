@@ -250,6 +250,74 @@ private:
     std::mutex m_Mutex;
 };
 
+/**
+ * Owns the anchored source and its parent for a reviewed permanent Delete. There is no destination
+ * side to hold, unlike Copy and Move - a delete publishes nothing anywhere, so this state is exactly
+ * the removal half of `NativeConditionalMoveState` with the publication half removed rather than left
+ * unused.
+ */
+class NativeConditionalDeleteState final
+{
+public:
+    NativeConditionalDeleteState(int _source_parent_fd,
+                                 int _source_fd,
+                                 ProviderConditionalCopyExistingExpectation _source,
+                                 ProviderConditionalCopyExistingExpectation _source_parent,
+                                 std::string _source_name,
+                                 native::ConditionalCopyMetadataSnapshot _source_metadata,
+                                 native::ConditionalCopyMetadataSnapshot _source_parent_metadata,
+                                 nc::utility::NativeFSManager &_native_fs_manager,
+                                 std::shared_ptr<native::ConditionalCopyIO> _io) noexcept
+        : m_SourceParentFD{_source_parent_fd}, m_SourceFD{_source_fd}, m_Source{std::move(_source)},
+          m_SourceParent{std::move(_source_parent)}, m_SourceName{std::move(_source_name)},
+          m_SourceMetadata{std::move(_source_metadata)}, m_SourceParentMetadata{std::move(_source_parent_metadata)},
+          m_NativeFSManager{_native_fs_manager}, m_IO{std::move(_io)}
+    {
+    }
+
+    NativeConditionalDeleteState(const NativeConditionalDeleteState &) = delete;
+    NativeConditionalDeleteState &operator=(const NativeConditionalDeleteState &) = delete;
+
+    ~NativeConditionalDeleteState() { Close(); }
+
+    [[nodiscard]] ProviderConditionalCopyCommitResult
+    Commit(const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) noexcept;
+
+    [[nodiscard]] ProviderConditionalCopyPublicationState Abort() noexcept
+    {
+        Close();
+        return ProviderConditionalCopyPublicationState::NotPublished;
+    }
+
+private:
+    void Close() noexcept
+    {
+        const auto lock = std::lock_guard{m_Mutex};
+        CloseUnlocked();
+    }
+
+    void CloseUnlocked() noexcept
+    {
+        for( int *fd : {&m_SourceParentFD, &m_SourceFD} ) {
+            if( *fd >= 0 ) {
+                m_IO->Close(*fd);
+                *fd = -1;
+            }
+        }
+    }
+
+    int m_SourceParentFD;
+    int m_SourceFD;
+    ProviderConditionalCopyExistingExpectation m_Source;
+    ProviderConditionalCopyExistingExpectation m_SourceParent;
+    std::string m_SourceName;
+    native::ConditionalCopyMetadataSnapshot m_SourceMetadata;
+    native::ConditionalCopyMetadataSnapshot m_SourceParentMetadata;
+    nc::utility::NativeFSManager &m_NativeFSManager;
+    std::shared_ptr<native::ConditionalCopyIO> m_IO;
+    std::mutex m_Mutex;
+};
+
 /** Owns a granted one-use helper lease until the generic provider transaction takes over. */
 class NativeCrossVolumeStagingState final
 {
@@ -322,8 +390,15 @@ bool NativeConditionalCopyContentFieldMatches(uint64_t _actual,
                                               uint64_t _expected,
                                               ProviderConditionalCopyExpectationTolerance _tolerance) noexcept
 {
-    return _tolerance == ProviderConditionalCopyExpectationTolerance::Exact ? _actual == _expected
-                                                                            : _actual >= _expected;
+    switch( _tolerance ) {
+        case ProviderConditionalCopyExpectationTolerance::Exact:
+            return _actual == _expected;
+        case ProviderConditionalCopyExpectationTolerance::MonotonicGrowth:
+            return _actual >= _expected;
+        case ProviderConditionalCopyExpectationTolerance::MonotonicShrink:
+            return _actual <= _expected;
+    }
+    return false;
 }
 
 bool NativeConditionalCopyContentTimestampMatches(const timespec &_actual,
@@ -332,6 +407,8 @@ bool NativeConditionalCopyContentTimestampMatches(const timespec &_actual,
 {
     if( _tolerance == ProviderConditionalCopyExpectationTolerance::Exact )
         return NativeConditionalCopyTimestampMatches(_actual, _expected);
+    // A clock does not run backward for either direction of content change: growth and shrink both
+    // still only ever advance a directory's own timestamps.
     return NativeConditionalCopySecondsNanosAtLeast(
         _actual.tv_sec, _actual.tv_nsec, _expected.seconds, _expected.nanoseconds);
 }
@@ -392,9 +469,9 @@ bool NativeConditionalCopyMetadataMatchesExpectation(
 /**
  * The full re-check Commit runs against what Begin itself captured on this same anchored descriptor.
  * Identity, ownership, permissions, ACL and extended attributes stay exact regardless of tolerance -
- * this is the one place they are checked at all for the destination parent, since the narrower
- * expectation above never carried them. Only size, link_count and the two content timestamps may
- * have grown.
+ * this is the one place they are checked at all for the destination/source parent, since the narrower
+ * expectation above never carried them. Only size, link_count and the two content timestamps may have
+ * moved, and only in the direction the tolerance names.
  */
 bool NativeConditionalCopyMetadataSnapshotMatches(const native::ConditionalCopyMetadataSnapshot &_actual,
                                                   const native::ConditionalCopyMetadataSnapshot &_expected,
@@ -402,16 +479,18 @@ bool NativeConditionalCopyMetadataSnapshotMatches(const native::ConditionalCopyM
 {
     if( _tolerance == ProviderConditionalCopyExpectationTolerance::Exact )
         return _actual == _expected;
-    // APFS advances a directory's link_count when a regular-file child is added, not only for
-    // subdirectories - empirically confirmed, not assumed. It is therefore a content signal for a
-    // directory, exactly like size, and belongs with it rather than with the identity/permission
-    // fields that must never move.
+    // APFS advances a directory's link_count when a regular-file child is added, and recedes it when
+    // one is removed, not only for subdirectories either way - empirically confirmed, not assumed. It
+    // is therefore a content signal for a directory, exactly like size, and belongs with it rather than
+    // with the identity/permission fields that must never move.
+    const bool content_matches = _tolerance == ProviderConditionalCopyExpectationTolerance::MonotonicGrowth
+                                     ? (_actual.link_count >= _expected.link_count && _actual.size >= _expected.size)
+                                     : (_actual.link_count <= _expected.link_count && _actual.size <= _expected.size);
     return _actual.device == _expected.device && _actual.inode == _expected.inode &&
            _actual.uid == _expected.uid && _actual.gid == _expected.gid && _actual.mode == _expected.mode &&
            _actual.flags == _expected.flags && _actual.access_time == _expected.access_time &&
            _actual.birth_time == _expected.birth_time && _actual.acl == _expected.acl &&
-           _actual.extended_attributes == _expected.extended_attributes &&
-           _actual.link_count >= _expected.link_count && _actual.size >= _expected.size &&
+           _actual.extended_attributes == _expected.extended_attributes && content_matches &&
            NativeConditionalCopySecondsNanosAtLeast(_actual.modification_time.seconds,
                                                      _actual.modification_time.nanoseconds,
                                                      _expected.modification_time.seconds,
@@ -798,6 +877,143 @@ NativeConditionalMoveState::Commit(const ProviderConditionalCopyTransaction::Can
         metadata_error = NativeConditionalCopyErrno();
     else if( published.st_dev != source_stat.st_dev || published.st_ino != source_stat.st_ino )
         metadata_error = ESTALE;
+
+    CloseUnlocked();
+    return NativeConditionalCopyPublished(metadata_error, filesystem_sync_error);
+}
+
+ProviderConditionalCopyCommitResult NativeConditionalDeleteState::Commit(
+    const ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker) noexcept
+{
+    const auto lock = std::lock_guard{m_Mutex};
+    if( m_SourceParentFD < 0 || m_SourceFD < 0 )
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, EBADF);
+
+    // The object that was reviewed is still the object this descriptor holds.
+    struct stat source_stat{};
+    if( m_IO->FStat(m_SourceFD, &source_stat) != 0 ) {
+        const int stat_error = NativeConditionalCopyErrno();
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, stat_error);
+    }
+    if( !NativeConditionalCopyStatMatches(source_stat, m_Source) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale, ESTALE);
+    }
+    const auto source_metadata = m_IO->CaptureMetadata(m_SourceFD);
+    if( !source_metadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                 source_metadata.error());
+    }
+    if( *source_metadata != m_SourceMetadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale, ESTALE);
+    }
+
+    // The name still leads to the object this descriptor holds - unlinkat acts on the name, so what it
+    // removes is whatever the name resolves to right now, not necessarily the object opened at Begin.
+    // Holding the source open proves the object still exists; it says nothing about what the name
+    // currently points at, the same reasoning a reviewed Move's own Commit already makes about its
+    // rename.
+    struct stat named_source{};
+    if( m_IO->FStatAt(m_SourceParentFD, m_SourceName.c_str(), &named_source, AT_SYMLINK_NOFOLLOW) != 0 ) {
+        const int stat_error = NativeConditionalCopyErrno();
+        CloseUnlocked();
+        return stat_error == ENOENT
+                   ? NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale, ESTALE)
+                   : NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                       stat_error);
+    }
+    if( named_source.st_dev != source_stat.st_dev || named_source.st_ino != source_stat.st_ino ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale, ESTALE);
+    }
+
+    // A stale source parent is reported as source staleness, the same reading a Move's own Commit
+    // gives it: the consumer's question is whether the world around the source moved, and a separate
+    // terminal word for the directory would not change what it must do about it.
+    struct stat source_parent_stat{};
+    if( m_IO->FStat(m_SourceParentFD, &source_parent_stat) != 0 ) {
+        const int stat_error = NativeConditionalCopyErrno();
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, stat_error);
+    }
+    if( !NativeConditionalCopyStatMatches(source_parent_stat, m_SourceParent) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale, ESTALE);
+    }
+    const auto source_parent_metadata = m_IO->CaptureMetadata(m_SourceParentFD);
+    if( !source_parent_metadata ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                 source_parent_metadata.error());
+    }
+    // Tolerance-aware: a batch removing several entries from the same parent legitimately shrinks it
+    // as its own earlier items complete, and `MonotonicShrink` is exactly the mirror of the tolerance
+    // a Copy/Move batch's shared destination parent already uses for growth - the same mechanism, the
+    // opposite direction, both confirmed empirically on APFS rather than assumed symmetric.
+    if( !NativeConditionalCopyMetadataSnapshotMatches(
+            *source_parent_metadata, m_SourceParentMetadata, m_SourceParent.tolerance) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::SourceStale, ESTALE);
+    }
+
+    const auto source_volume = m_NativeFSManager.VolumeFromFD(m_SourceParentFD);
+    if( !source_volume || source_stat.st_dev != source_parent_stat.st_dev ||
+        !native::EvaluateConditionalDeleteVolume(*source_volume).IsSupported() ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure, ENOTSUP);
+    }
+
+    // The last cancellation point. After the unlink the result must report what was observed.
+    if( NativeConditionalCopyCancelled(_cancel_checker) ) {
+        CloseUnlocked();
+        return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::Cancelled);
+    }
+
+    m_IO->Checkpoint(native::ConditionalCopyCheckpoint::BeforePublish);
+    if( m_IO->UnlinkAt(m_SourceParentFD, m_SourceName.c_str(), 0) != 0 ) {
+        const int unlink_error = NativeConditionalCopyErrno();
+        // A removal either happened or did not, but a failed call plus a concurrent world cannot be
+        // told apart from a success that was undone. The reviewed object still sitting right there
+        // under its own name is what tells the two apart - the same probe a Move's own ambiguous-
+        // rename resolution makes, with only one name left to check instead of two.
+        struct stat post_unlink_source{};
+        const int source_probe =
+            m_IO->FStatAt(m_SourceParentFD, m_SourceName.c_str(), &post_unlink_source, AT_SYMLINK_NOFOLLOW);
+        CloseUnlocked();
+        if( source_probe == 0 && post_unlink_source.st_dev == source_stat.st_dev &&
+            post_unlink_source.st_ino == source_stat.st_ino ) {
+            return NativeConditionalCopyNotPublished(ProviderConditionalCopyCommitFailure::ProviderFailure,
+                                                     unlink_error);
+        }
+        return NativeConditionalCopyUnknown(unlink_error);
+    }
+
+    // The directory changed and must be durable before this is called complete: an unlink that
+    // survives only in memory is a file that reappears after a crash, not one that was removed. No
+    // file content was written or read, so there is nothing to sync on the object itself - only the
+    // namespace that named it.
+    int filesystem_sync_error = 0;
+    const auto remember_sync_error = [&](int _error) noexcept {
+        if( filesystem_sync_error == 0 )
+            filesystem_sync_error = _error == 0 ? EIO : _error;
+    };
+    if( NativeConditionalCopyRetryInterrupted([&] { return m_IO->FSync(m_SourceParentFD); }) != 0 )
+        remember_sync_error(NativeConditionalCopyErrno());
+
+    m_IO->Checkpoint(native::ConditionalCopyCheckpoint::AfterPublishBeforeFullFSync);
+    if( NativeConditionalCopyRetryInterrupted([&] { return m_IO->FullFSync(m_SourceParentFD); }) != 0 )
+        remember_sync_error(NativeConditionalCopyErrno());
+
+    // The name must actually be gone - not merely that the syscall reported success.
+    int metadata_error = 0;
+    struct stat published{};
+    if( m_IO->FStatAt(m_SourceParentFD, m_SourceName.c_str(), &published, AT_SYMLINK_NOFOLLOW) == 0 )
+        metadata_error = EEXIST;
+    else if( NativeConditionalCopyErrno() != ENOENT )
+        metadata_error = NativeConditionalCopyErrno();
 
     CloseUnlocked();
     return NativeConditionalCopyPublished(metadata_error, filesystem_sync_error);
@@ -1846,6 +2062,20 @@ NativeHost::ConditionalMovePathSupport(const std::string_view _source_path,
     return ProviderConditionalMovePathSupport::SameVolumeRename;
 }
 
+ProviderConditionalDeletePathSupport
+NativeHost::ConditionalDeletePathSupport(const std::string_view _path) const noexcept
+{
+    if( _path.empty() || _path.front() != '/' )
+        return ProviderConditionalDeletePathSupport::Unavailable;
+
+    const auto volume = m_NativeFSManager.VolumeFromPath(_path);
+    if( !volume )
+        return ProviderConditionalDeletePathSupport::Unavailable;
+    if( !native::EvaluateConditionalDeleteVolume(*volume).IsSupported() )
+        return ProviderConditionalDeletePathSupport::Unsupported;
+    return ProviderConditionalDeletePathSupport::SameVolumeUnlink;
+}
+
 std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalCopyTransactionBeginError>
 NativeHost::BeginConditionalCopyTransaction(ProviderConditionalCopyReviewedAuthority _authority,
                                             const VFSCancelChecker &_cancel_checker)
@@ -2136,6 +2366,105 @@ NativeHost::BeginConditionalMoveTransaction(ProviderConditionalMoveReviewedAutho
     close_source.disengage();
     close_destination_parent.disengage();
     return MintConditionalMoveTransaction(
+        std::move(_authority),
+        [state](const auto &_commit_cancel_checker) { return state->Commit(_commit_cancel_checker); },
+        [state] { return state->Abort(); });
+}
+
+std::expected<std::unique_ptr<ProviderConditionalCopyTransaction>, ProviderConditionalDeleteTransactionBeginError>
+NativeHost::BeginConditionalDeleteTransaction(ProviderConditionalDeleteReviewedAuthority _authority,
+                                              const VFSCancelChecker &_cancel_checker)
+{
+    if( NativeConditionalCopyCancelled(_cancel_checker) )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::Cancelled);
+
+    const auto &claims = _authority.Claims();
+    const auto source_name =
+        NativeConditionalCopyChildName(claims.source_parent.absolute_path, claims.source.absolute_path);
+    if( claims.source_binding.host.get() != this ||
+        claims.source.kind != ProviderConditionalCopyExpectedKind::RegularFile ||
+        claims.source_parent.kind != ProviderConditionalCopyExpectedKind::Directory || !source_name ||
+        !ValidateFilename(*source_name) ) {
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::InvalidRequest);
+    }
+
+    const int source_parent_fd = m_ConditionalCopyIO->Open(claims.source_parent.absolute_path.c_str(),
+                                                           O_RDONLY | O_DIRECTORY | O_NOFOLLOW_ANY | O_CLOEXEC);
+    if( source_parent_fd < 0 ) {
+        const int open_error = errno;
+        return std::unexpected(open_error == ENOENT || open_error == ENOTDIR || open_error == ELOOP
+                                   ? ProviderConditionalDeleteTransactionBeginError::SourceParentStale
+                                   : ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    }
+    auto close_source_parent =
+        at_scope_end([source_parent_fd, io = m_ConditionalCopyIO] { io->Close(source_parent_fd); });
+
+    struct stat source_parent_stat{};
+    if( m_ConditionalCopyIO->FStat(source_parent_fd, &source_parent_stat) != 0 )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyStatMatches(source_parent_stat, claims.source_parent) )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::SourceParentStale);
+
+    // Opened *through* the anchored parent rather than by absolute path - the descriptor is bound to
+    // the same directory entry the unlink will act on, so the identity checked here and the name
+    // removed later are about one object, not two paths that merely read alike.
+    const int source_fd = m_ConditionalCopyIO->OpenAt(
+        source_parent_fd, source_name->c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+    if( source_fd < 0 ) {
+        const int open_error = errno;
+        return std::unexpected(open_error == ENOENT || open_error == ENOTDIR || open_error == ELOOP
+                                   ? ProviderConditionalDeleteTransactionBeginError::SourceStale
+                                   : ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    }
+    auto close_source = at_scope_end([source_fd, io = m_ConditionalCopyIO] { io->Close(source_fd); });
+
+    struct stat source_stat{};
+    if( m_ConditionalCopyIO->FStat(source_fd, &source_stat) != 0 )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyStatMatches(source_stat, claims.source) )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::SourceStale);
+
+    // One volume, and eligible for unlinkat rather than for a clone or an atomic rename.
+    const auto source_volume = m_NativeFSManager.VolumeFromFD(source_parent_fd);
+    if( !source_volume )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    if( source_stat.st_dev != source_parent_stat.st_dev ||
+        !native::EvaluateConditionalDeleteVolume(*source_volume).IsSupported() ) {
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::Unsupported);
+    }
+
+    auto source_metadata = m_ConditionalCopyIO->CaptureMetadata(source_fd);
+    if( !source_metadata )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyMetadataMatchesExpectation(*source_metadata, claims.source) )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::SourceStale);
+
+    auto source_parent_metadata = m_ConditionalCopyIO->CaptureMetadata(source_parent_fd);
+    if( !source_parent_metadata )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    if( !NativeConditionalCopyMetadataMatchesExpectation(*source_parent_metadata, claims.source_parent) )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::SourceParentStale);
+
+    if( NativeConditionalCopyCancelled(_cancel_checker) )
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::Cancelled);
+
+    std::shared_ptr<NativeConditionalDeleteState> state;
+    try {
+        state = std::make_shared<NativeConditionalDeleteState>(source_parent_fd,
+                                                                source_fd,
+                                                                claims.source,
+                                                                claims.source_parent,
+                                                                *source_name,
+                                                                std::move(*source_metadata),
+                                                                std::move(*source_parent_metadata),
+                                                                m_NativeFSManager,
+                                                                m_ConditionalCopyIO);
+    } catch( ... ) {
+        return std::unexpected(ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+    }
+    close_source_parent.disengage();
+    close_source.disengage();
+    return MintConditionalDeleteTransaction(
         std::move(_authority),
         [state](const auto &_commit_cancel_checker) { return state->Commit(_commit_cancel_checker); },
         [state] { return state->Abort(); });
