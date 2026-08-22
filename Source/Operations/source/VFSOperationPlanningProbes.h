@@ -126,6 +126,10 @@ private:
     [[nodiscard]] static nc::vfs::ProviderConditionalMoveReviewedAuthority
     MakeMoveAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
                       nc::vfs::ProviderConditionalMoveReviewedClaims _claims);
+    /** The Delete counterpart. A third distinct authority type, built the same way from the same seal. */
+    [[nodiscard]] static nc::vfs::ProviderConditionalDeleteReviewedAuthority
+    MakeDeleteAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
+                        nc::vfs::ProviderConditionalDeleteReviewedClaims _claims);
 
     VFSBoundOperationPreflight m_Preflight;
 
@@ -178,6 +182,12 @@ public:
      */
     [[nodiscard]] std::optional<nc::vfs::ProviderConditionalMoveReviewedAuthority>
     IssueMoveAuthorityForItem(size_t _item_index, nc::vfs::ProviderConditionalMoveReviewedClaims _claims);
+    /**
+     * The Delete counterpart, same one-shot-per-index rule over the same `m_Issued` bookkeeping - a
+     * sealed review covers a plan of one type, never more than one of the three at once.
+     */
+    [[nodiscard]] std::optional<nc::vfs::ProviderConditionalDeleteReviewedAuthority>
+    IssueDeleteAuthorityForItem(size_t _item_index, nc::vfs::ProviderConditionalDeleteReviewedClaims _claims);
 
 private:
     SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOperationPreflight> _review, size_t _item_count);

@@ -404,7 +404,7 @@ bool ProviderConditionalCopyOperationPresentationIsValid(
         return !_path.empty() && _path.front() == '/' && _path.find('\0') == std::string::npos;
     };
     return _presentation.source_host && valid_path(_presentation.source_path) &&
-           valid_path(_presentation.destination_path);
+           (!_presentation.destination_path || valid_path(*_presentation.destination_path));
 }
 
 std::string ProviderConditionalCopyOperationTitle(const std::vector<ProviderConditionalCopyOperationItem> &_items)
@@ -413,11 +413,16 @@ std::string ProviderConditionalCopyOperationTitle(const std::vector<ProviderCond
     // Several of them name no path at all rather than one item's: picking the first would describe
     // the batch by whichever item happens to lead it. The file being copied right now travels on the
     // current-item channel instead, where a display can follow it as it changes.
+    //
+    // A Delete item carries no destination at all - checked once, on the first item, since a batch is
+    // never a mix of the two shapes: one review covers one plan of one type.
+    const bool removes_source = !_items.empty() && !_items.front().presentation.destination_path;
     if( _items.size() == 1 ) {
-        return "Copying " + _items.front().presentation.source_path + " \u2192 " +
-               _items.front().presentation.destination_path;
+        return removes_source ? "Deleting " + _items.front().presentation.source_path
+                              : "Copying " + _items.front().presentation.source_path + " \u2192 " +
+                                    *_items.front().presentation.destination_path;
     }
-    return "Copying " + std::to_string(_items.size()) + " items";
+    return (removes_source ? "Deleting " : "Copying ") + std::to_string(_items.size()) + " items";
 }
 
 vfs::ProviderConditionalCopyTransaction::CancelChecker ProviderConditionalCopyOperationSanitizeCancelChecker(

@@ -1161,7 +1161,7 @@ TEST_CASE(PREFIX "refuses a batch it could not record",
         std::vector<ProviderConditionalCopyOperationItem> items;
         items.push_back(ProviderConditionalCopyOperationUTItem(0, 100, succeed, abort));
         auto second = ProviderConditionalCopyOperationUTItem(1, 100, succeed, abort);
-        second.presentation.destination_path.clear();
+        second.presentation.destination_path = std::string{};
         items.push_back(std::move(second));
         const auto created = ProviderConditionalCopyOperationTesting::CreateBatch(std::move(items));
         REQUIRE_FALSE(created);

@@ -228,6 +228,21 @@ OperationPlan MoveFilePlan()
     return std::move(*plan);
 }
 
+OperationPlan DeleteFilePlan()
+{
+    OperationPlanInput input{
+        .plan_id = "delete-file",
+        .type = OperationPlanType::PermanentDelete,
+        .sources = {{"local", "/src/a.txt"}},
+        .destination = std::nullopt,
+        .conflict_policy = std::nullopt,
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    };
+    auto plan = OperationPlan::Create(std::move(input));
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
 } // namespace
 
 TEST_CASE(PREFIX "validates explicit owning provider bindings", "[vfs-operation-planning-probes]")
@@ -566,7 +581,69 @@ std::pair<std::shared_ptr<PlanningHost>, ReviewedVFSOperationPreflight> SealTest
     return {local, std::move(*reviewed)};
 }
 
+/** Minimal Delete claims, mirroring `SealTestMoveClaims` minus the whole destination side. */
+nc::vfs::ProviderConditionalDeleteReviewedClaims SealTestDeleteClaims(const std::shared_ptr<nc::vfs::Host> &_host)
+{
+    return nc::vfs::ProviderConditionalDeleteReviewedClaims{
+        .plan_id = "delete-file",
+        .source_binding = {.provider_id = "local", .host = _host},
+        .source = {.absolute_path = "/src/a.txt", .kind = nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile},
+        .source_parent = {.absolute_path = "/src", .kind = nc::vfs::ProviderConditionalCopyExpectedKind::Directory},
+    };
+}
+
+/** An accepted single-item Delete, reviewed. */
+std::pair<std::shared_ptr<PlanningHost>, ReviewedVFSOperationPreflight> SealTestDeleteReview()
+{
+    const auto local = WriteHost(true, true);
+    local->stats.emplace("/src", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/src/a.txt", Stat(S_IFREG | 0644, 10));
+    auto probes = MakeProbes({{"local", local}},
+                             [](const OperationPlanningPath &,
+                                OperationPlanningRequiredAccess,
+                                nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+                                 return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+                             });
+    auto reviewed = ReviewedVFSOperationPreflight::Review(probes.Preflight(DeleteFilePlan()),
+                                                          VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE(reviewed);
+    return {local, std::move(*reviewed)};
+}
+
 } // namespace
+
+TEST_CASE(PREFIX "issues one Delete authority per accepted item and refuses a second for the same one",
+          "[vfs-operation-planning-probes]")
+{
+    auto [local, reviewed] = SealTestDeleteReview();
+    SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(reviewed));
+    REQUIRE(sealed.AcceptedItemCount() == 1);
+
+    auto authority = sealed.IssueDeleteAuthorityForItem(0, SealTestDeleteClaims(local));
+    REQUIRE(authority);
+    CHECK(authority->Claims().plan_id == "delete-file");
+    CHECK(authority->Claims().source_parent.absolute_path == "/src");
+    // Same one-shot rule as the Copy and Move issuers, over the same `m_Issued` bookkeeping - a
+    // sealed review covers a plan of exactly one type, so no pair of the three issuers can ever
+    // both authorise the same index.
+    CHECK_FALSE(sealed.IssueDeleteAuthorityForItem(0, SealTestDeleteClaims(local)).has_value());
+    CHECK_FALSE(sealed.IssueAuthorityForItem(0, SealTestClaims(local)).has_value());
+    CHECK_FALSE(sealed.IssueMoveAuthorityForItem(0, SealTestMoveClaims(local)).has_value());
+}
+
+TEST_CASE(PREFIX "seals a Delete plan whose accepted items live in the other report vector",
+          "[vfs-operation-planning-probes]")
+{
+    // `SealedReviewedPreflight::Seal` reads `report.items.size()` for Copy and Move but
+    // `report.deleted_items.size()` for a Delete plan - a Delete's own accepted items have never
+    // once been in `items`, so a seal that assumed otherwise would size `m_Issued` at zero and
+    // refuse every authority regardless of how many sources were actually accepted.
+    auto [local, reviewed] = SealTestDeleteReview();
+    REQUIRE(reviewed.AcceptedPlan().Report().items.empty());
+    REQUIRE(reviewed.AcceptedPlan().Report().deleted_items.size() == 1);
+    SealedReviewedPreflight sealed = SealedReviewedPreflight::Seal(std::move(reviewed));
+    CHECK(sealed.AcceptedItemCount() == 1);
+}
 
 TEST_CASE(PREFIX "issues one Move authority per accepted item and refuses a second for the same one",
           "[vfs-operation-planning-probes]")
@@ -655,6 +732,27 @@ TEST_CASE(PREFIX "issues a review token for an accepted Move", "[vfs-operation-p
                                                                 VFSOperationPreflightReviewDecision::Approved);
     REQUIRE(reviewed);
     CHECK(reviewed->AcceptedPlan().Plan().Type() == OperationPlanType::Move);
+}
+
+TEST_CASE(PREFIX "issues a review token for an accepted Delete", "[vfs-operation-planning-probes]")
+{
+    // Q2-8 Delete step C lifted this gate: a Delete plan carries the same reviewable shape Copy and
+    // Move do, on the axis it actually uses. What stays refused is anything that is not one of the
+    // three plan types the engine can execute.
+    const auto local = WriteHost(true, true);
+    local->stats.emplace("/src", Stat(S_IFDIR | 0755));
+    local->stats.emplace("/src/a.txt", Stat(S_IFREG | 0644, 10));
+    auto probes = MakeProbes({{"local", local}},
+                             [](const OperationPlanningPath &,
+                                OperationPlanningRequiredAccess,
+                                nc::vfs::Host &) -> OperationPlanningProbeResult<OperationPlanningAccessEvidence> {
+                                 return OperationPlanningAccessEvidence{OperationPlanningAccessState::Granted};
+                             });
+
+    const auto reviewed = ReviewedVFSOperationPreflight::Review(probes.Preflight(DeleteFilePlan()),
+                                                                VFSOperationPreflightReviewDecision::Approved);
+    REQUIRE(reviewed);
+    CHECK(reviewed->AcceptedPlan().Plan().Type() == OperationPlanType::PermanentDelete);
 }
 
 TEST_CASE(PREFIX "emits complete native object identity and version evidence", "[vfs-operation-planning-probes]")

@@ -344,7 +344,8 @@ ReviewedOperationFactory::CreateWithDependencies(
     SourceOpenAt _source_open_at,
     ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
     SnapshotLookup _snapshot_lookup,
-    ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver) noexcept
+    ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver,
+    ConditionalDeleteCommitTransactionResolver _conditional_delete_commit_transaction_resolver) noexcept
 {
     return BlockExecutionProduct(
         CreateExecutionProductWithDependencies(std::move(_preflight),
@@ -353,7 +354,8 @@ ReviewedOperationFactory::CreateWithDependencies(
                                                std::move(_source_open_at),
                                                std::move(_conditional_commit_transaction_resolver),
                                                std::move(_snapshot_lookup),
-                                               std::move(_conditional_move_commit_transaction_resolver)));
+                                               std::move(_conditional_move_commit_transaction_resolver),
+                                               std::move(_conditional_delete_commit_transaction_resolver)));
 }
 
 std::expected<CopyOperationExecutionProduct, ReviewedOperationFactoryError>
@@ -371,7 +373,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
     SourceOpenAt _source_open_at,
     ConditionalCommitTransactionResolver _conditional_commit_transaction_resolver,
     SnapshotLookup _snapshot_lookup,
-    ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver) noexcept
+    ConditionalMoveCommitTransactionResolver _conditional_move_commit_transaction_resolver,
+    ConditionalDeleteCommitTransactionResolver _conditional_delete_commit_transaction_resolver) noexcept
 {
     try {
         CancelChecker is_cancelled = [cancel_checker = std::move(_cancel_checker)]() noexcept {
@@ -398,10 +401,18 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         const AcceptedOperationPlan &accepted = sealed.AcceptedPlan();
         const OperationPlan &plan = accepted.Plan();
         const OperationPreflightReport &report = accepted.Report();
-        if( plan.Type() != OperationPlanType::Copy && plan.Type() != OperationPlanType::Move )
+        if( plan.Type() != OperationPlanType::Copy && plan.Type() != OperationPlanType::Move &&
+            plan.Type() != OperationPlanType::PermanentDelete )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedPlanType));
         const bool is_move = plan.Type() == OperationPlanType::Move;
-        if( report.items.empty() )
+        const bool is_delete = plan.Type() == OperationPlanType::PermanentDelete;
+        // Delete's own accepted items live in `deleted_items`, not `items`: a plan that removes a
+        // source is never the same report shape as one that publishes a destination, the same reason
+        // `OperationPlannedDeleteItem` is its own type rather than a Copy item with an unused field.
+        // Asked through the one shared helper rather than repeating the ternary, so every boundary
+        // that needs this count answers it identically.
+        const size_t item_count = OperationPlanningAcceptedItemCount(plan.Type(), report);
+        if( item_count == 0 )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::EmptyAcceptedPlan));
         // Both gates are gone: several sources are executed, and one source expanding into several
         // items needs only the loop that now exists. What stands in their place is not a limitation
@@ -413,20 +424,25 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         // the only path that stops planning part-way is a cancelled probe, which records a blocker,
         // and a blocked preflight is never accepted. Defence in depth against a refusal that would
         // otherwise surface as an unfinalizable journal entry - a hang, not an error.
-        if( report.items.size() != plan.Sources().size() )
+        if( item_count != plan.Sources().size() )
             return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::IncompleteAcceptedPlan));
-        switch( plan.ConflictPolicy()->Decision() ) {
-            case OperationPlanConflictDecision::Ask:
-            case OperationPlanConflictDecision::Skip:
-                break;
-            case OperationPlanConflictDecision::Replace:
-            case OperationPlanConflictDecision::KeepBoth:
-            case OperationPlanConflictDecision::RenameNew:
-            case OperationPlanConflictDecision::RenameExisting:
-            case OperationPlanConflictDecision::MergeFolders:
-            default:
-                return std::unexpected(
-                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedConflictPolicy));
+        // A Delete plan carries no conflict policy to ask about at all - `OperationPlan::Create`
+        // refuses one for Trash/PermanentDelete, the same way it refuses a destination, because a
+        // plan with no destination has nothing a conflict decision could ever be about.
+        if( const auto &conflict_policy = plan.ConflictPolicy() ) {
+            switch( conflict_policy->Decision() ) {
+                case OperationPlanConflictDecision::Ask:
+                case OperationPlanConflictDecision::Skip:
+                    break;
+                case OperationPlanConflictDecision::Replace:
+                case OperationPlanConflictDecision::KeepBoth:
+                case OperationPlanConflictDecision::RenameNew:
+                case OperationPlanConflictDecision::RenameExisting:
+                case OperationPlanConflictDecision::MergeFolders:
+                default:
+                    return std::unexpected(
+                        ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedConflictPolicy));
+            }
         }
         if( !report.conflicts.empty() || !report.destructive_effects.empty() || report.requires_confirmation ) {
             return std::unexpected(
@@ -459,9 +475,16 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
             // The planning paths, not bare strings: a rollback has to be able to name the item whose
             // undoing it could not confirm, and a path without its provider does not identify one.
             OperationPlanningPath source;
-            OperationPlanningPath destination;
+            // Empty for a Delete item: there is no destination to name. Whatever reads this back for
+            // an uncertain outcome falls back to `source`, which for a Delete is the only path an
+            // ambiguous commit could possibly be about.
+            std::optional<OperationPlanningPath> destination;
             uint64_t exact_source_bytes = 0;
             size_t journal_item_index = 0;
+            // Which axis this item's commit result belongs on - the same fact `removes_source` names
+            // at the journal-context boundary, carried here because that context is built once the
+            // whole batch is prepared, from whichever branch prepared each item.
+            bool removes_source = false;
         };
         const auto prepare_item =
             [&](const size_t _index) -> std::expected<PreparedItem, ReviewedOperationFactoryError> {
@@ -926,11 +949,249 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                                 .source = source_error_path,
                                 .destination = destination_error_path,
                                 .exact_source_bytes = exact_source_bytes,
-                                .journal_item_index = journal_item_index};
+                                .journal_item_index = journal_item_index,
+                                .removes_source = false};
+        };
+
+        // Delete's own item preparation, over `report.deleted_items` rather than `report.items`: it
+        // reuses every helper `prepare_item` uses, but not its control flow, because a Delete item has
+        // no destination at all - not an unused field, an entirely different report shape - so folding
+        // it into `prepare_item` would mean guarding roughly half that function's body behind a flag
+        // for no shared benefit. What it does share with Move's own branch above is the source-parent
+        // claim and its `MonotonicShrink` batch tolerance: a rename and an unlink both act on a name
+        // inside a directory, and both remove that name from it - and it keeps Move's own split
+        // between "could not even reach the parent" (`StaleSource`, the same code the source's own
+        // staleness uses, since from here the two are indistinguishable) and "reached it, but it is
+        // not the directory that was reviewed" (`StaleSourceParent`).
+        const auto prepare_delete_item =
+            [&](const size_t _index) -> std::expected<PreparedItem, ReviewedOperationFactoryError> {
+            const OperationPlannedDeleteItem &item = report.deleted_items.at(_index);
+            if( item.source_kind != OperationPlanningItemKind::File ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedSourceKind, item.source));
+            }
+
+            const auto source_path = ReviewedFactoryCanonicalPlanPath(item.source.absolute_path);
+            const auto source_parts = source_path ? ReviewedFactoryParentAndName(*source_path) : std::nullopt;
+            if( !source_path || !source_parts ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidPath, item.source));
+            }
+
+            // Matched against whichever plan source names this item, the same identity check Copy and
+            // Move make against `plan.Sources()` rather than against index position.
+            const auto names_this_item = [&](const OperationPlanSource &_source) {
+                const auto candidate = ReviewedFactoryCanonicalPlanPath(_source.AbsolutePath());
+                return candidate && *candidate == *source_path &&
+                       item.source.provider_id == _source.ProviderId().Value();
+            };
+            const auto structural_source = std::ranges::find_if(plan.Sources(), names_this_item);
+            if( structural_source == plan.Sources().end() ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
+            }
+            const auto journal_item_index =
+                static_cast<size_t>(std::distance(plan.Sources().begin(), structural_source));
+
+            const OperationPlanningPath source_parent{
+                .provider_id = item.source.provider_id,
+                .absolute_path = source_parts->first,
+            };
+            // The shrink-side mirror of the destination-parent bookkeeping above: several of a
+            // batch's own items removing entries from one shared folder legitimately shrink it as
+            // each earlier item completes.
+            const auto source_parent_tolerance =
+                !source_parents_targeted.insert(source_parent.absolute_path).second
+                   ? nc::vfs::ProviderConditionalCopyExpectationTolerance::MonotonicShrink
+                   : nc::vfs::ProviderConditionalCopyExpectationTolerance::Exact;
+
+            const auto source_host = sealed.Bindings()->Resolve(item.source.provider_id);
+            if( !source_host ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ProviderUnavailable, item.source));
+            }
+            if( !std::dynamic_pointer_cast<nc::vfs::NativeHost>(source_host) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedProviderScope));
+            }
+
+            const auto find_snapshot = [&](const OperationPlanningPath &_path) {
+                return _snapshot_lookup ? _snapshot_lookup(report, _path) : ReviewedFactoryFindSnapshot(report, _path);
+            };
+            const auto *source_snapshot = find_snapshot(item.source);
+            const auto *source_parent_snapshot = find_snapshot(source_parent);
+            if( !source_snapshot ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, item.source));
+            }
+            if( !source_parent_snapshot ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::MissingEvidence, source_parent));
+            }
+            if( source_snapshot->evidence.kind != OperationPlanningItemKind::File ||
+                !source_snapshot->evidence.native_identity || !source_snapshot->evidence.native_version ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, item.source));
+            }
+            if( source_parent_snapshot->evidence.kind != OperationPlanningItemKind::Directory ||
+                !source_parent_snapshot->evidence.native_identity ||
+                !source_parent_snapshot->evidence.native_version ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidEvidence, source_parent));
+            }
+
+            // What was actually probed at plan time is `Delete` access on the parent namespace, not
+            // read access on the source itself - `unlinkat` never reads the file's content, so
+            // re-verifying a permission nobody granted at review would check something the review
+            // never answered.
+            if( !ReviewedFactoryDirectAccess(source_parent.absolute_path, W_OK, _direct_access_checker) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::UnsupportedAccessRoute, source_parent));
+            }
+            if( is_cancelled() )
+                return cancelled();
+
+            errno = 0;
+            const auto resolved_source_parent = ReviewedFactoryResolveExistingPath(source_parts->first);
+            if( !resolved_source_parent ) {
+                const int error = errno != 0 ? errno : ENOENT;
+                const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleSource
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(error)));
+            }
+            auto source_parent_fd = ReviewedFactoryOpenCanonicalDirectory(*resolved_source_parent);
+            if( !source_parent_fd ) {
+                const auto code = source_parent_fd.error() == ENOENT || source_parent_fd.error() == ENOTDIR ||
+                                          source_parent_fd.error() == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleSource
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(
+                    ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(source_parent_fd.error())));
+            }
+            ReviewedFactoryOwnedFD held_source_parent = std::move(*source_parent_fd);
+            struct stat source_parent_stat{};
+            if( ReviewedFactoryFStatRetry(held_source_parent.Get(), &source_parent_stat) != 0 ) {
+                const int error = errno;
+                return std::unexpected(ReviewedFactoryFailure(
+                    ReviewedOperationFactoryErrorCode::OpenFailed, source_parent, ReviewedFactoryCauseFromErrno(error)));
+            }
+            if( !S_ISDIR(source_parent_stat.st_mode) ||
+                !ReviewedFactoryMatches(*source_parent_snapshot->evidence.native_identity, source_parent_stat) ||
+                !ReviewedFactoryMatches(*source_parent_snapshot->evidence.native_version, source_parent_stat) ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSourceParent, source_parent));
+            }
+            if( is_cancelled() )
+                return cancelled();
+
+            const auto open_source = [&](int _directory_fd, const char *_name, int _flags) {
+                return _source_open_at ? _source_open_at(_directory_fd, _name, _flags)
+                                       : openat(_directory_fd, _name, _flags);
+            };
+            int opened_source_fd;
+            while( true ) {
+                opened_source_fd = open_source(held_source_parent.Get(),
+                                               source_parts->second.c_str(),
+                                               O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+                if( opened_source_fd >= 0 || errno != EINTR )
+                    break;
+                if( is_cancelled() )
+                    return cancelled();
+            }
+            ReviewedFactoryOwnedFD source_fd{opened_source_fd};
+            if( source_fd.Get() < 0 ) {
+                const int error = errno;
+                const auto code = error == ENOENT || error == ENOTDIR || error == ELOOP
+                                      ? ReviewedOperationFactoryErrorCode::StaleSource
+                                      : ReviewedOperationFactoryErrorCode::OpenFailed;
+                return std::unexpected(ReviewedFactoryFailure(code, item.source, ReviewedFactoryCauseFromErrno(error)));
+            }
+            struct stat source_stat{};
+            if( ReviewedFactoryFStatRetry(source_fd.Get(), &source_stat) != 0 ) {
+                const int error = errno;
+                return std::unexpected(ReviewedFactoryFailure(
+                    ReviewedOperationFactoryErrorCode::OpenFailed, item.source, ReviewedFactoryCauseFromErrno(error)));
+            }
+            if( !S_ISREG(source_stat.st_mode) || !ReviewedFactoryMatches(source_snapshot->evidence, source_stat) ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, item.source));
+            }
+            if( is_cancelled() )
+                return cancelled();
+
+            const OperationPlanningPath source_error_path = item.source;
+            const uint64_t exact_source_bytes = source_snapshot->evidence.native_version->byte_size;
+
+            nc::vfs::ProviderConditionalDeleteReviewedClaims delete_claims{
+                .plan_id = std::string{plan.Id().Value()},
+                .source_binding =
+                    nc::vfs::ProviderConditionalCopyBinding{
+                        .provider_id = item.source.provider_id,
+                        .host = source_host,
+                    },
+                .source =
+                    ReviewedFactoryConditionalCopyExpectation(item.source,
+                                                              nc::vfs::ProviderConditionalCopyExpectedKind::RegularFile,
+                                                              *source_snapshot->evidence.native_identity,
+                                                              *source_snapshot->evidence.native_version),
+                .source_parent =
+                    ReviewedFactoryConditionalCopyExpectation(source_parent,
+                                                              nc::vfs::ProviderConditionalCopyExpectedKind::Directory,
+                                                              *source_parent_snapshot->evidence.native_identity,
+                                                              *source_parent_snapshot->evidence.native_version,
+                                                              source_parent_tolerance),
+            };
+            auto reviewed_authority = sealed.IssueDeleteAuthorityForItem(_index, std::move(delete_claims));
+            if( !reviewed_authority ) {
+                return std::unexpected(ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::InvalidReviewedPlan));
+            }
+
+            std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                          nc::vfs::ProviderConditionalDeleteTransactionBeginError>
+                transaction = std::unexpected(nc::vfs::ProviderConditionalDeleteTransactionBeginError::ProviderFailure);
+            try {
+                transaction =
+                    _conditional_delete_commit_transaction_resolver
+                        ? _conditional_delete_commit_transaction_resolver(std::move(*reviewed_authority), is_cancelled)
+                        : source_host->BeginConditionalDeleteTransaction(std::move(*reviewed_authority), is_cancelled);
+            } catch( ... ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            }
+
+            if( !transaction ) {
+                switch( transaction.error() ) {
+                    case nc::vfs::ProviderConditionalDeleteTransactionBeginError::SourceStale:
+                        return std::unexpected(
+                            ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSource, source_error_path));
+                    case nc::vfs::ProviderConditionalDeleteTransactionBeginError::SourceParentStale:
+                        return std::unexpected(
+                            ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::StaleSourceParent, source_parent));
+                    case nc::vfs::ProviderConditionalDeleteTransactionBeginError::Cancelled:
+                        return cancelled();
+                    case nc::vfs::ProviderConditionalDeleteTransactionBeginError::Unsupported:
+                    case nc::vfs::ProviderConditionalDeleteTransactionBeginError::InvalidRequest:
+                    case nc::vfs::ProviderConditionalDeleteTransactionBeginError::ProviderFailure:
+                    default:
+                        return std::unexpected(ReviewedFactoryFailure(
+                            ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+                }
+            }
+            if( !*transaction ) {
+                return std::unexpected(
+                    ReviewedFactoryFailure(ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable));
+            }
+
+            return PreparedItem{.transaction = std::move(*transaction),
+                                .source_host = source_host,
+                                .source = source_error_path,
+                                .destination = std::nullopt,
+                                .exact_source_bytes = exact_source_bytes,
+                                .journal_item_index = journal_item_index,
+                                .removes_source = true};
         };
 
         std::vector<PreparedItem> prepared;
-        prepared.reserve(report.items.size());
+        prepared.reserve(item_count);
 
         // Rolls the batch back and reports whether it can still be said that nothing was published.
         // Not what keeps the transactions from leaking - each one aborts itself when destroyed - but
@@ -943,8 +1204,10 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                 if( !item->transaction )
                     continue;
                 const auto result = item->transaction->Abort();
+                // A Delete item never has a destination to name, so an uncertain outcome falls back
+                // to the source - the only path an ambiguous removal could possibly be about.
                 if( result.publication != nc::vfs::ProviderConditionalCopyPublicationState::NotPublished )
-                    uncertain = item->destination;
+                    uncertain = item->destination.value_or(item->source);
             }
             prepared.clear();
             return uncertain;
@@ -966,8 +1229,8 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
         // Prepared as a set, committed to as a set. Every item's evidence is checked before any item
         // executes: checking as it goes would let the first item's copy happen and the third item's
         // staleness be discovered afterwards, with nothing left to refuse.
-        for( size_t index = 0; index != report.items.size(); ++index ) {
-            auto item = prepare_item(index);
+        for( size_t index = 0; index != item_count; ++index ) {
+            auto item = is_delete ? prepare_delete_item(index) : prepare_item(index);
             if( !item )
                 return std::unexpected(abandon_with(std::move(item.error())));
             prepared.emplace_back(std::move(*item));
@@ -994,12 +1257,14 @@ ReviewedOperationFactory::CreateExecutionProductWithDependencies(
                     ProviderConditionalCopyJournalContext{
                         .item_index = item.journal_item_index,
                         .exact_source_bytes = item.exact_source_bytes,
+                        .removes_source = item.removes_source,
                     },
                 .presentation =
                     ProviderConditionalCopyOperationPresentation{
                         .source_host = item.source_host,
                         .source_path = item.source.absolute_path,
-                        .destination_path = item.destination.absolute_path,
+                        .destination_path = item.destination.transform(
+                            [](const OperationPlanningPath &_path) { return _path.absolute_path; }),
                     },
             });
         }

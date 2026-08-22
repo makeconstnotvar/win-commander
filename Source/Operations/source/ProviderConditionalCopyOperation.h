@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,7 +36,8 @@ enum class ProviderConditionalCopyOperationConstructionError : uint8_t {
 struct ProviderConditionalCopyOperationPresentation final {
     std::shared_ptr<vfs::Host> source_host;
     std::string source_path;
-    std::string destination_path;
+    /** Empty for a Delete item, which publishes nothing - not an unused field, an absent one. */
+    std::optional<std::string> destination_path;
 };
 
 /**

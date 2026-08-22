@@ -555,6 +555,19 @@ private:
             return;
         }
 
+        // The parent's own evidence, not merely its access grant: `unlinkat` acts on a name inside
+        // this directory, so the authority a reviewed Delete mints has to name it as a claim the same
+        // way a reviewed Move's source parent already is - and a claim needs a snapshot to be built
+        // from, the same reason `PlanMoveSource` probes its own source parent's item evidence before
+        // its source's.
+        const auto *source_parent_item = Item(source_parent);
+        if( !source_parent_item )
+            return;
+        if( source_parent_item->kind != OperationPlanningItemKind::Directory ) {
+            AddBlocker(OperationPlanningBlockerCode::SourceMissing, source_parent);
+            return;
+        }
+
         const auto *source_item = Item(source_path);
         if( !source_item )
             return;

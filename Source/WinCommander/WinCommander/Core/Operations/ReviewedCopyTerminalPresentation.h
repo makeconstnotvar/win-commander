@@ -62,30 +62,49 @@ struct DurableCopyOutcomePresentation final {
 /**
  * One item is worth reporting unless it published exactly as asked, or was cancelled - a cancelled
  * item is always `NotPublished`, so saying nothing about it withholds nothing about the disk.
+ *
+ * `_removes_source` selects which axis the outcome actually lives on - a Delete's own positive
+ * terminal is `source_removal == Removed`, never `destination_publication == Published`, since a
+ * Delete plan's `destination_publication` stays at its own inert value always. Defaulted to `false`
+ * so every existing Copy/Move call site reads exactly as it always has.
  */
-[[nodiscard]] inline bool DurableCopyItemNeedsAttention(const nc::ops::OperationJournalItemResult &_result) noexcept
+[[nodiscard]] inline bool
+DurableCopyItemNeedsAttention(const nc::ops::OperationJournalItemResult &_result,
+                              const bool _removes_source = false) noexcept
 {
     if( _result.status == nc::ops::OperationJournalItemStatus::Cancelled )
         return false;
+    if( _removes_source )
+        return _result.status != nc::ops::OperationJournalItemStatus::Succeeded ||
+               _result.source_removal != nc::ops::OperationJournalRemovalState::Removed;
     return _result.status != nc::ops::OperationJournalItemStatus::Succeeded ||
            _result.destination_publication != nc::ops::OperationJournalPublicationState::Published;
 }
 
-/** True while anything in this outcome may have reached the destination directory. */
-[[nodiscard]] inline bool DurableCopyItemMayExist(const nc::ops::OperationJournalItemResult &_result) noexcept
+/**
+ * True while anything in this outcome may have changed on disk - reached the destination directory
+ * for a Copy/Move, or left the source for a Delete. Same `_removes_source` axis selection as above.
+ */
+[[nodiscard]] inline bool DurableCopyItemMayExist(const nc::ops::OperationJournalItemResult &_result,
+                                                   const bool _removes_source = false) noexcept
 {
+    if( _removes_source )
+        return _result.source_removal != nc::ops::OperationJournalRemovalState::NotRemoved;
     return _result.destination_publication != nc::ops::OperationJournalPublicationState::NotPublished;
 }
 
 [[nodiscard]] inline DurableCopyOutcomePresentation
-ClassifyDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcome &_outcome)
+ClassifyDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcome &_outcome,
+                           const bool _removes_source = false)
 {
     DurableCopyOutcomePresentation presentation;
     presentation.total_items = _outcome.item_results.size();
     presentation.without_item_results = _outcome.item_results.empty();
     for( const auto &result : _outcome.item_results ) {
-        if( result.status == nc::ops::OperationJournalItemStatus::Succeeded &&
-            result.destination_publication == nc::ops::OperationJournalPublicationState::Published )
+        const bool reached_positive_terminal =
+            _removes_source ? result.source_removal == nc::ops::OperationJournalRemovalState::Removed
+                            : result.destination_publication == nc::ops::OperationJournalPublicationState::Published;
+        if( result.status == nc::ops::OperationJournalItemStatus::Succeeded && reached_positive_terminal )
             ++presentation.published_items;
     }
 
@@ -96,7 +115,8 @@ ClassifyDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcome &_
     if( _outcome.state == nc::ops::OperationJournalState::Cancelled ) {
         presentation.kind = DurableCopyOutcomeKind::Silent;
         for( const auto &result : _outcome.item_results )
-            presentation.refresh_panel = presentation.refresh_panel || DurableCopyItemMayExist(result);
+            presentation.refresh_panel =
+                presentation.refresh_panel || DurableCopyItemMayExist(result, _removes_source);
         return presentation;
     }
 
@@ -117,8 +137,8 @@ ClassifyDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcome &_
     presentation.refresh_panel = _outcome.item_results.empty();
     for( size_t index = 0; index != _outcome.item_results.size(); ++index ) {
         const auto &result = _outcome.item_results[index];
-        presentation.refresh_panel = presentation.refresh_panel || DurableCopyItemMayExist(result);
-        if( DurableCopyItemNeedsAttention(result) )
+        presentation.refresh_panel = presentation.refresh_panel || DurableCopyItemMayExist(result, _removes_source);
+        if( DurableCopyItemNeedsAttention(result, _removes_source) )
             presentation.attention_indices.push_back(index);
     }
     return presentation;

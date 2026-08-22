@@ -1,5 +1,6 @@
 // Copyright (C) 2017-2024 Michael Kazakov. Subject to GNU General Public License version 3.
 #include "Delete.h"
+#include "CopyFile.h"
 #include "../PanelController.h"
 #include "../MainWindowFilePanelState.h"
 #include <Utility/NativeFSManager.h>
@@ -28,6 +29,62 @@ static bool DeletionContextIsCurrent(std::span<const VFSListingItem> _items,
                                      PanelController *_target,
                                      bool _trash);
 static void PresentStaleDeletionAlert(PanelController *_target);
+static void PresentDeleteEligibilityUnavailableAlert(PanelController *_target);
+
+namespace reviewed_delete {
+namespace {
+
+/** Everything the policy agrees on before asking the provider its own question. */
+bool IsReviewedDeleteShape(const VFSListingItem &_item) noexcept
+{
+    return _item && _item.IsReg() && _item.Host() && _item.Host()->IsNativeFS();
+}
+
+} // namespace
+
+Selection Select(const VFSListingItem &_item) noexcept
+{
+    try {
+        if( !IsReviewedDeleteShape(_item) )
+            return Selection::Legacy;
+        switch( _item.Host()->ConditionalDeletePathSupport(_item.Path()) ) {
+            case nc::vfs::ProviderConditionalDeletePathSupport::SameVolumeUnlink:
+                return Selection::Reviewed;
+            case nc::vfs::ProviderConditionalDeletePathSupport::Unsupported:
+                return Selection::Legacy;
+            case nc::vfs::ProviderConditionalDeletePathSupport::Unavailable:
+                return Selection::Reject;
+        }
+    } catch( ... ) {
+        return Selection::Reject;
+    }
+    return Selection::Reject;
+}
+
+Selection SelectBatch(const std::vector<VFSListingItem> &_items) noexcept
+{
+    if( _items.empty() )
+        return Selection::Legacy;
+
+    // Every item is asked, even once one has already answered legacy: a `Reject` further down is an
+    // eligibility question the provider could not answer, and stopping early would turn it into a
+    // silent legacy delete - the one outcome the single-item rule exists to refuse.
+    bool any_legacy = false;
+    for( const auto &item : _items ) {
+        switch( Select(item) ) {
+            case Selection::Reject:
+                return Selection::Reject;
+            case Selection::Legacy:
+                any_legacy = true;
+                break;
+            case Selection::Reviewed:
+                break;
+        }
+    }
+    return any_legacy ? Selection::Legacy : Selection::Reviewed;
+}
+
+} // namespace reviewed_delete
 
 Delete::Delete(nc::utility::NativeFSManager &_nat_fsman, bool _permanently)
     : m_NativeFSManager{_nat_fsman}, m_Permanently(_permanently)
@@ -93,6 +150,45 @@ bool PresentPermanentDeletion(const std::span<const VFSListingItem> _items,
 {
     if( !DeletionContextIsCurrent(_items, _target, false) )
         return false;
+
+    // The reviewed submission machinery is wired to `MainWindowFilePanelState` only - it needs a
+    // per-window `OperationSubmissionGate`, which only that hosting state owns today; an
+    // Explorer-hosted panel has no such gate to acquire a submission ticket from. Falls through to the
+    // legacy dialog below unconditionally, the same named scope boundary `Trash` has everywhere.
+    MainWindowFilePanelState *const reviewed_state =
+        [_target.state isKindOfClass:MainWindowFilePanelState.class]
+            ? static_cast<MainWindowFilePanelState *>(_target.state)
+            : nil;
+    if( reviewed_state ) {
+        std::vector<VFSListingItem> reviewed_candidates{_items.begin(), _items.end()};
+        switch( reviewed_delete::SelectBatch(reviewed_candidates) ) {
+            case reviewed_delete::Selection::Reviewed: {
+                __weak PanelController *weak_target = _target;
+                auto intent_is_current = [weak_target, items = reviewed_candidates]() {
+                    PanelController *const target = weak_target;
+                    return target && DeletionContextIsCurrent(std::span<const VFSListingItem>{items}, target, false);
+                };
+                auto refresh_panel = [weak_target] {
+                    if( PanelController *const target = weak_target )
+                        [target hintAboutFilesystemChange];
+                };
+                SubmitReviewedDelete(reviewed_state,
+                                     _target,
+                                     std::move(reviewed_candidates),
+                                     std::move(intent_is_current),
+                                     std::move(refresh_panel));
+                return true;
+            }
+            case reviewed_delete::Selection::Reject:
+                // An eligibility question the provider could not answer must never be quietly
+                // downgraded into "delete it the old way" - the same rule `reviewed_move::Select`
+                // already applies, restated here rather than silently falling through below.
+                PresentDeleteEligibilityUnavailableAlert(_target);
+                return true;
+            case reviewed_delete::Selection::Legacy:
+                break;
+        }
+    }
 
     auto items = std::make_shared<std::vector<VFSListingItem>>(_items.begin(), _items.end());
     const auto sheet = [[NCOpsDeletionDialog alloc] initWithItems:items];
@@ -234,6 +330,21 @@ static void PresentStaleDeletionAlert(PanelController *_target)
     alert.alertStyle = NSAlertStyleWarning;
     alert.messageText = NSLocalizedString(@"commands.file.mutation.disabled.stale",
                                           "Stale deletion review message");
+    [alert addButtonWithTitle:NSLocalizedString(@"OK", "Alert confirmation button")];
+    [alert beginSheetModalForWindow:_target.mainWindowController.window completionHandler:nil];
+}
+
+static void PresentDeleteEligibilityUnavailableAlert(PanelController *_target)
+{
+    if( !_target || !_target.mainWindowController ) {
+        NSBeep();
+        return;
+    }
+    const auto alert = [NSAlert new];
+    alert.alertStyle = NSAlertStyleCritical;
+    alert.messageText = @"Delete validation unavailable";
+    alert.informativeText =
+        @"The storage provider could not establish whether this delete is eligible. The delete was not started.";
     [alert addButtonWithTitle:NSLocalizedString(@"OK", "Alert confirmation button")];
     [alert beginSheetModalForWindow:_target.mainWindowController.window completionHandler:nil];
 }

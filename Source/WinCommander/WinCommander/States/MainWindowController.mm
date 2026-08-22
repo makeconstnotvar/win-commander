@@ -231,8 +231,13 @@ static __weak NCMainWindowController *g_LastFocusedNCMainWindowController = nil;
         [m_PanelState loadDefaultPanelContent];
     }
 
-    if( session->mode == nc::explorer::ExplorerWindowSessionMode::Commander )
+    if( session->mode == nc::explorer::ExplorerWindowSessionMode::Commander ) {
+        // Startup always presents the Explorer interface. A Commander-mode session - saved from a
+        // toggled-out window or migrated from the legacy panels_v1 root - restores only the base
+        // compatibility layer, so raise a fresh Explorer state above it.
+        [self ensureExplorerMode];
         return true;
+    }
     if( !session->explorer )
         return false;
 

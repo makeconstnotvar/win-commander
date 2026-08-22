@@ -96,6 +96,20 @@ ProviderConditionalCopyJournalPublication(PublicationState _state) noexcept
     return std::unexpected(MappingError::InconsistentResult);
 }
 
+std::expected<OperationJournalRemovalState, MappingError>
+ProviderConditionalCopyJournalRemoval(PublicationState _state) noexcept
+{
+    switch( _state ) {
+        case PublicationState::NotPublished:
+            return OperationJournalRemovalState::NotRemoved;
+        case PublicationState::Published:
+            return OperationJournalRemovalState::Removed;
+        case PublicationState::Unknown:
+            return OperationJournalRemovalState::Unknown;
+    }
+    return std::unexpected(MappingError::InconsistentResult);
+}
+
 std::expected<OperationJournalFilesystemSyncStatus, MappingError>
 ProviderConditionalCopyJournalFilesystemSync(FilesystemSyncStatus _status) noexcept
 {
@@ -152,11 +166,13 @@ MapProviderConditionalCopyCommitResultToJournalItemResult(
             break;
         case CommitFailure::MetadataFailed:
             error = OperationJournalItemError::Metadata;
-            recovery = OperationJournalRecoveryAction::InspectDestination;
+            recovery = _context.removes_source ? OperationJournalRecoveryAction::InspectSource
+                                               : OperationJournalRecoveryAction::InspectDestination;
             break;
         case CommitFailure::FileSystemSyncFailed:
             error = OperationJournalItemError::Commit;
-            recovery = OperationJournalRecoveryAction::InspectDestination;
+            recovery = _context.removes_source ? OperationJournalRecoveryAction::InspectSource
+                                               : OperationJournalRecoveryAction::InspectDestination;
             break;
         case CommitFailure::ProviderFailure:
             error = _result.publication == PublicationState::NotPublished
@@ -164,7 +180,8 @@ MapProviderConditionalCopyCommitResultToJournalItemResult(
                         : OperationJournalItemError::Commit;
             recovery = _result.publication == PublicationState::NotPublished
                            ? OperationJournalRecoveryAction::Retry
-                           : OperationJournalRecoveryAction::InspectDestination;
+                       : _context.removes_source ? OperationJournalRecoveryAction::InspectSource
+                                                 : OperationJournalRecoveryAction::InspectDestination;
             break;
         case CommitFailure::Aborted:
             return std::unexpected(MappingError::NonExecutionTerminal);
@@ -173,6 +190,13 @@ MapProviderConditionalCopyCommitResultToJournalItemResult(
     const uint64_t bytes = _result.publication == PublicationState::Published
                                ? _context.exact_source_bytes
                                : 0;
+    // Which axis actually receives the outcome - the other stays at its inert default, the same
+    // partition the journal's own validator enforces: a plan either publishes a destination or
+    // removes a source, never both, and the axis it does not use must never move off `NotPublished`
+    // / `NotRemoved`.
+    const auto removal = ProviderConditionalCopyJournalRemoval(_result.publication);
+    if( !removal )
+        return std::unexpected(MappingError::InconsistentResult);
     return OperationJournalItemResult{
         .item_index = _context.item_index,
         .status = status,
@@ -181,7 +205,9 @@ MapProviderConditionalCopyCommitResultToJournalItemResult(
         .prior_error = OperationJournalItemError::None,
         .prior_system_error = 0,
         .bytes = bytes,
-        .destination_publication = *publication,
+        .destination_publication =
+            _context.removes_source ? OperationJournalPublicationState::NotPublished : *publication,
+        .source_removal = _context.removes_source ? *removal : OperationJournalRemovalState::NotRemoved,
         .filesystem_sync_status = *filesystem_sync,
         .filesystem_sync_system_error = _result.filesystem_sync_system_error,
         .recovery_action = recovery};

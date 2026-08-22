@@ -168,6 +168,51 @@ ReviewedStrongConditionalMoveCommitTransaction(
     };
 }
 
+OperationPlan ReviewedDeletePlan(std::vector<OperationPlanSourceInput> _sources)
+{
+    OperationPlanInput input{
+        .plan_id = "reviewed-delete",
+        .type = OperationPlanType::PermanentDelete,
+        .sources = std::move(_sources),
+        .destination = std::nullopt,
+        .conflict_policy = std::nullopt,
+        .created_at = OperationPlan::TimePoint{std::chrono::seconds{1}},
+    };
+    auto plan = OperationPlan::Create(std::move(input));
+    REQUIRE(plan);
+    return std::move(*plan);
+}
+
+ReviewedOperationFactoryTestAccess::ConditionalDeleteCommitTransactionResolver
+ReviewedStrongConditionalDeleteCommitTransaction(
+    int *_abort_calls = nullptr,
+    nc::vfs::ProviderConditionalCopyPublicationState _abort_publication =
+        nc::vfs::ProviderConditionalCopyPublicationState::NotPublished)
+{
+    return [_abort_calls, _abort_publication](
+               nc::vfs::ProviderConditionalDeleteReviewedAuthority _authority,
+               const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &) {
+        REQUIRE(_authority.HasReviewSeal());
+        auto source = _authority.Claims().source_binding.host;
+        return nc::vfs::ProviderConditionalCopyTransactionTestAccess::MintForDelete(
+            *source,
+            std::move(_authority),
+            [](const auto &) {
+                return nc::vfs::ProviderConditionalCopyCommitResult{
+                    .publication = nc::vfs::ProviderConditionalCopyPublicationState::Published,
+                    .failure = nc::vfs::ProviderConditionalCopyCommitFailure::None,
+                    .filesystem_sync_status =
+                        nc::vfs::ProviderConditionalCopyFilesystemSyncStatus::Confirmed,
+                };
+            },
+            [_abort_calls, _abort_publication] {
+                if( _abort_calls != nullptr )
+                    ++*_abort_calls;
+                return _abort_publication;
+            });
+    };
+}
+
 ReviewedVFSOperationPreflight
 ReviewedReview(OperationPlan _plan,
                VFSOperationPlanningProbes &_probes,
@@ -1200,6 +1245,207 @@ TEST_CASE(PREFIX "maps every Move transaction begin failure to its own factory e
         std::move(cancelled_reviewed), {}, {}, {}, {}, cancelling_resolver);
     REQUIRE_FALSE(cancelled_created);
     CHECK(cancelled_created.error().code == ReviewedOperationFactoryErrorCode::Cancelled);
+}
+
+TEST_CASE(PREFIX "carries a reviewed Delete through one operation, and the source stops existing",
+          "[reviewed-operation-factory]")
+{
+    // Against the real Native transaction, not the test mint - the property that matters for a
+    // Delete is the same one that matters for a Move: `unlinkat` removes the entry as part of the
+    // same commit the journal records, so "completed" has to mean the source is gone, not merely
+    // that the provider was asked to remove it.
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    ReviewedWriteFile(source, "delete payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedDeletePlan({{"local", source.native()}}), probes);
+    REQUIRE(reviewed.AcceptedPlan().Plan().Type() == OperationPlanType::PermanentDelete);
+    REQUIRE(reviewed.AcceptedPlan().Report().deleted_items.size() == 1);
+
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    auto &terminal_evidence = ReviewedOperationFactoryTestAccess::TerminalEvidence(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+
+    const auto evidence = terminal_evidence();
+    REQUIRE(evidence);
+    CHECK(evidence->state == OperationJournalState::Completed);
+    REQUIRE(evidence->item_results.size() == 1);
+    CHECK(evidence->item_results[0].item_index == 0);
+    CHECK(evidence->item_results[0].status == OperationJournalItemStatus::Succeeded);
+    // The axis a Delete actually uses - `source_removal`, not `destination_publication`, which must
+    // stay at its own inert value since this plan never published anything.
+    CHECK(evidence->item_results[0].source_removal == OperationJournalRemovalState::Removed);
+    CHECK(evidence->item_results[0].destination_publication == OperationJournalPublicationState::NotPublished);
+    CHECK_FALSE(std::filesystem::exists(source));
+}
+
+TEST_CASE(PREFIX "mints a Delete authority carrying the source's own folder as a claim",
+          "[reviewed-operation-factory]")
+{
+    // Through the injected resolver rather than the real provider, so the claims the factory built
+    // can be inspected directly instead of only inferred from the outcome on disk.
+    TempTestDir temporary;
+    const auto source_directory = temporary.directory / "source";
+    std::filesystem::create_directory(source_directory);
+    const auto source = source_directory / "source.txt";
+    ReviewedWriteFile(source, "delete payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedDeletePlan({{"local", source.native()}}), probes);
+
+    std::optional<nc::vfs::ProviderConditionalDeleteReviewedClaims> observed_claims;
+    const auto observing_resolver =
+        [&](nc::vfs::ProviderConditionalDeleteReviewedAuthority _authority,
+           const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &_cancel_checker)
+        -> std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                         nc::vfs::ProviderConditionalDeleteTransactionBeginError> {
+        observed_claims = _authority.Claims();
+        return ReviewedStrongConditionalDeleteCommitTransaction()(std::move(_authority), _cancel_checker);
+    };
+
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+        std::move(reviewed), {}, {}, {}, {}, {}, observing_resolver);
+    REQUIRE(created);
+    REQUIRE(observed_claims);
+    CHECK(observed_claims->plan_id == "reviewed-delete");
+    CHECK(observed_claims->source.absolute_path == source.native());
+    CHECK(observed_claims->source_parent.absolute_path == source_directory.native());
+
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+}
+
+TEST_CASE(PREFIX "fails closed on a Delete whose source folder was touched after review ran",
+          "[reviewed-operation-factory]")
+{
+    // The Delete-only counterpart of the destination-parent staleness case Copy has and the
+    // source-parent one Move has: the folder holding the source is part of what a Delete claim
+    // names (`unlinkat` acts on a name inside a directory), so it gets the same fail-closed
+    // treatment and the same distinct error code - `StaleSourceParent`, not `StaleSource` - because
+    // the more specific fact is that the directory moved, not the file believed to be inside it.
+    TempTestDir temporary;
+    const auto source_directory = temporary.directory / "source";
+    std::filesystem::create_directory(source_directory);
+    const auto source = source_directory / "source.txt";
+    ReviewedWriteFile(source, "delete payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed = ReviewedReview(ReviewedDeletePlan({{"local", source.native()}}), probes);
+    // Written into the source's own folder after the review snapshot was taken: this is what the
+    // review never saw, so the folder no longer matches what it was reviewed as.
+    ReviewedWriteFile(source_directory / "unrelated.txt", "not part of this review");
+
+    const auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE_FALSE(created);
+    CHECK(created.error().code == ReviewedOperationFactoryErrorCode::StaleSourceParent);
+    CHECK(std::filesystem::exists(source));
+}
+
+TEST_CASE(PREFIX "maps every Delete transaction begin failure to its own factory error",
+          "[reviewed-operation-factory]")
+{
+    TempTestDir temporary;
+    const auto source = temporary.directory / "source.txt";
+    ReviewedWriteFile(source, "delete payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+
+    const auto begin_error_maps_to = [&](nc::vfs::ProviderConditionalDeleteTransactionBeginError _begin_error,
+                                         ReviewedOperationFactoryErrorCode _expected) {
+        auto reviewed = ReviewedReview(ReviewedDeletePlan({{"local", source.native()}}), probes);
+        const auto forced_resolver =
+            [_begin_error](nc::vfs::ProviderConditionalDeleteReviewedAuthority,
+                          const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)
+            -> std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                             nc::vfs::ProviderConditionalDeleteTransactionBeginError> {
+            return std::unexpected(_begin_error);
+        };
+        const auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+            std::move(reviewed), {}, {}, {}, {}, {}, forced_resolver);
+        REQUIRE_FALSE(created);
+        CHECK(created.error().code == _expected);
+    };
+
+    // Every value the provider's own Begin can answer, mapped independently of the factory's own
+    // pre-check - a race between that pre-check and the provider's Begin is exactly what this switch
+    // exists for. Unlike Copy/Move, Delete's own Begin error has no destination-shaped values at
+    // all: there is no destination for `DestinationParentStale`/`DestinationExists` to be about.
+    begin_error_maps_to(nc::vfs::ProviderConditionalDeleteTransactionBeginError::SourceStale,
+                        ReviewedOperationFactoryErrorCode::StaleSource);
+    begin_error_maps_to(nc::vfs::ProviderConditionalDeleteTransactionBeginError::SourceParentStale,
+                        ReviewedOperationFactoryErrorCode::StaleSourceParent);
+    begin_error_maps_to(nc::vfs::ProviderConditionalDeleteTransactionBeginError::Unsupported,
+                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+    begin_error_maps_to(nc::vfs::ProviderConditionalDeleteTransactionBeginError::InvalidRequest,
+                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+    begin_error_maps_to(nc::vfs::ProviderConditionalDeleteTransactionBeginError::ProviderFailure,
+                        ReviewedOperationFactoryErrorCode::ConditionalCommitAuthorityUnavailable);
+
+    auto cancelled_reviewed = ReviewedReview(ReviewedDeletePlan({{"local", source.native()}}), probes);
+    const auto cancelling_resolver =
+        [](nc::vfs::ProviderConditionalDeleteReviewedAuthority,
+          const nc::vfs::ProviderConditionalCopyTransaction::CancelChecker &)
+        -> std::expected<std::unique_ptr<nc::vfs::ProviderConditionalCopyTransaction>,
+                         nc::vfs::ProviderConditionalDeleteTransactionBeginError> {
+        return std::unexpected(nc::vfs::ProviderConditionalDeleteTransactionBeginError::Cancelled);
+    };
+    const auto cancelled_created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(
+        std::move(cancelled_reviewed), {}, {}, {}, {}, {}, cancelling_resolver);
+    REQUIRE_FALSE(cancelled_created);
+    CHECK(cancelled_created.error().code == ReviewedOperationFactoryErrorCode::Cancelled);
+}
+
+TEST_CASE(PREFIX "carries a real batch of Deletes out of one shared source folder, and the parent's own "
+                 "shrink does not fail the second item",
+          "[reviewed-operation-factory]")
+{
+    // The Delete-side mirror of the MoveTo batch producer's own insurance test: two items sharing
+    // one source folder, both reviewed while it was still full, proven at this layer rather than
+    // only at the VFS transaction layer - this is where `MonotonicShrink` is actually assigned per
+    // item, and an off-by-one in that assignment would only ever show up here.
+    TempTestDir temporary;
+    const auto first = temporary.directory / "first.txt";
+    const auto second = temporary.directory / "second.txt";
+    ReviewedWriteFile(first, "first payload");
+    ReviewedWriteFile(second, "second payload");
+
+    const auto host = std::shared_ptr<VFSHost>{TestEnv().vfs_native};
+    auto probes = ReviewedNativeProbes(host);
+    auto reviewed =
+        ReviewedReview(ReviewedDeletePlan({{"local", first.native()}, {"local", second.native()}}), probes);
+    REQUIRE(reviewed.AcceptedPlan().Report().deleted_items.size() == 2);
+
+    auto created = ReviewedOperationFactoryTestAccess::CreateExecutionProduct(std::move(reviewed), {});
+    REQUIRE(created);
+    auto product = std::move(*created);
+    auto &operation = ReviewedOperationFactoryTestAccess::Operation(product);
+    auto &terminal_evidence = ReviewedOperationFactoryTestAccess::TerminalEvidence(product);
+
+    operation->Start();
+    REQUIRE(operation->Wait(std::chrono::seconds{5}));
+
+    const auto evidence = terminal_evidence();
+    REQUIRE(evidence);
+    CHECK(evidence->state == OperationJournalState::Completed);
+    REQUIRE(evidence->item_results.size() == 2);
+    for( const auto &result : evidence->item_results ) {
+        CHECK(result.status == OperationJournalItemStatus::Succeeded);
+        CHECK(result.source_removal == OperationJournalRemovalState::Removed);
+    }
+    CHECK_FALSE(std::filesystem::exists(first));
+    CHECK_FALSE(std::filesystem::exists(second));
 }
 
 TEST_CASE(PREFIX "cannot be handed a plan whose review stopped part-way", "[reviewed-operation-factory]")

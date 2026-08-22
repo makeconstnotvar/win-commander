@@ -293,17 +293,139 @@ Full `OperationsUT` 273/273 (6,613) and full `WinCommanderUT` 908/908 (12,252) i
 nothing outside `VFS` regressed from the `Host` interface growing a third conditional-transaction entry
 point.
 
-**Step C — lift the gates.** All five (`Review`, `ReviewedOperationFactory`, `CopyOperationOrchestrator`
-×2, `OperationCenterCoordinator`), at once, for the reason Move's own Step C restated: lifting one at a
-time proves nothing, because none of them individually is the wall — the wall was the missing
-authority/transaction machinery Steps B1/B2 build.
+**Step C — DONE: lift the gates.** All five (`Review`, `ReviewedOperationFactory`,
+`CopyOperationOrchestrator` ×2, `OperationCenterCoordinator`), at once, for the reason Move's own Step C
+restated: lifting one at a time proves nothing, because none of them individually is the wall — the wall
+was the missing authority/transaction machinery Steps B1/B2 build. `ReviewedOperationFactory` gained a
+third branch (`is_delete`, alongside `is_move`) with its own `prepare_delete_item`, not a third
+conditional woven through the existing one: a Delete item has no destination at all, not an unused
+field, so folding it into the Copy/Move preparation function would have meant guarding roughly half that
+function's body behind a flag for no shared benefit. What it does share with Move's own branch is the
+source-parent claim and the `MonotonicShrink` batch tolerance — a rename and an unlink both act on a name
+inside a directory and both remove that name from it.
 
-**Step D — the producer.** `Delete`/`MoveToTrash`/`context::DeletePermanently` in
-`Actions/Delete.mm` gain a `reviewed_delete` policy namespace mirroring `reviewed_move`'s
-`Select`/`SelectIntoDirectory`/`SelectBatch` shape — though Delete has no destination-directory
-question at all, so likely only a `Select`/`SelectBatch` pair (item eligibility, whole-selection
-answer), not a `SelectIntoDirectory`. Routes only the `PermanentDelete` path this slice built; `Trash`
-keeps going through `nc::ops::Deletion` unconditionally, exactly as this document names it should.
+Two decisions this step made, not just implemented:
+
+- **The commit result's `publication` field is reinterpreted at the journal-mapping boundary, not
+  earlier.** `ProviderConditionalCopyJournalContext` gained one field, `removes_source`, set per item
+  from whichever branch prepared it. `MapProviderConditionalCopyCommitResultToJournalItemResult` reads
+  it to choose which axis receives the outcome — `source_removal` for a Delete, `destination_publication`
+  for everything else — and forces the *other* axis to its own inert value explicitly, rather than
+  trusting a default to stay put. This is the "not yet built" boundary Step B2 named and deferred; it
+  is now built, and it is the one place in the whole vertical that actually performs the rename from
+  "published" to "removed."
+- **A Delete item's presentation has no destination to show, and the operation's own title has to say
+  so.** `ProviderConditionalCopyOperationPresentation::destination_path` became
+  `std::optional<std::string>` rather than growing a sentinel empty string, and the batch title reads
+  "Deleting N items" instead of "Copying N items → " with nothing after the arrow.
+
+**Three real bugs found by real tests, not hypothetical ones.** Consistent with this vertical's own
+discipline (Step B2's `MonotonicShrink` gap, the journal validator regression in B1), every one of these
+was caught by a first real-filesystem test exercising a path nothing had exercised before, not reasoned
+into existence beforehand:
+
+1. `ReviewedVFSOperationPreflight::Review`'s `destructive_authority_required` check dereferenced
+   `accepted->Plan().ConflictPolicy()` unconditionally to ask whether the decision was `Replace` — correct
+   for Copy/Move, which always carry a conflict policy, and an immediate `SIGABRT` on an empty `optional`
+   for a Delete plan, which structurally never does (`OperationPlan::Create` refuses one for
+   Trash/PermanentDelete, the same way it refuses a destination). Found by the very first real-provider
+   Delete test written for this step, which crashed the whole test binary rather than failing an
+   assertion — confirmed via a core dump, since Catch2's own crash report pointed at an unrelated line.
+2. The identical shape of bug, independently, in `ReviewedOperationFactory`'s own conflict-policy
+   validation switch — the same unconditional `plan.ConflictPolicy()->Decision()`. Two call sites making
+   the same unchecked assumption is not a coincidence worth explaining away; both are now guarded by
+   `if (const auto &conflict_policy = plan.ConflictPolicy())`, skipping the whole question for a plan
+   type that has none to ask.
+3. `OperationPlanner::PlanDeleteSource` never captured the source parent's own item evidence —
+   `PlanMoveSource` calls `Item(source_parent)` before anything else, exactly because a reviewed Move
+   claim needs a snapshot to build its `source_parent` expectation from, and `PlanDeleteSource` needs the
+   identical snapshot for the identical reason but had never been given the call. Every accepted Delete
+   item therefore failed closed with `MissingEvidence` the moment `ReviewedOperationFactory` actually
+   tried to use it — invisible until Step C gave the evidence a consumer, and caught immediately once it
+   did. Fixed by adding the same `Item(source_parent)` probe, with the same `Directory`-kind check
+   `PlanMoveSource` already makes.
+
+### Verification
+
+Five new real-filesystem `TEST_CASE`s in `ReviewedOperationFactory_UT.cpp` (a full single-item run through
+the real Native transaction proving the source is gone and `source_removal == Removed` while
+`destination_publication` stays `NotPublished`; a claims-inspection case proving the source-parent claim
+is built correctly; the `StaleSourceParent` fail-closed case; every `ProviderConditionalDeleteTransactionBeginError`
+value mapped to its own factory error; a real two-item batch deleting out of one shared folder, proving
+`MonotonicShrink` is assigned correctly at this layer and not only at the VFS transaction layer Step B2
+already proved it at). Two new cases in `VFSOperationPlanningProbes_UT.cpp` (one-authority-per-item over
+the shared `m_Issued` bookkeeping across all three issuers now, and a case pinning that
+`SealedReviewedPreflight::Seal` reads `deleted_items` rather than `items` for a Delete plan — the
+generalization `OperationPlanningAcceptedItemCount` exists to make once, correctly, rather than repeat
+at every boundary that asks it). Two new cases in `CopyOperationOrchestrator_UT.cpp` (direct submission
+and coordinator submission, both against the real provider and a real journal). 184 assertions across all
+Delete-tagged cases, in Debug and under both Release ASAN and Release UBSAN with no diagnostics; full
+`OperationsUT` 283/283 (6,764) in Debug and under both sanitizer schemes with no diagnostics; full
+`WinCommanderUT` 908/908 (12,252) in Debug.
+
+**Step D — DONE: the producer.** `reviewed_delete::Select`/`SelectBatch` in `Actions/Delete.h`/`.mm`
+mirror `reviewed_move`'s `Select`/`SelectBatch` shape exactly as predicted — no `SelectIntoDirectory`,
+because a Delete plan has no destination-directory question at all to have a folder-shaped counterpart
+of. `Select` asks one thing only: `Host::ConditionalDeletePathSupport(item.Path())`, a single-path
+question where Copy/Move's own eligibility asks about a source *and* a destination parent. Wired into
+`PresentPermanentDeletion` (the live production path behind "Delete Permanently", bound as the
+`command_ids::FileDelete` executor in `AppDelegate.mm`): on `Reviewed`, the legacy `NCOpsDeletionDialog`
+is skipped entirely in favour of the reviewed engine's own review sheet; on `Reject`, submission stops
+with an explicit "validation unavailable" alert rather than silently falling back, the same rule
+`reviewed_move::Select` already applies to its own `Reject`; on `Legacy`, the existing dialog-then-
+`nc::ops::Deletion` path runs completely unchanged. `SubmitItemsToTrash`, `MoveToTrash::Perform`, and
+`context::MoveToTrash::Perform` are untouched and keep going through `nc::ops::Deletion`
+unconditionally, exactly as this document has always said `Trash` should — the only new production
+route this step adds is `PermanentDelete`'s.
+
+Two decisions this step made that Move's own step D did not have to:
+
+- **A destination-shaped `reviewed_copy_as::PreparedReview`/`ReviewPresentation`/
+  `PrepareReviewedCopyApplicationBoundary` cannot be widened to cover a Delete plan.** Its own eligibility
+  test (`destination_shape`) is unconditionally false for a plan that structurally never has a
+  destination, and its presentation-building loop reads `report.items`, which a Delete plan never
+  populates. Rather than growing that boundary's every destination-shaped field into an optional one -
+  a real risk to code with its own existing, passing test coverage for a change this step did not need
+  to make - a parallel, self-contained `ReviewedDeleteApplicationBoundary.h` was written instead: same
+  `PreparedReview`/`Approve`/`SubmissionPort` shape (which never touched a destination field to begin
+  with, so duplicating it costs nothing in shared risk), a `ReviewPresentation` with no destination,
+  conflict-decision, or conflict-scope field to leave inert.
+- **The reviewed submission machinery is wired to `MainWindowFilePanelState` only, and Delete's own
+  action classes are not.** `Copy As`/`Move As`/`Copy To`/`Move To` are all `StateAction`s, typed
+  directly to the one hosting state that owns an `OperationSubmissionGate`; `Delete`/`MoveToTrash`/
+  `context::DeletePermanently` are `PanelAction`s, callable from a panel hosted by *either*
+  `MainWindowFilePanelState` (Commander mode) or `NCExplorerState` (Explorer mode), and only the former
+  owns a submission gate today. `PresentPermanentDeletion` checks which one it has before attempting the
+  reviewed route at all; an Explorer-hosted panel falls through to the unchanged legacy dialog
+  unconditionally - a second named scope boundary alongside `Trash`'s, not a silent one.
+
+Terminal-outcome presentation (`ClassifyDurableCopyOutcome`, `AppendDurableItemDetail`,
+`PresentDurableCopyOutcome`) gained a `_removes_source` parameter, defaulted `false` so every existing
+Copy/Move call site is untouched: a Delete's own positive terminal is `source_removal == Removed`, never
+`destination_publication == Published`, which stays at its own inert value for a Delete plan always -
+unmodified, the classifier would have read every successful delete as a failure needing attention, since
+it counted `published_items` on an axis a Delete plan never moves. Caught by writing the classifier's own
+call site rather than assumed correct from Move's success.
+
+Named honestly rather than fixed, mirroring exactly what Move's own step D left alone for the identical
+reason: `PlanningBlockerDescription`/`ReviewedFactoryErrorDescription` still read a few branches in
+Copy-flavoured wording (`"This copy plan is not supported."`), and the deepest submission-recovery path
+(`PresentCoordinatorSubmissionFailure`) still titles its alert `"Copy submission failed"` regardless of
+plan type - both already true for Move today, neither made worse by Delete sharing them, and both
+correctly informative even when imprecisely worded, since no branch of either function reports a wrong
+fact about what happened on disk.
+
+### Verification
+
+New `ReviewedDeletePolicy_UT.mm` (mirroring `ReviewedMoveAsPolicy_UT.mm`'s shape): `Select`/`SelectBatch`
+eligibility across native/remote hosts, file/directory items, and every `ProviderConditionalDeletePathSupport`
+value; `PrepareReviewedDeleteApplicationBoundary` accepting an accepted Delete plan with no destination to
+name, refusing without a durable runtime or a current intent, and enforcing single-use `Approve`. 120
+assertions across 11 Delete-tagged `WinCommanderUT` cases in Debug. Full `WinCommanderUT` 915/915 (12,283)
+in Debug; a clean `WinCommander-Unsigned` application build. No sanitizer runs - this step is presentation
+and policy only, the same reasoning Move's own step D gave for skipping them, and for the identical
+reason: no engine or transaction code was touched, only the UI glue in front of machinery Steps A-C
+already proved under sanitizers.
 
 ## What this document deliberately does not decide
 

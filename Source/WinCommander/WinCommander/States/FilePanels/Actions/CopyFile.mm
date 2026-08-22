@@ -20,6 +20,7 @@
 #include <WinCommander/Core/Operations/OperationSubmissionGate.h>
 #include <WinCommander/Core/Operations/ReviewedCopyAsApplicationBoundary.h>
 #include <WinCommander/Core/Operations/ReviewedCopyTerminalPresentation.h>
+#include <WinCommander/Core/Operations/ReviewedDeleteApplicationBoundary.h>
 #include <WinCommander/Core/VFSOperationPlanningAccessChecker.h>
 #include <WinCommander/States/MainWindowController.h>
 #include <Base/dispatch_cpp.h>
@@ -874,10 +875,17 @@ struct ReviewedCopyRequest final {
     bool deselect{false};
 };
 
-/** "Copy" or "Move", for user-visible wording - the only difference the two plan types read as here. */
+/** "Copy", "Move", or "Delete", for user-visible wording - the only difference the plan types read as here. */
 NSString *ReviewedOperationNoun(const nc::ops::OperationPlanType _plan_type)
 {
-    return _plan_type == nc::ops::OperationPlanType::Move ? @"Move" : @"Copy";
+    switch( _plan_type ) {
+        case nc::ops::OperationPlanType::Move:
+            return @"Move";
+        case nc::ops::OperationPlanType::PermanentDelete:
+            return @"Delete";
+        default:
+            return @"Copy";
+    }
 }
 
 bool ReviewedCopyIntentIsCurrent(MainWindowFilePanelState *_state,
@@ -1025,23 +1033,44 @@ void AppendSystemError(NSMutableString *_message, NSString *_label, const int _e
         [_message appendFormat:@"\n%@: %d", _label, _error];
 }
 
-/** Everything one result has to say, appended under whatever heading names the item it belongs to. */
+/**
+ * Everything one result has to say, appended under whatever heading names the item it belongs to.
+ * `_removes_source` picks which axis actually moved for this plan type - a Delete's own positive
+ * terminal is `source_removal`, never `destination_publication`, which stays at its own inert value
+ * for a Delete plan always.
+ */
 void AppendDurableItemDetail(NSMutableString *_message,
                              const nc::ops::OperationJournalItemResult &_result,
                              NSString **_title,
-                             NSString *_noun)
+                             NSString *_noun,
+                             const bool _removes_source = false)
 {
-    switch( _result.destination_publication ) {
-        case nc::ops::OperationJournalPublicationState::NotPublished:
-            [_message appendString:@"The durable journal confirms that the destination was not published."];
-            break;
-        case nc::ops::OperationJournalPublicationState::Published:
-            [_message appendFormat:@"The destination was published, but the %@ did not satisfy its terminal contract.",
-                                   [_noun lowercaseString]];
-            break;
-        case nc::ops::OperationJournalPublicationState::Unknown:
-            [_message appendString:@"The durable journal cannot confirm whether the destination was published."];
-            break;
+    if( _removes_source ) {
+        switch( _result.source_removal ) {
+            case nc::ops::OperationJournalRemovalState::NotRemoved:
+                [_message appendString:@"The durable journal confirms that the source was not removed."];
+                break;
+            case nc::ops::OperationJournalRemovalState::Removed:
+                [_message appendString:@"The source was removed, but the delete did not satisfy its terminal contract."];
+                break;
+            case nc::ops::OperationJournalRemovalState::Unknown:
+                [_message appendString:@"The durable journal cannot confirm whether the source was removed."];
+                break;
+        }
+    }
+    else {
+        switch( _result.destination_publication ) {
+            case nc::ops::OperationJournalPublicationState::NotPublished:
+                [_message appendString:@"The durable journal confirms that the destination was not published."];
+                break;
+            case nc::ops::OperationJournalPublicationState::Published:
+                [_message appendFormat:@"The destination was published, but the %@ did not satisfy its terminal contract.",
+                                       [_noun lowercaseString]];
+                break;
+            case nc::ops::OperationJournalPublicationState::Unknown:
+                [_message appendString:@"The durable journal cannot confirm whether the destination was published."];
+                break;
+        }
     }
 
     if( _result.error != nc::ops::OperationJournalItemError::None )
@@ -1081,13 +1110,14 @@ void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcom
                                NCMainWindowController *_window_controller,
                                const std::string &_focus_destination,
                                const std::function<void()> &_refresh_panels,
-                               NSString *_noun)
+                               NSString *_noun,
+                               const bool _removes_source = false)
 {
     dispatch_assert_main_queue();
     // Decided over the whole set of results rather than over the one this surface used to demand. A
     // batch in which every item published reached here as "no terminal item result" and was announced
     // as a copy needing reconciliation; the rules are in the classifier, tested without AppKit.
-    const auto presentation = reviewed_copy_as::ClassifyDurableCopyOutcome(_outcome);
+    const auto presentation = reviewed_copy_as::ClassifyDurableCopyOutcome(_outcome, _removes_source);
 
     if( presentation.refresh_panel && _refresh_panels )
         _refresh_panels();
@@ -1117,17 +1147,19 @@ void PresentDurableCopyOutcome(const nc::ops::CopyOperationDurableTerminalOutcom
     else if( presentation.total_items == 1 ) {
         // One item still reads exactly as it always did - no count, no item heading, nothing that
         // would make a single copy look like a batch of one.
-        AppendDurableItemDetail(message, _outcome.item_results.front(), &title, _noun);
+        AppendDurableItemDetail(message, _outcome.item_results.front(), &title, _noun, _removes_source);
     }
     else {
         // A set has to say how much of it landed before it says what went wrong with the rest,
         // because "which files exist now" is the question the user actually has.
-        [message
-            appendFormat:@"%zu of %zu items were published.", presentation.published_items, presentation.total_items];
+        [message appendFormat:@"%zu of %zu items were %@.",
+                              presentation.published_items,
+                              presentation.total_items,
+                              _removes_source ? @"removed" : @"published"];
         for( const size_t index : presentation.attention_indices ) {
             const auto &result = _outcome.item_results[index];
             [message appendFormat:@"\n\nItem %zu: ", result.item_index + 1];
-            AppendDurableItemDetail(message, result, &title, _noun);
+            AppendDurableItemDetail(message, result, &title, _noun, _removes_source);
         }
         if( presentation.attention_indices.empty() ) {
             [message appendString:@"\nThe durable journal reports no successful terminal state for the operation as a "
@@ -1527,7 +1559,334 @@ void SubmitReviewedCopy(MainWindowFilePanelState *_target,
     });
 }
 
+std::expected<nc::ops::VFSBoundOperationPreflight, NSString *>
+BuildReviewedDeletePreflight(const std::vector<VFSListingItem> &_items,
+                             nc::panel::DirectoryAccessProvider &_access_provider)
+{
+    if( _items.empty() )
+        return std::unexpected(@"The delete request names no items.");
+
+    std::vector<nc::ops::OperationPlanSourceInput> sources;
+    sources.reserve(_items.size());
+    for( const auto &item : _items ) {
+        // One binding for the whole plan: every item this policy accepts shares the same native host,
+        // and a Delete plan has no destination host to ask about at all.
+        if( item.Host() != _items.front().Host() )
+            return std::unexpected(@"The delete request spans more than one storage provider.");
+        sources.emplace_back(
+            nc::ops::OperationPlanSourceInput{std::string{reviewed_copy_as::g_ReviewedCopyProviderId}, item.Path()});
+    }
+
+    auto plan = nc::ops::OperationPlan::Create({
+        .plan_id = NSUUID.UUID.UUIDString.UTF8String,
+        .type = nc::ops::OperationPlanType::PermanentDelete,
+        .sources = std::move(sources),
+        .destination = std::nullopt,
+        .conflict_policy = std::nullopt,
+        .created_at = nc::ops::OperationPlan::Clock::now(),
+    });
+    if( !plan )
+        return std::unexpected(@"The delete request is structurally invalid.");
+
+    auto bindings = nc::ops::VFSOperationPlanningBindings::Create(
+        {{std::string{reviewed_copy_as::g_ReviewedCopyProviderId}, _items.front().Host()}});
+    if( !bindings )
+        return std::unexpected(@"The source provider could not be bound to the delete request.");
+
+    auto probes = nc::ops::VFSOperationPlanningProbes::Create(
+        *bindings, nc::core::MakeVFSOperationPlanningAccessChecker(_access_provider));
+    if( !probes )
+        return std::unexpected(@"The provider validation boundary could not be created.");
+
+    return probes->Preflight(std::move(*plan));
+}
+
+NSString *ReviewedDeleteDetails(const reviewed_delete::ReviewPresentation &_presentation)
+{
+    NSMutableString *const details = [NSMutableString string];
+    if( _presentation.items.size() == 1 ) {
+        [details appendFormat:@"Source: %@\n\nScope: one item, permanent delete",
+                              [NSString stringWithUTF8StdString:_presentation.items.front().source_path]];
+    }
+    else {
+        [details appendString:@"Sources:"];
+        for( const auto &item : _presentation.items )
+            [details appendFormat:@"\n• %@", [NSString stringWithUTF8StdString:item.source_path]];
+        [details appendFormat:@"\n\nScope: %zu items, permanent delete", _presentation.items.size()];
+    }
+
+    if( _presentation.estimated_files ) {
+        [details
+            appendFormat:@"\nEstimated files: %llu", static_cast<unsigned long long>(*_presentation.estimated_files)];
+    }
+    else {
+        [details appendString:@"\nEstimated files: unknown"];
+    }
+    if( _presentation.estimated_bytes ) {
+        [details
+            appendFormat:@"\nEstimated bytes: %llu", static_cast<unsigned long long>(*_presentation.estimated_bytes)];
+    }
+    else {
+        [details appendString:@"\nEstimated bytes: unknown"];
+    }
+    [details appendFormat:@"\nAccess checks granted: %llu",
+                          static_cast<unsigned long long>(_presentation.access_evidence_count)];
+
+    if( !_presentation.warnings.empty() ) {
+        [details appendString:@"\n\nValidation notes:"];
+        for( const auto warning : _presentation.warnings )
+            [details appendFormat:@"\n• %@", ReviewedCopyWarningDescription(warning)];
+    }
+    return details;
+}
+
 } // namespace
+
+/**
+ * The Delete counterpart of `SubmitReviewedCopy`, considerably smaller because a Delete has one panel
+ * to act on rather than two, no destination to land in or focus afterward - only a refresh, because
+ * something that did exist may not any more. `_intent_is_current` is supplied by the caller rather
+ * than derived here, because the staleness check a Delete needs (`DeletionContextIsCurrent`) already
+ * lives next to the legacy dialog it was written for, and duplicating it here would be the one part of
+ * this function actually worth not sharing.
+ */
+void SubmitReviewedDelete(MainWindowFilePanelState *_target,
+                          PanelController *_panel,
+                          std::vector<VFSListingItem> _items,
+                          std::function<bool()> _intent_is_current,
+                          std::function<void()> _refresh_panel)
+{
+    dispatch_assert_main_queue();
+    if( _items.empty() )
+        return;
+    NSString *const noun = ReviewedOperationNoun(nc::ops::OperationPlanType::PermanentDelete);
+    NCAppDelegate *const app = NCAppDelegate.me;
+    const auto journal = app.operationJournal;
+    const auto custodian = app.copyOperationRunReceiptCustodian;
+    const auto operation_center = app.operationCenterCoordinator;
+    const auto recovery_coordinator = app.copyOperationRecoveryCoordinator;
+    if( !journal || !custodian || !operation_center || !recovery_coordinator ) {
+        ShowCopyAlert(_target.mainWindowController,
+                      [NSString stringWithFormat:@"%@ unavailable", noun],
+                      [NSString stringWithFormat:@"The durable operation journal could not be opened. The %@ was not "
+                                                 @"started.",
+                                                 [noun lowercaseString]],
+                      NSAlertStyleCritical);
+        return;
+    }
+
+    const auto pool = _target.operationsPool.shared_from_this();
+    auto *const access_provider = &app.directoryAccessProvider;
+    __weak PanelController *weak_panel = _panel;
+    __weak NCMainWindowController *weak_window_controller = _target.mainWindowController;
+    __weak MainWindowFilePanelState *weak_state = _target;
+
+    dispatch_to_default([items = std::move(_items),
+                         intent_is_current = std::move(_intent_is_current),
+                         refresh_panel = std::move(_refresh_panel),
+                         journal,
+                         custodian,
+                         operation_center,
+                         recovery_coordinator,
+                         pool,
+                         access_provider,
+                         noun,
+                         weak_panel,
+                         weak_window_controller,
+                         weak_state]() mutable {
+        auto preflight = BuildReviewedDeletePreflight(items, *access_provider);
+        dispatch_to_main_queue([intent_is_current = std::move(intent_is_current),
+                                refresh_panel = std::move(refresh_panel),
+                                journal,
+                                custodian,
+                                operation_center,
+                                recovery_coordinator,
+                                pool,
+                                noun,
+                                weak_panel,
+                                weak_window_controller,
+                                weak_state,
+                                preflight = std::move(preflight)]() mutable {
+            PanelController *const panel = weak_panel;
+            NCMainWindowController *const window_controller = weak_window_controller;
+            MainWindowFilePanelState *const state = weak_state;
+            if( !panel || !window_controller || !state )
+                return;
+            if( !preflight ) {
+                ShowCopyAlert(
+                    window_controller, [NSString stringWithFormat:@"%@ validation failed", noun], preflight.error());
+                return;
+            }
+
+            auto prepared = reviewed_delete::PrepareReviewedDeleteApplicationBoundary(
+                std::move(*preflight), true, intent_is_current && intent_is_current());
+            if( !prepared ) {
+                switch( prepared.error().code ) {
+                    case reviewed_delete::PreparationErrorCode::StaleIntent:
+                        ShowCopyAlert(window_controller,
+                                      [NSString stringWithFormat:@"%@ request expired", noun],
+                                      [NSString stringWithFormat:@"The active pane or its selection changed while "
+                                                                 @"the %@ request was being validated.",
+                                                                 [noun lowercaseString]]);
+                        return;
+                    case reviewed_delete::PreparationErrorCode::BlockedPreflight:
+                        ShowCopyAlert(window_controller,
+                                      [NSString stringWithFormat:@"%@ blocked", noun],
+                                      prepared.error().blocker
+                                          ? PlanningBlockerDescription(*prepared.error().blocker)
+                                          : [NSString stringWithFormat:@"The reviewed %@ is blocked.",
+                                                                       [noun lowercaseString]]);
+                        return;
+                    case reviewed_delete::PreparationErrorCode::UnsupportedScope:
+                        ShowCopyAlert(window_controller,
+                                      [NSString stringWithFormat:@"%@ blocked", noun],
+                                      [NSString stringWithFormat:@"The validated %@ no longer satisfies the "
+                                                                 @"reviewed scope.",
+                                                                 [noun lowercaseString]]);
+                        return;
+                    case reviewed_delete::PreparationErrorCode::UnpersistedRuntime:
+                        ShowCopyAlert(window_controller,
+                                      [NSString stringWithFormat:@"%@ unavailable", noun],
+                                      [NSString stringWithFormat:@"The durable operation journal could not be "
+                                                                 @"opened. The %@ was not started.",
+                                                                 [noun lowercaseString]],
+                                      NSAlertStyleCritical);
+                        return;
+                }
+            }
+
+            NSString *const details = ReviewedDeleteDetails(prepared->Presentation());
+
+            Alert *const review = [[Alert alloc] init];
+            review.alertStyle = NSAlertStyleInformational;
+            review.messageText = [NSString stringWithFormat:@"Review %@", noun];
+            review.informativeText = details;
+            [review addButtonWithTitle:NSLocalizedString(noun, "Approve a reviewed delete")];
+            [review addButtonWithTitle:NSLocalizedString(@"Cancel", "Cancel a reviewed delete")];
+
+            auto prepared_review = std::make_shared<reviewed_delete::PreparedReview>(std::move(*prepared));
+            [review
+                beginSheetModalForWindow:window_controller.window
+                       completionHandler:^(NSModalResponse response) {
+                         MainWindowFilePanelState *const current_state = weak_state;
+                         if( !current_state ) {
+                             if( response != NSAlertFirstButtonReturn )
+                                 return;
+                             ShowCopyAlert(window_controller,
+                                           [NSString stringWithFormat:@"%@ request expired", noun],
+                                           @"The active pane or focused item changed before approval.");
+                             return;
+                         }
+
+                         const auto approval = prepared_review->Approve(
+                             response == NSAlertFirstButtonReturn,
+                             intent_is_current,
+                             current_state.operationSubmissionGate,
+                             {
+                                 .dispatch_to_ui =
+                                     [](std::function<void()> _task) { dispatch_to_main_queue(std::move(_task)); },
+                                 .present_durable_outcome =
+                                     [weak_panel, weak_window_controller, refresh_panel, noun](
+                                         nc::ops::CopyOperationDurableTerminalOutcome _outcome) {
+                                         PresentDurableCopyOutcome(_outcome,
+                                                                   weak_panel,
+                                                                   weak_window_controller,
+                                                                   /*focus_destination=*/{},
+                                                                   refresh_panel,
+                                                                   noun,
+                                                                   /*removes_source=*/true);
+                                     },
+                                 .item_status_observer = {},
+                                 .submit =
+                                     [journal,
+                                      custodian,
+                                      operation_center,
+                                      recovery_coordinator,
+                                      pool,
+                                      weak_window_controller](
+                                         nc::ops::ReviewedVFSOperationPreflight _reviewed,
+                                         std::shared_ptr<nc::core::OperationSubmissionGate::Ticket> _submission_ticket,
+                                         nc::ops::CopyOperationSubmissionHooks _hooks,
+                                         std::shared_ptr<std::atomic_bool> _durable_outcome_delivered) mutable {
+                                         const auto plan_id = std::string{_reviewed.AcceptedPlan().Plan().Id().Value()};
+                                         dispatch_to_default([reviewed = std::move(_reviewed),
+                                                              journal,
+                                                              custodian,
+                                                              operation_center,
+                                                              recovery_coordinator,
+                                                              pool,
+                                                              plan_id,
+                                                              hooks = std::move(_hooks),
+                                                              durable_outcome_delivered =
+                                                                  std::move(_durable_outcome_delivered),
+                                                              submission_ticket = std::move(_submission_ticket),
+                                                              weak_window_controller]() mutable {
+                                             nc::ops::CopyOperationOrchestrator orchestrator{journal, pool, custodian};
+                                             auto submitted = operation_center->SubmitReviewedCopy(
+                                                 *journal,
+                                                 orchestrator,
+                                                 std::move(reviewed),
+                                                 [submission_ticket] { return submission_ticket->IsCancelled(); },
+                                                 std::move(hooks));
+                                             if( !submitted ) {
+                                                 const auto error = submitted.error();
+                                                 if( (error.orchestrator_error &&
+                                                      error.orchestrator_error->code ==
+                                                          nc::ops::CopyOperationOrchestratorErrorCode::Cancelled) ||
+                                                     durable_outcome_delivered->load(std::memory_order_acquire) )
+                                                     return;
+                                                 dispatch_to_main_queue([weak_window_controller,
+                                                                         error,
+                                                                         plan_id,
+                                                                         recovery_coordinator,
+                                                                         operation_center,
+                                                                         durable_outcome_delivered] {
+                                                     if( NCMainWindowController *const controller =
+                                                             weak_window_controller ) {
+                                                         PresentCoordinatorSubmissionFailure(controller,
+                                                                                             error,
+                                                                                             plan_id,
+                                                                                             recovery_coordinator,
+                                                                                             operation_center,
+                                                                                             durable_outcome_delivered);
+                                                     }
+                                                 });
+                                             }
+                                         });
+                                     },
+                             });
+
+                         switch( approval ) {
+                             case reviewed_delete::ApprovalResult::Submitted:
+                             case reviewed_delete::ApprovalResult::Declined:
+                                 return;
+                             case reviewed_delete::ApprovalResult::StaleIntent:
+                                 ShowCopyAlert(window_controller,
+                                               [NSString stringWithFormat:@"%@ request expired", noun],
+                                               @"The active pane or focused item changed before approval.");
+                                 return;
+                             case reviewed_delete::ApprovalResult::Cancelled:
+                                 ShowCopyAlert(window_controller,
+                                               [NSString stringWithFormat:@"%@ submission cancelled", noun],
+                                               [NSString stringWithFormat:@"The window is closing. The %@ was not "
+                                                                          @"started.",
+                                                                          [noun lowercaseString]]);
+                                 return;
+                             case reviewed_delete::ApprovalResult::ReviewFailed:
+                             case reviewed_delete::ApprovalResult::AlreadyConsumed:
+                             case reviewed_delete::ApprovalResult::MissingSubmissionPort:
+                             case reviewed_delete::ApprovalResult::SubmissionPortFailed:
+                                 ShowCopyAlert(window_controller,
+                                               [NSString stringWithFormat:@"%@ approval failed", noun],
+                                               [NSString stringWithFormat:@"The bound %@ request could not be "
+                                                                          @"approved safely.",
+                                                                          [noun lowercaseString]]);
+                                 return;
+                         }
+                       }];
+        });
+    });
+}
 
 static const auto g_DeselectConfigFlag = "filePanel.general.deselectItemsAfterFileOperations";
 

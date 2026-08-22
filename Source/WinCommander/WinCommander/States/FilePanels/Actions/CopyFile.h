@@ -3,6 +3,7 @@
 
 #include "DefaultAction.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -100,6 +101,21 @@ using Selection = reviewed_copy_as::Selection;
                                     const nc::ops::CopyingOptions &_options) noexcept;
 
 } // namespace reviewed_move
+
+/**
+ * The Delete counterpart of the reviewed submission machinery this file already builds for Copy and
+ * Move - declared here, not in `Actions/Delete.h`, because it is defined in `CopyFile.mm` alongside
+ * the description/presentation helpers it reuses (`ReviewedOperationNoun`, `PlanningBlockerDescription`,
+ * `PresentDurableCopyOutcome`, ...), and duplicating those into `Delete.mm` instead would be the one
+ * part of this producer actually worth not sharing. `_intent_is_current` is supplied by the caller: the
+ * staleness check a Delete needs is `DeletionContextIsCurrent`, which belongs next to the legacy dialog
+ * it was written for, in `Delete.mm`.
+ */
+void SubmitReviewedDelete(MainWindowFilePanelState *_target,
+                          PanelController *_panel,
+                          std::vector<nc::vfs::ListingItem> _items,
+                          std::function<bool()> _intent_is_current,
+                          std::function<void()> _refresh_panel);
 
 class CopyBase
 {

@@ -665,12 +665,13 @@ OperationCenterCoordinator::SubmitReviewedCopy(OperationJournal &_journal,
     const auto &accepted = _reviewed.AcceptedPlan();
     const auto &plan = accepted.Plan();
     // A batch is one operation here as everywhere else, so the count is no longer the question, and a
-    // Move is admitted on the same terms as a Copy - both publish a destination the journal already
-    // knows how to record. What remains is the journal's rule, asked before this path admits
-    // anything: a report that does not cover its plan's sources one item each cannot be recorded as
-    // completed, so it must not run.
-    if( (plan.Type() != OperationPlanType::Copy && plan.Type() != OperationPlanType::Move) ||
-        accepted.Report().items.size() != plan.Sources().size() ) {
+    // Move or a PermanentDelete is admitted on the same terms as a Copy - each publishes or removes
+    // on the one axis it uses, and the journal already knows how to record either. What remains is
+    // the journal's rule, asked before this path admits anything: a report that does not cover its
+    // plan's sources one item each cannot be recorded as completed, so it must not run.
+    if( (plan.Type() != OperationPlanType::Copy && plan.Type() != OperationPlanType::Move &&
+         plan.Type() != OperationPlanType::PermanentDelete) ||
+        OperationPlanningAcceptedItemCount(plan.Type(), accepted.Report()) != plan.Sources().size() ) {
         return orchestrator_failure(
             CopyOperationOrchestratorError{.code = CopyOperationOrchestratorErrorCode::UnsupportedReviewedPlan});
     }

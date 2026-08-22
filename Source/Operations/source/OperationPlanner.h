@@ -358,4 +358,20 @@ public:
     Preflight(OperationPlan _plan, OperationPlanningProbes &_probes);
 };
 
+/**
+ * How many items an accepted report actually covers for a plan of the given type - `deleted_items`
+ * for a plan that removes a source instead of publishing a destination, `items` for everything else.
+ * Every boundary that checks a report against `plan.Sources().size()` (the journal's own per-source
+ * numbering) has to ask this, not assume `items`: a Delete plan's own items live in the other vector,
+ * and a boundary that read `items.size()` for one would see zero regardless of how many sources were
+ * actually accepted.
+ */
+[[nodiscard]] inline size_t OperationPlanningAcceptedItemCount(OperationPlanType _type,
+                                                               const OperationPreflightReport &_report) noexcept
+{
+    return _type == OperationPlanType::PermanentDelete || _type == OperationPlanType::Trash
+               ? _report.deleted_items.size()
+               : _report.items.size();
+}
+
 } // namespace nc::ops

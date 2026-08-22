@@ -220,11 +220,16 @@ ReviewedVFSOperationPreflight::Review(VFSBoundOperationPreflight _preflight,
     const auto *accepted = std::get_if<AcceptedOperationPlan>(&_preflight.Result());
     if( !accepted )
         return std::unexpected(VFSOperationPreflightReviewError::Blocked);
-    if( accepted->Plan().Type() != OperationPlanType::Copy && accepted->Plan().Type() != OperationPlanType::Move )
+    if( accepted->Plan().Type() != OperationPlanType::Copy && accepted->Plan().Type() != OperationPlanType::Move &&
+        accepted->Plan().Type() != OperationPlanType::PermanentDelete )
         return std::unexpected(VFSOperationPreflightReviewError::UnsupportedPlanType);
+    // A Delete plan carries no conflict policy at all - `OperationPlan::Create` refuses one for
+    // Trash/PermanentDelete the same way it refuses a destination - so the policy-replace question
+    // can only ever be asked of a plan that has one to ask.
     const bool destructive_authority_required =
         accepted->Report().requires_confirmation ||
-        accepted->Plan().ConflictPolicy()->Decision() == OperationPlanConflictDecision::Replace;
+        (accepted->Plan().ConflictPolicy() &&
+         accepted->Plan().ConflictPolicy()->Decision() == OperationPlanConflictDecision::Replace);
     if( destructive_authority_required &&
         _decision != VFSOperationPreflightReviewDecision::ApprovedWithDestructiveConfirmation )
         return std::unexpected(VFSOperationPreflightReviewError::DestructiveConfirmationRequired);
@@ -250,6 +255,13 @@ ReviewedVFSOperationPreflight::MakeMoveAuthority(std::shared_ptr<ReviewedVFSOper
     return nc::vfs::ProviderConditionalMoveReviewedAuthority{std::move(_claims), std::move(_seal)};
 }
 
+nc::vfs::ProviderConditionalDeleteReviewedAuthority
+ReviewedVFSOperationPreflight::MakeDeleteAuthority(std::shared_ptr<ReviewedVFSOperationPreflight> _seal,
+                                                   nc::vfs::ProviderConditionalDeleteReviewedClaims _claims)
+{
+    return nc::vfs::ProviderConditionalDeleteReviewedAuthority{std::move(_claims), std::move(_seal)};
+}
+
 SealedReviewedPreflight::SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOperationPreflight> _review,
                                                  const size_t _item_count)
     : m_Review{std::move(_review)}, m_Issued(_item_count, false)
@@ -258,7 +270,8 @@ SealedReviewedPreflight::SealedReviewedPreflight(std::shared_ptr<ReviewedVFSOper
 
 SealedReviewedPreflight SealedReviewedPreflight::Seal(ReviewedVFSOperationPreflight _review)
 {
-    const size_t item_count = _review.AcceptedPlan().Report().items.size();
+    const size_t item_count =
+        OperationPlanningAcceptedItemCount(_review.AcceptedPlan().Plan().Type(), _review.AcceptedPlan().Report());
     // The seal is made once, here, and shared by every authority this review yields. Making one per
     // issue would let two authorities from the same review be indistinguishable from two reviews.
     auto sealed = std::make_shared<ReviewedVFSOperationPreflight>(std::move(_review));
@@ -305,6 +318,18 @@ SealedReviewedPreflight::IssueMoveAuthorityForItem(const size_t _item_index,
         return std::nullopt;
     m_Issued[_item_index] = true;
     return ReviewedVFSOperationPreflight::MakeMoveAuthority(m_Review, std::move(_claims));
+}
+
+std::optional<nc::vfs::ProviderConditionalDeleteReviewedAuthority>
+SealedReviewedPreflight::IssueDeleteAuthorityForItem(const size_t _item_index,
+                                                     nc::vfs::ProviderConditionalDeleteReviewedClaims _claims)
+{
+    if( _item_index >= m_Issued.size() )
+        return std::nullopt;
+    if( m_Issued[_item_index] )
+        return std::nullopt;
+    m_Issued[_item_index] = true;
+    return ReviewedVFSOperationPreflight::MakeDeleteAuthority(m_Review, std::move(_claims));
 }
 
 VFSOperationPlanningProbes::VFSOperationPlanningProbes(VFSOperationPlanningBindings::Ptr _bindings,
