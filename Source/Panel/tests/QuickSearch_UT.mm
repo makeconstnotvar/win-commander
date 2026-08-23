@@ -369,10 +369,10 @@ TEST_CASE("basic soft filtering")
     [qs setSearchCriteria:@"player"];
 
     CHECK(ctx.data.EntriesBySoftFiltering().size() == 2);
-    CHECK(ctx.data.EntriesBySoftFiltering()[0] == 15);
-    CHECK(ctx.data.EntriesBySoftFiltering()[1] == 44);
+    CHECK(ctx.data.EntriesBySoftFiltering()[0] == 16);
+    CHECK(ctx.data.EntriesBySoftFiltering()[1] == 45);
 
-    CHECK(ctx.delegate.cursorPosition == 15);
+    CHECK(ctx.delegate.cursorPosition == 16);
 }
 
 TEST_CASE("soft typing")
@@ -392,25 +392,25 @@ TEST_CASE("soft typing")
     CHECK(ctx.delegate.cursorPosition == 9);
 
     [qs handleKeyDown:KeyDown(@"y", 0) forPanelView:nil];
-    CHECK(ctx.delegate.cursorPosition == 15);
+    CHECK(ctx.delegate.cursorPosition == 16);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(NSDeleteCharacter), 0) forPanelView:nil];
     CHECK(ctx.delegate.cursorPosition == 9);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(0xF701), 0) forPanelView:nil];
-    CHECK(ctx.delegate.cursorPosition == 15);
+    CHECK(ctx.delegate.cursorPosition == 16);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(0xF701), 0) forPanelView:nil];
-    CHECK(ctx.delegate.cursorPosition == 44);
+    CHECK(ctx.delegate.cursorPosition == 45);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(0xF702), 0) forPanelView:nil];
     CHECK(ctx.delegate.cursorPosition == 9);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(0xF703), 0) forPanelView:nil];
-    CHECK(ctx.delegate.cursorPosition == 44);
+    CHECK(ctx.delegate.cursorPosition == 45);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(0xF700), 0) forPanelView:nil];
-    CHECK(ctx.delegate.cursorPosition == 15);
+    CHECK(ctx.delegate.cursorPosition == 16);
 
     [qs handleKeyDown:KeyDown(SingleCharStr(0xF700), 0) forPanelView:nil];
     CHECK(ctx.delegate.cursorPosition == 9);
@@ -493,7 +493,7 @@ VFSListingPtr AppsListing()
                                             "Microsoft PowerPoint.app",
                                             "Microsoft Word.app",
                                             "Mission Control.app",
-                                            "Win Commander.app",
+                                            "Duck Commander.app",
                                             "Notes.app",
                                             "Numbers.app",
                                             "Pages.app",

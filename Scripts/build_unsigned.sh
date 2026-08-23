@@ -30,7 +30,7 @@ ROOT_DIR=$(cd "$SCRIPTS_DIR/.." && pwd)
 XCODEPROJ="../Source/WinCommander/WinCommander.xcodeproj"
 PBUDDY=/usr/libexec/PlistBuddy
 
-# Build Help.pdf and copy it into the NC sources
+# Build Help.pdf and copy it into the Duck Commander sources
 ${SCRIPTS_DIR}/build_help.sh
 cp -f "${SCRIPTS_DIR}/build_help.tmp/Help.pdf" "${ROOT_DIR}/Source/WinCommander/WinCommander/Resources/Help.pdf"
 
@@ -59,7 +59,7 @@ VERSION=$( $PBUDDY -c "Print CFBundleShortVersionString" "$APP_PATH/Contents/Inf
 BUILD=$( $PBUDDY -c "Print CFBundleVersion" "$APP_PATH/Contents/Info.plist" )
 
 create-dmg \
- --volname "Win Commander Unsigned" \
+ --volname "Duck Commander Unsigned" \
  --window-pos 200 200 \
  --window-size 610 386 \
  --background "dmg/background.png" \
@@ -67,5 +67,5 @@ create-dmg \
  --icon-size 128 \
  --icon "${APP_NAME}" 176 192 \
  --app-drop-link 432 192 \
- "win-commander-unsigned-${VERSION}(${BUILD}).dmg" \
+ "duck-commander-unsigned-${VERSION}(${BUILD}).dmg" \
  "${APP_NAME}"

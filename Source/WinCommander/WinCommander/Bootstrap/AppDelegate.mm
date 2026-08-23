@@ -1123,7 +1123,7 @@ static NCAppDelegate *g_Me = nil;
         // setup Sparkle updater stuff
         NSMenuItem *item = [[NSMenuItem alloc] init];
         item.title = NSLocalizedString(@"Check for Updates...",
-                                       "Menu item title for check if any Win Commander updates are available");
+                                       "Menu item title for check if any Duck Commander updates are available");
         item.target = NCBootstrapSharedSUUpdaterInstance();
         item.action = NCBootstrapSUUpdaterAction();
         [[NSApp.mainMenu itemAtIndex:0].submenu insertItem:item atIndex:1];

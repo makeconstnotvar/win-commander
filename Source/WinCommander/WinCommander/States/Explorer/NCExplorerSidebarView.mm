@@ -29,20 +29,14 @@ static const SidebarRenderOptions g_RenderOptions = static_cast<SidebarRenderOpt
 static NSString *const g_ColumnIdentifier = @"NCExplorerSidebarColumn";
 static NSString *const g_RowIdentifier = @"NCExplorerSidebarRow";
 
-// Sidebar geometry from the .pen mockups (FM-02 rA2v2 / FM-03 Qefa3). File-local statics on
-// purpose: NCExplorerSidebarView is constructed only by NCExplorerState, so nothing in the
-// Commander presentation can observe these.
-static const CGFloat g_RowHeight = 30.0;              // FM-02 nav row / FM-03 favourite row h30
-static const CGFloat g_RowGap = 3.0;                  // FM-02 group gap 3
-static const CGFloat g_SectionHeaderHeight = 22.0;    // FM-03 section header h22
-static const CGFloat g_SectionGap = 16.0;             // FM-03 sidebar section gap
-static const CGFloat g_SectionLabelBottomInset = 5.0; // header inner pad less the gap AppKit adds
-static const CGFloat g_VerticalPadding = 14.0;        // sidebar pad [14,12], vertical component
-static const CGFloat g_RowIconSize = 16.0;            // favourite row icon 16x16
+// The source-list row height is deliberately left to AppKit. It follows the user's system sidebar
+// size preference and keeps this navigation surface at the same scale as native macOS sidebars.
+static const CGFloat g_VerticalPadding = 14.0;
+static const CGFloat g_RowIconSize = 20.0;
 static const CGFloat g_RowIconLeading = 8.0;
-static const CGFloat g_RowIconLabelGap = 9.0;         // favourite row gap 9
+static const CGFloat g_RowIconLabelGap = 9.0;
 static const CGFloat g_RowTrailingInset = 8.0;
-static const CGFloat g_HairlineWidth = 1.0;           // sidebar stroke right 1
+static const CGFloat g_HairlineWidth = 1.0;
 
 static std::string NormalizedDirectory(std::string _path)
 {
@@ -199,6 +193,28 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         [self.selectionDelegate outlineViewSelectionDidChange:self];
 }
 
+- (void)mouseDown:(NSEvent *)_event
+{
+    const NSPoint location = [self convertPoint:_event.locationInWindow fromView:nil];
+    const NSInteger row = [self rowAtPoint:location];
+    if( row >= 0 ) {
+        id const item = [self itemAtRow:row];
+        if( [self isExpandable:item] ) {
+            // AppKit sends a second mouseDown with clickCount == 2 for a double-click. Toggle on the
+            // first click only, otherwise a double-click would immediately undo its own result.
+            if( _event.clickCount == 1 ) {
+                if( [self isItemExpanded:item] )
+                    [self collapseItem:item];
+                else
+                    [self expandItem:item];
+            }
+            return;
+        }
+    }
+
+    [super mouseDown:_event];
+}
+
 @end
 
 /** The sidebar's right edge. The mockup draws a 1pt stroke there, so the flat palette surface needs
@@ -222,11 +238,23 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 @end
 
 @implementation NCExplorerSidebarRowView
-- (void)drawBackgroundInRect:(NSRect) [[maybe_unused]] _dirty_rect
+- (BOOL)isOpaque
 {
+    return true;
+}
+
+- (void)drawBackgroundInRect:(NSRect)_dirty_rect
+{
+    // Paint both states. Leaving a deselected row transparent lets its previous accent fill survive
+    // in the backing store until an ancestor happens to repaint, which can look like multi-selection.
+    [nc::explorer::ChromeFillColor() setFill];
+    NSRectFill(_dirty_rect);
     if( !self.selected )
         return;
-    [[NSColor.controlAccentColor colorWithAlphaComponent:0.16] setFill];
+    NSColor *const selection_color = self.emphasized
+                                         ? [NSColor.controlAccentColor colorWithAlphaComponent:0.16]
+                                         : NSColor.unemphasizedSelectedContentBackgroundColor;
+    [selection_color setFill];
     [[NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, 4.0, 1.0) xRadius:5.0 yRadius:5.0] fill];
 }
 @end
@@ -322,11 +350,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     m_OutlineView = outlineView;
     m_OutlineView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     m_OutlineView.headerView = nil;
-    m_OutlineView.rowSizeStyle = NSTableViewRowSizeStyleCustom;
-    m_OutlineView.rowHeight = g_RowHeight;
-    // Height only. intercellSpacing.width is inset by half on each side of every cell frame, so
-    // zeroing it would shift each row left and invalidate the icon-leading calibration.
-    m_OutlineView.intercellSpacing = NSMakeSize(m_OutlineView.intercellSpacing.width, g_RowGap);
+    m_OutlineView.rowSizeStyle = NSTableViewRowSizeStyleDefault;
+    m_OutlineView.allowsMultipleSelection = false;
     m_OutlineView.selectionHighlightStyle = NSTableViewSelectionHighlightStyleNone;
     m_OutlineView.indentationPerLevel = 0.0;
     m_OutlineView.floatsGroupRows = false;
@@ -334,9 +359,9 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     m_OutlineView.dataSource = self;
     m_OutlineView.accessibilityIdentifier = @"wincommander.explorer.sidebar.locations";
     m_OutlineView.accessibilityLabel = NSLocalizedString(@"Locations", "Explorer sidebar accessibility label");
-    m_OutlineView.backgroundColor = NSColor.clearColor;
+    m_OutlineView.backgroundColor = nc::explorer::ChromeFillColor();
     if( @available(macOS 11.0, *) )
-        m_OutlineView.style = NSTableViewStylePlain;
+        m_OutlineView.style = NSTableViewStyleSourceList;
 
     NSTableColumn *const column = [[NSTableColumn alloc] initWithIdentifier:g_ColumnIdentifier];
     column.resizingMask = NSTableColumnAutoresizingMask;
@@ -350,7 +375,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     m_ScrollView.autohidesScrollers = true;
     m_ScrollView.automaticallyAdjustsContentInsets = false;
     m_ScrollView.contentInsets = NSEdgeInsetsMake(g_VerticalPadding, 0.0, g_VerticalPadding, 0.0);
-    m_ScrollView.drawsBackground = false;
+    m_ScrollView.drawsBackground = true;
+    m_ScrollView.backgroundColor = nc::explorer::ChromeFillColor();
     m_ScrollView.borderType = NSNoBorder;
     m_ScrollView.documentView = m_OutlineView;
     [self addSubview:m_ScrollView];
@@ -697,21 +723,9 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 - (NSTableRowView *)outlineView:(NSOutlineView *) [[maybe_unused]] _outline_view rowViewForItem:(id)_item
 {
     auto node = nc::objc_cast<NCExplorerSidebarNode>(_item);
-    if( !node || node.section )
+    if( !node )
         return nil;
     return [[NCExplorerSidebarRowView alloc] initWithFrame:NSZeroRect];
-}
-
-- (CGFloat)outlineView:(NSOutlineView *) [[maybe_unused]] _outline_view heightOfRowByItem:(id)_item
-{
-    auto node = nc::objc_cast<NCExplorerSidebarNode>(_item);
-    if( !node || !node.section )
-        return g_RowHeight;
-    if( m_RootNodes.firstObject == node )
-        return g_SectionHeaderHeight; // sits directly against the sidebar's own top padding
-    // AppKit already lays intercellSpacing.height above this row, so the row carries only the
-    // remainder of the mockup's inter-section gap.
-    return g_SectionHeaderHeight + (g_SectionGap - g_RowGap);
 }
 
 - (NSView *)outlineView:(NSOutlineView *)_outline_view
@@ -725,20 +739,17 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     if( node.section ) {
         NSTextField *const label = [NSTextField labelWithString:node.title];
         label.translatesAutoresizingMaskIntoConstraints = false;
-        label.font = [NSFont boldSystemFontOfSize:NSFont.smallSystemFontSize];
+        label.font = [NSFont systemFontOfSize:NSFont.systemFontSize weight:NSFontWeightSemibold];
         label.textColor = NSColor.secondaryLabelColor;
         label.accessibilityIdentifier = @"wincommander.explorer.sidebar.section";
         label.accessibilityLabel = node.title;
 
-        // The gap the mockup puts above a section lives in the row's own height, so the label is
-        // pinned to the bottom of that taller row rather than centred in it.
         NSView *const container = [[NSView alloc] initWithFrame:NSZeroRect];
         [container addSubview:label];
         [NSLayoutConstraint activateConstraints:@[
             [label.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:g_RowIconLeading],
             [label.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor],
-            [label.bottomAnchor constraintEqualToAnchor:container.bottomAnchor
-                                               constant:-g_SectionLabelBottomInset],
+            [label.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
         ]];
         return container;
     }

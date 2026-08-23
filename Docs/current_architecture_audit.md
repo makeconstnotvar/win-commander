@@ -1,4 +1,4 @@
-# Текущая архитектура Win Commander
+# Текущая архитектура Duck Commander
 
 > Статус: M0 architecture baseline with active migration updates
 >

@@ -161,9 +161,9 @@ bool SandboxManager::AskAccessForPathSync(const std::string &_path, bool _mandat
 
     NSOpenPanel *const openPanel = NSOpenPanel.openPanel;
     openPanel.message = NSLocalizedString(@"Click “Allow Access” to grant access to files in the selected directory",
-                                          "Asking the user to grant filesystem access for NC");
+                                          "Asking the user to grant filesystem access for Duck Commander");
     openPanel.prompt =
-        NSLocalizedString(@"Allow Access", "Asking user for granting file system access for NC - button title");
+        NSLocalizedString(@"Allow Access", "Asking user for granting file system access for Duck Commander - button title");
     openPanel.canChooseFiles = false;
     openPanel.canChooseDirectories = true;
     openPanel.allowsMultipleSelection = false;

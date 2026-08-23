@@ -434,55 +434,55 @@
       }
     },
     "56.title" : {
-      "comment" : "Class = \"NSMenuItem\"; title = \"Win Commander\"; ObjectID = \"56\";",
+      "comment" : "Class = \"NSMenuItem\"; title = \"Duck Commander\"; ObjectID = \"56\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Win Commander"
+            "value" : "Duck Commander"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Win Commander"
+            "value" : "Duck Commander"
           }
         }
       }
     },
     "57.title" : {
-      "comment" : "Class = \"NSMenu\"; title = \"Win Commander\"; ObjectID = \"57\";",
+      "comment" : "Class = \"NSMenu\"; title = \"Duck Commander\"; ObjectID = \"57\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Win Commander"
+            "value" : "Duck Commander"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Win Commander"
+            "value" : "Duck Commander"
           }
         }
       }
     },
     "58.title" : {
-      "comment" : "Class = \"NSMenuItem\"; title = \"About Win Commander\"; ObjectID = \"58\";",
+      "comment" : "Class = \"NSMenuItem\"; title = \"About Duck Commander\"; ObjectID = \"58\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "About Win Commander"
+            "value" : "About Duck Commander"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "О Win Commander"
+            "value" : "О Duck Commander"
           }
         }
       }
@@ -632,37 +632,37 @@
       }
     },
     "134.title" : {
-      "comment" : "Class = \"NSMenuItem\"; title = \"Hide Win Commander\"; ObjectID = \"134\";",
+      "comment" : "Class = \"NSMenuItem\"; title = \"Hide Duck Commander\"; ObjectID = \"134\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Hide Win Commander"
+            "value" : "Hide Duck Commander"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Скрыть Win Commander"
+            "value" : "Скрыть Duck Commander"
           }
         }
       }
     },
     "136.title" : {
-      "comment" : "Class = \"NSMenuItem\"; title = \"Quit Win Commander\"; ObjectID = \"136\";",
+      "comment" : "Class = \"NSMenuItem\"; title = \"Quit Duck Commander\"; ObjectID = \"136\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Quit Win Commander"
+            "value" : "Quit Duck Commander"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Завершить Win Commander"
+            "value" : "Завершить Duck Commander"
           }
         }
       }
@@ -2144,19 +2144,19 @@
       }
     },
     "iBP-LD-aNS.title" : {
-      "comment" : "Class = \"NSMenuItem\"; title = \"Win Commander Help\"; ObjectID = \"iBP-LD-aNS\";",
+      "comment" : "Class = \"NSMenuItem\"; title = \"Duck Commander Help\"; ObjectID = \"iBP-LD-aNS\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Win Commander Help"
+            "value" : "Duck Commander Help"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Справка Win Commander"
+            "value" : "Справка Duck Commander"
           }
         }
       }

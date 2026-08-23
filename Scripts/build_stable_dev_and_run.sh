@@ -27,7 +27,7 @@ chmod 700 "$MACHINE_LOCK_DIRECTORY"
 exec 9>"$MACHINE_LOCK_DIRECTORY/stable-build.lock"
 chmod 600 "$MACHINE_LOCK_DIRECTORY/stable-build.lock"
 if ! lockf -s -t 600 9; then
-  echo "Timed out waiting for another stable Win Commander build to finish." >&2
+  echo "Timed out waiting for another stable Duck Commander build to finish." >&2
   exit 75
 fi
 
@@ -76,7 +76,9 @@ ditto "$SOURCE_APP_PATH" "$STAGING_APP_PATH"
 /usr/bin/xattr -dr com.apple.provenance "$STAGING_APP_PATH" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $DEVELOPMENT_BUNDLE_IDENTIFIER" \
   "$STAGING_APP_PATH/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName WinCommander Codex Dev" \
+/usr/libexec/PlistBuddy -c "Set :CFBundleName Duck Commander" \
+  "$STAGING_APP_PATH/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Duck Commander" \
   "$STAGING_APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool false" \
   "$STAGING_APP_PATH/Contents/Info.plist" 2>/dev/null || \

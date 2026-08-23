@@ -1124,12 +1124,12 @@ ShellTask::ShellType ShellTask::GetShellType() const
 std::string ShellTask::ComposePromptCommand() const
 {
     // setup pwd feedback
-    // this braindead construct creates a two-way communication channel between a shell and NC:
+    // this braindead construct creates a two-way communication channel between a shell and Duck Commander:
     // 1) the shell is about to print a command prompt
     // 2) PROMPT_COMMAND/precmd is executed by the shell
-    // 2.a) current directory is told to NC through the pwd pipe
-    // 2.b) shell is blocked until NC responds via the semaphore pipe
-    // 2.c) NC processes the pwd notification (hopefully) and writes into the semaphore pipe
+    // 2.a) current directory is told to Duck Commander through the pwd pipe
+    // 2.b) shell is blocked until Duck Commander responds via the semaphore pipe
+    // 2.c) Duck Commander processes the pwd notification (hopefully) and writes into the semaphore pipe
     // 2.d) data from that semaphore is read and the shell is unblocked
     // 3) the shell resumes
     const int pid = I->shell_pid;

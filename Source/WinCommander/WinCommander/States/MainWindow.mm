@@ -45,7 +45,7 @@ static const auto g_InitialWindowContentRect = NSMakeRect(100, 100, 1000, 600);
         self.identifier = g_Identifier;
         self.title = @"";
         self.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-        self.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
+        self.toolbarStyle = NSWindowToolbarStyleUnified;
 
         // window placement logic below:
         // (it may be later overwritten by Cocoa's restoration mechanism)

@@ -23,6 +23,9 @@ using namespace nc;
 
 namespace {
 
+constexpr CGFloat g_InnerControlHeight = 28.0;
+constexpr CGFloat g_SearchFieldWidth = 230.0;
+
 struct BreadcrumbPresentationState {
     core::PaneLoadPhase load_phase = core::PaneLoadPhase::Empty;
     bool address_editable = false;
@@ -152,7 +155,10 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
 
 @end
 
-@interface NCExplorerBreadcrumbControl () <NSComboBoxDataSource, NSComboBoxDelegate, NSTextFieldDelegate>
+@interface NCExplorerBreadcrumbControl () <NSComboBoxDataSource,
+                                           NSComboBoxDelegate,
+                                           NSTextFieldDelegate,
+                                           NSMenuItemValidation>
 @end
 
 @implementation NCExplorerBreadcrumbControl {
@@ -226,12 +232,17 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
 
 - (void)buildLayout
 {
-    m_LocationButton = [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:@"folder.fill"
-                                                           accessibilityDescription:nil]
+    NSImage *const folder_image =
+        [[NSImage imageWithSystemSymbolName:@"folder.fill" accessibilityDescription:nil]
+            imageWithSymbolConfiguration:[NSImageSymbolConfiguration configurationWithPointSize:15.0
+                                                                                           weight:NSFontWeightRegular]];
+    m_LocationButton = [NSButton buttonWithImage:folder_image
                                           target:self
                                           action:@selector(onEditPath:)];
     m_LocationButton.bezelStyle = NSBezelStyleInline;
     m_LocationButton.bordered = false;
+    m_LocationButton.controlSize = NSControlSizeRegular;
+    m_LocationButton.imageScaling = NSImageScaleProportionallyDown;
     m_LocationButton.toolTip = NSLocalizedString(@"Edit path (Command-L)", "Explorer address bar");
     m_LocationButton.accessibilityLabel = NSLocalizedString(@"Edit path", "Explorer accessibility label");
 
@@ -246,6 +257,7 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     m_PathEditor.dataSource = self;
     m_PathEditor.delegate = self;
     m_PathEditor.completes = true;
+    m_PathEditor.controlSize = NSControlSizeRegular;
     m_PathEditor.font = [NSFont systemFontOfSize:NSFont.systemFontSize];
     m_PathEditor.placeholderString = NSLocalizedString(@"Enter a path", "Explorer address bar");
     m_PathEditor.target = self;
@@ -266,6 +278,7 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     m_ErrorLabel.accessibilityLabel = NSLocalizedString(@"Folder status", "Explorer accessibility label");
 
     m_FindField = [[NSSearchField alloc] initWithFrame:NSZeroRect];
+    m_FindField.controlSize = NSControlSizeRegular;
     m_FindField.placeholderString = NSLocalizedString(@"Find Files", "Explorer toolbar");
     m_FindField.toolTip = NSLocalizedString(@"Open Find Files with this filename mask", "Explorer toolbar");
     m_FindField.target = self;
@@ -296,15 +309,18 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     [NSLayoutConstraint activateConstraints:@[
         [m_LocationButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:2.0],
         [m_LocationButton.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [m_LocationButton.widthAnchor constraintEqualToConstant:24.0],
+        [m_LocationButton.widthAnchor constraintEqualToConstant:g_InnerControlHeight],
+        [m_LocationButton.heightAnchor constraintEqualToConstant:g_InnerControlHeight],
 
         [m_PathStack.leadingAnchor constraintEqualToAnchor:m_LocationButton.trailingAnchor constant:2.0],
         [m_PathStack.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
         [m_PathStack.trailingAnchor constraintLessThanOrEqualToAnchor:m_ErrorLabel.leadingAnchor constant:-6.0],
+        [m_PathStack.heightAnchor constraintGreaterThanOrEqualToConstant:g_InnerControlHeight],
 
         [m_PathEditor.leadingAnchor constraintEqualToAnchor:m_LocationButton.trailingAnchor constant:2.0],
         [m_PathEditor.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
         [m_PathEditor.trailingAnchor constraintEqualToAnchor:m_ErrorLabel.leadingAnchor constant:-6.0],
+        [m_PathEditor.heightAnchor constraintEqualToConstant:g_InnerControlHeight],
 
         [m_FallbackLabel.leadingAnchor constraintEqualToAnchor:m_LocationButton.trailingAnchor constant:4.0],
         [m_FallbackLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
@@ -321,7 +337,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
 
         [m_FindField.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
         [m_FindField.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-2.0],
-        [m_FindField.widthAnchor constraintEqualToConstant:180.0],
+        [m_FindField.widthAnchor constraintEqualToConstant:g_SearchFieldWidth],
+        [m_FindField.heightAnchor constraintEqualToConstant:g_InnerControlHeight],
     ]];
 }
 
@@ -408,7 +425,7 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     m_LocationButton.enabled = m_PresentationState->address_editable;
 
     if( editor_visible && (location_changed || !m_PresentationState->address_editable) )
-        [self leaveEditingMode];
+        [self leaveEditingModeFocusingPanel:true];
     else if( editor_visible )
         return;
 
@@ -496,12 +513,16 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     segment.tag = target_index;
     segment.toolTip = [NSString stringWithUTF8String:_target.path.c_str()];
     segment.accessibilityLabel = _target.title;
+    [segment.heightAnchor constraintEqualToConstant:g_InnerControlHeight].active = true;
     [segment setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
                                       forOrientation:NSLayoutConstraintOrientationHorizontal];
     [m_PathStack addArrangedSubview:segment];
 
-    NSButton *const siblings = [NSButton buttonWithImage:[NSImage imageWithSystemSymbolName:@"chevron.right"
-                                                                   accessibilityDescription:nil]
+    NSImage *const chevron =
+        [[NSImage imageWithSystemSymbolName:@"chevron.right" accessibilityDescription:nil]
+            imageWithSymbolConfiguration:[NSImageSymbolConfiguration configurationWithPointSize:11.0
+                                                                                           weight:NSFontWeightSemibold]];
+    NSButton *const siblings = [NSButton buttonWithImage:chevron
                                                   target:self
                                                   action:@selector(onSiblingMenu:)];
     siblings.bezelStyle = NSBezelStyleInline;
@@ -510,7 +531,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     siblings.tag = target_index;
     siblings.toolTip = NSLocalizedString(@"Show sibling folders", "Explorer address bar");
     siblings.accessibilityLabel = NSLocalizedString(@"Show sibling folders", "Explorer accessibility label");
-    [siblings.widthAnchor constraintEqualToConstant:16.0].active = true;
+    [siblings.widthAnchor constraintEqualToConstant:g_InnerControlHeight].active = true;
+    [siblings.heightAnchor constraintEqualToConstant:g_InnerControlHeight].active = true;
     [m_PathStack addArrangedSubview:siblings];
 }
 
@@ -621,7 +643,32 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     [m_PathEditor selectText:nil];
 }
 
-- (void)leaveEditingMode
+- (IBAction)ToggleViewHiddenFiles:(id)_sender
+{
+    NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
+    if( dispatcher )
+        [dispatcher ToggleViewHiddenFiles:_sender];
+    else
+        NSBeep();
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)_item
+{
+    if( _item.action == @selector(ToggleViewHiddenFiles:) ) {
+        NCPanelControllerActionsDispatcher *const dispatcher = m_Panel.view.actionsDispatcher;
+        return dispatcher ? [dispatcher validateMenuItem:_item] : false;
+    }
+    return true;
+}
+
+- (void)restoreAddressPresentation
+{
+    const bool show_path = m_PresentationState && HasAddressLocation(*m_PresentationState);
+    m_PathStack.hidden = !show_path;
+    m_FallbackLabel.hidden = show_path;
+}
+
+- (void)leaveEditingModeFocusingPanel:(const bool)_focus_panel
 {
     NSResponder *const first_responder = self.window.firstResponder;
     const bool editor_had_focus = first_responder == m_PathEditor || first_responder == m_PathEditor.currentEditor;
@@ -632,7 +679,8 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     m_PathEditor.hidden = true;
     m_Completions = @[];
     [m_PathEditor reloadData];
-    if( editor_had_focus )
+    [self restoreAddressPresentation];
+    if( _focus_panel && editor_had_focus )
         [self.window makeFirstResponder:m_Panel.view];
 }
 
@@ -767,14 +815,29 @@ std::string ExpandAddressPath(std::string_view _input, const BreadcrumbPresentat
     doCommandBySelector:(SEL)_selector
 {
     if( _control == m_PathEditor && _selector == @selector(cancelOperation:) ) {
-        [self leaveEditingMode];
-        const bool show_path = m_PresentationState && IsAddressEditable(*m_PresentationState);
-        m_PathStack.hidden = !show_path;
-        m_FallbackLabel.hidden = show_path;
-        [self.window makeFirstResponder:m_Panel.view];
+        [self leaveEditingModeFocusingPanel:true];
         return true;
     }
     return false;
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)_notification
+{
+    if( _notification.object != m_PathEditor )
+        return;
+
+    // The delegate notification can arrive while AppKit is still handing focus to the clicked
+    // control. Defer only the visual teardown so the new responder remains authoritative.
+    __weak NCExplorerBreadcrumbControl *weak_self = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NCExplorerBreadcrumbControl *const strong_self = weak_self;
+      if( !strong_self || strong_self->m_PathEditor.hidden )
+          return;
+      NSResponder *const responder = strong_self.window.firstResponder;
+      if( responder == strong_self->m_PathEditor || responder == strong_self->m_PathEditor.currentEditor )
+          return;
+      [strong_self leaveEditingModeFocusingPanel:false];
+    });
 }
 
 - (NSInteger)numberOfItemsInComboBox:(NSComboBox *) [[maybe_unused]] _combo_box

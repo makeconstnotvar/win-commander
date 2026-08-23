@@ -1,4 +1,4 @@
-# What's New in Win Commander
+# What's New in Duck Commander
 
 ## Version 1.8.0 (19 Dec 2025)
 - Updated for macOS Tahoe.
@@ -44,7 +44,7 @@
 - Improved the security checks in the privileged helper.
 
 ## Version 1.6.0 (14 May 2024)
-- Win Commander is now completely free and open source.
+- The application is now completely free and open source.
 - Added support for file tags.
 - Fixed an issue that could stop directory updates on SMB volumes.
 - Fixed an issue where the mouse cursor could navigate to the wrong directory.
@@ -81,11 +81,11 @@
 - Now scrolling caused by keypresses is instantaneous by default for both Brief and List presentation modes. The "filePanel.presentation.smoothScrolling" config setting controls this behaviour.
 - Batch Rename now picks a longest filename to select a range of characters from.
 - Improved the robustness of in-place renaming, that fixes the situations when a filesystem change discarded the in-place editor.
-- Improved the robustness of the filesystem notifications handling. Now NC tries to rely on system notifications whenever possible but also keeps a backup in case the events don't come.
+- Improved the robustness of the filesystem notifications handling. The app now tries to rely on system notifications whenever possible but also keeps a backup in case the events don't come.
 - Now switching to a Single-Pane mode and then back to Dual-Pane mode preserves the proportion between the panels.
 - Fixed an issue with moving items into the ".." directory.
 - Fixed a performance degradation when calculating directories sizes in a massive listing.
-- Fixed an issue with dragging a file into NC when a Full Disk Access was not granted, which could end up in an error.
+- Fixed an issue with dragging a file into the app when a Full Disk Access was not granted, which could end up in an error.
 - Fixed an issue with incorrect horizontal alignment of a scroller in the Brief presentation mode.
 - Fixed the visual glitches in the Dark mode caused by transparency of the List view headers.
 - Cmd-Backspace no longer moves an item to Trash when its being renamed via in-place filename editor.
@@ -124,7 +124,7 @@
 - Fixed an issue with saving the configuration when the Users folder was placed on a non-root volume.
 - Fixed an issue with the built-in terminal when a custom shell was a symbolic link.
 - Fixed an issue with the inability of PSFS VFS to kill a process.
-- Fixed an issue of silent failing to drag an item into an NC window when lacking permissions.
+- Fixed an issue of silent failing to drag an item into an application window when lacking permissions.
 - Fixed a visual glitch with vertical separators when Classic theme was used.
 - Fixed a visual glitch of blurred panels after switching between Retina and Non-Retina displays.
 - Fixed a freeze in the Batch Rename dialog when renaming a large number of items.
@@ -173,7 +173,7 @@
 - Field rename editor now commits an edit when its window loses focus.
 - New action: “Close Other Tabs” (Alt+Cmd+W).
 - The “+” button on the tab bar now reacts on the right click the same way as on the long press.
-- Improved unmounting of APFS volumes. Now NC will eject an underlying physical storage too.
+- Improved unmounting of APFS volumes. The app will now eject an underlying physical storage too.
 - Lots of bugfixes and internal improvements.
             
 ## Version 1.2.4 (27 Feb 2018)
@@ -257,7 +257,7 @@
 - Added support for archive handling on any VFS (that is, in other archives, on network filesystems, etc.).
 - Added a startup mode setting for external tools.
 - Now the terminal shell can be customized. Three shells are supported: bash, zsh, and [t]csh.
-- If the shell was terminated (via exit, ^D, etc.), NC can revive it.
+- If the shell was terminated (via exit, ^D, etc.), the app can revive it.
 - Assigned “Compress Here” to F9, and “Compress to Opposite Panel” to Shift+F9.
 - Now the File Already Exists dialog treats a pressed Shift key as an automatic “Apply to All”.
 - Now toolbars can be customized.
@@ -277,7 +277,7 @@
 - Now deleting a file with process information in PSFS (Processes List) will kill that process.
 - Added access to F1 … F19 buttons regardless of system settings.
 - Enabled scripting with AppleScript.
-- Now in case of drag & drop within NC, it will check whether the source and target filesystems are the same. Based on that information, NC will choose between moving and copying. Of course, the keyboard modifiers (Ctrl for linking, Alt for copying, Cmd for moving) will be considered, too.
+- For drag and drop within the app, it now checks whether the source and target filesystems are the same. Based on that information, the app chooses between moving and copying. The keyboard modifiers (Ctrl for linking, Alt for copying, Cmd for moving) are considered too.
 - Added new shortcuts: F9 to compress items in the target panel, and ⇧F9 to compress items in the current panel.
 - Fixed the issue with unmountable volumes (for example, USB flash drives that were locked by the built-in terminal and could not be ejected).
 - Built-in terminal will no longer produce error messages on USB sticks with FAT32.
@@ -285,7 +285,7 @@
 - Fixed some visual and stability bugs.
 
 ## Version 1.1.2 (7 June 2016)
-- Changed the application’s title to Win Commander.
+- Changed the application’s title.
 - Added basic support for editing remote files.
 - Added support for lightweight search with Spotlight.
 - Added the new ⌥⌘V shortcut to move item here.

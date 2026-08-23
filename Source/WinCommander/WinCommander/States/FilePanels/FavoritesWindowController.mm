@@ -226,7 +226,7 @@ static const auto g_FavoritesWindowControllerDragDataType = @"com.wincommander.n
         std::vector<FavoriteLocationsStorage::Favorite> addition;
         auto &storage = m_Storage();
         if( auto source = nc::objc_cast<FilesDraggingSource>(info.draggingSource) ) {
-            // dragging from some NC panel
+            // dragging from a Duck Commander panel
             for( PanelDraggingItem *item : source.items )
                 if( auto f = FavoriteComposing{storage}.FromListingItem(item.item) )
                     if( ![self hasFavorite:*f] )
@@ -350,7 +350,7 @@ static const auto g_FavoritesWindowControllerDragDataType = @"com.wincommander.n
     if( ff.empty() ) {
         Alert *alert = [[Alert alloc] init];
         alert.messageText = NSLocalizedString(@"Failed to retreive Finder's Favorites",
-                                              "Showing an error when NC isn't able to get Finder Favorites");
+                                              "Showing an error when Duck Commander isn't able to get Finder Favorites");
         [alert addButtonWithTitle:NSLocalizedString(@"OK", "")];
         [alert beginSheetModalForWindow:self.window
                       completionHandler:^([[maybe_unused]] NSModalResponse rc){

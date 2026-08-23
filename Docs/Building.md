@@ -1,5 +1,5 @@
-# Building Win Commander
-This guide outlines the steps to build Win Commander from source. Before changing the project, read [`AGENTS.md`](../AGENTS.md), the [canonical product specification](win_commander_ideal_file_manager_spec.md), and the [development plan](Development-Plan.md).
+# Building Duck Commander
+This guide outlines the steps to build Duck Commander from source. Before changing the project, read [`AGENTS.md`](../AGENTS.md), the [canonical product specification](win_commander_ideal_file_manager_spec.md), and the [development plan](Development-Plan.md).
 
 ## Getting the code
 Clone this repository with `git clone`.  
@@ -25,7 +25,7 @@ The first run creates or adopts the local certificate and records its fingerprin
 Use `Scripts/build_stable_dev_and_run.sh --no-run` to rebuild and install without opening the app. Validate an installed copy without rebuilding with `Scripts/verify_stable_dev_identity.sh`. The historical `Scripts/build_unsigned_and_run.sh` command is a compatibility alias for this same stable path. Direct DerivedData products remain suitable for compile/test evidence.
 
 ## Exploring the Source Code
-Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The source tree includes the main application and 11 library projects:
+Duck Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-C++ and Swift. The source tree includes the main application and 11 library projects:
   * Base: Foundational, general-purpose tools.
   * Config: Configuration management.
   * CUI: Shared UI components.
@@ -39,7 +39,7 @@ Win Commander has a medium-sized codebase (~150KSloC) written in C++, Objective-
   * Viewer: Integrated file viewer component.
 
 ## Testing
-Win Commander employs two testing strategies: unit tests (`_UT` suffix) for individual components, and integration tests (`_IT` suffix) for checking how those components interact. Each type of test is easily identifiable by its unique filename suffix and corresponding build target. For example, `Term` represents the library, `TermUT` the unit tests for this library, and `TermIT` the integration tests.  
+Duck Commander employs two testing strategies: unit tests (`_UT` suffix) for individual components, and integration tests (`_IT` suffix) for checking how those components interact. Each type of test is easily identifiable by its unique filename suffix and corresponding build target. For example, `Term` represents the library, `TermUT` the unit tests for this library, and `TermIT` the integration tests.\
 Unit tests are quick and standalone, not requiring any external setups. In contrast, integration tests might need specific conditions, like running Docker VMs (detailed in `Source/VFS/tests/data/docker/[start|stop].sh`), to properly execute.  
 
 `IntegrationTests` also builds `WinCommanderIT`, the Docker-only application boundary target. Its FTP/SFTP/WebDAV cases drive a real `PanelController` through remote navigation and forced user refresh after a mutation from a distinct shadow host. Stop/restart proves the typed network path; `docker pause`/`unpause` keeps the listener reachable but withholds replies, proving the provider deadline, preserved listing/generation, lossless raw timeout and `TimeoutError`, then a fresh listing through the same controller and host. FTP bounds listing requests, WebDAV bounds only blocking control requests, and SFTP bounds connect/session work; these deadlines do not cap bulk transfers. The focused suite passes 9 cases / 376 assertions and remains deliberately excluded from `UnitTests` and M0.
@@ -86,4 +86,4 @@ Unsigned tests prove deterministic permission policy only. Before a release that
 ## Implementation Notes
   * [Syntax Highlighting](SyntaxHighlighting.md)
   * [Creating Image Templates from SF Symbols](ImageTemplatesFromSFSymbols.md)
-  * [Unity Builds](https://kazakov.life/2025/12/12/win-commander-and-build-times/)
+  * Unity builds

@@ -1142,19 +1142,19 @@
       }
     },
     "LGc-UR-n1L.title" : {
-      "comment" : "Class = \"NSButtonCell\"; title = \"Show when NC is active\"; ObjectID = \"LGc-UR-n1L\";",
+      "comment" : "Class = \"NSButtonCell\"; title = \"Show when Duck Commander is active\"; ObjectID = \"LGc-UR-n1L\";",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Show when NC is active"
+            "value" : "Show when Duck Commander is active"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Показывать когда NC активен"
+            "value" : "Показывать, когда Duck Commander активен"
           }
         }
       }

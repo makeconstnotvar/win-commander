@@ -85,7 +85,7 @@ OTHER_LDFLAGS = -v -ObjC -framework Foundation -framework Cocoa -framework Syste
 // Path to 3rd-Party dependencies
 THRDPTY=$(SRCROOT)/../../3rd_Party
 
-// Path to NC's own libraries
+// Path to Duck Commander's own libraries
 LIBS=$(SRCROOT)/..
 
 // Paths - headers

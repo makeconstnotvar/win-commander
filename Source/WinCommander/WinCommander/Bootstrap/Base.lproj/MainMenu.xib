@@ -14,10 +14,10 @@
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <menu title="AMainMenu" systemMenu="main" id="29">
             <items>
-                <menuItem title="Win Commander" id="56">
-                    <menu key="submenu" title="Win Commander" systemMenu="apple" id="57">
+                <menuItem title="Duck Commander" id="56">
+                    <menu key="submenu" title="Duck Commander" systemMenu="apple" id="57">
                         <items>
-                            <menuItem title="About Win Commander" tag="10000" id="58">
+                            <menuItem title="About Duck Commander" tag="10000" id="58">
                                 <modifierMask key="keyEquivalentModifierMask"/>
                                 <connections>
                                     <action selector="orderFrontStandardAboutPanel:" target="-2" id="142"/>
@@ -46,7 +46,7 @@
                             <menuItem isSeparatorItem="YES" id="144">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Hide Win Commander" tag="10020" keyEquivalent="h" id="134">
+                            <menuItem title="Hide Duck Commander" tag="10020" keyEquivalent="h" id="134">
                                 <connections>
                                     <action selector="hide:" target="-1" id="367"/>
                                 </connections>
@@ -65,7 +65,7 @@
                             <menuItem isSeparatorItem="YES" id="149">
                                 <modifierMask key="keyEquivalentModifierMask" command="YES"/>
                             </menuItem>
-                            <menuItem title="Quit Win Commander" tag="10050" keyEquivalent="q" id="136">
+                            <menuItem title="Quit Duck Commander" tag="10050" keyEquivalent="q" id="136">
                                 <connections>
                                     <action selector="terminate:" target="-3" id="449"/>
                                 </connections>
@@ -493,8 +493,8 @@ DQ
                                     </items>
                                 </menu>
                             </menuItem>
-                            <menuItem title="Show Hidden Files" tag="13140" keyEquivalent="I" id="zGu-Ls-RVD">
-                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                            <menuItem title="Show Hidden Files" tag="13140" keyEquivalent="." id="zGu-Ls-RVD">
+                                <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
                                 <connections>
                                     <action selector="ToggleViewHiddenFiles:" target="-1" id="Ayw-w8-zaF"/>
                                 </connections>
@@ -1062,7 +1062,7 @@ CQ
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Help" systemMenu="help" id="491">
                         <items>
-                            <menuItem title="Win Commander Help" tag="17000" keyEquivalent="?" id="iBP-LD-aNS">
+                            <menuItem title="Duck Commander Help" tag="17000" keyEquivalent="?" id="iBP-LD-aNS">
                                 <connections>
                                     <action selector="OnShowHelp:" target="-1" id="mbF-jF-ZMK"/>
                                 </connections>

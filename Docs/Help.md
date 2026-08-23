@@ -2,14 +2,14 @@
 
 ## Introduction
 
-Win Commander is a free dual-pane file manager for macOS, designed with a focus on speed, keyboard-based navigation, and flexibility.
+Duck Commander is a free dual-pane file manager for macOS, designed with a focus on speed, keyboard-based navigation, and flexibility.
 The project aims to blend the user experience of classic file managers from the '80s and '90s with the modern look and feel of Mac computers.
-Win Commander follows the design principles of [orthodox file managers](https://en.wikipedia.org/wiki/File_manager#Orthodox_file_managers), specifically dual-pane file managers.
+Duck Commander follows the design principles of [orthodox file managers](https://en.wikipedia.org/wiki/File_manager#Orthodox_file_managers), specifically dual-pane file managers.
 This website contains an in-depth study of this kind of software: [Less is More: Orthodox File Managers as Sysadmin IDE](https://softpanorama.org/OFM/index.shtml).
 
 ## System Requirements
 
-The current version of Win Commander supports any Mac running one of the following versions of macOS:
+The current version of Duck Commander supports any Mac running one of the following versions of macOS:
 
 - macOS 26 Tahoe
 - macOS 15 Sequoia
@@ -21,7 +21,7 @@ The current version of Win Commander supports any Mac running one of the followi
 While not a strict policy, a maintenance goal is to support the last six major releases of macOS.
 This typically covers Mac hardware with a time span of approximately 12 years.
 
-Win Commander runs natively on both Intel and Apple Silicon (ARM) architectures.
+Duck Commander runs natively on both Intel and Apple Silicon (ARM) architectures.
 
 Below is the compatibility table for the older releases:
 
@@ -37,27 +37,27 @@ Below is the compatibility table for the older releases:
 
 ## Installation
 
-Win Commander is portable; it doesn't require the installation of additional components and can run from any folder.
-When downloaded from the Mac App Store, Win Commander is automatically placed in the `/Applications` folder.
+Duck Commander is portable; it doesn't require the installation of additional components and can run from any folder.
+When downloaded from the Mac App Store, Duck Commander is automatically placed in the `/Applications` folder.
 If it was downloaded from the website, it can be copied into the `/Applications` folder by dragging the icon there.
-You can also run Win Commander directly from a `.dmg` disk image; in this case, Win Commander will offer to move itself to the `/Applications` folder.
+You can also run Duck Commander directly from a `.dmg` disk image; in this case, Duck Commander will offer to move itself to the `/Applications` folder.
 
-![Copying NC from a dmg](Help-install-dmg.png)
+![Copying Duck Commander from a dmg](Help-install-dmg.png)
 
 ## Running the Application
 
-Simply double-click on the Win Commander icon to start it.
+Simply double-click on the Duck Commander icon to start it.
 
 ## Access Permissions
 
-If you downloaded Win Commander from the Mac App Store, the application will request permissions when navigating to a new location.
+If you downloaded Duck Commander from the Mac App Store, the application will request permissions when navigating to a new location.
 This requirement is imposed on all applications published in the Mac App Store as a safety measure to prevent unauthorized access outside of the sandbox container.
 You can revoke granted access permissions at any time by clicking `Settings > General > Granted filesystem access > Reset`.
 The permission request will appear as shown below:
 
-![NC asking for an access permission](Help-sandbox-perm.png)
+![Duck Commander asking for an access permission](Help-sandbox-perm.png)
 
-Even if you downloaded Win Commander outside of the Mac App Store, accessing certain locations will require granting permissions.
+Even if you downloaded Duck Commander outside of the Mac App Store, accessing certain locations will require granting permissions.
 As of this writing, the list of such locations includes:
 
 - Desktop Folder
@@ -66,12 +66,12 @@ As of this writing, the list of such locations includes:
 - Network Volumes
 - iCloud Drive
 
-To use Win Commander in these locations, you need to grant the necessary permissions in System Settings under `Privacy & Security > Files and Folders` section.
-Alternatively, you can grant Win Commander Full Disk Access in System Settings under `Privacy & Security > Full Disk Access` section.
+To use Duck Commander in these locations, you need to grant the necessary permissions in System Settings under `Privacy & Security > Files and Folders` section.
+Alternatively, you can grant Duck Commander Full Disk Access in System Settings under `Privacy & Security > Full Disk Access` section.
 
 ## Version Differences
 
-There are two existing versions of Win Commander: the sandboxed version available in the Mac App Store, and the standalone version available for direct download from the website.
+There are two existing versions of Duck Commander: the sandboxed version available in the Mac App Store, and the standalone version available for direct download from the website.
 Both versions are mostly equal in terms of functionality.
 The sandboxed version consumes slightly more resources due to sandboxing, but it provides an additional layer of protection.
 The notable features missing from the sandboxed version are:
@@ -84,7 +84,7 @@ The notable features missing from the sandboxed version are:
 # File Panels
 
 ## Introduction
-Below is a screenshot of a typical interface of Win Commander:
+Below is a screenshot of a typical interface of Duck Commander:
 
 ![Example of the interface](Help-main-ui.png)
 
@@ -108,7 +108,7 @@ Each panel is vertically divided into three logical parts:
 - Footer: shows the filename of the focused item, its size and modification date, the total number of items in the panel, and the free space available on this storage.
 
 ## Navigation
-Win Commander supports both mouse-based and keyboard-based navigation inside the file panel, although the keyboard is preferred.
+Duck Commander supports both mouse-based and keyboard-based navigation inside the file panel, although the keyboard is preferred.
 Use a single mouse click to change the cursor position (i.e., the focused item) and scroll gestures to scroll through the contents of the file panel without changing the cursor position.
 The navigation hotkeys are the following:
 
@@ -130,7 +130,7 @@ To go to a parent folder, do the same with the `..` [pseudo-folder](https://en.w
 Displaying the `..` folder is optional and can be turned off in the Settings dialog.
 Pressing `Backward Delete` (Backspace) or `Cmd + Up` navigates to the parent folder, regardless of the current cursor position.
 
-Win Commander stores location history for each file panel.
+Duck Commander stores location history for each file panel.
 To navigate the history back and forth, use the `Cmd + [` and `Cmd + ]` hotkeys.
 
 There are some locations that can be navigated to using hotkeys:
@@ -153,7 +153,7 @@ Here is what the popup looks like:
 ![GoTo popup](Help-goto-popup.png)
 
 To navigate to an arbitrary location on the filesystem, you can use the GoTo dialog opened by the `Shift + Cmd + G` hotkey or through the menu: `Go > Go To Folder...`.
-In this dialog, you can type any path, and after clicking the Go button Win Commander will navigate to the specified folder.
+In this dialog, you can type any path, and after clicking the Go button Duck Commander will navigate to the specified folder.
 Below is the view of this dialog box:
 
 ![GoTo dialog](Help-goto-dialog.png)
@@ -169,21 +169,21 @@ The action performed when you press `Return` depends on the type of item:
 - For executable items, it runs the file inside the built-in terminal emulator.
 - For all other items, the default macOS association is used to open them.
 
-If you need to open an archive with a non-standard extension (.xlsx, .pak etc), you can force Win Commander to navigate into it instead of opening the item with an external application by using the `Cmd + Down` hotkey or the `Go > Enter` menu item.
+If you need to open an archive with a non-standard extension (.xlsx, .pak etc), you can force Duck Commander to navigate into it instead of opening the item with an external application by using the `Cmd + Down` hotkey or the `Go > Enter` menu item.
 
 The `Shift + Return` hotkey opens an item in macOS using its default association, regardless of the item type.
 
-To open an item outside of Win Commander using a specific application, select the application from the `Open With` menu, which is available in the context menu or the `File` menu.
+To open an item outside of Duck Commander using a specific application, select the application from the `Open With` menu, which is available in the context menu or the `File` menu.
 
 ## Panel Management
 You can swap the contents of the left and right panels using the `Cmd + U` hotkey or the menu item `View > Swap Panels`.
 This operation also transfers the focus to the opposite panel.  
 To sync the contents of the opposite panel with the contents of the current panel, you can use the `Opt + Cmd + U` hotkey or the menu item `View > Sync Panels`.  
-In most cases, Win Commander will automatically refresh the contents of the file panel whenever the underlying part of the filesystem changes.
+In most cases, Duck Commander will automatically refresh the contents of the file panel whenever the underlying part of the filesystem changes.
 Sometimes, however, it's not possible to automatically detect these changes.
 In such cases, the panel can be manually refreshed using the `Cmd + R` hotkey or the menu item `View > Refresh`.
 
-The two panels in a Win Commander's window normally have the same width.
+The two panels in a Duck Commander's window normally have the same width.
 If needed this proportion can be changed by either dragging the splitter located between them or by using the `Ctrl + Opt + Left` / `Ctrl + Opt + Right` hotkeys.
 Here is an example of panels with different widths:
 
@@ -197,13 +197,13 @@ The following screenshot provides an example of how single-pane mode looks:
 ![Single-pane mode](Help-panel-collapsed.png)
 
 ## Selection
-Win Commander follows the UX of orthodox file managers and diverges from the typical macOS UX when it comes to item selection.
+Duck Commander follows the UX of orthodox file managers and diverges from the typical macOS UX when it comes to item selection.
 It treats item selection and cursor position separately, which means moving the cursor does not change the selection of items in the panel.
 Below is an example of a panel with some selected items and the cursor focused on an item that is not selected:
 
 ![Items selection](Help-panel-selection.png)
 
-There are numerous ways to manipulate the item selection using the keyboard or mouse in Win Commander:
+There are numerous ways to manipulate the item selection using the keyboard or mouse in Duck Commander:
 
 - `Cmd + A`: selects all items.
 - `Opt + Cmd + A`: deselects all items.
@@ -218,7 +218,7 @@ There are numerous ways to manipulate the item selection using the keyboard or m
 - `Alt + Cmd + -`: deselects all items with the same extension as the currently focused item.
 
 ## Sorting Modes
-Win Commander offers various ways to organize items in a folder.
+Duck Commander offers various ways to organize items in a folder.
 You can sort the items in ascending or descending order based on the following properties:
 
 - Name
@@ -266,7 +266,7 @@ When changing the sorting order via hotkeys or the menu, the behavior depends on
 If the criteria are different, it will switch to the selected criteria with its default order (as shown in the table above). 
 Selecting the same sorting criteria again will toggle the order between ascending and descending.
 
-Win Commander also provides some customization options to fine-tune sorting:
+Duck Commander also provides some customization options to fine-tune sorting:
 
 - `Separate Folders from Files` places all folders before any regular files.
 - `Extensionless Folders` forces extension-based sorting to treat any folder as if it doesn't have an extension.
@@ -276,13 +276,13 @@ Win Commander also provides some customization options to fine-tune sorting:
   - `Case-Sensitive`:  A simple Unicode-based comparison that compares characters one by one without transformations. The fastest of the three.
 
 ## Hidden Items
-In Win Commander, items are considered hidden if their filenames begin with a dot (`"."`) or if they have the hidden file attribute (`UF_HIDDEN`) set.
+In Duck Commander, items are considered hidden if their filenames begin with a dot (`"."`) or if they have the hidden file attribute (`UF_HIDDEN`) set.
 The special parent folder entry (`".."`) is never treated as hidden.
 By default, hidden items are not shown in the file panels.
 You can toggle their visibility using the `Shift + Cmd + .` hotkey or by selecting `View > Show/Hide Hidden Items` from the menu.
 
 ## Quick Search
-Win Commander offers a fast way to locate a file in a folder by typing a few letters from its name.
+Duck Commander offers a fast way to locate a file in a folder by typing a few letters from its name.
 This keyboard-based navigation is called Quick Search.
 It's highly customizable and can behave differently based on your settings, but at its core, the idea is simple: any keyboard input can be used to filter folder items.
 To remove the filtering, press the `Esc` button to clear the search query.
@@ -315,7 +315,7 @@ When filtered-out items are configured to still be shown, and a key modifier is 
 Using normal keyboard navigation (Arrows, Home, End, etc.) while holding the modifier will restrict the cursor movement to only the matching files.
 
 ## View Modes
-Win Commander can display the contents of a panel in three modes: Brief, List, and Gallery.
+Duck Commander can display the contents of a panel in three modes: Brief, List, and Gallery.
 
 - Brief mode shows only basic item information, such as the filename, icon, and tag colors, and arranges the items in consecutive columns.
   This allows more items to fit on the screen and enables the cursor to move both vertically and horizontally.
@@ -331,7 +331,7 @@ This screenshot shows Gallery mode with the other panel collapsed:
 
 ![Gallery mode](Help-panel-gallery.png)
 
-By default, Win Commander has 5 preconfigured modes, which you can switch using the `View > View Mode` menu or via the hotkeys listed below:
+By default, Duck Commander has 5 preconfigured modes, which you can switch using the `View > View Mode` menu or via the hotkeys listed below:
 
 - `Ctrl + 1` - `Short`: A Brief mode that shows 3 equal-sized columns per panel.
 - `Ctrl + 2` - `Medium`: A Brief mode that uses dynamically sized columns depending on the widths of filenames.
@@ -342,7 +342,7 @@ By default, Win Commander has 5 preconfigured modes, which you can switch using 
 You can fine-tune, rearrange, and add new custom panel layouts in the Settings dialog: `Settings > Panels > Layout`.
 
 ## Quick Lists
-Quick Lists is another mechanism in Win Commander for accessing specific locations with minimal keypresses, tailored for keyboard use.
+Quick Lists is another mechanism in Duck Commander for accessing specific locations with minimal keypresses, tailored for keyboard use.
 It is similar to the Go To popup but provides more locations and does not mix different types of locations.
 A Quick List popup is shown inside the focused panel, and its content can depend on the panel itself.
 There are 6 kinds of Quick Lists, which can be accessed via the menu `Go > Quick Lists` or via the hotkeys below:
@@ -351,7 +351,7 @@ There are 6 kinds of Quick Lists, which can be accessed via the menu `Go > Quick
 - `Cmd + 2` - `History`: A history of recent locations visited in this panel.
 - `Cmd + 3` - `Favorites`: Favorite and frequently visited locations.
 - `Cmd + 4` - `Volumes`: Currently attached system volumes.
-- `Cmd + 5` - `Connections`: Network locations that Win Commander can connect to. Clicking on a connection establishes it and navigates the panel to the default location on that remote resource.
+- `Cmd + 5` - `Connections`: Network locations that Duck Commander can connect to. Clicking on a connection establishes it and navigates the panel to the default location on that remote resource.
 - `Cmd + 6` - `Tags`: A list of known file tags. Clicking on a tag shows all items with the selected tag in the panel.
 
 This screenshot shows a `Volumes` Quick List:
@@ -361,7 +361,7 @@ This screenshot shows a `Volumes` Quick List:
 ## Tabs
 File panels support a tabbed interface, allowing multiple locations to be opened simultaneously on either the left or right pane.
 The tab bar appears automatically if more than one tab is open in a pane, but it can also be forced to always show via the menu `View > Show Tab Bar` or by using the hotkey `Cmd + Shift + T`.
-The screenshot below shows Win Commander's window with two tabs in the left pane and three tabs in the right pane:
+The screenshot below shows Duck Commander's window with two tabs in the left pane and three tabs in the right pane:
 
 ![Tabbed Interface](Help-panel-tabs.png)
 
@@ -384,7 +384,7 @@ To close tabs, you can use the following hotkeys:
 - `Alt + Cmd + W` - closes all other tabs.
 
 ## Favorites
-Favorites is a list of frequently accessed locations, similar to those in other software. Win Commander provides quick access to these locations through the following:
+Favorites is a list of frequently accessed locations, similar to those in other software. Duck Commander provides quick access to these locations through the following:
 
 - The `Go > Favorites` menu.
 - Go To popups (`F1`/`F2`).
@@ -395,7 +395,7 @@ To add a directory to the list, use this window, click the `+` button, and selec
 Alternatively, you can add a directory with the hotkey `Cmd + B` or the `File > Add to Favorites` menu item.
 Use the `-` button in the Favorites window to remove a location.
 The Favorites window also allows you to synchronize the list with Finder Favorites or reset it to the default set of location.
-A favorite location can represent any path available in the macOS filesystem or any virtual filesystem supported by Win Commander, such as network filesystems, archive contents, file extended attributes, or the process list.
+A favorite location can represent any path available in the macOS filesystem or any virtual filesystem supported by Duck Commander, such as network filesystems, archive contents, file extended attributes, or the process list.
 
 This screenshot shows the `Favorites` window:
 
@@ -426,7 +426,7 @@ Once files are found, you can:
 # Operations
 
 ## Introduction
-Win Commander executes file operations in the background whenever possible to ensure the user interface remains responsive.
+Duck Commander executes file operations in the background whenever possible to ensure the user interface remains responsive.
 Most operations are tied to the window where they originated, allowing you to monitor progress and providing options to pause or cancel as needed.
 When file operations are in progress, they are displayed in the central part of the window, just above the file panels: 
 
@@ -455,7 +455,7 @@ To move items from one location to another, you can use the following methods:
 To quickly rename an item in place, single-click its filename or press Ctrl + F6.
 
 ## Batch Rename
-Win Commander allows you to rename multiple items at once by applying a rename pattern. To open the Batch Rename dialog, select the items you want to rename, then press the `Ctrl + M` hotkey or choose `Command > Batch Rename` from the menu:
+Duck Commander allows you to rename multiple items at once by applying a rename pattern. To open the Batch Rename dialog, select the items you want to rename, then press the `Ctrl + M` hotkey or choose `Command > Batch Rename` from the menu:
 
 ![Batch Rename](Help-batch-rename.png)
 
@@ -529,7 +529,7 @@ The Rename Dialog provides a preview of how the renamed list of files will look.
 No renaming will take place until you click the `OK` button or press `Cmd + Return`.
 
 ## Delete
-Win Commander allows you to delete filesystem items or move them to the Trash, where supported.
+Duck Commander allows you to delete filesystem items or move them to the Trash, where supported.
 To quickly move an item to the Trash, press the `Cmd + Backspace` hotkey or select the menu item `Command > Move to Trash`.
 If the Trash functionality is not supported on the current volume, a Delete dialog will appear, asking you to confirm whether you want to delete the item permanently.
 You can also invoke the Delete dialog using the `F8` / `Shift + F8` hotkeys or their corresponding menu items: `Command > Delete...` and `Command > Delete Permanently...`.
@@ -537,7 +537,7 @@ When applicable, the dialog provides an option to choose between deleting and mo
 The difference between the two commands lies in the default selection presented in the dialog.
 
 ## Create Folder
-There are two ways to create a folder in Win Commander:
+There are two ways to create a folder in Duck Commander:
 
   - Using the `F7` hotkey or the menu item `Command > Create Directory`. 
     This command opens the Create Directory dialog, where you can specify the name of the new folder before making any changes to the filesystem.
@@ -565,7 +565,7 @@ If any of the selected items is a folder, the dialog provides an option to apply
 Please note that changing certain attributes requires administrator rights and will fail if executed without enabling Admin Mode.
 
 ## Compress
-Win Commander includes a built-in compression tool that allows you to archive files.
+Duck Commander includes a built-in compression tool that allows you to archive files.
 Currently, only the ZIP archive format is supported.
 Archives can be password-protected using AES-256 encryption.
 
@@ -573,7 +573,7 @@ To create an archive in the same location as the source items, press `F9` or sel
 To place the resulting archive in the location of the opposite panel, press `Shift + F9` or select `Command > Compress To...`.
 
 ## Manage Links
-In Win Commander, you can create new hard links and create or edit symbolic links.
+In Duck Commander, you can create new hard links and create or edit symbolic links.
 By default, these actions do not have assigned hotkeys.
 They can be accessed via the `Command > Links` menu, which includes the following options:
 
@@ -582,11 +582,11 @@ They can be accessed via the `Command > Links` menu, which includes the followin
 - `Edit Symbolic Link`.
 
 # Virtual File Systems
-In addition to browsing the "real" filesystem available on macOS, Win Commander allows you to interact with other resources as if they were part of the normal filesystem.
+In addition to browsing the "real" filesystem available on macOS, Duck Commander allows you to interact with other resources as if they were part of the normal filesystem.
 Most operations, such as browsing, searching, viewing, and modifying, work seamlessly with these virtual filesystems (VFS).
 Opening a file stored on a VFS with an external application requires the file to be copied to a temporary location first.
 Small files are copied automatically, while opening larger files prompts for confirmation.
-When a file on a VFS is modified using an external editor, Win Commander automatically reflects the changes in the underlying VFS.
+When a file on a VFS is modified using an external editor, Duck Commander automatically reflects the changes in the underlying VFS.
 
 Currently, the following virtual filesystems are supported:
 
@@ -613,15 +613,15 @@ Currently, the following virtual filesystems are supported:
 
 # External Editors
 You can configure a list of editor applications in the `Settings` dialog.
-To modify these settings, navigate to `Win Commander > Settings > Editors`.
-When you press `F4` or select the `Command > External Editor` menu item, Win Commander selects an appropriate editor based on the file extension of the currently focused file and opens the file in that editor.
-External editors can be executed either as standalone macOS applications or as command-line tools within Win Commander’s terminal emulator.
+To modify these settings, navigate to `Duck Commander > Settings > Editors`.
+When you press `F4` or select the `Command > External Editor` menu item, Duck Commander selects an appropriate editor based on the file extension of the currently focused file and opens the file in that editor.
+External editors can be executed either as standalone macOS applications or as command-line tools within Duck Commander’s terminal emulator.
 
 # Tools
-Similar to external editors, tools allow you to define a set of applications that Win Commander can execute.
+Similar to external editors, tools allow you to define a set of applications that Duck Commander can execute.
 The key difference is that, with tools, you have full control over the parameters passed to the application at startup.  
 Additionally, tools can be assigned a designated hotkey, and their icons can be placed on the toolbar for easy access.
-To define external tools, navigate to `Win Commander > Settings > Tools`.  
+To define external tools, navigate to `Duck Commander > Settings > Tools`.
 
 To execute a tool, you can:
 
@@ -635,10 +635,10 @@ Virtual File Systems (VFS) are not supported.
 When called, tools can run in one of two modes, depending on the `Startup Mode` setting:
 
   - `Run Detached`: Executes the tool as a standalone macOS application.
-  - `Run in Terminal`: Executes the tool as a command-line utility within Win Commander’s terminal emulator.
+  - `Run in Terminal`: Executes the tool as a command-line utility within Duck Commander’s terminal emulator.
 
 The parameters passed to an external tool are defined using placeholders.
-Win Commander replaces these placeholders with specific values when the tool is executed.
+Duck Commander replaces these placeholders with specific values when the tool is executed.
 
 Supported placeholders:
 
@@ -683,7 +683,7 @@ Supported placeholders:
   - `%xT`: Limits the total number of files passed to the tool to **x**.
 
 # Integrated Viewer
-Win Commander features a built-in viewer that lets you examine files without leaving the application:
+Duck Commander features a built-in viewer that lets you examine files without leaving the application:
 
 ![Integrated Viewer](Help-intergrated-viewer.png)
 
@@ -712,7 +712,7 @@ The viewer can operate within the application window where it was launched, repl
 To open the built-in viewer, press the `F3` hotkey or select the `Command > Internal Viewer` menu item. To close it, simply press `Esc`.
 
 # Integrated Terminal
-Win Commander includes a built-in terminal emulator, allowing you to run command-line utilities without switching to another application.
+Duck Commander includes a built-in terminal emulator, allowing you to run command-line utilities without switching to another application.
 The terminal emulator supports most VT100 commands and many extensions, such as 256 colors and mouse support.
 
 ![Terminal Emulator](Help-terminal.png)
@@ -721,7 +721,7 @@ The terminal is context-aware and synchronizes the current panel's folder with t
 This synchronization is bi-directional, executing `cd` in the terminal updates the panel path, and changing the folder in the panel updates the terminal’s working directory.
 Supported terminal shells include `bash`, `zsh`, `csh`, and `tcsh`.
 
-There are two ways to use the terminal emulator in Win Commander:
+There are two ways to use the terminal emulator in Duck Commander:
 
 - Full-Window Mode.  
   In full-window mode, the terminal occupies the entire application window, temporarily hiding the file panels.
@@ -731,7 +731,7 @@ There are two ways to use the terminal emulator in Win Commander:
 - Overlapped Mode.  
   In overlapped mode, the terminal is positioned below the file panels, allowing both to remain visible simultaneously.
   This configuration is particularly useful for users familiar with orthodox dual-pane file managers, where a command-line interface is always accessible.
-  If desired, you can configure Win Commander to redirect keyboard input directly to the overlapped terminal even when it isn’t focused by enabling the option under `Settings > Panels > Behavior > Redirect keyboard input to the overlapped terminal`.
+  If desired, you can configure Duck Commander to redirect keyboard input directly to the overlapped terminal even when it isn’t focused by enabling the option under `Settings > Panels > Behavior > Redirect keyboard input to the overlapped terminal`.
   To reveal the terminal in overlapped mode, press `Ctrl + Alt + Up` to move the file panels upward.
   You can hide it again by pressing `Ctrl + Alt + Down`.
   For a clearer view of the terminal, you can fully hide the file panels by pressing `Ctrl + Alt + O`, and press the same shortcut again to bring the panels back into view.
@@ -745,14 +745,14 @@ Some actions do not have default hotkeys but can still be accessed through the a
 
 | Action                                       | Key Equivalent            |
 | -----------------------------------------    | ------------------------- |
-| _**Win Commander Menu**_                  |                           |
+| _**Duck Commander Menu**_                  |                           |
 | &nbsp; About                                 |                           |
 | &nbsp; Preferences                           | Cmd + ,                   |
 | &nbsp; Enable Admin Mode                     |                           |
-| &nbsp; Hide Win Commander                 | Cmd + H                   |
+| &nbsp; Hide Duck Commander                 | Cmd + H                   |
 | &nbsp; Hide Others                           | Opt + Cmd+H               |
 | &nbsp; Show All                              |                           |
-| &nbsp; Quit Win Commander                 | Cmd + Q                   |
+| &nbsp; Quit Duck Commander                 | Cmd + Q                   |
 | &nbsp; Quit and Close All Windows            | Opt + Cmd + Q             |
 | _**File Menu**_                              |                           |
 | &nbsp; New Window                            | Cmd + N                   |
@@ -944,17 +944,17 @@ Some actions do not have default hotkeys but can still be accessed through the a
 
 # Frequently Asked Questions
 
-**Q**: I have an idea for Win Commander!  
+**Q**: I have an idea for Duck Commander!\
 **A**: That’s fantastic!
 Feel free to contribute your ideas and proposed changes to the project.
-The entire source code and build instructions for Win Commander are available in this repository.
+The entire source code and build instructions for Duck Commander are available in this repository.
 Be sure to read through the [CONTRIBUTING](../CONTRIBUTING.md) guidelines carefully before you start.
 
 ---
 
 **Q**: Can you implement a specific feature or request?  
 **A**: Likely not.
-As Win Commander is maintained by a single contributor, resources are limited, and I cannot accommodate all requests due to time and energy constraints.
+As Duck Commander is maintained by a single contributor, resources are limited, and I cannot accommodate all requests due to time and energy constraints.
 The Apple ecosystem is rather hostile to developers, and just maintaining the project up to date with the constant macOS/toolchain/dependencies changes requires significant effort.
 However, contributions of reasonable quality from the community are welcome.
 You can consider implementing the feature yourself.
@@ -962,7 +962,7 @@ Check out the [contribution guidelines](../CONTRIBUTING.md) for more information
 
 ---
 
-**Q**: Win Commander crashes/behaves incorrectly/etc. Can you fix it?  
+**Q**: Duck Commander crashes/behaves incorrectly/etc. Can you fix it?\
 **A**: Possibly.
 However, it is often difficult to track down the problem without a detailed description of the setup and a set of reproducible steps.
 Please spend some time describing in detail what happened and how it can be reproduced.
@@ -973,25 +973,25 @@ This will greatly help in resolving the issue.
 **Q**: Preview lacks a feature XYZ, is it possible to add it?  
 **A**: This might be challenging.
 The entire preview functionality is managed by macOS via the [Quick Look framework](https://en.wikipedia.org/wiki/Quick_Look).
-Rendition and behaviour for various file types is provided by various plugins in that system-wide framework, and Win Commander has no control over it.
+Rendition and behaviour for various file types is provided by various plugins in that system-wide framework, and Duck Commander has no control over it.
 Currently it doesn’t even have any content-specific logic.
 While it’s possible to start providing special handling for some specific file types, like images, it would require significant resources to implement, test, and maintain.
 
 ---
 
-**Q**: Can Win Commander access iCloud storage?  
-**A**: Win Commander does not provide first-class access to iCloud.
+**Q**: Can Duck Commander access iCloud storage?\
+**A**: Duck Commander does not provide first-class access to iCloud.
 Apple does not have an official API to allow applications to directly manipulate items outside of their own containers.
 At least that’s my understanding of the status quo at the moment of writing (I’d be glad to be proven wrong).
-However, you can manually navigate to `~/Library/Mobile Documents/com~apple~CloudDocs` and access the items there using the normal UI of Win Commander.
+However, you can manually navigate to `~/Library/Mobile Documents/com~apple~CloudDocs` and access the items there using the normal UI of Duck Commander.
 This usually works, but there is no guarantee that the content of that folder is properly synchronized.
 
 ---
 
-**Q**: Win Commander crashes with EXC_BAD_INSTRUCTION.  
+**Q**: Duck Commander crashes with EXC_BAD_INSTRUCTION.\
 **A**: This has been observed when macOS Catalina is installed on hardware that is not officially supported.
-Win Commander/x64 requires SSE4.2 since v1.2.9, which is available on all Mac models officially supported by Catalina.
-If this OS version is installed on a machine with a CPU lacking these instructions, Win Commander v1.2.9+ cannot run.
+Duck Commander/x64 requires SSE4.2 since v1.2.9, which is available on all Mac models officially supported by Catalina.
+If this OS version is installed on a machine with a CPU lacking these instructions, Duck Commander v1.2.9+ cannot run.
 The only workaround is to use an older version.
 
 ---
@@ -1001,7 +1001,7 @@ The only workaround is to use an older version.
 
 ---
 
-**Q**: How to make Win Commander restore the state of its windows after it has been closed and restarted?  
+**Q**: How to make Duck Commander restore the state of its windows after it has been closed and restarted?\
 **A**: Turn off the checkbox `System Settings > Desktop & Dock > Close windows when quitting an application`.
 By default, this option is turned on.
 
@@ -1018,19 +1018,19 @@ Toggle this option by selecting `Menu > View > Show Hidden Files` or by pressing
 
 ---
 
-**Q**: Do dialogs in Win Commander have hotkeys?  
+**Q**: Do dialogs in Duck Commander have hotkeys?\
 **A**: Yes, many dialogs have hotkeys using the Ctrl (^) key modifier.
 Hovering the mouse cursor over a UI element will display context help, which may show the hotkey for that element.
 
 ---
 
-**Q**: Where does Win Commander store its state?  
+**Q**: Where does Duck Commander store its state?\
 **A**: In these locations:
 
-- Main configuration files (managed by NC):  
-`~/Library/Application Support/Win Commander/Config`
-- Volatile state file (managed by NC):  
-`~/Library/Application Support/Win Commander/State`
+- Main configuration files (managed by Duck Commander):\
+`~/Library/Application Support/<CFBundleExecutable>/Config`
+- Volatile state file (managed by Duck Commander):\
+`~/Library/Application Support/<CFBundleExecutable>/State`
 - Windows state (managed by macOS):  
 `~/Library/Saved Application State/com.wincommander.App.savedState`
 - Application defaults (managed by macOS):  
@@ -1042,13 +1042,13 @@ Hovering the mouse cursor over a UI element will display context help, which may
 
 ---
 
-**Q**: Why does Win Commander keep forgetting the theme I selected?  
-**A**: Mostly likely, Win Commander automatically switches to another theme whenever the macOS system theme changes (Light/Dark) and/or when the app restarts.
+**Q**: Why does Duck Commander keep forgetting the theme I selected?\
+**A**: Mostly likely, Duck Commander automatically switches to another theme whenever the macOS system theme changes (Light/Dark) and/or when the app restarts.
 You can control this by navigating to `Settings -> Themes -> (...) -> Configure automatic switching...` and either turning off this functionality or setting the theme you want for both Light and Dark appearances.
 
 ---
 
 **Q**: Where can I find the logs?  
-**A**: To open the Logs window while NC is running, hold Alt and select `Help -> Debug -> Show Logs...`.
+**A**: To open the Logs window while Duck Commander is running, hold Alt and select `Help -> Debug -> Show Logs...`.
 Next, adjust the log level by clicking the settings (gear) icon and choosing the desired level, either for a specific subsystem or globally.
 By default, logging is disabled (the level is set to Off).

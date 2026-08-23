@@ -60,7 +60,7 @@ CURLConnection::CURLConnection(const HostConfiguration &_config, const long _blo
       m_RequestHeader(nullptr, &curl_slist_free_all)
 {
     const auto auth_methods = CURLAUTH_BASIC | CURLAUTH_DIGEST;
-    const auto ua = "Win Commander";
+    const auto ua = "Duck Commander";
     const auto curl = m_EasyHandle;
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, auth_methods);
     curl_easy_setopt(curl, CURLOPT_USERNAME, _config.user.c_str());

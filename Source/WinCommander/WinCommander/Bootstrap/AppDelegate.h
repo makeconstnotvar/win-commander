@@ -95,19 +95,19 @@ class NativeHost;
 + (NCAppDelegate *)me;
 
 /**
- * Support dir, ~/Library/Application Support/Win Commander/.
+ * Support dir, ~/Library/Application Support/<CFBundleExecutable>/.
  * Is in Containers for Sandboxes versions
  */
 @property(nonatomic, readonly) const std::filesystem::path &supportDirectory;
 
 /**
- * By default this dir is ~/Library/Application Support/Win Commander/Config/.
+ * By default this dir is ~/Library/Application Support/<CFBundleExecutable>/Config/.
  * May change in the future.
  */
 @property(nonatomic, readonly) const std::filesystem::path &configDirectory;
 
 /**
- * This dir is ~/Library/Application Support/Win Commander/State/.
+ * This dir is ~/Library/Application Support/<CFBundleExecutable>/State/.
  */
 @property(nonatomic, readonly) const std::filesystem::path &stateDirectory;
 

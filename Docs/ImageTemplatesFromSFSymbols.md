@@ -1,4 +1,4 @@
-Win Commander includes template images rendered from the SF Symbols font.  
+Duck Commander includes template images rendered from the SF Symbols font.\
 This ensures compatibility with older versions of macOS where SF Symbols are partially or completely unavailable.  
 The following instructions outline the process for adding a new image template.
 
@@ -27,4 +27,3 @@ In Xcode:
   - Set `Properties > Render As`: to `Template Image`.
   - Drag the images into the `1x` and `2x` slots.
   - Done! You can now use the named image `return.left.12`.
-  

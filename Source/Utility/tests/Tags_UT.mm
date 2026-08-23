@@ -506,7 +506,7 @@ TEST_CASE(PREFIX "Our tags can be read back by Cocoa")
     }
 }
 
-TEST_CASE(PREFIX "Spotlight detects items with new tags invented by NC", "[!mayfail]")
+TEST_CASE(PREFIX "Spotlight detects items with new tags invented by Duck Commander", "[!mayfail]")
 {
     // Need to place these temp files into an indexable location (which the temp dir is not)
     auto basepath = std::filesystem::path{nc::base::CommonPaths::Library()} / "__nc_testing_tags_ut__";
@@ -514,7 +514,7 @@ TEST_CASE(PREFIX "Spotlight detects items with new tags invented by NC", "[!mayf
     auto cleanup = at_scope_end([basepath] { std::filesystem::remove_all(basepath); });
 
     const std::string label =
-        fmt::format("Hello! This is a new tag created via Win Commander! My PID is {}", getpid());
+        fmt::format("Hello! This is a new tag created via Duck Commander! My PID is {}", getpid());
     const Tags::Color color = Tags::Color::Orange;
 
     {

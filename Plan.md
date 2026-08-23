@@ -774,7 +774,7 @@ Selection
 
 ## `FM-35 Dual Pane / Commander Mode`
 
-Так как корень у тебя Nimble Commander, можно сохранить power-mode, но не делать его главным экраном.
+Архитектура Duck Commander позволяет сохранить power-mode как расширенный режим.
 
 Нарисовать отдельный режим:
 

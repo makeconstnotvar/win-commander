@@ -121,14 +121,14 @@
         }
       }
     },
-    "This will cause Win Commander to ask you for access when necessary." : {
-      "comment" : "Informative text saying that Win Commander will ask for filesystem access when need it",
+    "This will cause Duck Commander to ask you for access when necessary." : {
+      "comment" : "Informative text saying that Duck Commander will ask for filesystem access when need it",
       "extractionState" : "manual",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Win Commander будет спрашивать вас о предоставлении доступа при необходимости."
+            "value" : "Duck Commander будет спрашивать вас о предоставлении доступа при необходимости."
           }
         }
       }

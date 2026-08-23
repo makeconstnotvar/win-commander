@@ -5,7 +5,7 @@
 - `Docs/win_commander_ideal_file_manager_spec.md` defines the product, architecture, safety rules, Definition of Done, test matrix, and release gates.
 - `Docs/Development-Plan.md` is the active execution plan. Select work from it and update status, acceptance evidence, affected docs, and `changelog.md` with every completed slice.
 - Code and executable tests define verified current behavior. Keep the architecture audit, refactor plan, gap matrix, and risk register aligned when ownership or contract status changes.
-- `Plan.md`, `Docs/WindowsUI-Redesign-*`, and `Docs/nimble_commander_optimization_spec.md` are reference inputs.
+- `Plan.md`, `Docs/WindowsUI-Redesign-*`, and `Docs/duck_commander_optimization_spec.md` are reference inputs.
 
 ## Architecture and safety boundaries
 

@@ -9,6 +9,7 @@
 #include <WinCommander/States/Explorer/NCExplorerState.h>
 #include <WinCommander/States/Explorer/NCExplorerToolbarDelegate.h>
 #include <WinCommander/States/FilePanels/PanelController.h>
+#include <WinCommander/States/FilePanels/PanelControllerActionsDispatcher.h>
 #include <WinCommander/States/FilePanels/PanelView.h>
 #include <WinCommander/States/FilePanels/MainWindowFilePanelState.h>
 #include <WinCommander/States/MainWindowController.h>
@@ -39,6 +40,7 @@
 - (IBAction)performClose:(id)_sender;
 - (IBAction)onSwitchDualSinglePaneMode:(id)_sender;
 - (void)changeFocusedSide;
+- (IBAction)ToggleViewHiddenFiles:(id)_sender;
 - (BOOL)validateMenuItem:(NSMenuItem *)_item;
 - (IBAction)OnSwapPanels:(id)_sender;
 - (IBAction)OnFileCopyCommand:(id)_sender;
@@ -98,20 +100,68 @@
 }
 @end
 
+@interface ExplorerTabsTestHiddenFilesDispatcher : NCPanelControllerActionsDispatcher
+@property(nonatomic) BOOL validationResult;
+@property(nonatomic, readonly) NSUInteger validationCount;
+@property(nonatomic, readonly) NSUInteger executionCount;
+@property(nonatomic, readonly, weak) NSMenuItem *lastValidatedItem;
+@property(nonatomic, readonly, weak) id lastExecutionSender;
+@end
+
+@implementation ExplorerTabsTestHiddenFilesDispatcher {
+    BOOL _validationResult;
+    NSUInteger _validationCount;
+    NSUInteger _executionCount;
+    __weak NSMenuItem *_lastValidatedItem;
+    __weak id _lastExecutionSender;
+}
+@synthesize validationResult = _validationResult;
+- (NSUInteger)validationCount
+{
+    return _validationCount;
+}
+- (NSUInteger)executionCount
+{
+    return _executionCount;
+}
+- (NSMenuItem *)lastValidatedItem
+{
+    return _lastValidatedItem;
+}
+- (id)lastExecutionSender
+{
+    return _lastExecutionSender;
+}
+- (BOOL)validateMenuItem:(NSMenuItem *)_item
+{
+    ++_validationCount;
+    _lastValidatedItem = _item;
+    return self.validationResult;
+}
+- (IBAction)ToggleViewHiddenFiles:(id)_sender
+{
+    ++_executionCount;
+    _lastExecutionSender = _sender;
+}
+@end
+
 @interface ExplorerTabsTestPanelView : NSView
 @property(nonatomic, weak) NSProgressIndicator *busyIndicatorOverride;
 @property(nonatomic, weak) id<NCPanelViewKeystrokeSink> keystrokeSink;
 @property(nonatomic) BOOL headerBarVisible;
+@property(nonatomic, strong) NCPanelControllerActionsDispatcher *actionsDispatcher;
 @end
 
 @implementation ExplorerTabsTestPanelView {
     __weak NSProgressIndicator *_busyIndicatorOverride;
     __weak id<NCPanelViewKeystrokeSink> _keystrokeSink;
     BOOL _headerBarVisible;
+    NCPanelControllerActionsDispatcher *_actionsDispatcher;
 }
 @synthesize busyIndicatorOverride = _busyIndicatorOverride;
 @synthesize keystrokeSink = _keystrokeSink;
 @synthesize headerBarVisible = _headerBarVisible;
+@synthesize actionsDispatcher = _actionsDispatcher;
 - (BOOL)acceptsFirstResponder
 {
     return true;
@@ -124,6 +174,16 @@
 {
     if( self.keystrokeSink == _sink )
         self.keystrokeSink = nil;
+}
+@end
+
+@interface ExplorerTabsTestOutsideResponder : NSView
+@end
+
+@implementation ExplorerTabsTestOutsideResponder
+- (BOOL)acceptsFirstResponder
+{
+    return true;
 }
 @end
 
@@ -463,6 +523,41 @@ TEST_CASE(PREFIX "Escape explicitly cancels progressive navigation preview")
 
     CHECK(fixture.first.cancelBackgroundOperationsCount == 1);
     CHECK(fixture.second.cancelBackgroundOperationsCount == 0);
+}
+
+TEST_CASE(PREFIX "routes hidden-files menu validation and action outside PanelView focus")
+{
+    Fixture fixture;
+    ExplorerTabsTestHiddenFilesDispatcher *const dispatcher = [ExplorerTabsTestHiddenFilesDispatcher new];
+    dispatcher.validationResult = YES;
+    fixture.first_view.actionsDispatcher = dispatcher;
+
+    ExplorerTabsTestWindow *const window =
+        [[ExplorerTabsTestWindow alloc] initWithContentRect:NSMakeRect(0, 0, 960, 480)
+                                                  styleMask:NSWindowStyleMaskTitled
+                                                    backing:NSBackingStoreBuffered
+                                                      defer:false];
+    window.contentView = fixture.state;
+    ExplorerTabsTestOutsideResponder *const outside =
+        [[ExplorerTabsTestOutsideResponder alloc] initWithFrame:NSMakeRect(0, 0, 20, 20)];
+    [fixture.state addSubview:outside];
+    REQUIRE([window makeFirstResponder:outside]);
+    REQUIRE(window.firstResponder == outside);
+    REQUIRE(window.firstResponder != fixture.first_view);
+
+    NSMenuItem *const item = [[NSMenuItem alloc] initWithTitle:@"Show Hidden Files"
+                                                       action:@selector(ToggleViewHiddenFiles:)
+                                                keyEquivalent:@""];
+    CHECK([fixture.state validateMenuItem:item]);
+    CHECK(dispatcher.validationCount == 1);
+    CHECK(dispatcher.lastValidatedItem == item);
+    CHECK(dispatcher.executionCount == 0);
+
+    NSObject *const sender = [NSObject new];
+    CHECK([window.firstResponder tryToPerform:item.action with:sender]);
+    CHECK(dispatcher.executionCount == 1);
+    CHECK(dispatcher.lastExecutionSender == sender);
+    CHECK(dispatcher.validationCount == 1);
 }
 
 TEST_CASE(PREFIX "switch atomically rebinds active chrome and retires pane-local UI")

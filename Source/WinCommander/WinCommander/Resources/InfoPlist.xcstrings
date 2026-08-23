@@ -1,14 +1,38 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duck Commander"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duck Commander"
+          }
+        }
+      }
+    },
     "CFBundleName" : {
       "comment" : "Bundle name",
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Win Commander"
+            "state" : "translated",
+            "value" : "Duck Commander"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duck Commander"
           }
         }
       }
@@ -20,7 +44,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "An application in Win Commander wants to use AppleScript."
+            "value" : "An application in Duck Commander wants to use AppleScript."
           }
         }
       }
@@ -32,7 +56,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "The access is needed in order to allow you to browse and manage the items in this folder with Win Commander. This application will not use any of your personal data without your actions."
+            "value" : "The access is needed in order to allow you to browse and manage the items in this folder with Duck Commander. This application will not use any of your personal data without your actions."
           }
         }
       }
@@ -44,7 +68,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "The access is needed in order to allow you to browse and manage the items in this folder with Win Commander. This application will not use any of your personal data without your actions."
+            "value" : "The access is needed in order to allow you to browse and manage the items in this folder with Duck Commander. This application will not use any of your personal data without your actions."
           }
         }
       }
@@ -56,7 +80,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "The access is needed in order to allow you to browse and manage the items in this folder with Win Commander. This application will not use any of your personal data without your actions."
+            "value" : "The access is needed in order to allow you to browse and manage the items in this folder with Duck Commander. This application will not use any of your personal data without your actions."
           }
         }
       }

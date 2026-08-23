@@ -3578,13 +3578,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Thank you for using a registered copy of Win Commander! Please restart it for the changes to take effect."
+            "value" : "Thank you for using a registered copy of Duck Commander! Please restart it for the changes to take effect."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Спасибо за использование зарегистрированной копии Win Commander!"
+            "value" : "Спасибо за использование зарегистрированной копии Duck Commander!"
           }
         }
       }
@@ -3612,13 +3612,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This is a trial version of Win Commander.\nTo continue using this software after the 30-day trial period, you have to either buy a license or install the paid version from Mac App Store.\nThis window appears only in the trial version."
+            "value" : "This is a trial version of Duck Commander.\nTo continue using this software after the 30-day trial period, you have to either buy a license or install the paid version from Mac App Store.\nThis window appears only in the trial version."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Это пробная версия Win Commander.\nЧтобы продолжить использование этого продукта после окончания пробного периода в 30 дней, Вам нужно купить лицензию или установить платную версию из Mac App Store.\nЭто окно появляется только в пробной версии."
+            "value" : "Это пробная версия Duck Commander.\nЧтобы продолжить использование этого продукта после окончания пробного периода в 30 дней, Вам нужно купить лицензию или установить платную версию из Mac App Store.\nЭто окно появляется только в пробной версии."
           }
         }
       }
@@ -3657,7 +3657,7 @@
 
     },
     "Allow Access" : {
-      "comment" : "Asking user for granting file system access for NC - button title",
+      "comment" : "Asking user for granting file system access for Duck Commander - button title",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -3797,7 +3797,7 @@
       }
     },
     "Check for Updates..." : {
-      "comment" : "Menu item title for check if any Win Commander updates are available",
+      "comment" : "Menu item title for check if any Duck Commander updates are available",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -3818,7 +3818,7 @@
       }
     },
     "Click “Allow Access” to grant access to files in the selected directory" : {
-      "comment" : "Asking the user to grant filesystem access for NC",
+      "comment" : "Asking the user to grant filesystem access for Duck Commander",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -4102,7 +4102,7 @@
       }
     },
     "Failed to retreive Finder's Favorites" : {
-      "comment" : "Showing an error when NC isn't able to get Finder Favorites",
+      "comment" : "Showing an error when Duck Commander isn't able to get Finder Favorites",
       "localizations" : {
         "ru" : {
           "stringUnit" : {
@@ -4735,22 +4735,22 @@
         }
       }
     },
-    "Win Commander will copy them to a temporary location before they can be opened." : {
+    "Duck Commander will copy them to a temporary location before they can be opened." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Win Commander скопирует их во временную папку, прежде чем их можно будет открыть."
+            "value" : "Duck Commander скопирует их во временную папку, прежде чем их можно будет открыть."
           }
         }
       }
     },
-    "Win Commander will create a copy in a temporary location before it can be opened." : {
+    "Duck Commander will create a copy in a temporary location before it can be opened." : {
       "localizations" : {
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Win Commander создаст копию во временной папке, прежде чем её можно будет открыть."
+            "value" : "Duck Commander создаст копию во временной папке, прежде чем её можно будет открыть."
           }
         }
       }
@@ -5531,7 +5531,7 @@
       }
     },
     "Unable to connect to a network share" : {
-      "comment" : "Informing a user that NC can't connect to network share",
+      "comment" : "Informing a user that Duck Commander can't connect to network share",
       "localizations" : {
         "ru" : {
           "stringUnit" : {

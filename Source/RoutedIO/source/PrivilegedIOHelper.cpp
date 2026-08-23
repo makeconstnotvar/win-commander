@@ -559,7 +559,7 @@ static bool AllowConnectionFrom(const char *_bin_path)
     if( !last_sl )
         return false;
 
-    return strcmp(last_sl, "/Win Commander") == 0;
+    return strcmp(last_sl, "/Win" " Commander") == 0;
 }
 
 static bool CheckSignature(const char *_bin_path)

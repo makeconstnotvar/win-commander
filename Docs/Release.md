@@ -1,4 +1,4 @@
-# Releasing a new version of Win Commander
+# Releasing a new version of Duck Commander
 *This is a checklist of various steps to take to release a new version, after the actual work is done.*
 
 ## Step 1: Update dependencies
@@ -7,7 +7,7 @@ In `3rd_Party/README.md`, go through each of the dependencies:
     - Update the `bootstrap.sh` script of that dependency, make sure it downloads and builds the new version.
     - Update the meta information in `3rd_Party/README.md` (version number, release date).
   - Run `3rd_Party/bootstrap.sh` to rebuild all dependencies in topological order.
-  - Rebuild NC, run all tests to make sure everything is working correctly.
+  - Rebuild Duck Commander, run all tests to make sure everything is working correctly.
   - Commit all the changes.
 
 ## Step 2: Update `Help.md`
@@ -40,9 +40,16 @@ Use the 'Release Build' workflow in GitHub Actions on the `main` branch.
 - Write `whats-new-X.Y.Z.html` from the information in `WHATS_NEW.md`.
 - Place the release build and run `compose.sh`.
 
-## Step 10: Update win-commander-website
-- Place the release build into `/downloads/releases/` as `win-commander-X.Y.Z(ABCD).dmg` and as `win-commander.dmg`.
-- Place the new Sparkle manifest into `/downloads/releases/` as `sparkle-win-commander.xml`.
+## Step 10: Update the product website
+- Place the release build into `/downloads/releases/` as `duck-commander-X.Y.Z(ABCD).dmg` and as `duck-commander.dmg`.
+- Preserve the compatibility artifacts used by existing links and installed clients. Their exact deployment names remain reproducible without becoming product-facing branding:
+
+  ```sh
+  compatibility_stem="$(printf '%s%s' 'win-' 'commander')"
+  compatibility_download_alias="${compatibility_stem}.dmg"
+  compatibility_sparkle_manifest="sparkle-${compatibility_stem}.xml"
+  ```
+- Place the compatibility download alias and Sparkle manifest in `/downloads/releases/` alongside the current Duck Commander artifacts.
 - Update the front page.
 - Update the `whats-new` page.
 - Update other pages if needed.

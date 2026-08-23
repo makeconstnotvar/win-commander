@@ -28,7 +28,7 @@ BUILT_PATH="${BUILD_DIR}/built"
 mkdir -p "${BUILD_DIR}"
 mkdir -p "${ARCHIVE_PATH}"
 
-# Build Help.pdf and copy it into the NC sources
+# Build Help.pdf and copy it into the Duck Commander sources
 ${SCRIPTS_DIR}/build_help.sh
 cp -f "${SCRIPTS_DIR}/build_help.tmp/Help.pdf" "${ROOT_DIR}/Source/WinCommander/WinCommander/Resources/Help.pdf"
 
@@ -54,11 +54,11 @@ APP_NAME=$($XC -showBuildSettings | grep " FULL_PRODUCT_NAME =" | sed -e 's/.*= 
 APP_PATH="${BUILT_PATH}/${APP_NAME}"
 VERSION=$( $PBUDDY -c "Print CFBundleShortVersionString" "${APP_PATH}/Contents/Info.plist" )
 BUILD=$( $PBUDDY -c "Print CFBundleVersion" "${APP_PATH}/Contents/Info.plist" )
-DMG_NAME="win-commander-nightly-${VERSION}(${BUILD}).dmg"
+DMG_NAME="duck-commander-nightly-${VERSION}(${BUILD}).dmg"
 
 # Wrap the built application into a .dmg disk image
 create-dmg \
- --volname "Win Commander Nightly" \
+ --volname "Duck Commander Nightly" \
  --window-pos 200 200 \
  --window-size 610 386 \
  --background "dmg/background.png" \

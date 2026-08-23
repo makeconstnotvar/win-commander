@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "CF6D997C196675290077B146"
-               BuildableName = "Win Commander.app"
+               BuildableName = "Duck Commander.app"
                BlueprintName = "WinCommander-MAS"
                ReferencedContainer = "container:WinCommander.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CF6D997C196675290077B146"
-            BuildableName = "Win Commander.app"
+            BuildableName = "Duck Commander.app"
             BlueprintName = "WinCommander-MAS"
             ReferencedContainer = "container:WinCommander.xcodeproj">
          </BuildableReference>
@@ -54,7 +54,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CF6D997C196675290077B146"
-            BuildableName = "Win Commander.app"
+            BuildableName = "Duck Commander.app"
             BlueprintName = "WinCommander-MAS"
             ReferencedContainer = "container:WinCommander.xcodeproj">
          </BuildableReference>
@@ -71,7 +71,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "CF6D997C196675290077B146"
-            BuildableName = "Win Commander.app"
+            BuildableName = "Duck Commander.app"
             BlueprintName = "WinCommander-MAS"
             ReferencedContainer = "container:WinCommander.xcodeproj">
          </BuildableReference>

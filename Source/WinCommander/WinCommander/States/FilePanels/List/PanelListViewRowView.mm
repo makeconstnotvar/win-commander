@@ -87,6 +87,8 @@ using namespace nc::panel;
 {
     if( m_PanelActive != panelActive ) {
         m_PanelActive = panelActive;
+        if( !panelActive )
+            m_Hovered = false;
         [self updateColors];
         [self updateAccessibilityPresentation];
     }
@@ -246,16 +248,26 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
 - (NSColor *)findCurrentBackgroundColor
 {
     if( self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer ) {
-        if( self.selected ) {
-            if( m_PanelActive )
-                return [NSColor.controlAccentColor colorWithAlphaComponent:0.20];
-            return NSColor.unemphasizedSelectedContentBackgroundColor;
-        }
-        if( m_VD.is_selected() )
-            return [NSColor.controlAccentColor colorWithAlphaComponent:0.12];
-        if( m_Hovered )
-            return [NSColor.controlAccentColor colorWithAlphaComponent:0.07];
-        return NSColor.controlBackgroundColor;
+        __block NSColor *resolved = nil;
+        NSAppearance *const appearance = self.effectiveAppearance ?: NSApp.effectiveAppearance;
+        [appearance performAsCurrentDrawingAppearance:^{
+          NSColor *const background = NSColor.controlBackgroundColor;
+          if( self.selected ) {
+              resolved = m_PanelActive
+                             ? Blend([NSColor.controlAccentColor colorWithAlphaComponent:0.20], background)
+                             : Blend(NSColor.unemphasizedSelectedContentBackgroundColor, background);
+          }
+          else if( m_VD.is_selected() ) {
+              resolved = Blend([NSColor.controlAccentColor colorWithAlphaComponent:0.12], background);
+          }
+          else if( m_Hovered ) {
+              resolved = Blend([NSColor.controlAccentColor colorWithAlphaComponent:0.07], background);
+          }
+          else {
+              resolved = Blend(background, background);
+          }
+        }];
+        return resolved;
     }
     return FindBackgroundColor(self.selected, m_PanelActive, m_VD.is_selected(), m_ItemIndex % 2);
 }
@@ -369,6 +381,12 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
 
 - (void)notifyThemeChanged
 {
+    [self updateColors];
+}
+
+- (void)viewDidChangeEffectiveAppearance
+{
+    [super viewDidChangeEffectiveAppearance];
     [self updateColors];
 }
 

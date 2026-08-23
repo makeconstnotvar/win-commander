@@ -19,6 +19,10 @@ static NSString *const g_RefreshItem = @"explorer_refresh";
 static NSString *const g_BreadcrumbItem = @"explorer_breadcrumb";
 static NSString *const g_CommanderModeItem = @"explorer_commander_mode";
 
+static const CGFloat g_ToolbarButtonWidth = 32.0;
+static const CGFloat g_ToolbarButtonHeight = 30.0;
+static const CGFloat g_AddressBarHeight = 34.0;
+
 namespace {
 
 NSString *ToolbarButtonHelp(NSString *_identifier)
@@ -129,11 +133,17 @@ void ApplyToolbarCommandState(const nc::core::CommandState &_state, NSButton *_b
 
 - (NSButton *)makeButtonWithSymbol:(NSString *)_symbol_name target:(id)_target action:(SEL)_action
 {
-    NSButton *button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 32, 27)];
-    button.bezelStyle = NSBezelStyleTexturedRounded;
+    NSButton *button =
+        [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, g_ToolbarButtonWidth, g_ToolbarButtonHeight)];
+    button.bezelStyle = NSBezelStyleToolbar;
+    button.controlSize = NSControlSizeRegular;
     button.refusesFirstResponder = true;
     button.title = @"";
-    button.image = [NSImage imageWithSystemSymbolName:_symbol_name accessibilityDescription:nil];
+    NSImage *const image = [NSImage imageWithSystemSymbolName:_symbol_name accessibilityDescription:nil];
+    button.image = [image imageWithSymbolConfiguration:
+                              [NSImageSymbolConfiguration configurationWithPointSize:15.0
+                                                                              weight:NSFontWeightRegular]];
+    button.imageScaling = NSImageScaleProportionallyDown;
     button.target = _target;
     button.action = _action;
     return button;
@@ -192,7 +202,9 @@ void ApplyToolbarCommandState(const nc::core::CommandState &_state, NSButton *_b
                            @"wincommander.explorer.toolbar.commanderMode",
                            NSLocalizedString(@"Commander Mode", "Explorer toolbar accessibility label"));
 
-    m_Breadcrumb = [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 0, 600, 27) panelController:_panel];
+    m_Breadcrumb = [[NCExplorerBreadcrumbControl alloc]
+        initWithFrame:NSMakeRect(0, 0, 600, g_AddressBarHeight)
+        panelController:_panel];
     m_Breadcrumb.accessibilityIdentifier = @"wincommander.explorer.toolbar.path";
     m_Breadcrumb.accessibilityHelp =
         NSLocalizedString(@"Shows the current folder and lets you enter a path", "Explorer toolbar accessibility help");
@@ -279,8 +291,8 @@ void ApplyToolbarCommandState(const nc::core::CommandState &_state, NSButton *_b
         NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
         item.view = m_Breadcrumb;
         item.paletteLabel = item.label = NSLocalizedString(@"Path", "Toolbar palette");
-        item.minSize = NSMakeSize(420, 27);
-        item.maxSize = NSMakeSize(1100, 27);
+        item.minSize = NSMakeSize(420, g_AddressBarHeight);
+        item.maxSize = NSMakeSize(1100, g_AddressBarHeight);
         return item;
     }
 

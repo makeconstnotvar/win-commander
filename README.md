@@ -1,8 +1,8 @@
-# Win Commander
+# Duck Commander
 
-![Win Commander — Commander mode](Docs/nc.png)
+![Duck Commander — Commander mode](Docs/nc.png)
 
-Win Commander is a native macOS file manager built on the Nimble Commander engine. It combines the established dual-pane Commander workflow with an Explorer-style interface over the same `Panel`, `VFS`, and `Operations` foundations.
+Duck Commander is a native macOS file manager built on an established upstream engine. It combines the dual-pane Commander workflow with an Explorer-style interface over the same `Panel`, `VFS`, and `Operations` foundations.
 
 The [ideal file manager specification](Docs/win_commander_ideal_file_manager_spec.md) is the product and architecture source of truth. The [development plan](Docs/Development-Plan.md) is the active tracker for priorities, dependencies, acceptance evidence, and remaining work.
 
@@ -56,4 +56,4 @@ See [Building.md](Docs/Building.md) and [Scripts/README.md](Scripts/README.md) f
 
 ## Origin and license
 
-Win Commander derives from [Nimble Commander](https://github.com/mikekazakov/nimble-commander) by Michael Kazakov. Upstream copyright notices remain in the source. The project is licensed under [GPLv3](LICENSE.md).
+Duck Commander derives from Michael Kazakov's [upstream file-manager project](https://github.com/mikekazakov/nimble-commander). Upstream copyright notices remain in the source. The project is licensed under [GPLv3](LICENSE.md).

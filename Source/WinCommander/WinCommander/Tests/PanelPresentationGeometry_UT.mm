@@ -32,6 +32,7 @@
 #include <WinCommander/States/FilePanels/Gallery/Layout.h>
 #include <WinCommander/States/FilePanels/Helpers/Pasteboard.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewGeometry.h>
+#include <WinCommander/States/FilePanels/List/PanelListView.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewProjection.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewRowView.h>
 #include <WinCommander/States/FilePanels/List/PanelListViewTableHeaderView.h>
@@ -190,6 +191,93 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
     return m_CapturedRequest;
 }
 
+@end
+
+@interface ExplorerBreadcrumbFocusTestPanelController : ExplorerBreadcrumbTestPanelController
+@property(nonatomic, readonly) ExplorerTabFocusableTestView *focusView;
+@end
+
+@interface ExplorerBreadcrumbHiddenFilesDispatcher : NCPanelControllerActionsDispatcher
+@property(nonatomic) BOOL validationResult;
+@property(nonatomic, readonly) NSUInteger validationCount;
+@property(nonatomic, readonly) NSUInteger executionCount;
+@property(nonatomic, readonly, weak) id lastSender;
+@end
+
+@implementation ExplorerBreadcrumbHiddenFilesDispatcher {
+    BOOL m_ValidationResult;
+    NSUInteger m_ValidationCount;
+    NSUInteger m_ExecutionCount;
+    __weak id m_LastSender;
+}
+@synthesize validationResult = m_ValidationResult;
+- (NSUInteger)validationCount
+{
+    return m_ValidationCount;
+}
+- (NSUInteger)executionCount
+{
+    return m_ExecutionCount;
+}
+- (id)lastSender
+{
+    return m_LastSender;
+}
+- (BOOL)validateMenuItem:(NSMenuItem *) [[maybe_unused]] _item
+{
+    ++m_ValidationCount;
+    return m_ValidationResult;
+}
+- (IBAction)ToggleViewHiddenFiles:(id)_sender
+{
+    ++m_ExecutionCount;
+    m_LastSender = _sender;
+}
+@end
+
+@interface ExplorerBreadcrumbPanelTestView : ExplorerTabFocusableTestView
+@property(nonatomic, strong) NCPanelControllerActionsDispatcher *actionsDispatcher;
+@end
+
+@implementation ExplorerBreadcrumbPanelTestView
+@synthesize actionsDispatcher = m_ActionsDispatcher;
+@end
+
+@implementation ExplorerBreadcrumbFocusTestPanelController {
+    ExplorerTabFocusableTestView *m_FocusView;
+}
+
+- (instancetype)init
+{
+    self = [super init];
+    if( self )
+        m_FocusView = [[ExplorerBreadcrumbPanelTestView alloc] initWithFrame:NSMakeRect(0, 0, 120, 40)];
+    return self;
+}
+
+- (PanelView *)view
+{
+    return static_cast<PanelView *>(m_FocusView);
+}
+
+- (ExplorerTabFocusableTestView *)focusView
+{
+    return m_FocusView;
+}
+
+@end
+
+// PanelListViewRowView only needs the presentation-style answer for these component-level state
+// checks. A full NCPanelListView would pull the model, icon repository and table virtualization into
+// tests whose subject is the row's own hover/selection reducer.
+@interface ExplorerListPresentationTestView : NSObject
+@end
+
+@implementation ExplorerListPresentationTestView
+- (NCPanelListViewPresentationStyle)presentationStyle
+{
+    return NCPanelListViewPresentationStyleExplorer;
+}
 @end
 
 @interface ExplorerToolbarTestActionsDispatcher : NCPanelControllerActionsDispatcher
@@ -994,6 +1082,12 @@ VFSListingPtr ExplorerPresentationNonUniformListing()
 @interface NCExplorerBreadcrumbControl (ExplorerPresentationTests)
 - (void)navigateToPath:(const std::string &)_path host:(const VFSHostPtr &)_host;
 - (void)onPathEditorCommit:(id)_sender;
+- (BOOL)control:(NSControl *)_control textView:(NSTextView *)_text_view doCommandBySelector:(SEL)_selector;
+@end
+
+@interface PanelListViewRowView (ExplorerPresentationTests)
+- (void)mouseEntered:(nullable NSEvent *)_event;
+- (void)mouseExited:(nullable NSEvent *)_event;
 @end
 
 @interface NCExplorerCommandBarView (ExplorerOperationMenuTests)
@@ -1426,6 +1520,99 @@ TEST_CASE(PREFIX "virtualized List items rebind accessibility state without stal
     CHECK(list.accessibilitySelected);
     CHECK_FALSE(list.accessibilityFocused);
     CHECK([list.accessibilityValue isEqualToString:@"Selected"]);
+}
+
+TEST_CASE(PREFIX "Explorer List hover lifecycle preserves semantic selection across row reuse")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    EnsureExplorerItemTheme();
+    const std::vector<VFSListingItem> items = NativeItems({"fixture.txt", "replacement.txt"});
+    REQUIRE(items.size() == 2);
+    __attribute__((objc_precise_lifetime)) ExplorerListPresentationTestView *const presentation =
+        [ExplorerListPresentationTestView new];
+    PanelListViewRowView *const row = [[PanelListViewRowView alloc] initWithItem:items.front()];
+    row.listView = static_cast<NCPanelListView *>(presentation);
+    row.panelActive = true;
+
+    nc::panel::data::ItemVolatileData semantic_selection;
+    semantic_selection.toggle_selected(true);
+    row.vd = semantic_selection;
+    nc::panel::data::ItemVolatileData actual = row.vd;
+    REQUIRE(actual.is_selected());
+
+    [row mouseEntered:nil];
+    actual = row.vd;
+    CHECK(actual == semantic_selection);
+    [row mouseExited:nil];
+    actual = row.vd;
+    CHECK(actual == semantic_selection);
+    row.item = items.back();
+    const VFSListingItem rebound_item = row.item;
+    CHECK(rebound_item == items.back());
+    actual = row.vd;
+    CHECK(actual == semantic_selection);
+    row.panelActive = false;
+    actual = row.vd;
+    CHECK(actual == semantic_selection);
+}
+
+TEST_CASE(PREFIX "Explorer List hover semantic and focus fills stay opaque and deactivation clears hover")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    EnsureExplorerItemTheme();
+    const std::vector<VFSListingItem> items = NativeItems({"fixture.txt"});
+    REQUIRE(items.size() == 1);
+    __attribute__((objc_precise_lifetime)) ExplorerListPresentationTestView *const presentation =
+        [ExplorerListPresentationTestView new];
+    PanelListViewRowView *const row = [[PanelListViewRowView alloc] initWithItem:items.front()];
+    row.listView = static_cast<NCPanelListView *>(presentation);
+    row.panelActive = true;
+
+    const auto resolved_rgba = [](NSColor *_color) {
+        NSAppearance *const appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+        __block uint32_t rgba = 0;
+        [appearance performAsCurrentDrawingAppearance:^{ rgba = [_color toRGBA]; }];
+        return rgba;
+    };
+    const auto resolved_alpha = [](NSColor *_color) {
+        NSAppearance *const appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+        __block CGFloat alpha = 0.0;
+        [appearance performAsCurrentDrawingAppearance:^{
+          NSColor *const converted = [_color colorUsingColorSpace:NSColorSpace.sRGBColorSpace] ?: _color;
+          alpha = converted.alphaComponent;
+        }];
+        return alpha;
+    };
+
+    const uint32_t normal_rgba = resolved_rgba(row.rowBackgroundColor);
+    [row mouseEntered:nil];
+    NSColor *const hover = row.rowBackgroundColor;
+    CHECK(resolved_alpha(hover) == 1.0);
+    CHECK(resolved_rgba(hover) != normal_rgba);
+
+    row.panelActive = false;
+    CHECK(resolved_alpha(row.rowBackgroundColor) == 1.0);
+    CHECK(resolved_rgba(row.rowBackgroundColor) == normal_rgba);
+    row.panelActive = true;
+    CHECK(resolved_rgba(row.rowBackgroundColor) == normal_rgba);
+
+    nc::panel::data::ItemVolatileData semantic_selection;
+    semantic_selection.toggle_selected(true);
+    row.vd = semantic_selection;
+    NSColor *const semantic = row.rowBackgroundColor;
+    CHECK(resolved_alpha(semantic) == 1.0);
+    CHECK(resolved_rgba(semantic) != normal_rgba);
+    [row mouseEntered:nil];
+    nc::panel::data::ItemVolatileData actual = row.vd;
+    CHECK(actual == semantic_selection);
+    CHECK(resolved_rgba(row.rowBackgroundColor) == resolved_rgba(semantic));
+
+    row.selected = true;
+    NSColor *const focused = row.rowBackgroundColor;
+    CHECK(resolved_alpha(focused) == 1.0);
+    CHECK(resolved_rgba(focused) != resolved_rgba(semantic));
+    actual = row.vd;
+    CHECK(actual == semantic_selection);
 }
 
 TEST_CASE(PREFIX "virtualized Brief items clear and rebind production accessibility state")
@@ -2015,6 +2202,62 @@ TEST_CASE(PREFIX "Explorer toolbar rebind retires old snapshot state before the 
     CHECK([breadcrumb.accessibilityValue isEqual:@""]);
     CHECK_FALSE([second_dispatcher lastBackAvailability].has_value());
     CHECK_FALSE([second_dispatcher lastRefreshAvailability].has_value());
+}
+
+TEST_CASE(PREFIX "Explorer address control uses the native toolbar metric")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerToolbarTestActionsDispatcher *const dispatcher = [ExplorerToolbarTestActionsDispatcher new];
+    ExplorerBreadcrumbTestPanelController *const panel = [ExplorerBreadcrumbTestPanelController new];
+    NCExplorerToolbarDelegate *const delegate =
+        [[NCExplorerToolbarDelegate alloc] initWithPanelController:panel actionsDispatcher:dispatcher];
+
+    NSMutableArray<NSButton *> *const toolbar_buttons = [NSMutableArray new];
+    for( NSString *const identifier in @[@"explorer_back", @"explorer_forward", @"explorer_up", @"explorer_refresh"] ) {
+        NSToolbarItem *const item = [delegate toolbar:delegate.toolbar
+                                   itemForItemIdentifier:identifier
+                               willBeInsertedIntoToolbar:true];
+        REQUIRE([item.view isKindOfClass:NSButton.class]);
+        [toolbar_buttons addObject:static_cast<NSButton *>(item.view)];
+    }
+
+    NSToolbarItem *const address_item = [delegate toolbar:delegate.toolbar
+                               itemForItemIdentifier:@"explorer_breadcrumb"
+                           willBeInsertedIntoToolbar:true];
+    REQUIRE([address_item.view isKindOfClass:NCExplorerBreadcrumbControl.class]);
+    NCExplorerBreadcrumbControl *const address =
+        static_cast<NCExplorerBreadcrumbControl *>(address_item.view);
+    NSWindow *const layout_window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 600, 34)
+                                                                 styleMask:NSWindowStyleMaskBorderless
+                                                                   backing:NSBackingStoreBuffered
+                                                                     defer:false];
+    [layout_window.contentView addSubview:address];
+    address.frame = NSMakeRect(0.0, 0.0, 600.0, 34.0);
+    [layout_window.contentView layoutSubtreeIfNeeded];
+
+    NSButton *const location = [address valueForKey:@"m_LocationButton"];
+    NSComboBox *const editor = [address valueForKey:@"m_PathEditor"];
+    NSSearchField *const search = [address valueForKey:@"m_FindField"];
+    REQUIRE(location);
+    REQUIRE(editor);
+    REQUIRE(search);
+
+    CHECK(address_item.minSize.height == 34.0);
+    CHECK(address_item.maxSize.height == 34.0);
+    CHECK(address.frame.size.height == 34.0);
+    for( NSButton *const button in toolbar_buttons ) {
+        CHECK(button.frame.size.width == 32.0);
+        CHECK(button.frame.size.height == 30.0);
+    }
+    const NSRect location_alignment = [location alignmentRectForFrame:location.frame];
+    CHECK(location.frame.size.width == 28.0);
+    CHECK(location_alignment.size.height == 28.0);
+    CHECK(editor.frame.size.height == 28.0);
+    CHECK(search.frame.size.width == 230.0);
+    CHECK(search.frame.size.height == 28.0);
+    CHECK(NSMidY(location_alignment) == NSMidY(address.bounds));
+    CHECK(NSMidY(editor.frame) == NSMidY(address.bounds));
+    CHECK(NSMidY(search.frame) == NSMidY(address.bounds));
 }
 
 TEST_CASE(PREFIX "command bar uses one native 28 point button metric and aligned content")
@@ -2957,6 +3200,88 @@ TEST_CASE(PREFIX "failed Cut marker staging invalidates move intent and remains 
     CHECK_FALSE(PasteboardSupport::IsCutInFlight(pasteboard));
     CHECK(PasteboardSupport::FileOperation(pasteboard) == PasteboardFileOperation::Copy);
     CHECK_FALSE(PasteboardSupport::CanReadFileList(pasteboard));
+}
+
+TEST_CASE(PREFIX "breadcrumb blur restores the address without stealing focus and Escape returns to the panel")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    NSWindow *const window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 640, 160)
+                                                          styleMask:NSWindowStyleMaskBorderless
+                                                            backing:NSBackingStoreBuffered
+                                                              defer:false];
+    ExplorerBreadcrumbFocusTestPanelController *const panel = [ExplorerBreadcrumbFocusTestPanelController new];
+    panel.focusView.frame = NSMakeRect(0, 0, 120, 40);
+    [window.contentView addSubview:panel.focusView];
+    NCExplorerBreadcrumbControl *const control =
+        [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 50, 600, 34) panelController:panel];
+    [window.contentView addSubview:control];
+    ExplorerTabFocusableTestView *const next_responder =
+        [[ExplorerTabFocusableTestView alloc] initWithFrame:NSMakeRect(140, 0, 120, 40)];
+    [window.contentView addSubview:next_responder];
+
+    const VFSHostPtr host = std::make_shared<NativePasteboardTestHost>();
+    [control applyPaneSnapshot:ExplorerSnapshot(nc::core::PaneLoadPhase::Loaded, host)];
+    NSStackView *const path = [control valueForKey:@"m_PathStack"];
+    NSComboBox *const editor = [control valueForKey:@"m_PathEditor"];
+    NSTextField *const fallback = [control valueForKey:@"m_FallbackLabel"];
+    REQUIRE(path);
+    REQUIRE(editor);
+    REQUIRE(fallback);
+    REQUIRE_FALSE(path.hidden);
+    REQUIRE(fallback.hidden);
+
+    [control focusAddressField];
+    REQUIRE_FALSE(editor.hidden);
+    REQUIRE((window.firstResponder == editor || window.firstResponder == editor.currentEditor));
+    REQUIRE([window makeFirstResponder:next_responder]);
+    REQUIRE(RunExplorerPresentationMainLoopUntil([editor] { return editor.hidden; }));
+    CHECK(window.firstResponder == next_responder);
+    CHECK_FALSE(path.hidden);
+    CHECK(fallback.hidden);
+
+    [control focusAddressField];
+    REQUIRE_FALSE(editor.hidden);
+    REQUIRE([control control:editor
+                    textView:static_cast<NSTextView *>(editor.currentEditor)
+         doCommandBySelector:@selector(cancelOperation:)]);
+    CHECK(editor.hidden);
+    CHECK_FALSE(path.hidden);
+    CHECK(fallback.hidden);
+    CHECK(window.firstResponder == panel.focusView);
+}
+
+TEST_CASE(PREFIX "breadcrumb routes hidden-files validation and action while its editor owns focus")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    NSWindow *const window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 640, 160)
+                                                          styleMask:NSWindowStyleMaskBorderless
+                                                            backing:NSBackingStoreBuffered
+                                                              defer:false];
+    ExplorerBreadcrumbFocusTestPanelController *const panel = [ExplorerBreadcrumbFocusTestPanelController new];
+    ExplorerBreadcrumbHiddenFilesDispatcher *const dispatcher = [ExplorerBreadcrumbHiddenFilesDispatcher new];
+    dispatcher.validationResult = true;
+    static_cast<ExplorerBreadcrumbPanelTestView *>(panel.focusView).actionsDispatcher = dispatcher;
+    NCExplorerBreadcrumbControl *const control =
+        [[NCExplorerBreadcrumbControl alloc] initWithFrame:NSMakeRect(0, 50, 600, 34) panelController:panel];
+    [window.contentView addSubview:control];
+
+    const VFSHostPtr host = std::make_shared<NativePasteboardTestHost>();
+    [control applyPaneSnapshot:ExplorerSnapshot(nc::core::PaneLoadPhase::Loaded, host)];
+    [control focusAddressField];
+    NSComboBox *const editor = [control valueForKey:@"m_PathEditor"];
+    REQUIRE((window.firstResponder == editor || window.firstResponder == editor.currentEditor));
+
+    NSMenuItem *const item = [[NSMenuItem alloc] initWithTitle:@"Show Hidden Files"
+                                                       action:@selector(ToggleViewHiddenFiles:)
+                                                keyEquivalent:@"."];
+    CHECK([control validateMenuItem:item]);
+    CHECK(dispatcher.validationCount == 1);
+    CHECK(dispatcher.executionCount == 0);
+
+    NSObject *const sender = [NSObject new];
+    CHECK([window.firstResponder tryToPerform:item.action with:sender]);
+    CHECK(dispatcher.executionCount == 1);
+    CHECK(dispatcher.lastSender == sender);
 }
 
 TEST_CASE(PREFIX "breadcrumb keeps address callbacks current and distinguishes admission from fetch failures")

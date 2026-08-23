@@ -9,7 +9,7 @@
 #include <cmath>
 
 /*//////////////////////////////////////////////////////////////////////////////////////////////////
-This is the most obscure Cocoa usage in NC.
+This is the most obscure Cocoa usage in Duck Commander.
 
 Test cases to check if it works:
 - drag and drop few images into Messages.app.

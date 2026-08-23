@@ -19,13 +19,13 @@
         "showTabs": false,
         
         /**
-         * Force NC to treat incoming FnXX keys as functional ones, not multimedia controls
+         * Force Duck Commander to treat incoming FnXX keys as functional ones, not multimedia controls
          */
         "alwaysUseFnKeysAsFunctional": false,
         
         "notifications": {            
             /**
-             * Allow to show notifications when NC is a frontmost application.
+             * Allow to show notifications when Duck Commander is a frontmost application.
              */
             "showWhenActive": true,
             
@@ -150,7 +150,7 @@
             "deselectItemsAfterFileOperations": true,
             
             /**
-             * When opening a file from a VFS, NC will have to copy it into a temporary location first.
+             * When opening a file from a VFS, Duck Commander will have to copy it into a temporary location first.
              * This setting controls the maximum size of a file that can be opened without confirmation.
              * Default value: 64MB.
              */
@@ -285,13 +285,13 @@
             "defaultChecksumVerification": 1,
             
             /**
-             * Time in milliseconds, that NC will wait before checking for changes in shadow copy of
+             * Time in milliseconds, that Duck Commander will wait before checking for changes in shadow copy of
              * VFS file after getting a notification from filesystem.
              */
             "vfsShadowUploadChangesCheckDelay": 5000,
 
             /**
-             * Time in milliseconds, after which NC will give up on watching for changes in shadow 
+             * Time in milliseconds, after which Duck Commander will give up on watching for changes in shadow
              * copy of VFS file. Measured from making of shadow copy or from the it's last change.
              */
             "vfsShadowUploadObservationDropDelay": 3600000,
@@ -532,12 +532,12 @@
      */
     "terminal": {
         /**
-         * True if NC should ignore customShellPath and use a value from environment: $SHELL.
+         * True if Duck Commander should ignore customShellPath and use a value from environment: $SHELL.
          */
         "useDefaultLoginShell": true,
         
         /**
-         * Which shell NC should use, if not the default one.
+         * Which shell Duck Commander should use, if not the default one.
          */
         "customShellPath": "/bin/bash",
         

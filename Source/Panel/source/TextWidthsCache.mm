@@ -13,7 +13,7 @@ using nc::utility::FontGeometryInfo;
 
 // it was deliberately chosen to use the most dumb method to purge the cache.
 // assuming that one record on average taken about 100bytes, 10'000 would take around 1Mb of memory.
-// the purge is executed after a significant delay, thus allowing NC to temporary cache a huge
+// the purge is executed after a significant delay, thus allowing Duck Commander to temporarily cache a huge
 // amount of width values in case of an extreme workload, e.g. browsing in temporary panel with a
 // million entries inside.
 static const auto g_MaxStrings = 10'000;

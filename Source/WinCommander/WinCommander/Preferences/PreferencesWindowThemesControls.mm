@@ -248,7 +248,7 @@ using nc::ThemeAppearance;
     NSFontManager *fontManager = NSFontManager.sharedFontManager;
     fontManager.target = self;
     fontManager.action = @selector(fontManagerChanged:);
-    // NSFontManager goes bananas if you ask it to customize a system font, so instead NC
+    // NSFontManager goes bananas if you ask it to customize a system font, so Duck Commander
     // cheats and place a dummy font if current font is a system font.
     if( [m_Font isSystemFont] )
         [fontManager setSelectedFont:m_DummyCustomFont isMultiple:NO];

@@ -2860,9 +2860,24 @@ static NSString *SyncPreviewText(const nc::core::FolderSyncPlan &_plan,
     [[self focusedContent].TabbedHolder() selectNextFilePanelTab];
 }
 
+- (IBAction)ToggleViewHiddenFiles:(id)_sender
+{
+    PanelController *const panel = self.panelController;
+    NCPanelControllerActionsDispatcher *const dispatcher = panel.view.actionsDispatcher;
+    if( dispatcher )
+        [dispatcher ToggleViewHiddenFiles:_sender];
+    else
+        NSBeep();
+}
+
 - (BOOL)validateMenuItem:(NSMenuItem *)_item
 {
     NCExplorerPaneContent &content = [self focusedContent];
+    if( _item.action == @selector(ToggleViewHiddenFiles:) ) {
+        PanelController *const panel = content.ActivePanel();
+        NCPanelControllerActionsDispatcher *const dispatcher = panel.view.actionsDispatcher;
+        return dispatcher ? [dispatcher validateMenuItem:_item] : false;
+    }
     if( _item.action == @selector(OnFileNewTab:) )
         return content.HasTabsModel() &&
                content.TabsModel()->Size() < nc::explorer::ExplorerSessionPersistency::MaximumTabs;

@@ -680,7 +680,7 @@ TEST_CASE(PREFIX "publishes an exclusive clone only at Commit")
     const ConditionalCopyPaths paths;
     Write(paths.source, "reviewed payload");
     REQUIRE(chmod(paths.source.c_str(), 0640) == 0);
-    constexpr char xattr_name[] = "com.magnumbytes.NimbleCommander.conditional-copy-test";
+    constexpr char xattr_name[] = "com.duckcommander.conditional-copy-test";
     constexpr char xattr_value[] = "reviewed metadata";
     REQUIRE(setxattr(paths.source.c_str(), xattr_name, xattr_value, sizeof(xattr_value) - 1, 0, 0) == 0);
     SetReadACLForCurrentUser(paths.source);

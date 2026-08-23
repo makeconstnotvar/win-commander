@@ -5,6 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_APP_PATH="$HOME/Applications/WinCommander-Codex.app"
 EXPECTED_BUNDLE_IDENTIFIER="com.wincommander.App.CodexDev"
+EXPECTED_BUNDLE_NAME="Duck Commander"
+EXPECTED_BUNDLE_DISPLAY_NAME="Duck Commander"
+EXPECTED_EXECUTABLE_NAME="WinCommander-Unsigned"
 EXPECTED_ENTITLEMENTS_PATH="$SCRIPT_DIR/../Source/WinCommander/WinCommander/Resources/WinCommander-CodexDev.entitlements"
 REQUIRE_CANONICAL_PATH=1
 
@@ -59,6 +62,20 @@ wc_assert_expected_local_identity \
   "$APP_PATH" "$EXPECTED_BUNDLE_IDENTIFIER" "$PINNED_IDENTITY"
 wc_assert_pinned_designated_requirement "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+INFO_PLIST="$APP_PATH/Contents/Info.plist"
+for key_and_value in \
+  "CFBundleName=$EXPECTED_BUNDLE_NAME" \
+  "CFBundleDisplayName=$EXPECTED_BUNDLE_DISPLAY_NAME" \
+  "CFBundleExecutable=$EXPECTED_EXECUTABLE_NAME"; do
+  key="${key_and_value%%=*}"
+  expected="${key_and_value#*=}"
+  actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$INFO_PLIST" 2>/dev/null || true)"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Unexpected $key in the stable local build: expected '$expected', got '$actual'." >&2
+    exit 1
+  fi
+done
 
 ACTUAL_ENTITLEMENTS="$(mktemp "${TMPDIR:-/tmp}/wincommander-entitlements.XXXXXX")"
 cleanup() {

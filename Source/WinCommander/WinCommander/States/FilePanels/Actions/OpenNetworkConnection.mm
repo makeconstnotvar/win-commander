@@ -157,7 +157,7 @@ static void GoToLANShare(PanelController *_target,
                 dispatch_to_main_queue([=] {
                     Alert *const alert = [[Alert alloc] init];
                     alert.messageText = NSLocalizedString(@"Unable to connect to a network share",
-                                                          "Informing a user that NC can't connect to network share");
+                                                          "Informing a user that Duck Commander can't connect to network share");
                     alert.informativeText = [NSString stringWithUTF8StdString:_err];
                     [alert addButtonWithTitle:NSLocalizedString(@"OK", "")];
                     [alert runModal];
