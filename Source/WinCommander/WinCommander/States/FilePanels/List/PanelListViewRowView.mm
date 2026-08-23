@@ -1,5 +1,6 @@
 // Copyright (C) 2016-2025 Michael Kazakov. Subject to GNU General Public License version 3.
 #include <WinCommander/Core/Theming/Theme.h>
+#include <WinCommander/Core/Theming/ExplorerPalette.h>
 #include <Panel/UI/PanelViewPresentationItemsColoringFilter.h>
 #include "../PanelView.h"
 #include "PanelListView.h"
@@ -8,6 +9,7 @@
 #include "PanelListViewRowView.h"
 #include "../PanelItemAccessibility.h"
 #include <Utility/ObjCpp.h>
+#include <algorithm>
 
 using namespace nc::panel;
 
@@ -263,18 +265,24 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
     if( !m_Item )
         return NSColor.blackColor;
 
-    const auto explorer = self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer;
-    if( explorer && self.selected )
-        return NSColor.labelColor;
+    if( self.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer ) {
+        // Explorer presentation paints text with semantic system colours end to end, the way
+        // findCurrentBackgroundColor above already paints rows. The legacy per-item colouring rules
+        // encode Commander conventions - marked entries in red - that contradict both the accent
+        // tint those rows already carry and the appearance a system colour resolves to in dark
+        // mode. Consulting them here also made the closing labelColor unreachable, because the
+        // shipped rule sets end in a catch-all that matches every item.
+        return (m_Item.IsHidden() && !self.selected) ? NSColor.secondaryLabelColor : NSColor.labelColor;
+    }
 
     const auto &rules = nc::CurrentTheme().FilePanelsItemsColoringRules();
 
-    const auto focus = !explorer && self.selected && m_PanelActive;
+    const auto focus = self.selected && m_PanelActive;
     for( const auto &i : rules )
         if( i.filter.Filter(m_Item, m_VD) )
             return focus ? i.focused : i.regular;
 
-    return explorer ? NSColor.labelColor : NSColor.blackColor;
+    return NSColor.blackColor;
 }
 
 - (NSColor *)findCurrentTagAccentColor
@@ -373,10 +381,24 @@ static NSColor *FindBackgroundColor(bool _is_focused, bool _is_active, bool _is_
 {
 }
 
-- (void)drawRect:(NSRect) [[maybe_unused]] _dirty_rect
+- (void)drawRect:(NSRect)_dirty_rect
 {
     [m_RowColor set];
     NSRectFill(_dirty_rect);
+
+    if( self.listView.presentationStyle != NCPanelListViewPresentationStyleExplorer )
+        return;
+
+    // The visual bottom edge is MaxY in a flipped view and MinY otherwise. This class declares no
+    // isFlipped override today; computing it keeps the rule at the bottom if one is ever added.
+    const NSRect bounds = self.bounds;
+    const CGFloat hairline = 1.0 / std::max(self.window.backingScaleFactor, 1.0);
+    const CGFloat rule_y = self.isFlipped ? NSMaxY(bounds) - hairline : NSMinY(bounds);
+    const NSRect rule = NSMakeRect(NSMinX(bounds), rule_y, NSWidth(bounds), hairline);
+    if( NSIntersectsRect(rule, _dirty_rect) ) {
+        [nc::explorer::RowDividerColor() setFill];
+        NSRectFill(NSIntersectionRect(rule, _dirty_rect));
+    }
 }
 
 - (void)addSubview:(NSView *)view

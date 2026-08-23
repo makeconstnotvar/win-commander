@@ -140,7 +140,9 @@ static NSParagraphStyle *ParagraphStyle(PanelViewFilenameTrimming _mode)
 {
     const int origin = m_LayoutConstants.icon_size ? (2 * m_LayoutConstants.inset_left) + m_LayoutConstants.icon_size
                                                    : m_LayoutConstants.inset_left;
-    const auto tags = m_Controller.item.Tags();
+    // An unbound or recycled item carries no listing, and Tags() reads through it.
+    const VFSListingItem item = m_Controller.item;
+    const auto tags = item ? item.Tags() : std::span<const nc::utility::Tags::Tag>{};
     const auto tags_geom = TrailingTagsInplaceDisplay::Place(tags);
     const auto width = bounds.size.width - origin - m_LayoutConstants.inset_right - tags_geom.margin - tags_geom.width;
     return NSMakeRect(origin, 0, width, bounds.size.height);
@@ -226,7 +228,9 @@ static NSColor *Blend(NSColor *_front, NSColor *_back)
                          respectFlipped:false
                                   hints:nil];
 
-    if( const auto tags = m_Controller.item.Tags(); !tags.empty() ) {
+    const VFSListingItem tagged_item = m_Controller.item;
+    if( const auto tags = tagged_item ? tagged_item.Tags() : std::span<const nc::utility::Tags::Tag>{};
+        !tags.empty() ) {
         const auto tags_geom = TrailingTagsInplaceDisplay::Place(tags);
         TrailingTagsInplaceDisplay::Draw(text_segment_rect.origin.x + text_segment_rect.size.width + tags_geom.margin,
                                          bounds.size.height,

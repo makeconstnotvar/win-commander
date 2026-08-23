@@ -55,9 +55,9 @@
 #include <unordered_set>
 #include <vector>
 
-static const CGFloat g_SidebarWidth = 220.0;
-static const CGFloat g_CommandBarHeight = 36.0;
-static const CGFloat g_InspectorPreferredWidth = 320.0;
+static const CGFloat g_SidebarWidth = 252.0;
+static const CGFloat g_CommandBarHeight = 50.0;
+static const CGFloat g_InspectorPreferredWidth = 306.0;
 static const CGFloat g_InspectorMinimumWidth = 280.0;
 static const CGFloat g_InspectorMaximumWidth = 520.0;
 static const CGFloat g_PanelMinimumWidth = 360.0;
@@ -309,6 +309,7 @@ void ConfigureExplorerRootAccessibility(NSView *_view)
                           inspectorView:(NCExplorerInspectorView *)_inspector
                          QLPanelAdaptor:(NCPanelQLPanelAdaptor *)_ql_panel_adaptor;
 - (void)applyPaneSnapshotForTesting:(const nc::core::PaneSnapshot &)_snapshot;
+- (void)setFocusedPaneSnapshotForTesting:(const nc::core::PaneSnapshot &)_snapshot;
 - (void)configureTabBindingForTestingWithToolbarDelegate:(NCExplorerToolbarDelegate *)_toolbar
                                                  sidebar:(NCExplorerSidebarView *)_sidebar
                                               commandBar:(NCExplorerCommandBarView *)_command_bar;
@@ -721,38 +722,57 @@ public:
         m_Gallery.hidden = !_on;
         m_TabbedHolder.hidden = _on;
         if( _on )
-            RefreshGallery();
+            RefreshGallery(true);
+        else
+            m_RenderedGalleryListing.reset();
     }
 
-    /** Rebuilds what the Gallery shows from the active panel's current listing. */
-    void RefreshGallery()
+    /**
+     * Rebuilds what the Gallery shows from the active panel's current listing.
+     *
+     * The rebuild walks the whole listing and, on native volumes, runs one cloud probe per row, so
+     * it only runs when the committed listing identity actually differs from the one on screen.
+     * `_force` is for entering Gallery mode, where the view starts empty and must be painted even
+     * though the listing is the one already recorded.
+     */
+    void RefreshGallery(const bool _force = false)
     {
         if( m_Gallery == nil || !m_GalleryMode || m_Panel == nil )
             return;
-        std::vector<nc::core::NativeListingEntry> entries;
-        std::string directory;
         try {
             const VFSListingPtr listing = m_Panel.data.ListingPtr();
             if( !listing )
                 return;
-            directory = m_Panel.currentDirectoryPath;
+            if( !_force && listing == m_RenderedGalleryListing )
+                return;
+
+            std::string directory = m_Panel.currentDirectoryPath;
             if( !directory.empty() && directory.back() == '/' )
                 directory.pop_back();
+            std::vector<nc::core::NativeListingEntry> entries;
             entries.reserve(listing->Count());
             for( unsigned i = 0; i < listing->Count(); ++i )
                 entries.push_back(nc::core::NativeListingEntry{.filename = std::string{listing->Filename(i)},
                                                                .is_directory = listing->IsDir(i)});
+
+            // The cloud probe only means anything on the native filesystem; elsewhere every item is
+            // simply not cloud, and asking would be a per-row filesystem call answering nothing.
+            const bool native = m_Panel.vfs != nullptr && m_Panel.vfs->IsNativeFS();
+            auto source =
+                nc::core::BuildGalleryListing(directory,
+                                              entries,
+                                              native ? nc::core::ProbeNativeCloudItem
+                                                     : decltype(&nc::core::ProbeNativeCloudItem){});
+            [m_Gallery applyContents:nc::core::BuildGalleryContents(source.Items()) inDirectory:directory];
+            m_RenderedGalleryListing = listing;
         } catch( ... ) {
             // A listing that changed underneath is not something to half-draw: leaving the previous
-            // contents is better than showing a folder assembled from two different moments.
+            // contents is better than showing a folder assembled from two different moments. The
+            // recorded identity stays behind with it, so the next attempt rebuilds rather than
+            // mistaking the half-applied state for the current one.
+            m_RenderedGalleryListing.reset();
             return;
         }
-        // The cloud probe only means anything on the native filesystem; elsewhere every item is
-        // simply not cloud, and asking would be a per-row filesystem call answering nothing.
-        const bool native = m_Panel.vfs != nullptr && m_Panel.vfs->IsNativeFS();
-        auto source = nc::core::BuildGalleryListing(
-            directory, entries, native ? nc::core::ProbeNativeCloudItem : decltype(&nc::core::ProbeNativeCloudItem){});
-        [m_Gallery applyContents:nc::core::BuildGalleryContents(source.Items()) inDirectory:directory];
     }
 
     FilePanelsTabbedHolder *TabbedHolder() const noexcept { return m_TabbedHolder; }
@@ -959,6 +979,11 @@ public:
         swap(m_TabEntries, _other.m_TabEntries);
         swap(m_TabbedHolder, _other.m_TabbedHolder);
         swap(m_PaneStateView, _other.m_PaneStateView);
+        // The Gallery view lives inside m_Container, so it has to travel with it; leaving it behind
+        // parents one side's gallery in the other side's half of the window.
+        swap(m_Gallery, _other.m_Gallery);
+        swap(m_GalleryMode, _other.m_GalleryMode);
+        swap(m_RenderedGalleryListing, _other.m_RenderedGalleryListing);
         swap(m_QuickSearchOverlay, _other.m_QuickSearchOverlay);
         swap(m_Container, _other.m_Container);
         swap(m_SynchronizingTabs, _other.m_SynchronizingTabs);
@@ -978,6 +1003,7 @@ public:
             m_ViewSettingsContextObservation = nil;
         }
         m_LatestPaneSnapshot.reset();
+        m_RenderedGalleryListing.reset();
         ClearPaneStateView();
         return previous;
     }
@@ -1046,6 +1072,10 @@ private:
     NCExplorerPaneStateView *m_PaneStateView = nil;
     NCGalleryView *m_Gallery = nil;
     bool m_GalleryMode = false;
+    /** Identity of the listing the Gallery currently shows. The rebuild is keyed on this rather
+     *  than on snapshot arrival: PaneStore republishes for cursor moves, selection changes and
+     *  quick-search keystrokes, none of which the Gallery reflects. */
+    VFSListingPtr m_RenderedGalleryListing;
     NCExplorerQuickSearchOverlayView *m_QuickSearchOverlay = nil;
     NSView *m_Container = nil;
     nc::core::PaneStoreAdapter::ObservationTicket m_PaneStoreObservation;
@@ -1076,6 +1106,8 @@ private:
     std::array<NCExplorerPaneContent, g_ExplorerPaneSideCount> m_Sides;
     NCExplorerPaneSide m_FocusedSide;
     bool m_DualPaneEnabled;
+    /** Last title published for the focused pane, replayed when this state becomes topmost. */
+    NSString *m_WindowTitle;
     std::shared_ptr<nc::ops::Pool> m_OperationsPool;
 }
 
@@ -1135,7 +1167,7 @@ private:
         m_PaneDividerRatio = g_DefaultPaneDividerRatio;
 
         m_ToolbarDelegate = [[NCExplorerToolbarDelegate alloc] initWithPanelController:initial_panel];
-        [self buildLayout];
+        [self buildLayoutWithInitialPanel:initial_panel];
 
         [self bindActivePanel:initial_panel focus:false];
         [self loadNativeHomeForSessionPanel:initial_panel];
@@ -1143,9 +1175,18 @@ private:
     return self;
 }
 
-- (void)buildLayout
+/**
+ * Builds the chrome around the pane area.
+ *
+ * The initial panel is passed in rather than read back through self.panelController: the active
+ * panel of a side is only published by bindActivePanel:, which necessarily runs after this method
+ * because it talks to the very views built here. Reading it back therefore handed every subview a
+ * nil controller, and the sidebar builds its favourite rows eagerly - each row asking the panel
+ * where it currently is - so a single configured favourite crashed construction outright.
+ */
+- (void)buildLayoutWithInitialPanel:(PanelController *)_initial_panel
 {
-    PanelController *const initial_panel = self.panelController;
+    PanelController *const initial_panel = _initial_panel;
     m_Sidebar = [[NCExplorerSidebarView alloc] initWithFrame:NSRect() panelController:initial_panel];
     NCAppDelegate *const app = NCAppDelegate.me;
     nc::core::CommandRegistry &command_registry = app.commandRegistry;
@@ -1171,22 +1212,32 @@ private:
     m_CommandBar.translatesAutoresizingMaskIntoConstraints = false;
     [self buildContentSplitWithPaneAreaView:[self currentPaneAreaView] inspectorView:m_Inspector];
 
-    [self addSubview:m_Sidebar];
     [self addSubview:m_CommandBar];
     [self addSubview:m_OperationProgressView];
     [self addSubview:m_SearchModeView];
     [self addSubview:m_ContentSplitView];
+    // Keep the sidebar above the legacy pane view. Several established panel renderers paint
+    // outside their nominal split-view bounds during bootstrap; they do not accept hit tests there,
+    // but when mounted later in z-order they can still cover the sidebar's rows visually.
+    [self addSubview:m_Sidebar positioned:NSWindowAbove relativeTo:m_ContentSplitView];
 
     [NSLayoutConstraint activateConstraints:@[
+        // The command bar is window-level chrome: full width directly under the toolbar, with the
+        // workspace - sidebar plus content - beginning below it. Docs/WindowsUI-Redesign-Design.md
+        // section 2 and both mockup frames draw this order; the previous arrangement inverted it.
+        [m_CommandBar.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [m_CommandBar.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        // safeAreaLayoutGuide follows the titlebar/unified-toolbar exclusion for this
+        // FullSizeContentView window, and automatically falls back to the view bounds while the
+        // state is detached. Keeping the anchor local avoids a stale cross-window layout guide when
+        // Viewer or Terminal temporarily replaces Explorer as the content view.
+        [m_CommandBar.topAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.topAnchor],
+        [m_CommandBar.heightAnchor constraintEqualToConstant:g_CommandBarHeight],
+
         [m_Sidebar.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-        [m_Sidebar.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [m_Sidebar.topAnchor constraintEqualToAnchor:m_CommandBar.bottomAnchor],
         [m_Sidebar.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
         [m_Sidebar.widthAnchor constraintEqualToConstant:g_SidebarWidth],
-
-        [m_CommandBar.leadingAnchor constraintEqualToAnchor:m_Sidebar.trailingAnchor],
-        [m_CommandBar.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [m_CommandBar.topAnchor constraintEqualToAnchor:self.topAnchor],
-        [m_CommandBar.heightAnchor constraintEqualToConstant:g_CommandBarHeight],
 
         [m_OperationProgressView.leadingAnchor constraintEqualToAnchor:m_Sidebar.trailingAnchor],
         [m_OperationProgressView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
@@ -1916,8 +1967,14 @@ private:
         return;
     [self applyViewSettingsForSnapshot:_snapshot tabEntry:*entry forContent:content];
 
+    // The Gallery mirrors a listing rather than observing one, so it has to be rebuilt wherever the
+    // listing can change. Refreshing only on entry left the previous folder's tiles on screen for
+    // the whole of the next navigation. The call is inert while this side is not in Gallery mode.
+    content.RefreshGallery();
+
     if( _side != m_FocusedSide )
         return;
+    [self publishWindowTitleFromState:_snapshot.state];
     [m_ToolbarDelegate applyPaneSnapshot:_snapshot];
     [m_CommandBar applyPaneSnapshot:_snapshot];
     [content.ActivePanel().view applyExplorerPaneSnapshot:_snapshot];
@@ -2073,6 +2130,8 @@ private:
     _panel.quickSearchPresentation = content.QuickSearchOverlay();
 
     [self applySearchSnapshotForPane:_panel.paneId];
+    if( becomes_focused )
+        [self republishWindowTitleForFocusedSide];
     if( _focus )
         [self.window makeFirstResponder:_panel.view];
 }
@@ -2104,6 +2163,7 @@ private:
     panel.quickSearchPresentation = content.QuickSearchOverlay();
 
     [self applySearchSnapshotForPane:panel.paneId];
+    [self republishWindowTitleForFocusedSide];
     [self.window makeFirstResponder:panel.view];
     [self invalidateExplorerRestorableState];
     return true;
@@ -2299,7 +2359,12 @@ private:
     const NSSize size = [NCExplorerCommandPaletteView preferredSize];
     [NSLayoutConstraint activateConstraints:@[
         [m_CommandPalette.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [m_CommandPalette.topAnchor constraintEqualToAnchor:self.topAnchor constant:80.0],
+        // The command bar now occupies the top band, so the palette hangs below it. The test
+        // double for the command bar is a real view that is never added to self, so anchor
+        // against it only when it actually shares this view hierarchy.
+        [m_CommandPalette.topAnchor
+            constraintEqualToAnchor:(m_CommandBar.superview == self ? m_CommandBar.bottomAnchor : self.topAnchor)
+                           constant:28.0],
         [m_CommandPalette.widthAnchor constraintEqualToConstant:size.width],
         [m_CommandPalette.heightAnchor constraintEqualToConstant:size.height],
     ]];
@@ -2949,7 +3014,43 @@ static NSString *SyncPreviewText(const nc::core::FolderSyncPlan &_plan,
 
 - (void)windowStateDidBecomeAssigned
 {
+    [self republishWindowTitleForFocusedSide];
     [self.window makeFirstResponder:self.panelController.view];
+}
+
+/** Writes the focused pane's own display title, so the window never shows the path of the hidden
+ *  Commander base that keeps running underneath this state. An absent or undecodable title clears
+ *  the bar rather than leaving the previous pane's path standing, matching the way the breadcrumb
+ *  blanks itself instead of holding a value it can no longer vouch for. */
+- (void)publishWindowTitleFromState:(const nc::core::PaneState &)_state
+{
+    m_WindowTitle = [NSString stringWithUTF8String:_state.display_title.c_str()] ?: @"";
+    [self republishWindowTitle];
+}
+
+/** Drops the title outright, for a focused side that has published no snapshot to name. */
+- (void)clearWindowTitle
+{
+    m_WindowTitle = @"";
+    [self republishWindowTitle];
+}
+
+- (void)republishWindowTitle
+{
+    self.window.title = m_WindowTitle ?: @"";
+}
+
+/** Names the window after whichever side currently holds focus. Focus can move without any new
+ *  snapshot arriving - the Tab key, clicking the unfocused side's selected tab, leaving dual pane -
+ *  and an idle pane publishes nothing further, so the title has to be re-derived at those points
+ *  from the snapshot each side already retains. */
+- (void)republishWindowTitleForFocusedSide
+{
+    const NCExplorerPaneContent &content = [self contentForSide:m_FocusedSide];
+    if( const std::optional<nc::core::PaneSnapshot> &snapshot = content.LatestPaneSnapshot() )
+        [self publishWindowTitleFromState:snapshot->state];
+    else
+        [self clearWindowTitle];
 }
 
 - (void)windowStateDidResign
@@ -2959,7 +3060,10 @@ static NSString *SyncPreviewText(const nc::core::FolderSyncPlan &_plan,
 
 - (bool)windowStateNeedsTitle
 {
-    return true;
+    // The toolbar already owns the complete editable address. Keep the synchronized window title
+    // as a fallback for the toolbar-hidden state and system window lists, but suppress its visual
+    // duplicate while the Explorer toolbar is present.
+    return false;
 }
 
 - (BOOL)handleModeSpecificKeyEquivalent:(NSEvent *)_event
@@ -3349,6 +3453,13 @@ static NSString *SyncPreviewText(const nc::core::FolderSyncPlan &_plan,
     if( !content.HasTabsModel() )
         return {};
     return content.TabPaneIDsForTesting();
+}
+
+/** Seeds the focused side's retained snapshot without driving any presentation, for tests that
+ *  exercise what gets re-derived from that retained value rather than what a snapshot paints. */
+- (void)setFocusedPaneSnapshotForTesting:(const nc::core::PaneSnapshot &)_snapshot
+{
+    [self focusedContent].LatestPaneSnapshotRef() = _snapshot;
 }
 
 - (void)applyPaneSnapshotForTesting:(const nc::core::PaneSnapshot &)_snapshot

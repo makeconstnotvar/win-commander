@@ -103,7 +103,7 @@ static NSParagraphStyle *ParagraphStyle(PanelViewFilenameTrimming _mode)
 {
     const int origin = g.FilenameOffsetInColumn();
     const auto tags_geom = TrailingTagsInplaceDisplay::Place(m_Tags);
-    const auto width = bounds.size.width - origin - nc::panel::PanelListViewGeometry::RightInset() - tags_geom.margin -
+    const auto width = bounds.size.width - origin - g.RightInset() - tags_geom.margin -
                        tags_geom.width;
 
     return NSMakeRect(origin, 0, width, bounds.size.height);
@@ -119,7 +119,10 @@ static NSParagraphStyle *ParagraphStyle(PanelViewFilenameTrimming _mode)
 
     const auto bounds = self.bounds;
     const auto geometry = row_view.listView.geometry;
-    const auto is_symlink = row_view.item.IsSymlink();
+    // A recycled row still hangs in the table with an empty item until AppKit detaches it, and an
+    // empty item carries no listing to read through. The sibling extension view faulted here.
+    const VFSListingItem item = row_view.item;
+    const auto is_symlink = item && item.IsSymlink();
 
     [row_view.rowBackgroundColor set];
     NSRectFill(self.bounds);
@@ -131,7 +134,7 @@ static NSParagraphStyle *ParagraphStyle(PanelViewFilenameTrimming _mode)
 
     [m_AttrString drawWithRect:text_rect options:0];
 
-    const auto icon_rect = NSMakeRect(nc::panel::PanelListViewGeometry::LeftInset(),
+    const auto icon_rect = NSMakeRect(geometry.LeftInset(),
                                       ((bounds.size.height - geometry.IconSize()) / 2.) + 0.5,
                                       geometry.IconSize(),
                                       geometry.IconSize());

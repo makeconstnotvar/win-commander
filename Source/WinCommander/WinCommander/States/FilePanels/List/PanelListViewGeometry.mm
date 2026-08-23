@@ -75,14 +75,17 @@ PanelListViewGeometry::PanelListViewGeometry()
 {
 }
 
-PanelListViewGeometry::PanelListViewGeometry(NSFont *_font, int _icon_scale, unsigned _padding)
+PanelListViewGeometry::PanelListViewGeometry(NSFont *_font, int _icon_scale, unsigned _padding, Insets _insets)
+    : m_Insets(_insets)
 {
     std::tie(m_LineHeight, m_TextBaseLine, m_IconSize) = GrabGeometryFromSystemFont(_font, _icon_scale, _padding);
 }
 
 short PanelListViewGeometry::FilenameOffsetInColumn() const noexcept
 {
-    return static_cast<short>(IconSize() ? (2 * LeftInset()) + IconSize() : LeftInset());
+    // left inset, the icon, then the gap before the name. With the Commander defaults this is
+    // 7 + 16 + 7 = 30, exactly what the previous 2 * LeftInset() + IconSize() produced.
+    return static_cast<short>(IconSize() ? LeftInset() + IconSize() + IconGap() : LeftInset());
 }
 
 } // namespace nc::panel

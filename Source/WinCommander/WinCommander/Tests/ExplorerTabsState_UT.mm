@@ -31,6 +31,7 @@
                                                  sidebar:(NCExplorerSidebarView *)_sidebar
                                               commandBar:(NCExplorerCommandBarView *)_command_bar;
 - (BOOL)addInactivePanelForTesting:(PanelController *)_panel;
+- (void)setFocusedPaneSnapshotForTesting:(const nc::core::PaneSnapshot &)_snapshot;
 - (BOOL)attachExplorerTabPanel:(PanelController *)_panel createPaneStore:(BOOL)_create_pane_store;
 - (std::vector<nc::core::PaneId>)tabPaneIDsForTesting;
 - (BOOL)setSearchControllerForTesting:(ExplorerSearchController *)_controller forPanel:(PanelController *)_panel;
@@ -1007,6 +1008,68 @@ TEST_CASE(PREFIX "Tab key switches focus between sides only while dual pane is a
 
     [fixture.state handleKeyDown:tab_key forPanelView:fixture.second.view];
     CHECK(fixture.state.panelController == fixture.first);
+}
+
+TEST_CASE(PREFIX "fallback window title follows focus while the Explorer toolbar suppresses its duplicate")
+{
+    Fixture fixture;
+    CHECK_FALSE(fixture.state.windowStateNeedsTitle);
+    ExplorerTabsTestWindow *const window =
+        [[ExplorerTabsTestWindow alloc] initWithContentRect:NSMakeRect(0, 0, 960, 480)
+                                                  styleMask:NSWindowStyleMaskTitled
+                                                    backing:NSBackingStoreBuffered
+                                                      defer:false];
+    window.contentView = fixture.state;
+    window.title = @"stale Commander path";
+
+    fixture.state.dualPanePanelForTesting = fixture.second;
+    [fixture.state onSwitchDualSinglePaneMode:nil];
+    REQUIRE(fixture.state.dualPaneEnabledForTesting);
+    REQUIRE(fixture.state.panelController == fixture.first);
+
+    const auto titled = [](const nc::core::PaneId _pane_id, const char *_title) {
+        nc::core::PaneSnapshot snapshot;
+        snapshot.pane_id = _pane_id;
+        snapshot.revision = 1;
+        // Empty phase keeps the visual-state mapper off a listing this fixture has no reason to
+        // build: the title is derived from display_title alone, independently of load phase.
+        snapshot.state.load_phase = nc::core::PaneLoadPhase::Empty;
+        snapshot.state.display_title = _title;
+        return snapshot;
+    };
+
+    // The left side is focused, so this snapshot lands on it.
+    [fixture.state setFocusedPaneSnapshotForTesting:titled(fixture.first.paneId, "left-folder")];
+
+    NSEvent *const tab_key = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                               location:NSZeroPoint
+                                          modifierFlags:0
+                                              timestamp:0
+                                           windowNumber:0
+                                                context:nil
+                                             characters:@"\t"
+                            charactersIgnoringModifiers:@"\t"
+                                              isARepeat:NO
+                                                keyCode:48];
+
+    // Focus moves to a side that has published nothing. The title must drop rather than keep
+    // advertising the other pane's folder - the pane is idle and will publish no correcting
+    // snapshot of its own.
+    [fixture.state handleKeyDown:tab_key forPanelView:fixture.first.view];
+    REQUIRE(fixture.state.panelController == fixture.second);
+    CHECK([window.title isEqualToString:@""]);
+
+    [fixture.state setFocusedPaneSnapshotForTesting:titled(fixture.second.paneId, "right-folder")];
+
+    // Tab alone - with no new snapshot from either pane - must still re-derive the title from
+    // whichever side now holds focus.
+    [fixture.state handleKeyDown:tab_key forPanelView:fixture.second.view];
+    REQUIRE(fixture.state.panelController == fixture.first);
+    CHECK([window.title isEqualToString:@"left-folder"]);
+
+    [fixture.state handleKeyDown:tab_key forPanelView:fixture.first.view];
+    REQUIRE(fixture.state.panelController == fixture.second);
+    CHECK([window.title isEqualToString:@"right-folder"]);
 
     // A panel view that belongs to neither side never claims or acts on the key.
     ExplorerTabsTestPanelView *const foreign_view = [[ExplorerTabsTestPanelView alloc] initWithFrame:NSZeroRect];

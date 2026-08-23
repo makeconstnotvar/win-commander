@@ -105,10 +105,10 @@ static NSParagraphStyle *const g_Style = [] {
 
             if( m_AttrString ) {
                 const auto geometry = lv.geometry;
-                NSRect rc = NSMakeRect(nc::panel::PanelListViewGeometry::LeftInset(),
+                NSRect rc = NSMakeRect(geometry.LeftInset(),
                                        geometry.TextBaseLine(),
-                                       self.bounds.size.width - nc::panel::PanelListViewGeometry::LeftInset() -
-                                           nc::panel::PanelListViewGeometry::RightInset(),
+                                       self.bounds.size.width - geometry.LeftInset() -
+                                           geometry.RightInset(),
                                        0.);
                 [m_AttrString drawWithRect:rc options:0];
             }

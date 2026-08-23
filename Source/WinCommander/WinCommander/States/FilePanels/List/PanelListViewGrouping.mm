@@ -33,6 +33,10 @@ static NSString *ExplorerTypeDescriptionForExtension(NSString *_extension)
 
 NSString *ExplorerFileTypeDescription(const VFSListingItem &_item)
 {
+    // An empty item has no listing behind it; every accessor below would read through a null one.
+    if( !_item )
+        return @"";
+
     if( _item.IsDir() )
         return NSLocalizedString(@"File folder", "Explorer Details type for a directory");
     NSString *const extension = _item.HasExtension() ? [NSString stringWithUTF8String:_item.Extension()] : nil;

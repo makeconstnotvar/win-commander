@@ -6,6 +6,7 @@
 #include "../FilePanels/Actions/ShowGoToPopup.h"
 #include "../FilePanels/Helpers/LocationFormatter.h"
 #include "../../Bootstrap/AppDelegate.h"
+#include "../../Core/Theming/ExplorerPalette.h"
 #include <Panel/NetworkConnectionsManager.h>
 #include <Panel/PanelData.h>
 #include <Panel/TagsStorage.h>
@@ -28,6 +29,21 @@ static const SidebarRenderOptions g_RenderOptions = static_cast<SidebarRenderOpt
 static NSString *const g_ColumnIdentifier = @"NCExplorerSidebarColumn";
 static NSString *const g_RowIdentifier = @"NCExplorerSidebarRow";
 
+// Sidebar geometry from the .pen mockups (FM-02 rA2v2 / FM-03 Qefa3). File-local statics on
+// purpose: NCExplorerSidebarView is constructed only by NCExplorerState, so nothing in the
+// Commander presentation can observe these.
+static const CGFloat g_RowHeight = 30.0;              // FM-02 nav row / FM-03 favourite row h30
+static const CGFloat g_RowGap = 3.0;                  // FM-02 group gap 3
+static const CGFloat g_SectionHeaderHeight = 22.0;    // FM-03 section header h22
+static const CGFloat g_SectionGap = 16.0;             // FM-03 sidebar section gap
+static const CGFloat g_SectionLabelBottomInset = 5.0; // header inner pad less the gap AppKit adds
+static const CGFloat g_VerticalPadding = 14.0;        // sidebar pad [14,12], vertical component
+static const CGFloat g_RowIconSize = 16.0;            // favourite row icon 16x16
+static const CGFloat g_RowIconLeading = 8.0;
+static const CGFloat g_RowIconLabelGap = 9.0;         // favourite row gap 9
+static const CGFloat g_RowTrailingInset = 8.0;
+static const CGFloat g_HairlineWidth = 1.0;           // sidebar stroke right 1
+
 static std::string NormalizedDirectory(std::string _path)
 {
     while( _path.size() > 1 && _path.back() == '/' )
@@ -45,6 +61,12 @@ static bool IsPathInsideMount(const std::string &_path, const std::string &_moun
 
 static std::optional<std::string> CurrentNativeDirectory(PanelController *_panel)
 {
+    // `data` hands back a C++ reference, so a nil controller yields a null one and the first read
+    // through it faults. These helpers run from row-highlight tests that outlive any particular
+    // controller, so an absent panel is simply an absent location.
+    if( !_panel )
+        return std::nullopt;
+
     if( !_panel.data.IsLoaded() || !_panel.isUniform )
         return std::nullopt;
 
@@ -57,6 +79,9 @@ static std::optional<std::string> CurrentNativeDirectory(PanelController *_panel
 
 static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel)
 {
+    if( !_panel )
+        return std::nullopt;
+
     if( !_panel.data.IsLoaded() || !_panel.isUniform )
         return std::nullopt;
 
@@ -176,6 +201,36 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
 @end
 
+/** The sidebar's right edge. The mockup draws a 1pt stroke there, so the flat palette surface needs
+ *  an explicit seam against the file area. */
+@interface NCExplorerSidebarHairlineView : NSView
+@end
+
+@implementation NCExplorerSidebarHairlineView
+- (BOOL)isOpaque
+{
+    return false;
+}
+- (void)drawRect:(NSRect) [[maybe_unused]] _dirty_rect
+{
+    [NSColor.separatorColor setFill];
+    NSRectFillUsingOperation(self.bounds, NSCompositingOperationSourceOver);
+}
+@end
+
+@interface NCExplorerSidebarRowView : NSTableRowView
+@end
+
+@implementation NCExplorerSidebarRowView
+- (void)drawBackgroundInRect:(NSRect) [[maybe_unused]] _dirty_rect
+{
+    if( !self.selected )
+        return;
+    [[NSColor.controlAccentColor colorWithAlphaComponent:0.16] setFill];
+    [[NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, 4.0, 1.0) xRadius:5.0 yRadius:5.0] fill];
+}
+@end
+
 @interface NCExplorerSidebarView () <NSOutlineViewDataSource,
                                      NSOutlineViewDelegate,
                                      NCExplorerOutlineViewSelectionDelegate>
@@ -195,6 +250,35 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 }
 
 @synthesize panelController = m_Panel;
+
+- (BOOL)isOpaque
+{
+    return true;
+}
+
+- (void)drawRect:(NSRect) [[maybe_unused]] _dirty_rect
+{
+    [nc::explorer::ChromeFillColor() setFill];
+    NSRectFill(self.bounds);
+}
+
+- (void)layout
+{
+    [super layout];
+
+    // The state constructs the sidebar at NSZeroRect and Auto Layout assigns its production width
+    // later. NSOutlineView does not reliably grow its only column from that zero-width bootstrap,
+    // leaving live, hittable rows whose cell views are clipped to an empty column. Bind both the
+    // document and its column to the clip width once layout has the real geometry.
+    const CGFloat width = NSWidth(m_ScrollView.contentView.bounds);
+    if( width <= 0.0 )
+        return;
+    NSSize document_size = m_OutlineView.frame.size;
+    document_size.width = width;
+    [m_OutlineView setFrameSize:document_size];
+    if( NSTableColumn *const column = m_OutlineView.tableColumns.firstObject )
+        column.width = width;
+}
 
 - (instancetype)initWithFrame:(NSRect)frameRect panelController:(PanelController *)_panel
 {
@@ -233,28 +317,26 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
 - (void)buildScaffold
 {
-    NSVisualEffectView *const background = [[NSVisualEffectView alloc] initWithFrame:self.bounds];
-    background.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    background.material = NSVisualEffectMaterialSidebar;
-    background.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-    background.state = NSVisualEffectStateActive;
-    [self addSubview:background];
-
     NCExplorerOutlineView *const outlineView = [[NCExplorerOutlineView alloc] initWithFrame:self.bounds];
     outlineView.selectionDelegate = self;
     m_OutlineView = outlineView;
     m_OutlineView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     m_OutlineView.headerView = nil;
-    m_OutlineView.rowSizeStyle = NSTableViewRowSizeStyleMedium;
-    m_OutlineView.selectionHighlightStyle = NSTableViewSelectionHighlightStyleSourceList;
-    m_OutlineView.indentationPerLevel = 12.0;
+    m_OutlineView.rowSizeStyle = NSTableViewRowSizeStyleCustom;
+    m_OutlineView.rowHeight = g_RowHeight;
+    // Height only. intercellSpacing.width is inset by half on each side of every cell frame, so
+    // zeroing it would shift each row left and invalidate the icon-leading calibration.
+    m_OutlineView.intercellSpacing = NSMakeSize(m_OutlineView.intercellSpacing.width, g_RowGap);
+    m_OutlineView.selectionHighlightStyle = NSTableViewSelectionHighlightStyleNone;
+    m_OutlineView.indentationPerLevel = 0.0;
     m_OutlineView.floatsGroupRows = false;
     m_OutlineView.delegate = self;
     m_OutlineView.dataSource = self;
     m_OutlineView.accessibilityIdentifier = @"wincommander.explorer.sidebar.locations";
     m_OutlineView.accessibilityLabel = NSLocalizedString(@"Locations", "Explorer sidebar accessibility label");
+    m_OutlineView.backgroundColor = NSColor.clearColor;
     if( @available(macOS 11.0, *) )
-        m_OutlineView.style = NSTableViewStyleSourceList;
+        m_OutlineView.style = NSTableViewStylePlain;
 
     NSTableColumn *const column = [[NSTableColumn alloc] initWithIdentifier:g_ColumnIdentifier];
     column.resizingMask = NSTableColumnAutoresizingMask;
@@ -262,14 +344,38 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     m_OutlineView.outlineTableColumn = column;
 
     m_ScrollView = [[NSScrollView alloc] initWithFrame:self.bounds];
-    m_ScrollView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    m_ScrollView.translatesAutoresizingMaskIntoConstraints = false;
     m_ScrollView.hasVerticalScroller = true;
     m_ScrollView.hasHorizontalScroller = false;
     m_ScrollView.autohidesScrollers = true;
+    m_ScrollView.automaticallyAdjustsContentInsets = false;
+    m_ScrollView.contentInsets = NSEdgeInsetsMake(g_VerticalPadding, 0.0, g_VerticalPadding, 0.0);
     m_ScrollView.drawsBackground = false;
     m_ScrollView.borderType = NSNoBorder;
     m_ScrollView.documentView = m_OutlineView;
     [self addSubview:m_ScrollView];
+
+    // The sidebar is already constrained below the command bar. Padding belongs to the scroll
+    // content, not to this view's safe area: adding it to the safe area lets AppKit fold the window
+    // titlebar inset into the nested scroll view and can move the whole outline out of its clip.
+    // Explicit edge constraints also matter because this view is born at NSZeroRect and only gets
+    // its production size from NCExplorerState's Auto Layout pass.
+    [NSLayoutConstraint activateConstraints:@[
+        [m_ScrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+        [m_ScrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [m_ScrollView.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [m_ScrollView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+    ]];
+
+    NSView *const hairline = [[NCExplorerSidebarHairlineView alloc] initWithFrame:NSZeroRect];
+    hairline.translatesAutoresizingMaskIntoConstraints = false;
+    [self addSubview:hairline];
+    [NSLayoutConstraint activateConstraints:@[
+        [hairline.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [hairline.topAnchor constraintEqualToAnchor:self.topAnchor],
+        [hairline.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        [hairline.widthAnchor constraintEqualToConstant:g_HairlineWidth],
+    ]];
 
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(selectionChanged:)
@@ -435,6 +541,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         const std::any context = connection;
         auto action = [panel, network, context] { nc::panel::actions::NavigateToLocation(panel, *network, context); };
         auto currentTest = [panel, network, connection] {
+            if( !panel )
+                return false;
             if( !panel.data.IsLoaded() || !panel.isUniform )
                 return false;
             const auto &host = panel.data.Host();
@@ -471,6 +579,8 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         const std::any context = tag;
         auto action = [panel, network, context] { nc::panel::actions::NavigateToLocation(panel, *network, context); };
         auto currentTest = [panel, tag] {
+            if( !panel )
+                return false;
             return panel.data.IsLoaded() && !panel.isUniform && panel.data.Listing().Title() == tag.Label();
         };
         auto node = [[NCExplorerSidebarNode alloc] initItemWithTitle:representation.menu_title ?: @""
@@ -584,6 +694,26 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
     return false;
 }
 
+- (NSTableRowView *)outlineView:(NSOutlineView *) [[maybe_unused]] _outline_view rowViewForItem:(id)_item
+{
+    auto node = nc::objc_cast<NCExplorerSidebarNode>(_item);
+    if( !node || node.section )
+        return nil;
+    return [[NCExplorerSidebarRowView alloc] initWithFrame:NSZeroRect];
+}
+
+- (CGFloat)outlineView:(NSOutlineView *) [[maybe_unused]] _outline_view heightOfRowByItem:(id)_item
+{
+    auto node = nc::objc_cast<NCExplorerSidebarNode>(_item);
+    if( !node || !node.section )
+        return g_RowHeight;
+    if( m_RootNodes.firstObject == node )
+        return g_SectionHeaderHeight; // sits directly against the sidebar's own top padding
+    // AppKit already lays intercellSpacing.height above this row, so the row carries only the
+    // remainder of the mockup's inter-section gap.
+    return g_SectionHeaderHeight + (g_SectionGap - g_RowGap);
+}
+
 - (NSView *)outlineView:(NSOutlineView *)_outline_view
      viewForTableColumn:(NSTableColumn *) [[maybe_unused]] _table_column
                    item:(id)_item
@@ -594,11 +724,23 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
 
     if( node.section ) {
         NSTextField *const label = [NSTextField labelWithString:node.title];
+        label.translatesAutoresizingMaskIntoConstraints = false;
         label.font = [NSFont boldSystemFontOfSize:NSFont.smallSystemFontSize];
         label.textColor = NSColor.secondaryLabelColor;
         label.accessibilityIdentifier = @"wincommander.explorer.sidebar.section";
         label.accessibilityLabel = node.title;
-        return label;
+
+        // The gap the mockup puts above a section lives in the row's own height, so the label is
+        // pinned to the bottom of that taller row rather than centred in it.
+        NSView *const container = [[NSView alloc] initWithFrame:NSZeroRect];
+        [container addSubview:label];
+        [NSLayoutConstraint activateConstraints:@[
+            [label.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:g_RowIconLeading],
+            [label.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor],
+            [label.bottomAnchor constraintEqualToAnchor:container.bottomAnchor
+                                               constant:-g_SectionLabelBottomInset],
+        ]];
+        return container;
     }
 
     NSTableCellView *cell = [_outline_view makeViewWithIdentifier:g_RowIdentifier owner:self];
@@ -619,12 +761,14 @@ static std::optional<std::string> CurrentVerboseLocation(PanelController *_panel
         [cell addSubview:textField];
 
         [NSLayoutConstraint activateConstraints:@[
-            [imageView.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:2.0],
+            [imageView.leadingAnchor constraintEqualToAnchor:cell.leadingAnchor constant:g_RowIconLeading],
             [imageView.centerYAnchor constraintEqualToAnchor:cell.centerYAnchor],
-            [imageView.widthAnchor constraintEqualToConstant:18.0],
-            [imageView.heightAnchor constraintEqualToConstant:18.0],
-            [textField.leadingAnchor constraintEqualToAnchor:imageView.trailingAnchor constant:7.0],
-            [textField.trailingAnchor constraintEqualToAnchor:cell.trailingAnchor constant:-4.0],
+            [imageView.widthAnchor constraintEqualToConstant:g_RowIconSize],
+            [imageView.heightAnchor constraintEqualToConstant:g_RowIconSize],
+            [textField.leadingAnchor constraintEqualToAnchor:imageView.trailingAnchor
+                                                    constant:g_RowIconLabelGap],
+            [textField.trailingAnchor constraintEqualToAnchor:cell.trailingAnchor
+                                                     constant:-g_RowTrailingInset],
             [textField.centerYAnchor constraintEqualToAnchor:cell.centerYAnchor],
         ]];
     }

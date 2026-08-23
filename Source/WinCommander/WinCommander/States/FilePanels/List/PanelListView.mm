@@ -4,6 +4,7 @@
 #include <WinCommander/Bootstrap/AppDelegate.h>
 #include <WinCommander/Bootstrap/Config.h>
 #include <WinCommander/Core/Theming/Theme.h>
+#include <WinCommander/Core/Theming/ExplorerPalette.h>
 #include <WinCommander/Core/Theming/ThemesManager.h>
 #include <Utility/AdaptiveDateFormatting.h>
 #include <Utility/ObjCpp.h>
@@ -39,6 +40,15 @@ using nc::vfsicon::IconRepository;
 static const auto g_MaxStashedRows = 50;
 static const auto g_SortAscImage = [NSImage imageNamed:@"NSAscendingSortIndicator"];
 static const auto g_SortDescImage = [NSImage imageNamed:@"NSDescendingSortIndicator"];
+
+// Explorer details presentation, from the FM-02 mockup. The 13pt system font yields 19pt of leading
+// in PanelListViewGeometry, so this padding produces the mockup's 38pt row, with a 36pt header band
+// that stays one step above it.
+static constexpr unsigned g_ExplorerRowVerticalPadding = 19;
+static constexpr double g_ExplorerHeaderHeight = 36.;
+static constexpr double g_ExplorerGroupRowHeight = 30.;
+static constexpr nc::panel::PanelListViewGeometry::Insets g_ExplorerInsets = {
+    .left = 12, .right = 12, .icon_gap = 8};
 
 // identifiers legend:
 // A - Name
@@ -161,7 +171,7 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
         m_TableView.headerView = [[PanelListViewTableHeaderView alloc] init];
         if( m_PresentationStyle == NCPanelListViewPresentationStyleExplorer ) {
             NSRect header_frame = m_TableView.headerView.frame;
-            header_frame.size.height = 28.0;
+            header_frame.size.height = g_ExplorerHeaderHeight;
             m_TableView.headerView.frame = header_frame;
         }
         [self setupColumns];
@@ -415,8 +425,13 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
 - (void)calculateItemLayout
 {
     const bool explorer = m_PresentationStyle == NCPanelListViewPresentationStyleExplorer;
-    m_Geometry = PanelListViewGeometry(
-        self.font, m_AssignedLayout.icon_scale, explorer ? 9U : CurrentTheme().FilePanelsListRowVerticalPadding());
+    m_Geometry = explorer ? PanelListViewGeometry(self.font,
+                                                  m_AssignedLayout.icon_scale,
+                                                  g_ExplorerRowVerticalPadding,
+                                                  g_ExplorerInsets)
+                          : PanelListViewGeometry(self.font,
+                                                  m_AssignedLayout.icon_scale,
+                                                  CurrentTheme().FilePanelsListRowVerticalPadding());
 
     [self setupIconsPxSize];
 
@@ -432,12 +447,15 @@ static NSString *ToKindIdentifier(PanelListViewColumns _kind) noexcept;
                         m_DateAccessedColumn,
                         m_TagsColumn} ) {
         if( auto cell = objc_cast<PanelListViewTableHeaderCell>(column.headerCell) ) {
-            cell.leftOffset = static_cast<double>(nc::panel::PanelListViewGeometry::LeftInset());
+            cell.leftOffset = static_cast<double>(m_Geometry.LeftInset());
         }
     }
-    // But for the filename column the offset is special
+    // The Commander presentation aligns the name title with the filename text past the icon; the
+    // Explorer mockup aligns every header title to its own column pad, so the header row reads as
+    // one rhythm across all four columns.
     if( auto cell = objc_cast<PanelListViewTableHeaderCell>(m_NameColumn.headerCell) ) {
-        cell.leftOffset = static_cast<double>(m_Geometry.FilenameOffsetInColumn());
+        cell.leftOffset = explorer ? static_cast<double>(m_Geometry.LeftInset())
+                                   : static_cast<double>(m_Geometry.FilenameOffsetInColumn());
     }
 }
 
@@ -592,7 +610,7 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 
 - (CGFloat)tableView:(NSTableView *) [[maybe_unused]] _table_view heightOfRow:(NSInteger)_row
 {
-    return [self tableView:_table_view isGroupRow:_row] ? 32.0 : m_Geometry.LineHeight();
+    return [self tableView:_table_view isGroupRow:_row] ? g_ExplorerGroupRowHeight : m_Geometry.LineHeight();
 }
 
 - (BOOL)tableView:(NSTableView *) [[maybe_unused]] _table_view shouldSelectRow:(NSInteger)_row
@@ -1258,10 +1276,10 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
         if( PanelListViewTableHeaderCell *cell = objc_cast<PanelListViewTableHeaderCell>(col.headerCell) ) {
             cell.drawsVerticalSeparator = !explorer;
             if( explorer ) {
-                [cell updateThemeWithTextFont:[NSFont systemFontOfSize:12.0 weight:NSFontWeightMedium]
-                                    textColor:NSColor.secondaryLabelColor
-                               separatorColor:NSColor.separatorColor
-                              backgroundColor:NSColor.controlBackgroundColor];
+                [cell updateThemeWithTextFont:[NSFont systemFontOfSize:12.0 weight:NSFontWeightSemibold]
+                                    textColor:NSColor.labelColor
+                               separatorColor:nc::explorer::TableHeaderDividerColor()
+                              backgroundColor:nc::explorer::TableHeaderFillColor()];
             }
             else {
                 [cell updateThemeWithTextFont:CurrentTheme().FilePanelsListHeaderFont()
@@ -1298,9 +1316,17 @@ static View *RetrieveOrSpawnView(NSTableView *_tv, NSString *_identifier)
 {
     [m_TableView enumerateAvailableRowViewsUsingBlock:^(NSTableRowView *abstract_row_view,
                                                         [[maybe_unused]] NSInteger row) {
-      if( PanelListViewRowView *const row_view = nc::objc_cast<PanelListViewRowView>(abstract_row_view) )
-          row_view.alphaValue =
-              PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, row_view.item.Path()) ? 0.55 : 1.0;
+      PanelListViewRowView *const row_view = nc::objc_cast<PanelListViewRowView>(abstract_row_view);
+      if( !row_view )
+          return;
+      // Available rows include ones already cleared for reuse; a cleared row has nothing to be cut.
+      const VFSListingItem item = row_view.item;
+      if( !item ) {
+          row_view.alphaValue = 1.0;
+          return;
+      }
+      row_view.alphaValue =
+          PasteboardSupport::IsCutItem(NSPasteboard.generalPasteboard, item.Path()) ? 0.55 : 1.0;
     }];
 }
 

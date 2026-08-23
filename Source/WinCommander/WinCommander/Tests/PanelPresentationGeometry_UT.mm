@@ -8,6 +8,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <VFS/VFSListingInput.h>
 #include <Utility/ByteCountFormatter.h>
+#include <Utility/HexadecimalColor.h>
 #include <Panel/UI/PanelTabBarView.h>
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/FileCutCommand.h>
@@ -16,6 +17,7 @@
 #include <WinCommander/Core/Commands/ToggleHiddenFilesCommand.h>
 #include <WinCommander/Core/Errors/FileManagerErrorAdapter.h>
 #include <WinCommander/Core/Pane/PaneSnapshot.h>
+#include <WinCommander/Core/Theming/ExplorerPalette.h>
 #include <WinCommander/Core/Theming/ThemesManager.h>
 #include <WinCommander/States/Explorer/NCExplorerBreadcrumbControl.h>
 #include <WinCommander/States/Explorer/NCExplorerCommandBarView.h>
@@ -1201,6 +1203,32 @@ ExplorerOperationCenterSnapshotWithTerminalAndQueuedRecords(ExplorerOperationMen
 
 #define PREFIX "Explorer presentation geometry "
 
+TEST_CASE(PREFIX "palette resolves the mockup light tokens without losing dark appearance support")
+{
+    const auto resolvedRGBA = [](NSColor *_color, NSAppearanceName _appearance_name) {
+        NSAppearance *const appearance = [NSAppearance appearanceNamed:_appearance_name];
+        __block uint32_t rgba = 0;
+        [appearance performAsCurrentDrawingAppearance:^{
+          rgba = [_color toRGBA];
+        }];
+        return rgba;
+    };
+
+    const uint32_t light_chrome = [[NSColor colorWithHexString:"#ECEEF1"] toRGBA];
+    const uint32_t dark_chrome = [[NSColor colorWithHexString:"#2F2F31"] toRGBA];
+    const uint32_t light_command_bar = [[NSColor colorWithHexString:"#F7F8FA"] toRGBA];
+    const uint32_t dark_command_bar = [[NSColor colorWithHexString:"#252527"] toRGBA];
+
+    CHECK(resolvedRGBA(nc::explorer::ChromeFillColor(), NSAppearanceNameAqua) == light_chrome);
+    CHECK(resolvedRGBA(nc::explorer::ChromeFillColor(), NSAppearanceNameDarkAqua) == dark_chrome);
+    CHECK(resolvedRGBA(nc::explorer::ChromeFillColor(), NSAppearanceNameAccessibilityHighContrastAqua) ==
+          light_chrome);
+    CHECK(resolvedRGBA(nc::explorer::ChromeFillColor(), NSAppearanceNameAccessibilityHighContrastDarkAqua) ==
+          dark_chrome);
+    CHECK(resolvedRGBA(nc::explorer::CommandBarFillColor(), NSAppearanceNameAqua) == light_command_bar);
+    CHECK(resolvedRGBA(nc::explorer::CommandBarFillColor(), NSAppearanceNameDarkAqua) == dark_command_bar);
+}
+
 TEST_CASE(PREFIX "footer renders only PaneStore snapshot status")
 {
     auto footer = [[NCPanelViewFooter alloc] initWithFrame:NSMakeRect(0, 0, 600, 24)
@@ -1481,13 +1509,29 @@ TEST_CASE(PREFIX "virtualized Gallery items clear and rebind production accessib
     CHECK([element.accessibilityValue isEqualToString:@"Selected"]);
 }
 
-TEST_CASE(PREFIX "Details uses a readable 28 point row")
+TEST_CASE(PREFIX "Details uses the 38 point mockup row")
 {
-    const PanelListViewGeometry geometry([NSFont systemFontOfSize:13.0], 1, 9);
+    const PanelListViewGeometry geometry(
+        [NSFont systemFontOfSize:13.0], 1, 19, PanelListViewGeometry::Insets{.left = 12, .right = 12, .icon_gap = 8});
 
-    CHECK(geometry.LineHeight() == 28);
+    CHECK(geometry.LineHeight() == 38);
     CHECK(geometry.IconSize() == 16);
-    CHECK(geometry.TextBaseLine() == 8);
+    CHECK(geometry.LeftInset() == 12);
+    CHECK(geometry.RightInset() == 12);
+    // 12pt cell pad, then the 16pt icon, then the mockup's 8pt gap before the name.
+    CHECK(geometry.FilenameOffsetInColumn() == 36);
+}
+
+TEST_CASE(PREFIX "Commander list geometry is untouched by the Explorer insets")
+{
+    const PanelListViewGeometry geometry([NSFont systemFontOfSize:13.0], 1, 0);
+
+    CHECK(geometry.LineHeight() == 19);
+    CHECK(geometry.TextBaseLine() == 4);
+    CHECK(geometry.LeftInset() == 7);
+    CHECK(geometry.RightInset() == 5);
+    // The old formula was 2 * LeftInset() + IconSize(); the new one is left + icon + gap. With the
+    // Commander defaults both give 30, which is what keeps the classic presentation bit-identical.
     CHECK(geometry.FilenameOffsetInColumn() == 30);
 }
 
@@ -1971,6 +2015,48 @@ TEST_CASE(PREFIX "Explorer toolbar rebind retires old snapshot state before the 
     CHECK([breadcrumb.accessibilityValue isEqual:@""]);
     CHECK_FALSE([second_dispatcher lastBackAvailability].has_value());
     CHECK_FALSE([second_dispatcher lastRefreshAvailability].has_value());
+}
+
+TEST_CASE(PREFIX "command bar uses one native 28 point button metric and aligned content")
+{
+    REQUIRE(nc::dispatch_is_main_queue());
+    ExplorerOperationMenuTestActionsDispatcher *const dispatcher = [ExplorerOperationMenuTestActionsDispatcher new];
+    ExplorerOperationMenuTestPanelController *const panel =
+        [[ExplorerOperationMenuTestPanelController alloc] initWithActionsDispatcher:dispatcher];
+    NCExplorerCommandBarView *const bar = [[NCExplorerCommandBarView alloc] initWithFrame:NSMakeRect(0, 0, 1400, 50)
+                                                                          panelController:panel];
+
+    [bar layoutSubtreeIfNeeded];
+    REQUIRE(bar.subviews.count == 1);
+    REQUIRE([bar.subviews.firstObject isKindOfClass:NSStackView.class]);
+    NSStackView *const stack = static_cast<NSStackView *>(bar.subviews.firstObject);
+    NSMutableArray<NSButton *> *const buttons = [NSMutableArray new];
+    for( NSView *const view in stack.arrangedSubviews ) {
+        if( [view isKindOfClass:NSButton.class] )
+            [buttons addObject:static_cast<NSButton *>(view)];
+    }
+    REQUIRE(buttons.count == 10);
+
+    const CGFloat expected_font_size = [NSFont systemFontSizeForControlSize:NSControlSizeLarge];
+    const CGFloat expected_mid_y = NSMidY(buttons.firstObject.frame);
+    const CGFloat expected_baseline = buttons.firstObject.firstBaselineOffsetFromTop;
+    for( NSButton *const button in buttons ) {
+        CHECK(button.controlSize == NSControlSizeLarge);
+        CHECK(button.bezelStyle == NSBezelStyleAccessoryBarAction);
+        CHECK(button.imagePosition == NSImageLeading);
+        CHECK(button.imageHugsTitle);
+        CHECK(button.image != nil);
+        CHECK(button.font.pointSize == expected_font_size);
+        CHECK(button.intrinsicContentSize.height == 28.0);
+        CHECK(button.frame.size.height == 28.0);
+        CHECK(NSMidY(button.frame) == expected_mid_y);
+        CHECK(button.firstBaselineOffsetFromTop == expected_baseline);
+    }
+
+    REQUIRE(buttons.firstObject.bezelColor != nil);
+    CHECK([buttons.firstObject.bezelColor isEqual:NSColor.controlAccentColor]);
+    for( NSUInteger index = 1; index < buttons.count; ++index )
+        CHECK(buttons[index].bezelColor == nil);
 }
 
 TEST_CASE(PREFIX "compact Operations menu fails closed when its services are absent")

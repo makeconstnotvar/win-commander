@@ -545,6 +545,15 @@ static bool Has(std::span<PanelController *> _c, PanelController *_p) noexcept
 
 - (void)updateTitle
 {
+    // The window title belongs to whichever state is actually on screen. This state stays alive
+    // underneath Explorer as the permanent compatibility base and keeps receiving panel
+    // notifications there, so an unconditional write publishes a hidden panel's path into a window
+    // that is showing something else entirely. Explorer republishes its own title when it becomes
+    // topmost, and so does this state through windowStateDidBecomeAssigned.
+    NCMainWindowController *const controller = nc::objc_cast<NCMainWindowController>(self.window.windowController);
+    if( controller != nil && controller.topmostState != self )
+        return;
+
     self.window.title = TrimmedTitleForWindow(TitleForData(self.activePanelData), self.window);
 }
 

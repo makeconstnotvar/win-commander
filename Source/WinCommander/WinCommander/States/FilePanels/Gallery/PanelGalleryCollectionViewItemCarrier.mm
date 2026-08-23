@@ -88,6 +88,10 @@ static NSParagraphStyle *ParagraphStyle(PanelViewFilenameTrimming _mode)
     if( self ) {
         self.autoresizingMask = NSViewNotSizable;
         self.autoresizesSubviews = false;
+        // Same defaults its Brief twin sets: drawing can reach an unbound carrier, and a nil
+        // filename or colour is not something NSAttributedString accepts.
+        m_Filename = @"";
+        m_FilenameColor = NSColor.labelColor;
         m_PermitFieldRenaming = false;
         m_IsSymlink = false;
         m_Highlighted = false;

@@ -70,9 +70,14 @@ static NSParagraphStyle *const g_Style = [] {
     if( !row_view )
         return;
 
+    // A recycled row is handed an empty item before it is refilled or discarded, and an empty item
+    // carries no listing to answer questions about itself. The Explorer type column asks the item
+    // what it is, so it must not be asked until the row actually holds one.
     const bool explorer = row_view.listView.presentationStyle == NCPanelListViewPresentationStyleExplorer;
-    if( m_Extension != nil || explorer ) {
-        NSString *const display_string = explorer ? nc::panel::ExplorerFileTypeDescription(row_view.item) : m_Extension;
+    const bool explorer_type = explorer && static_cast<bool>(row_view.item);
+    if( m_Extension != nil || explorer_type ) {
+        NSString *const display_string =
+            explorer_type ? nc::panel::ExplorerFileTypeDescription(row_view.item) : m_Extension;
         NSDictionary *attrs = @{
             NSFontAttributeName: row_view.listView.font,
             NSForegroundColorAttributeName: row_view.rowSecondaryTextColor,
@@ -102,7 +107,7 @@ static NSParagraphStyle *const g_Style = [] {
                 const auto context = NSGraphicsContext.currentContext.CGContext;
                 CGContextSetFillColorWithColor(context, rv.rowSecondaryTextColor.CGColor);
                 CGContextSetTextPosition(
-                    context, nc::panel::PanelListViewGeometry::LeftInset(), geometry.TextBaseLine());
+                    context, geometry.LeftInset(), geometry.TextBaseLine());
                 CGContextSetTextDrawingMode(context, kCGTextFill);
                 CTLineDraw(m_Line.get(), context);
             }

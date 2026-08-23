@@ -169,15 +169,19 @@ using namespace nc::panel;
         return;
 
     if( self.briefView ) {
-        const auto explorer = self.briefView.explorerAppearance;
-        if( explorer && self.selected ) {
-            self.carrier.filenameColor = NSColor.labelColor;
+        // Explorer appearance paints filenames with semantic system colours only. The legacy
+        // colouring rules end in a catch-all that matches every item, so consulting them here
+        // overwrote the semantic colour on the very next line and painted Commander's marked-item
+        // red into an Explorer window. The cursor row stays at full strength so the row the user is
+        // on is always legible against its accent fill.
+        if( self.briefView.explorerAppearance ) {
+            self.carrier.filenameColor =
+                (m_Item.IsHidden() && !self.selected) ? NSColor.secondaryLabelColor : NSColor.labelColor;
             return;
         }
-        if( explorer )
-            self.carrier.filenameColor = NSColor.labelColor;
+
         const auto &rules = nc::CurrentTheme().FilePanelsItemsColoringRules();
-        const bool focus = !explorer && self.selected && m_PanelActive;
+        const bool focus = self.selected && m_PanelActive;
         for( const auto &i : rules )
             if( i.filter.Filter(m_Item, m_VD) ) {
                 self.carrier.filenameColor = focus ? i.focused : i.regular;

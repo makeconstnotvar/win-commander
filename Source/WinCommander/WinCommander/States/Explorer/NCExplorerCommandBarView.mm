@@ -5,6 +5,7 @@
 #include "../FilePanels/PanelView.h"
 #include "../FilePanels/PanelControllerActionsDispatcher.h"
 #include "../FilePanels/Helpers/Pasteboard.h"
+#include <WinCommander/Core/Theming/ExplorerPalette.h>
 #include <WinCommander/Core/Commands/CommandIds.h>
 #include <WinCommander/Core/Commands/CommandRegistry.h>
 #include <WinCommander/Core/Commands/OperationCancelCommand.h>
@@ -18,6 +19,7 @@
 #include <Utility/ObjCpp.h>
 #include <Utility/StringExtras.h>
 #include <VFS/VFS.h>
+#include <algorithm>
 #include <chrono>
 #include <optional>
 
@@ -263,6 +265,11 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
         [alert runModal];
 }
 
+
+constexpr CGFloat g_CommandBarHorizontalInset = 18.0;
+constexpr CGFloat g_CommandBarItemSpacing = 10.0;
+constexpr CGFloat g_CommandButtonHeight = 28.0;
+
 } // namespace
 
 @implementation NCExplorerCommandBarView {
@@ -383,17 +390,39 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     [self updateCommandAvailability];
 }
 
-- (NSButton *)makeButtonWithTitle:(NSString *)_title symbol:(NSString *)_symbol target:(id)_target action:(SEL)_action
+- (NSButton *)makeButtonWithTitle:(NSString *)_title
+                           symbol:(NSString *)_symbol
+                           accent:(BOOL)_accent
+                           target:(id)_target
+                           action:(SEL)_action
 {
-    NSButton *const button = [NSButton buttonWithTitle:_title
-                                                 image:[NSImage imageWithSystemSymbolName:_symbol
-                                                                 accessibilityDescription:nil]
-                                                target:_target
-                                                action:_action];
-    button.imagePosition = NSImageLeft;
-    button.bezelStyle = NSBezelStyleTexturedRounded;
+    NSButton *const button = [NSButton
+        buttonWithTitle:_title
+                  image:[NSImage imageWithSystemSymbolName:_symbol accessibilityDescription:nil]
+                 target:_target
+                 action:_action];
+    // The accessory-bar action bezel gives AppKit full ownership of the icon/title baseline,
+    // pressed and disabled states. Large is the native 28pt macOS control size; its font remains
+    // the platform's 13pt control font.
+    button.bezelStyle = NSBezelStyleAccessoryBarAction;
+    button.controlSize = NSControlSizeLarge;
+    button.font = [NSFont systemFontOfSize:[NSFont systemFontSizeForControlSize:NSControlSizeLarge]];
+    button.imagePosition = NSImageLeading;
+    button.imageHugsTitle = true;
+    button.symbolConfiguration =
+        [NSImageSymbolConfiguration configurationWithTextStyle:NSFontTextStyleBody scale:NSImageSymbolScaleMedium];
+    button.bezelColor = _accent ? NSColor.controlAccentColor : nil;
     button.refusesFirstResponder = true;
     button.translatesAutoresizingMaskIntoConstraints = false;
+
+    // Hugging above the spacer's priority keeps the stack from stretching buttons into the slack, so
+    // the spacer is the only arranged view that grows.
+    [button setContentHuggingPriority:NSLayoutPriorityDefaultHigh
+                       forOrientation:NSLayoutConstraintOrientationHorizontal];
+    // Below the required trailing constraint, so a too-narrow bar truncates labels instead of
+    // logging an unsatisfiable system.
+    [button setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                     forOrientation:NSLayoutConstraintOrientationHorizontal];
     return button;
 }
 
@@ -401,31 +430,37 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
 {
     NSButton *const new_button = [self makeButtonWithTitle:NSLocalizedString(@"New", "Explorer command bar button")
                                                     symbol:@"plus"
+                                                    accent:true
                                                     target:self
                                                     action:@selector(showNewPopover:)];
 
     m_CutButton = [self makeButtonWithTitle:NSLocalizedString(@"Cut", "Explorer command bar button")
                                      symbol:@"scissors"
+                                     accent:false
                                      target:self
                                      action:@selector(performCut:)];
 
     m_CopyButton = [self makeButtonWithTitle:NSLocalizedString(@"Copy", "Explorer command bar button")
                                       symbol:@"doc.on.doc"
+                                      accent:false
                                       target:self
                                       action:@selector(performCopy:)];
 
     m_PasteButton = [self makeButtonWithTitle:NSLocalizedString(@"Paste", "Explorer command bar button")
                                        symbol:@"doc.on.clipboard"
+                                       accent:false
                                        target:self
                                        action:@selector(performPaste:)];
 
     m_RenameButton = [self makeButtonWithTitle:NSLocalizedString(@"Rename", "Explorer command bar button")
                                         symbol:@"pencil"
+                                        accent:false
                                         target:self
                                         action:@selector(performRename:)];
 
     m_ShareButton = [self makeButtonWithTitle:NSLocalizedString(@"Share", "Explorer command bar button")
                                        symbol:@"square.and.arrow.up"
+                                       accent:false
                                        target:self
                                        action:@selector(showSharePicker:)];
 
@@ -434,23 +469,37 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     // used here.
     m_DeleteButton = [self makeButtonWithTitle:NSLocalizedString(@"Delete", "Explorer command bar button")
                                         symbol:@"trash"
+                                        accent:false
                                         target:self
                                         action:@selector(performDelete:)];
 
     NSButton *const sort_button = [self makeButtonWithTitle:NSLocalizedString(@"Sort", "Explorer command bar button")
                                                      symbol:@"arrow.up.arrow.down"
+                                                     accent:false
                                                      target:self
                                                      action:@selector(showSortPopover:)];
 
     NSButton *const view_button = [self makeButtonWithTitle:NSLocalizedString(@"View", "Explorer command bar button")
                                                      symbol:@"square.grid.2x2"
+                                                     accent:false
                                                      target:self
                                                      action:@selector(showViewPopover:)];
 
     NSButton *const more_button = [self makeButtonWithTitle:NSLocalizedString(@"More", "Explorer command bar button")
                                                      symbol:@"ellipsis.circle"
+                                                     accent:false
                                                      target:self
                                                      action:@selector(showMoreMenu:)];
+
+    // The mockup's fill_container spacer: the only arranged view that wants to grow, so Sort, View
+    // and More end up flush against the trailing inset while the file commands stay flush left.
+    NSView *const trailing_spacer = [[NSView alloc] initWithFrame:NSZeroRect];
+    trailing_spacer.translatesAutoresizingMaskIntoConstraints = false;
+    [trailing_spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [trailing_spacer setContentCompressionResistancePriority:1
+                                             forOrientation:NSLayoutConstraintOrientationHorizontal];
+    // The spacer has no intrinsic size, so it needs an explicit floor or its width is ambiguous.
+    [trailing_spacer.widthAnchor constraintGreaterThanOrEqualToConstant:0.].active = true;
 
     NSStackView *const stack = [NSStackView stackViewWithViews:@[
         new_button,
@@ -460,6 +509,7 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
         m_RenameButton,
         m_ShareButton,
         m_DeleteButton,
+        trailing_spacer,
         sort_button,
         view_button,
         more_button
@@ -467,16 +517,24 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
     stack.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     stack.alignment = NSLayoutAttributeCenterY;
     stack.distribution = NSStackViewDistributionFill;
-    stack.spacing = 6.0;
+    stack.spacing = g_CommandBarItemSpacing;
     stack.translatesAutoresizingMaskIntoConstraints = false;
     [self addSubview:stack];
 
+    // Pinning trailing with == is what gives the spacer slack to absorb. Held below required so a
+    // window too narrow for every button yields this constraint first, rather than fighting the
+    // required <= that keeps the row inside the bar.
+    NSLayoutConstraint *const stack_trailing =
+        [stack.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-g_CommandBarHorizontalInset];
+    stack_trailing.priority = NSLayoutPriorityDefaultHigh;
+
     [NSLayoutConstraint activateConstraints:@[
-        [stack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:8.0],
+        [stack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:g_CommandBarHorizontalInset],
         [stack.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-8.0],
-        [stack.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor constant:4.0],
-        [stack.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-4.0]
+        [stack.heightAnchor constraintEqualToConstant:g_CommandButtonHeight],
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor
+                                                       constant:-g_CommandBarHorizontalInset],
+        stack_trailing
     ]];
 }
 
@@ -1562,6 +1620,24 @@ void PresentOperationCancelFailure(NSWindow *_window, const nc::core::CommandReg
      didChooseSharingService:(NSSharingService *) [[maybe_unused]] _service
 {
     m_ActiveSharingPicker = nil;
+}
+
+- (void)drawRect:(NSRect)_dirty_rect
+{
+    [nc::explorer::CommandBarFillColor() setFill];
+    NSRectFill(_dirty_rect);
+
+    // The visual bottom edge is MaxY in a flipped view and MinY otherwise. Compute it rather than
+    // assume: this class declares no isFlipped override today, but a future one must not silently
+    // move the rule to the top of the bar.
+    const NSRect bounds = self.bounds;
+    const CGFloat hairline = 1.0 / std::max(self.window.backingScaleFactor, 1.0);
+    const CGFloat rule_y = self.isFlipped ? NSMaxY(bounds) - hairline : NSMinY(bounds);
+    const NSRect rule = NSMakeRect(NSMinX(bounds), rule_y, NSWidth(bounds), hairline);
+    if( NSIntersectsRect(rule, _dirty_rect) ) {
+        [nc::explorer::ChromeDividerColor() setFill];
+        NSRectFill(NSIntersectionRect(rule, _dirty_rect));
+    }
 }
 
 @end

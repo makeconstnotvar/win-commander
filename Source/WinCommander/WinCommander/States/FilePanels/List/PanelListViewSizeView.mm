@@ -106,10 +106,10 @@ static NSString *SizeStringFromEncodedSize(uint64_t _sz)
             NSRectFill(self.bounds);
             [PanelListViewTableView drawVerticalSeparatorForView:self];
 
-            const auto text_rect = NSMakeRect(nc::panel::PanelListViewGeometry::LeftInset(),
+            const auto text_rect = NSMakeRect(geometry.LeftInset(),
                                               geometry.TextBaseLine(),
-                                              bounds.size.width - nc::panel::PanelListViewGeometry::LeftInset() -
-                                                  nc::panel::PanelListViewGeometry::RightInset(),
+                                              bounds.size.width - geometry.LeftInset() -
+                                                  geometry.RightInset(),
                                               0);
             [m_String drawWithRect:text_rect options:0 attributes:m_TextAttributes context:nil];
         }
